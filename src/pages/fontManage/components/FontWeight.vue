@@ -85,6 +85,8 @@ function pick(index: number) {
   display: flex;
   flex-direction: row;
   align-items: center;
+  flex: 1;
+  min-width: 0;
 }
 
 .fw__glyph {
@@ -111,6 +113,7 @@ function pick(index: number) {
 }
 
 .fw__count {
+  flex: 0 0 auto;
   width: 18px;
   height: 18px;
   display: inline-flex;

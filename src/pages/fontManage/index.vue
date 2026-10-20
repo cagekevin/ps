@@ -498,6 +498,8 @@ async function apply(font: FontItem, variantIndex = 0) {
 .search-row :deep(.g-input) {
   height: var(--h-field);
   border-radius: var(--r-input);
+  /* 不设 min-width:0 会把漏斗按钮挤出可视区 */
+  min-width: 0;
 }
 
 /* 原版底部工具条高 24、底色 #545454 */

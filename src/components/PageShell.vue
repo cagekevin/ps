@@ -60,6 +60,8 @@ h1 {
   height: 100%;
   margin: 0;
   flex: 1;
+  /* 必须 min-width:0，否则会把右侧按钮挤出容器 */
+  min-width: 0;
   display: flex;
   align-items: center;
   color: var(--text-strong);
