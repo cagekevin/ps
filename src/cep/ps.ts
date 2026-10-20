@@ -1,6 +1,7 @@
 import { CepError, ERR_PREFIX, evalScriptRaw, hasCep, jsxCall } from './eval-script'
 import { DATA_FILES, PS_ENV } from './env'
-import { extensionDir, hasNode, readTextFile, readTextSmart, userDir, writeTextFile } from './fs'
+import { extensionDir, hasNode, readTextFile, readTextSmart, userDir } from './fs'
+import { jsonFile } from './json-file'
 import type { FontItem, FontTag, LayerState, SysFontFile } from './types'
 import * as mock from './mock'
 
@@ -85,47 +86,49 @@ export async function getFontList(opts: { refresh?: boolean } = {}): Promise<Fon
   return mergeStars(list)
 }
 
-/** 读字体标签（我的标签那一排） */
-export async function getFontTags(): Promise<FontTag[]> {
-  if (!hasCep()) return mock.getFontTags()
+interface RawTag {
+  text?: string
+  arr?: string[]
+  xz?: boolean
+}
 
-  try {
-    const text = await readTextSmart(`${userDir()}/${DATA_FILES.ztglTags}`)
-    if (!text) return []
-    const raw = JSON.parse(text) as Array<{ text?: string; arr?: string[]; xz?: boolean }>
-    return raw
-      .filter((item) => typeof item.text === 'string')
-      .map((item) => ({
-        text: item.text as string,
-        arr: Array.isArray(item.arr) ? item.arr : [],
-        xz: item.xz === true,
-      }))
-  } catch {
-    return []
-  }
+interface RawStar {
+  name?: string
+  star?: string | number
 }
 
 /** 星级收藏文件（原面板 sj_ztglStar.ini） */
 const STAR_FILE = 'sj_ztglStar.ini'
 
+const tagFile = jsonFile<RawTag[]>(DATA_FILES.ztglTags, () => [])
+const starFile = jsonFile<RawStar[]>(STAR_FILE, () => [])
+
+/** 读字体标签（我的标签那一排） */
+export async function getFontTags(): Promise<FontTag[]> {
+  if (!hasCep()) return mock.getFontTags()
+
+  const raw = await tagFile.read()
+  return raw
+    .filter((item) => typeof item.text === 'string')
+    .map((item) => ({
+      text: item.text as string,
+      arr: Array.isArray(item.arr) ? item.arr : [],
+      xz: item.xz === true,
+    }))
+}
+
 /** 读星级：{ 家族名: 1~3 } */
 export async function getFontStars(): Promise<Record<string, number>> {
   if (!hasCep()) return mock.getFontStars()
 
-  try {
-    const text = await readTextSmart(`${userDir()}/${STAR_FILE}`)
-    if (!text) return {}
-    const raw = JSON.parse(text) as Array<{ name?: string; star?: string | number }>
-    const map: Record<string, number> = {}
-    for (const item of raw) {
-      if (typeof item.name !== 'string') continue
-      const value = Number(item.star)
-      if (value > 0) map[item.name] = value
-    }
-    return map
-  } catch {
-    return {}
+  const raw = await starFile.read()
+  const map: Record<string, number> = {}
+  for (const item of raw) {
+    if (typeof item.name !== 'string') continue
+    const value = Number(item.star)
+    if (value > 0) map[item.name] = value
   }
+  return map
 }
 
 /**
@@ -135,55 +138,34 @@ export async function getFontStars(): Promise<Record<string, number>> {
 export async function setFontStar(family: string, star: number): Promise<void> {
   if (!hasCep()) return mock.setFontStar(family, star)
 
-  const path = `${userDir()}/${STAR_FILE}`
-  const text = await readTextSmart(path)
-  let list: Array<{ name: string; star: number }> = []
-  try {
-    const raw = text ? (JSON.parse(text) as Array<{ name?: string; star?: string | number }>) : []
-    list = raw
+  await starFile.update((raw) => {
+    const list = raw
       .filter((item) => typeof item.name === 'string')
       .map((item) => ({ name: item.name as string, star: Number(item.star) || 0 }))
-  } catch {
-    list = []
-  }
 
-  const hit = list.find((item) => item.name === family)
-  if (star <= 0) {
-    if (hit) list = list.filter((item) => item.name !== family)
-  } else if (hit) {
-    hit.star = star
-  } else {
-    list.push({ name: family, star })
-  }
+    if (star <= 0) return list.filter((item) => item.name !== family)
 
-  writeTextFile(`${path}.bak`, text ?? '[]')
-  writeTextFile(path, JSON.stringify(list))
+    const hit = list.find((item) => item.name === family)
+    if (hit) hit.star = star
+    else list.push({ name: family, star })
+    return list
+  })
 }
 
 /** 给字体加/去某个标签，写回 sj_ztglTags.ini */
 export async function toggleFontTag(tagText: string, family: string): Promise<void> {
   if (!hasCep()) return mock.toggleFontTag(tagText, family)
 
-  const path = `${userDir()}/${DATA_FILES.ztglTags}`
-  const text = await readTextSmart(path)
-  let list: Array<{ text?: string; arr?: string[]; xz?: boolean }> = []
-  try {
-    list = text ? (JSON.parse(text) as Array<{ text?: string; arr?: string[]; xz?: boolean }>) : []
-  } catch {
-    list = []
-  }
+  await tagFile.update((list) => {
+    const tag = list.find((item) => item.text === tagText)
+    if (!tag) return
 
-  const tag = list.find((item) => item.text === tagText)
-  if (!tag) return
-
-  const arr = Array.isArray(tag.arr) ? tag.arr : []
-  const index = arr.indexOf(family)
-  if (index >= 0) arr.splice(index, 1)
-  else arr.push(family)
-  tag.arr = arr
-
-  writeTextFile(`${path}.bak`, text ?? '[]')
-  writeTextFile(path, JSON.stringify(list))
+    const arr = Array.isArray(tag.arr) ? tag.arr : []
+    const index = arr.indexOf(family)
+    if (index >= 0) arr.splice(index, 1)
+    else arr.push(family)
+    tag.arr = arr
+  })
 }
 
 /** 把字体设到当前选中的图层上，variantIndex 对应 weights/names/postScriptNames 的下标 */

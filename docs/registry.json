@@ -139,6 +139,15 @@
       "since": "2026-10-20"
     },
     {
+      "id": "json-file",
+      "name": "JSON 数据文件读写",
+      "entry": "src/cep/json-file.ts",
+      "api": "jsonFile(name, fallback) → { read, update, write, path }；update 自动备份 .bak",
+      "when": "读写 %APPDATA%\\SheJiZhuLi 下的 JSON 数据文件；不要自己拼读-改-写",
+      "status": "stable",
+      "since": "2026-10-20"
+    },
+    {
       "id": "cep-fs",
       "name": "文件读写",
       "entry": "src/cep/fs.ts",
