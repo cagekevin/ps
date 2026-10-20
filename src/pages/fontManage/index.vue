@@ -163,7 +163,7 @@ async function apply(font: FontItem, variantIndex = 0) {
         <GDropdown v-model:visible="filterOpen" placement="bottom-end">
           <template #trigger>
             <button class="icon-btn" :class="{ 'is-on': langFilter !== 'all' }" type="button">
-              <Icon name="iconguolv" size="sm" />
+              <Icon name="iconguolv" size="lg" />
             </button>
           </template>
           <GMenu :model-value="langFilter" @select="onLangSelect">
@@ -233,7 +233,7 @@ async function apply(font: FontItem, variantIndex = 0) {
             >
             <div class="actions u-row">
               <button class="act" type="button" @click.stop="openTagMenu($event, font)">
-                <Icon name="iconbiaoqian" size="xs" />
+                <Icon name="iconbiaoqian" />
               </button>
               <Rating :selected="stars[font.family] ?? 0" @rating="(value) => store.rate(font.family, value)" />
             </div>

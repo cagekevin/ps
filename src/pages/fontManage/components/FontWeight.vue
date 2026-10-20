@@ -61,7 +61,7 @@ function pick(index: number) {
         class="fw__option"
         @click.stop="pick(index)"
       >
-        <Icon v-if="index === current" name="icongouxuan" size="xs" class="fw__check" />
+        <Icon v-if="index === current" name="icongouxuan" class="fw__check" />
         <span>{{ weight }}</span>
       </div>
     </div>

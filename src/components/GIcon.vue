@@ -9,12 +9,12 @@ import type { IconSize } from './icon/size'
 withDefaults(
   defineProps<{
     name: string
-    size?: IconSize
+    size?: IconSize | string
     color?: string
     title?: string
     spin?: boolean
   }>(),
-  { size: 'md' },
+  { size: '1em' },
 )
 </script>
 
