@@ -73,7 +73,7 @@ watch(
         class="tag-menu__item"
         @click="emit('toggle', tag.text)"
       >
-        <Icon v-if="active.includes(tag.text)" name="icongouxuan" :size="12" class="tag-menu__check" />
+        <Icon v-if="active.includes(tag.text)" name="icongouxuan" size="xs" class="tag-menu__check" />
         <span>{{ tag.text }}</span>
       </div>
     </div>

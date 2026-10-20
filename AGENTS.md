@@ -12,6 +12,7 @@ UI 和数据流全部重写；PS 能力层继续调原厂 jsxbin（`public/lib/a
 1. `docs/进度.md` —— 现在做到哪、下一步是什么
 2. `docs/台账.md` —— 待办和债务，**带 id 和依赖**，从这里挑活干
 3. `docs/横切能力.md` —— 已有哪些公共能力，别重复造
+4. `docs/视觉规范.md` —— 字号、图标、图标+文字怎么配，**写页面前必查**
 4. `docs/jsx-契约.md` —— jsx 函数真实返回结构，**别猜**
 5. `docs/架构决策.md` —— 为什么这么设计，别轻易推翻
 6. `docs/log/index.md` —— 最近踩过什么坑、做过什么决策
@@ -71,6 +72,10 @@ bind(computed(() => items.value.filter(/* ... */)))   // 有筛选才需要
 需要新色值/新尺寸时：先加到 `tokens.css`，再在组件里引用。
 色值来源必须是 `05-官方资源/04-CEP资源包/CEP001-设计助理/css/app.bf68b505.css` 里的真实值，
 不要凭截图目测（这一条踩过坑）。
+
+**字号和图标**：一律查 `docs/视觉规范.md`。图标用预设名（`size="xs"`），
+禁止 `:size="12"` 这种裸数字（`npm run check` 会拦，`npm run style:fix` 能自动改）。
+图标和文字必须在 flex 容器里，间距用 `gap`，不要 `vertical-align`、不要 `margin-right`。
 
 **命名规则**（三种前缀，别混）：
 

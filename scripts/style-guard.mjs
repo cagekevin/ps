@@ -83,6 +83,32 @@ function mapStyleBlocks(content, fn) {
   })
 }
 
+/** 模板规则（不只 <style>）：图标尺寸必须用预设名 */
+const TEMPLATE_RULES = [
+  {
+    id: 'icon-size',
+    re: /<Icon\b[^>]*?:size="\d+"/g,
+    hint: '图标尺寸用预设名：size="2xs|xs|sm|md|lg|xl|2xl"，见 docs/视觉规范.md',
+  },
+]
+
+/** 自动修复用的映射，和 components/icon/size.ts 保持一致 */
+const SIZE_TO_NAME = { 9: '2xs', 10: 'xs', 14: 'sm', 16: 'md', 18: 'lg', 20: 'xl', 24: '2xl' }
+
+function stripStyle(content) {
+  return content.replace(/<style[^>]*>[\s\S]*?<\/style>/g, '')
+}
+
+function countTemplate(content) {
+  const tpl = stripStyle(content)
+  let count = 0
+  for (const rule of TEMPLATE_RULES) {
+    const hits = tpl.match(rule.re)
+    if (hits) count += hits.length
+  }
+  return count
+}
+
 function countViolations(css) {
   let count = 0
   for (const re of [COLOR_RE, FS_RE, RADIUS_RE]) {
@@ -102,7 +128,8 @@ function collect() {
     const css = abs.endsWith('.vue') ? mapStyleBlocks(content, (b) => b) : content
     if (!css.trim()) continue
 
-    const count = countViolations(css)
+    let count = countViolations(css)
+    if (abs.endsWith('.vue')) count += countTemplate(content)
     if (count > 0) result[rel] = count
   }
   return result
@@ -143,7 +170,17 @@ function fix() {
       return out
     }
 
-    const next = abs.endsWith('.vue') ? mapStyleBlocks(content, applyFix) : applyFix(content)
+    let next = abs.endsWith('.vue') ? mapStyleBlocks(content, applyFix) : applyFix(content)
+
+    // 模板里的裸图标尺寸也能自动修
+    if (abs.endsWith('.vue')) {
+      next = next.replace(/<Icon\b[^>]*?:size="(\d+)"/g, (match, px) => {
+        const name = SIZE_TO_NAME[px]
+        if (!name) return match
+        fixed++
+        return match.replace(`:size="${px}"`, `size="${name}"`)
+      })
+    }
 
     if (fixed > 0) {
       writeFileSync(abs, next, 'utf8')
@@ -154,7 +191,8 @@ function fix() {
 
     // 修完还剩多少（这些是 token 里没有对应值的，需要人工决定）
     const remainingCss = abs.endsWith('.vue') ? mapStyleBlocks(next, (b) => b) : next
-    const left = countViolations(remainingCss)
+    let left = countViolations(remainingCss)
+    if (abs.endsWith('.vue')) left += countTemplate(next)
     if (left > 0) leftovers.push({ file: rel, count: left })
   }
 

@@ -16,14 +16,14 @@ function reload() {
   <div class="layout">
     <nav class="nav">
       <router-link v-for="item in navRoutes" :key="item.path" :to="item.path" class="nav-item">
-        <Icon v-if="item.meta?.icon" :name="item.meta.icon" :size="17" />
+        <Icon v-if="item.meta?.icon" :name="item.meta.icon" size="lg" />
         <span v-else class="glyph">{{ item.meta?.glyph }}</span>
       </router-link>
 
       <div class="nav-spacer" />
 
       <router-link v-for="item in navBottomRoutes" :key="item.path" :to="item.path" class="nav-item">
-        <Icon v-if="item.meta?.icon" :name="item.meta.icon" :size="17" />
+        <Icon v-if="item.meta?.icon" :name="item.meta.icon" size="lg" />
         <span v-else class="glyph">{{ item.meta?.glyph }}</span>
       </router-link>
 

@@ -48,7 +48,7 @@ function pick(name: string) {
         <GInput v-model="kw" placeholder="搜图标名，如 chuangjian / guanbi" clearable size="small" />
         <div class="icon-grid">
           <button v-for="name in shownIcons" :key="name" class="icon-cell" :title="name" @click="pick(name)">
-            <Icon :name="name" :size="18" />
+            <Icon :name="name" size="lg" />
             <span>{{ name.replace(/^icon/, '') }}</span>
           </button>
         </div>
@@ -78,7 +78,7 @@ function pick(name: string) {
         <p class="hint">当前值：{{ input || '（空）' }}</p>
         <GInput placeholder="带前置图标" size="small">
           <template #prefix>
-            <Icon name="iconsousuo" :size="13" />
+            <Icon name="iconsousuo" size="sm" />
           </template>
         </GInput>
         <GInput placeholder="禁用" disabled />

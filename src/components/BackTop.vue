@@ -48,7 +48,7 @@ function toTop() {
 <template>
   <transition name="slide-up">
     <button v-if="visible" class="back-top" type="button" title="回到顶部" @click="toTop">
-      <Icon :name="icon" :size="16" />
+      <Icon :name="icon" size="md" />
     </button>
   </transition>
 </template>

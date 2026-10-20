@@ -1,23 +1,26 @@
 <script setup lang="ts">
 import { computed, watchEffect } from 'vue'
 import { hasIcon } from './icon/names'
+import { toPx, type IconSize } from './icon/size'
 
 /**
  * 图标。名字对应原面板 sprite 里的 symbol id，可以带 # 前缀（兼容模板里的 #iconxxx）。
- * 原面板用法：<baseIcon name="#iconchuangjian" class="svg-14" />
+ *
+ * size 优先用预设名（xs/sm/md/lg…），不要写裸数字 —— `npm run check` 会拦。
+ * 见 docs/视觉规范.md。
  */
 const props = withDefaults(
   defineProps<{
     name: string
-    size?: number | string
+    size?: IconSize | number
     color?: string
     title?: string
   }>(),
-  { size: 16 },
+  { size: 'md' },
 )
 
 const id = computed(() => props.name.replace(/^#/, ''))
-const px = computed(() => (typeof props.size === 'number' ? `${props.size}px` : props.size))
+const px = computed(() => toPx(props.size))
 
 watchEffect(() => {
   if (!hasIcon(id.value)) console.warn(`[Icon] 图标不存在：${id.value}`)

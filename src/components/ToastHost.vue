@@ -24,7 +24,7 @@ const ICON: Record<string, string> = {
         :class="`is-${item.type}`"
         @click="store.dismiss(item.id)"
       >
-        <Icon :name="ICON[item.type]" :size="13" class="toast-icon" />
+        <Icon :name="ICON[item.type]" size="sm" class="toast-icon" />
         <span class="toast-text">{{ item.text }}</span>
       </div>
     </transition-group>

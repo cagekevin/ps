@@ -2,6 +2,7 @@
 import { computed } from 'vue'
 import Icon from './Icon.vue'
 import { hasIcon } from './icon/names'
+import { toPx, type IconSize } from './icon/size'
 
 /**
  * 原面板有两套图标：SVG sprite（baseIcon）和 gdaicon 字体。
@@ -11,16 +12,16 @@ import { hasIcon } from './icon/names'
 const props = withDefaults(
   defineProps<{
     name: string
-    size?: number | string
+    size?: IconSize | number
     color?: string
     title?: string
   }>(),
-  { size: 16 },
+  { size: 'md' },
 )
 
 const id = computed(() => props.name.replace(/^#/, '').replace(/^gdaicon-/, ''))
 const mapped = computed(() => hasIcon(id.value))
-const fontSize = computed(() => (typeof props.size === 'number' ? `${props.size}px` : props.size))
+const fontSize = computed(() => toPx(props.size))
 </script>
 
 <template>

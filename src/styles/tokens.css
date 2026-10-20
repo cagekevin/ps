@@ -92,6 +92,17 @@
   --preview-xl: 72px;
   --preview-xl-lh: 101px;
 
+  /* ---------- 图标阶梯 ----------
+     取自原版模板 svg-N 的真实使用频率，见 docs/视觉规范.md
+     注意：图标尺寸不跟字号绑定，各自按场景取。 */
+  --icon-2xs: 9px;
+  --icon-xs: 10px;
+  --icon-sm: 14px;
+  --icon-md: 16px;
+  --icon-lg: 18px;
+  --icon-xl: 20px;
+  --icon-2xl: 24px;
+
   /* ---------- 圆角 ---------- */
   --r-xs: 3px;
   --r-sm: 2px;

@@ -143,7 +143,7 @@ async function apply(font: FontItem, variantIndex = 0) {
       <GDropdown v-model:visible="menuOpen" placement="bottom-end">
         <template #trigger>
           <button class="icon-btn" type="button">
-            <Icon name="icongengduocaidan" :size="16" />
+            <Icon name="icongengduocaidan" size="md" />
           </button>
         </template>
         <GMenu @select="onMenuSelect">
@@ -157,13 +157,13 @@ async function apply(font: FontItem, variantIndex = 0) {
       <div class="search-row u-row u-gap-2">
         <GInput v-model="keyword" placeholder="搜索" clearable>
           <template #prefix>
-            <Icon name="iconsousuo" :size="13" />
+            <Icon name="iconsousuo" size="sm" />
           </template>
         </GInput>
         <GDropdown v-model:visible="filterOpen" placement="bottom-end">
           <template #trigger>
             <button class="icon-btn" :class="{ 'is-on': langFilter !== 'all' }" type="button">
-              <Icon name="iconguolv" :size="15" />
+              <Icon name="iconguolv" size="sm" />
             </button>
           </template>
           <GMenu :model-value="langFilter" @select="onLangSelect">
@@ -208,7 +208,7 @@ async function apply(font: FontItem, variantIndex = 0) {
     <div v-else-if="loading && !items.length" class="state">正在读取系统字体…</div>
 
     <div v-else-if="!visible.length" class="state">
-      <Icon name="iconsousuo" :size="44" class="state__icon" />
+      <Icon name="iconsousuo" size="2xl" class="state__icon" />
       <p>没有找到匹配的字体</p>
       <button v-if="hasFilter" class="retry" type="button" @click="clearFilters">清除筛选</button>
     </div>
@@ -233,7 +233,7 @@ async function apply(font: FontItem, variantIndex = 0) {
             >
             <div class="actions u-row">
               <button class="act" type="button" @click.stop="openTagMenu($event, font)">
-                <Icon name="iconbiaoqian" :size="12" />
+                <Icon name="iconbiaoqian" size="xs" />
               </button>
               <Rating :selected="stars[font.family] ?? 0" @rating="(value) => store.rate(font.family, value)" />
             </div>
@@ -259,7 +259,7 @@ async function apply(font: FontItem, variantIndex = 0) {
 
     <template #footer>
       <button class="icon-btn" type="button" @click="store.cyclePreview()">
-        <Icon :name="previewMode === 'none' ? 'iconyincang' : 'iconxianshi'" :size="15" />
+        <Icon :name="previewMode === 'none' ? 'iconyincang' : 'iconxianshi'" size="sm" />
       </button>
       <span class="footer-tip">{{ PREVIEW_LABEL[previewMode] }}</span>
     </template>
