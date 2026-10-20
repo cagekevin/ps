@@ -69,8 +69,10 @@ function label(tag: CategoryTag) {
 
 <style scoped>
 .fp {
-  width: 240px;
-  max-height: 460px;
+  width: 220px;
+  /* 窄面板下不能超出视口，否则右侧 chip 点不到 */
+  max-width: calc(100vw - 64px);
+  max-height: 420px;
   overflow-y: auto;
   padding: var(--sp-4);
   box-sizing: border-box;

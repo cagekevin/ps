@@ -167,9 +167,14 @@ const filtered = computed(() => {
 
 bind(filtered)
 
-const countText = computed(() =>
-  activeTag.value ? `${activeTag.value}(${filtered.value.length})` : `全部(${items.value.length})`,
-)
+/**
+ * 计数：有筛选（标签 / 面板 / 搜索）时显示过滤后的数量，否则显示总数。
+ * 之前只在标签筛选时用 filtered.length，面板筛选仍显示总数，看起来像"点了没反应"。
+ */
+const countText = computed(() => {
+  const label = activeTag.value || '全部'
+  return hasFilter.value ? `${label}(${filtered.value.length})` : `${label}(${items.value.length})`
+})
 
 // 双列已移除：面板默认宽度远小于 420，用不上；
 // 且 useElementWidth 在窄视口下测量不准（340px 也判成双列），先只保留单列。
@@ -472,9 +477,11 @@ async function apply(font: FontItem, variantIndex = 0) {
   color: var(--accent-soft);
 }
 
-/* 下拉容器默认 min-width:100%（触发器只有 24px），面板会被压成一条 */
+/* 下拉容器默认 min-width:100%（触发器只有 24px），面板会被压成一条。
+   同时限制最大宽度，避免在窄面板里超出视口右侧被裁掉。 */
 .filter-dropdown :deep(.g-dropdown__panel) {
   width: max-content;
+  max-width: calc(100vw - 56px);
 }
 
 /* 原版 .tag-input__create{padding:6px 12px;margin:8px 0;background:#3968ff;border-radius:4px;width:fit-content} */
