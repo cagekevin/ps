@@ -26,6 +26,8 @@ export interface Category {
 export interface Classification {
   categories: Category[]
   presets: Record<string, Record<string, number[]>>
+  /** 免费商用字体名单（原版 classification.json 的 commercials 数组） */
+  commercials: string[]
 }
 
 const FILE = 'classification.json'
@@ -63,6 +65,7 @@ const MOCK: Classification = {
     ] },
   ],
   presets: {},
+  commercials: ['MiSans', 'OPPOSans'],
 }
 
 export async function getClassification(): Promise<Classification> {
@@ -79,7 +82,13 @@ export async function getClassification(): Promise<Classification> {
       if (!item || !Array.isArray(item.tags)) continue
       categories.push({ key, name: item.name ?? key, extraTag: item.extraTag, tags: item.tags })
     }
-    return { categories: categories.length ? categories : MOCK.categories, presets: raw.presets ?? {} }
+    return {
+      categories: categories.length ? categories : MOCK.categories,
+      presets: raw.presets ?? {},
+      commercials: Array.isArray((raw as { commercials?: string[] }).commercials)
+        ? ((raw as { commercials?: string[] }).commercials as string[])
+        : [],
+    }
   } catch {
     return MOCK
   }
@@ -88,19 +97,41 @@ export async function getClassification(): Promise<Classification> {
 /** 选中的筛选条件：{ 分类key: [标签id] } */
 export type FilterState = Record<string, number[]>
 
+/** 字体语言：按名称判断中英（和 stores/font.ts 的 familyLang 同规则） */
+function isChinese(family: string): boolean {
+  return /[\u4e00-\u9fa5]/.test(family)
+}
+
 /**
- * 字体是否通过筛选。规则：每个有选中项的分类都要命中（AND），
- * 同一分类内命中任意一项即可（OR）。没有 presets 数据时不过滤。
+ * 字体是否通过筛选。组间 AND、组内 OR。
+ *
+ * 注意：`presets`（类型/风格/评分）只覆盖云端字体（1178 条，全是尔雅/字魂这类），
+ * 系统字体一条都没有 —— 所以那几组对本地字体天然不生效。
+ * 语言和授权类型有独立数据源，能真正过滤。
  */
-export function matchFilter(family: string, state: FilterState, presets: Classification['presets']): boolean {
+export function matchFilter(family: string, state: FilterState, data: Classification): boolean {
   const active = Object.entries(state).filter(([, ids]) => ids.length > 0)
   if (!active.length) return true
 
-  const preset = presets[family]
-  if (!preset) return true
-
   return active.every(([key, ids]) => {
-    const owned = preset[key] ?? []
-    return ids.some((id) => owned.includes(id))
+    if (key === 'language') {
+      // 1 简体/2 繁体 都算中文，3 English，4 日文
+      const chinese = isChinese(family)
+      return ids.some((id) => {
+        if (id === 1 || id === 2) return chinese
+        if (id === 3) return !chinese
+        return false
+      })
+    }
+
+    if (key === 'commercial') {
+      const free = data.commercials.includes(family)
+      return ids.some((id) => (id === 1 ? free : !free))
+    }
+
+    // 其余组依赖 presets，没有数据的字体直接放行（不因缺数据而消失）
+    const preset = data.presets[family]
+    if (!preset) return true
+    return ids.some((id) => (preset[key] ?? []).includes(id))
   })
 }

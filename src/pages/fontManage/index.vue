@@ -135,7 +135,7 @@ const keyword = ref('')
 const activeTag = ref('')
 /** 筛选面板选中的条件：{ 分类key: [标签id] } */
 const filterState = ref<FilterState>({})
-const classification = ref<Classification>({ categories: [], presets: {} })
+const classification = ref<Classification>({ categories: [], presets: {}, commercials: [] })
 const menuOpen = ref(false)
 const filterOpen = ref(false)
 
@@ -155,7 +155,7 @@ const filtered = computed(() => {
 
   return items.value.filter((font) => {
     if (tagFonts && !tagFonts.includes(font.family)) return false
-    if (!matchFilter(font.family, filterState.value, classification.value.presets)) return false
+    if (!matchFilter(font.family, filterState.value, classification.value)) return false
     if (!kw) return true
     return (
       font.family.toLowerCase().includes(kw) ||
@@ -182,6 +182,15 @@ const hasFilter = computed(
 )
 
 const filterOn = computed(() => Object.values(filterState.value).some((ids) => ids.length > 0))
+
+/**
+ * 只显示真正有数据支撑的分组。
+ * 类型/风格/评分依赖 classification.json 的 presets，而那 1178 条全是云端字体，
+ * 系统字体一条都没有 —— 放出来点了也没反应，不如不显示。
+ */
+const usableCategories = computed(() =>
+  classification.value.categories.filter((c) => c.key === 'language' || c.key === 'commercial'),
+)
 
 function clearFilters() {
   keyword.value = ''
@@ -269,13 +278,13 @@ async function apply(font: FontItem, variantIndex = 0) {
             <Icon name="iconsousuo" size="sm" />
           </template>
         </GInput>
-        <GDropdown v-model:visible="filterOpen" placement="bottom-end">
+        <GDropdown v-model:visible="filterOpen" placement="bottom-end" class="filter-dropdown">
           <template #trigger>
             <button class="filter-btn" :class="{ 'is-on': filterOn }" type="button">
               <Icon name="iconguolv" size="lg" />
             </button>
           </template>
-          <FilterPanel v-model="filterState" :categories="classification.categories" />
+          <FilterPanel v-model="filterState" :categories="usableCategories" />
         </GDropdown>
       </div>
 
@@ -461,6 +470,11 @@ async function apply(font: FontItem, variantIndex = 0) {
 
 .filter-btn.is-on {
   color: var(--accent-soft);
+}
+
+/* 下拉容器默认 min-width:100%（触发器只有 24px），面板会被压成一条 */
+.filter-dropdown :deep(.g-dropdown__panel) {
+  width: max-content;
 }
 
 /* 原版 .tag-input__create{padding:6px 12px;margin:8px 0;background:#3968ff;border-radius:4px;width:fit-content} */
