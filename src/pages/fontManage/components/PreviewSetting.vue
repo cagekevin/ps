@@ -46,10 +46,10 @@ onBeforeUnmount(() => {
 <template>
   <div class="ps">
     <button class="ps__icon" type="button" title="预览设置" @click="open = !open">
-      <Icon name="iconyanjing" />
+      <Icon name="iconxianshi" />
     </button>
     <button class="ps__icon" type="button" title="自定义预览文案" @click="emit('toggle-text')">
-      <Icon name="iconzihao" />
+      <Icon name="iconzihaodaxiao1" />
     </button>
 
     <Teleport to="body">

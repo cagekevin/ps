@@ -27,7 +27,7 @@ function apply() {
 
 <template>
   <div class="pt">
-    <Icon name="iconzihao" class="pt__icon" />
+    <Icon name="iconzihaodaxiao1" class="pt__icon" />
     <input
       v-model="text"
       class="pt__input"

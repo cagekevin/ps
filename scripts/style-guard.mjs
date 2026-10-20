@@ -146,6 +146,35 @@ const IMPORTANT_RE = /!important/g
 const MARGIN_NEG_RE = /margin:\s*-/g
 
 /**
+ * 图标名检查：`<Icon name="iconxxx">` 里的名字必须真实存在于 sprite。
+ *
+ * 反例：`iconyanjing` / `iconzihao` 是我猜的，sprite 里没有，
+ * 渲染出来是一个空白方块，只有控制台一句 warning —— 没人看控制台。
+ */
+function checkIconNames() {
+  const namesFile = join(SRC, 'components', 'icon', 'names.ts')
+  if (!existsSync(namesFile)) return []
+
+  const known = new Set(
+    [...readFileSync(namesFile, 'utf8').matchAll(/'([a-z0-9]+)'/gi)].map((m) => m[1]),
+  )
+
+  const problems = []
+  for (const file of walk(SRC)) {
+    if (!file.endsWith('.vue') && !file.endsWith('.ts')) continue
+    if (file === namesFile) continue
+
+    const text = readFileSync(file, 'utf8')
+    for (const m of text.matchAll(/["'](icon[a-z0-9]+)["']/g)) {
+      if (!known.has(m[1])) {
+        problems.push(`${relative(root, file).replace(/\\/g, '/')} 用了不存在的图标 ${m[1]}`)
+      }
+    }
+  }
+  return problems
+}
+
+/**
  * 静默失败检查（查 7）：store 里声明的 xxxError 必须在某个组件里被渲染。
  * 反例：tagsError 赋值 5 次、模板 0 次引用 —— 读失败时用户只看到"空的"。
  */
@@ -303,6 +332,15 @@ if (command === 'fix') {
     console.error('\n[style] 有硬编码样式，超出允许数量：\n')
     for (const p of problems) console.error(`  ${p.file}  ${p.count} 处（上限 ${p.allowed}）`)
     console.error('\n  先试 npm run style:fix 自动修，修不了再手动加 token。\n')
+    process.exit(1)
+  }
+
+  // 图标名必须真实存在，否则渲染成空白方块
+  const badIcons = checkIconNames()
+  if (badIcons.length) {
+    console.error('\n[style] 图标名不存在（会渲染成空白）：\n')
+    for (const p of badIcons) console.error(`  ${p}`)
+    console.error('\n  去 src/components/icon/names.ts 里找真实名字，别猜。\n')
     process.exit(1)
   }
 
