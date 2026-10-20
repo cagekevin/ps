@@ -250,7 +250,7 @@ async function apply(font: FontItem, variantIndex = 0) {
     <template #toolbar>
       <div class="search-row u-row u-gap-2">
         <GInput v-model="keyword" placeholder="搜索" clearable>
-          <template #prefix>
+          <template #suffix>
             <Icon name="iconsousuo" size="sm" />
           </template>
         </GInput>
@@ -283,6 +283,7 @@ async function apply(font: FontItem, variantIndex = 0) {
       <section class="tags">
         <div class="tags-head u-row">
           <span>我的标签</span>
+          <button class="tags-add" type="button" title="新建标签" @click="openCreate">+</button>
         </div>
         <p v-if="tagsError" class="tags-error">{{ tagsError }}（标签读取失败，字体列表不受影响）</p>
         <div v-else class="tag-list u-row">
@@ -298,16 +299,14 @@ async function apply(font: FontItem, variantIndex = 0) {
             {{ tag.text }}
           </button>
         </div>
-        <!-- 原版 .tag-input__create：蓝色文字按钮，不是裸加号 -->
-        <button class="tag-create" type="button" @click="openCreate">新建标签</button>
       </section>
 
-      <div class="list-head u-row u-gap-2">
-        <span class="a-mark">A</span>
-        <span class="list-count">{{ countText }}</span>
-        <button v-if="activeTag" class="clear-tag" type="button" @click="activeTag = ''">取消筛选</button>
-      </div>
     </template>
+
+    <div class="list-head u-row u-gap-2">
+      <span class="list-count">{{ countText }}</span>
+      <button v-if="activeTag" class="clear-tag" type="button" @click="activeTag = ''">取消筛选</button>
+    </div>
 
     <div v-if="error" class="state is-error">
       <p>{{ error }}</p>
@@ -330,7 +329,6 @@ async function apply(font: FontItem, variantIndex = 0) {
         @click="apply(font)"
         @contextmenu="openTagMenu($event, font)"
       >
-        <span class="a-mark">A</span>
         <div class="item-body">
           <div class="name-row u-row u-gap-3">
             <span
@@ -388,6 +386,7 @@ async function apply(font: FontItem, variantIndex = 0) {
       :tags="tags"
       :active="activeTagsOf"
       @toggle="onTagToggle"
+      @create="(text) => store.createTag(text)"
     />
 
     <TagContextMenu
@@ -492,6 +491,18 @@ async function apply(font: FontItem, variantIndex = 0) {
   padding: var(--sp-4) 0;
 }
 
+/* 原版搜索框高 28、圆角 6 */
+.search-row :deep(.g-input) {
+  height: var(--h-search);
+  border-radius: var(--r-lg);
+}
+
+/* 原版底部工具条高 24、底色 #545454 */
+:deep(.shell__footer) {
+  height: var(--h-footer);
+  background: var(--c-bar);
+}
+
 .search-row :deep(.g-input) {
   flex: 1;
 }
@@ -528,34 +539,54 @@ async function apply(font: FontItem, variantIndex = 0) {
 }
 
 .tag {
-  padding: var(--sp-2) var(--sp-4);
-  border: 0;
-  border-radius: var(--r-pill);
-  background: var(--c-hover-1);
+  padding: var(--sp-1) var(--sp-3);
+  border: 1px solid transparent;
+  border-radius: var(--r-md);
+  background: var(--c-surface-raised);
   color: var(--c-text-onchip);
   font-size: var(--fs-md);
   line-height: 16px;
   white-space: nowrap;
-  transition: background var(--dur-fast) var(--ease);
 }
 
 .tag:hover {
-  background: var(--c-hover-2);
+  background: var(--c-surface-raised-hover);
+}
+
+.tags-add {
+  width: 18px;
+  height: 18px;
+  margin-left: auto;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--c-icon);
+  font-size: var(--fs-xl);
+  line-height: 1;
+}
+
+.tags-add:hover {
+  color: var(--c-text-inverse);
 }
 
 .tag:hover {
   border-color: var(--accent-soft);
 }
 
-/* 选中：蓝底白字，符合常理 */
+/* 选中：蓝色描边 */
 .tag.is-active {
-  background: var(--accent);
-  color: var(--c-text-inverse);
+  border-color: var(--accent);
 }
 
+/* 原版：全部(259) 单独一行，位于标签和列表之间 */
 .list-head {
+  flex: 0 0 auto;
   height: var(--h-row);
-  /* 只留上边线：下边线和 PageShell 工具条自带的 border-bottom 会叠成 2px */
+  padding: 0 var(--page-pad-x);
   border-top: 1px solid var(--border);
   color: var(--c-text-muted);
   font-size: var(--fs-md);
@@ -668,7 +699,7 @@ async function apply(font: FontItem, variantIndex = 0) {
   min-width: 0;
   /* 原版 __font-family 的 max-width: calc(100% - 60px)，给右侧操作区预留位置 */
   max-width: calc(100% - 60px);
-  color: var(--c-text-strong);
+  color: var(--c-text);
   font-size: var(--fs-md);
   white-space: nowrap;
   overflow: hidden;

@@ -1,11 +1,11 @@
 <script setup lang="ts">
 import { navBottomRoutes, navRoutes } from '@/router'
-import { runtimeInfo } from '@/cep/ps'
+
 import Icon from '@/components/Icon.vue'
 import ToastHost from '@/components/ToastHost.vue'
 import ErrorBoundary from '@/components/ErrorBoundary.vue'
 
-const info = runtimeInfo()
+
 
 function reload() {
   location.reload()
@@ -27,7 +27,6 @@ function reload() {
         <span v-else class="glyph">{{ item.meta?.glyph }}</span>
       </router-link>
 
-      <div class="nav-mode" :class="info.inCep ? 'ps' : 'mock'">{{ info.inCep ? 'PS' : 'MK' }}</div>
       <button class="nav-item reload" @click="reload">↻</button>
     </nav>
 
@@ -60,18 +59,18 @@ function reload() {
   flex-direction: column;
   align-items: center;
   padding: var(--sp-2) 0;
-  background: var(--c-nav);
+  background: var(--bg);
 }
 
 .nav-item {
   position: relative;
   width: 32px;
   height: 32px;
+  border-radius: 0;
   display: flex;
   align-items: center;
   justify-content: center;
   border: 0;
-  border-radius: var(--r-lg);
   background: transparent;
   color: var(--c-icon);
   text-decoration: none;
@@ -80,14 +79,15 @@ function reload() {
 }
 
 .nav-item:hover {
-  background: var(--c-hover-1);
+  background: var(--c-hover-2);
   color: var(--c-text-inverse);
 }
 
 /* 当前所在：白 10% 底 + 强调色图标，一眼能看出 */
+/* 原版：.sub-nav-item-active 背景 #4b4b4b，图标变白 */
 .nav-item.router-link-active {
-  background: var(--c-hover-2);
-  color: var(--accent-soft);
+  background: var(--c-surface-raised);
+  color: var(--c-text-inverse);
 }
 
 .glyph {

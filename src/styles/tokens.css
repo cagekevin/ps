@@ -150,6 +150,10 @@
   --h-row: 26px;
   /* 预览文案输入框（原版 .preview-text>input height:30px） */
   --h-field: 30px;
+  /* 搜索框（原版 .search input 高 28） */
+  --h-search: 28px;
+  /* 底部工具条（原版 .preview-setting__actions height:24px） */
+  --h-footer: 24px;
   --nav-item: 30px;
 
   /* ---------- 层级 ---------- */
