@@ -33,10 +33,10 @@ useDismiss(() => open.value, cardRef, () => {
 
 <template>
   <div class="ps">
-    <button class="ps__icon" type="button" title="预览设置" @click="open = !open">
+    <button class="ps__icon" type="button" @click="open = !open">
       <Icon name="iconxianshi" />
     </button>
-    <button class="ps__icon" type="button" title="自定义预览文案" @click="emit('toggle-text')">
+    <button class="ps__icon" type="button" @click="emit('toggle-text')">
       <Icon name="iconzihaodaxiao1" />
     </button>
 

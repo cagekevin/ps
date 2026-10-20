@@ -247,7 +247,7 @@ async function apply(font: FontItem, variantIndex = 0) {
       <GDropdown v-model:visible="menuOpen" placement="bottom-end">
         <template #trigger>
           <!-- 原版是竖三点 ⋮（sprite 里没有，用内联 SVG） -->
-          <button class="icon-btn" type="button" title="更多">
+          <button class="icon-btn" type="button">
             <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
               <circle cx="8" cy="3" r="1.3" />
               <circle cx="8" cy="8" r="1.3" />
@@ -271,7 +271,7 @@ async function apply(font: FontItem, variantIndex = 0) {
         </GInput>
         <GDropdown v-model:visible="filterOpen" placement="bottom-end">
           <template #trigger>
-            <button class="filter-btn" :class="{ 'is-on': filterOn }" type="button" title="筛选">
+            <button class="filter-btn" :class="{ 'is-on': filterOn }" type="button">
               <Icon name="iconguolv" size="lg" />
             </button>
           </template>
@@ -294,7 +294,7 @@ async function apply(font: FontItem, variantIndex = 0) {
       <section class="tags">
         <div class="tags-head u-row">
           <span>我的标签</span>
-          <button class="tags-add" type="button" title="新建标签" @click="openCreate">+</button>
+          <button class="tags-add" type="button" @click="openCreate">+</button>
         </div>
         <p v-if="tagsError" class="tags-error">{{ tagsError }}（标签读取失败，字体列表不受影响）</p>
         <div v-else class="tag-list u-row">
@@ -352,12 +352,11 @@ async function apply(font: FontItem, variantIndex = 0) {
               <button
                 class="act"
                 type="button"
-                title="打标签（右键字体行也可以）"
                 @click.stop="openTagMenu($event, font)"
               >
                 <Icon name="iconbiaoqian" />
               </button>
-              <span title="点击收藏，再点一次取消">
+              <span>
                 <Rating :selected="stars[font.family] ?? 0" @rating="(value) => store.rate(font.family, value)" />
               </span>
             </div>
