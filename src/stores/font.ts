@@ -1,6 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { getFontTags, setFont } from '@/cep/ps'
+import { getFontStars, getFontTags, setFont, setFontStar, toggleFontTag } from '@/cep/ps'
 import { describeCepError } from '@/cep/eval-script'
 import { usePersistedRef } from '@/composables/usePersisted'
 import type { FontItem, FontTag } from '@/cep/types'
@@ -35,8 +35,41 @@ export function previewText(family: string): string {
 export const useFontStore = defineStore('font', () => {
   const tags = ref<FontTag[]>([])
   const tagsError = ref('')
+  const stars = ref<Record<string, number>>({})
   const activeFamily = ref('')
   const previewMode = usePersistedRef<PreviewMode>('font.previewMode', 'small')
+
+  async function loadStars() {
+    try {
+      stars.value = await getFontStars()
+    } catch {
+      stars.value = {}
+    }
+  }
+
+  /** 点同一颗星 = 取消收藏 */
+  async function rate(family: string, value: number) {
+    const next = stars.value[family] === value ? 0 : value
+    const copy = { ...stars.value }
+    if (next <= 0) delete copy[family]
+    else copy[family] = next
+    stars.value = copy
+
+    try {
+      await setFontStar(family, next)
+    } catch (e) {
+      tagsError.value = describeCepError(e)
+    }
+  }
+
+  async function toggleTag(tagText: string, family: string) {
+    try {
+      await toggleFontTag(tagText, family)
+      tags.value = await getFontTags()
+    } catch (e) {
+      tagsError.value = describeCepError(e)
+    }
+  }
 
   async function loadTags() {
     if (tags.value.length) return
@@ -64,5 +97,17 @@ export const useFontStore = defineStore('font', () => {
     }
   }
 
-  return { tags, tagsError, activeFamily, previewMode, loadTags, cyclePreview, apply }
+  return {
+    tags,
+    tagsError,
+    stars,
+    activeFamily,
+    previewMode,
+    loadTags,
+    loadStars,
+    rate,
+    toggleTag,
+    cyclePreview,
+    apply,
+  }
 })

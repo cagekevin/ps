@@ -1,6 +1,6 @@
 import { CepError, ERR_PREFIX, evalScriptRaw, hasCep, jsxCall } from './eval-script'
 import { DATA_FILES, PS_ENV } from './env'
-import { extensionDir, hasNode, readTextFile, readTextSmart, userDir } from './fs'
+import { extensionDir, hasNode, readTextFile, readTextSmart, userDir, writeTextFile } from './fs'
 import type { FontItem, FontTag, LayerState, SysFontFile } from './types'
 import * as mock from './mock'
 
@@ -103,6 +103,87 @@ export async function getFontTags(): Promise<FontTag[]> {
   } catch {
     return []
   }
+}
+
+/** 星级收藏文件（原面板 sj_ztglStar.ini） */
+const STAR_FILE = 'sj_ztglStar.ini'
+
+/** 读星级：{ 家族名: 1~3 } */
+export async function getFontStars(): Promise<Record<string, number>> {
+  if (!hasCep()) return mock.getFontStars()
+
+  try {
+    const text = await readTextSmart(`${userDir()}/${STAR_FILE}`)
+    if (!text) return {}
+    const raw = JSON.parse(text) as Array<{ name?: string; star?: string | number }>
+    const map: Record<string, number> = {}
+    for (const item of raw) {
+      if (typeof item.name !== 'string') continue
+      const value = Number(item.star)
+      if (value > 0) map[item.name] = value
+    }
+    return map
+  } catch {
+    return {}
+  }
+}
+
+/**
+ * 写星级。注意原文件里 star 有的是字符串 "3" 有的是数字 3，统一写数字。
+ * 写之前先备份成 .bak，避免写坏原面板的数据。
+ */
+export async function setFontStar(family: string, star: number): Promise<void> {
+  if (!hasCep()) return mock.setFontStar(family, star)
+
+  const path = `${userDir()}/${STAR_FILE}`
+  const text = await readTextSmart(path)
+  let list: Array<{ name: string; star: number }> = []
+  try {
+    const raw = text ? (JSON.parse(text) as Array<{ name?: string; star?: string | number }>) : []
+    list = raw
+      .filter((item) => typeof item.name === 'string')
+      .map((item) => ({ name: item.name as string, star: Number(item.star) || 0 }))
+  } catch {
+    list = []
+  }
+
+  const hit = list.find((item) => item.name === family)
+  if (star <= 0) {
+    if (hit) list = list.filter((item) => item.name !== family)
+  } else if (hit) {
+    hit.star = star
+  } else {
+    list.push({ name: family, star })
+  }
+
+  writeTextFile(`${path}.bak`, text ?? '[]')
+  writeTextFile(path, JSON.stringify(list))
+}
+
+/** 给字体加/去某个标签，写回 sj_ztglTags.ini */
+export async function toggleFontTag(tagText: string, family: string): Promise<void> {
+  if (!hasCep()) return mock.toggleFontTag(tagText, family)
+
+  const path = `${userDir()}/${DATA_FILES.ztglTags}`
+  const text = await readTextSmart(path)
+  let list: Array<{ text?: string; arr?: string[]; xz?: boolean }> = []
+  try {
+    list = text ? (JSON.parse(text) as Array<{ text?: string; arr?: string[]; xz?: boolean }>) : []
+  } catch {
+    list = []
+  }
+
+  const tag = list.find((item) => item.text === tagText)
+  if (!tag) return
+
+  const arr = Array.isArray(tag.arr) ? tag.arr : []
+  const index = arr.indexOf(family)
+  if (index >= 0) arr.splice(index, 1)
+  else arr.push(family)
+  tag.arr = arr
+
+  writeTextFile(`${path}.bak`, text ?? '[]')
+  writeTextFile(path, JSON.stringify(list))
 }
 
 /** 把字体设到当前选中的图层上，variantIndex 对应 weights/names/postScriptNames 的下标 */

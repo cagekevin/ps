@@ -31,6 +31,30 @@ export async function getFontTags(): Promise<FontTag[]> {
   }))
 }
 
+const mockStars: Record<string, number> = { MiSans: 3, Didot: 2 }
+
+export async function getFontStars(): Promise<Record<string, number>> {
+  await wait(40)
+  return { ...mockStars }
+}
+
+export async function setFontStar(family: string, star: number): Promise<void> {
+  await wait(40)
+  if (star <= 0) delete mockStars[family]
+  else mockStars[family] = star
+}
+
+export async function toggleFontTag(tagText: string, family: string): Promise<void> {
+  await wait(40)
+  const tag = (tagsJson as unknown as FontTag[]).find((t) => t.text === tagText)
+  if (!tag) return
+  const arr = tag.arr ?? []
+  const index = arr.indexOf(family)
+  if (index >= 0) arr.splice(index, 1)
+  else arr.push(family)
+  tag.arr = arr
+}
+
 export async function setFont(font: FontItem, variantIndex = 0): Promise<void> {
   await wait(120)
   const weight = font.weights[variantIndex] ?? '?'

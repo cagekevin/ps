@@ -7,6 +7,8 @@ import { PREVIEW_LABEL, familyLang, previewText, useFontStore } from '@/stores/f
 import { useFeedbackStore } from '@/stores/feedback'
 import { usePagedList } from '@/composables/usePagedList'
 import FontWeight from './components/FontWeight.vue'
+import Rating from './components/Rating.vue'
+import TagMenu from './components/TagMenu.vue'
 import PageShell from '@/components/PageShell.vue'
 import GInput from '@/components/GInput.vue'
 import GDropdown from '@/components/GDropdown.vue'
@@ -16,7 +18,26 @@ import Icon from '@/components/Icon.vue'
 
 const store = useFontStore()
 const feedback = useFeedbackStore()
-const { tags, previewMode, activeFamily } = storeToRefs(store)
+const { tags, previewMode, activeFamily, stars } = storeToRefs(store)
+
+/** 右键标签菜单的位置和当前字体 */
+const tagMenu = ref({ visible: false, x: 0, y: 0, family: '' })
+
+const activeTagsOf = computed(() => {
+  const family = tagMenu.value.family
+  if (!family) return []
+  return tags.value.filter((tag) => tag.arr.includes(family)).map((tag) => tag.text)
+})
+
+function openTagMenu(event: MouseEvent, font: FontItem) {
+  event.preventDefault()
+  tagMenu.value = { visible: true, x: event.clientX, y: event.clientY, family: font.family }
+}
+
+function onTagToggle(text: string) {
+  if (!tagMenu.value.family) return
+  void store.toggleTag(text, tagMenu.value.family)
+}
 
 const keyword = ref('')
 const activeTag = ref('')
@@ -59,6 +80,7 @@ const countText = computed(() =>
 onMounted(() => {
   void load()
   void store.loadTags()
+  void store.loadStars()
 })
 
 function previewFamily(font: FontItem) {
@@ -181,11 +203,18 @@ async function apply(font: FontItem, variantIndex = 0) {
         class="font-item u-row"
         :class="{ 'is-active': activeFamily === font.family }"
         @click="apply(font)"
+        @contextmenu="openTagMenu($event, font)"
       >
         <span class="a-mark">A</span>
         <div class="item-body">
           <div class="name-row u-row u-gap-3">
             <span class="family">{{ font.family }}</span>
+            <div class="actions u-row">
+              <button class="act" type="button" @click.stop="openTagMenu($event, font)">
+                <Icon name="iconbiaoqian" :size="12" />
+              </button>
+              <Rating :selected="stars[font.family] ?? 0" @rating="(value) => store.rate(font.family, value)" />
+            </div>
           </div>
 
           <pre
@@ -212,6 +241,15 @@ async function apply(font: FontItem, variantIndex = 0) {
       </button>
       <span class="footer-tip">{{ PREVIEW_LABEL[previewMode] }}</span>
     </template>
+
+    <TagMenu
+      v-model:visible="tagMenu.visible"
+      :x="tagMenu.x"
+      :y="tagMenu.y"
+      :tags="tags"
+      :active="activeTagsOf"
+      @toggle="onTagToggle"
+    />
   </PageShell>
 </template>
 
@@ -399,6 +437,34 @@ async function apply(font: FontItem, variantIndex = 0) {
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* hover 才出现的操作区：打标签 + 星级 */
+.actions {
+  display: none;
+  gap: var(--sp-1);
+}
+
+.font-item:hover .actions {
+  display: flex;
+}
+
+.act {
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--c-icon);
+}
+
+.act:hover {
+  background: var(--bg-raise);
+  color: var(--text-strong);
 }
 
 .preview {
