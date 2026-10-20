@@ -6,6 +6,7 @@ import type { FontItem } from '@/cep/types'
 import { PREVIEW_LABEL, familyLang, previewText, useFontStore } from '@/stores/font'
 import { useFeedbackStore } from '@/stores/feedback'
 import { usePagedList } from '@/composables/usePagedList'
+import FontWeight from './components/FontWeight.vue'
 import PageShell from '@/components/PageShell.vue'
 import GInput from '@/components/GInput.vue'
 import GDropdown from '@/components/GDropdown.vue'
@@ -82,12 +83,20 @@ function onLangSelect(value: string | number) {
   langFilter.value = value as 'all' | 'cn' | 'en'
 }
 
+/** 每个家族当前选中的字重下标 */
+const weightIndex = ref<Record<string, number>>({})
+
+function currentWeight(family: string) {
+  return weightIndex.value[family] ?? 0
+}
+
 async function apply(font: FontItem, variantIndex = 0) {
   const failure = await store.apply(font, variantIndex)
   if (failure) {
     feedback.error(failure)
     return
   }
+  weightIndex.value[font.family] = variantIndex
   const weight = font.weights[variantIndex] ?? ''
   feedback.ok(`已应用 ${font.family}${weight ? ` · ${weight}` : ''}`)
 }
@@ -177,7 +186,6 @@ async function apply(font: FontItem, variantIndex = 0) {
         <div class="item-body">
           <div class="name-row u-row u-gap-3">
             <span class="family">{{ font.family }}</span>
-            <span v-if="font.weights.length > 1" class="count">{{ font.weights.length }}</span>
           </div>
 
           <pre
@@ -188,18 +196,11 @@ async function apply(font: FontItem, variantIndex = 0) {
             >{{ previewText(font.family) }}</pre
           >
 
-          <div v-if="font.weights.length > 1" class="weights u-row u-gap-2">
-            <button
-              v-for="index in Math.min(font.weights.length, 8)"
-              :key="index"
-              class="weight"
-              type="button"
-              @click.stop="apply(font, index - 1)"
-            >
-              A
-            </button>
-            <span v-if="font.weights.length > 8" class="weight-more">+{{ font.weights.length - 8 }}</span>
-          </div>
+          <FontWeight
+            :font="font"
+            :current="currentWeight(font.family)"
+            @select="(index) => apply(font, index)"
+          />
         </div>
       </li>
       <li ref="sentinelRef" class="sentinel" aria-hidden="true" />
@@ -400,21 +401,6 @@ async function apply(font: FontItem, variantIndex = 0) {
   text-overflow: ellipsis;
 }
 
-.count {
-  flex: 0 0 auto;
-  width: 18px;
-  height: 18px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  border: 1px solid var(--bg-raise);
-  border-radius: var(--r-md);
-  background: var(--bg-raise);
-  color: var(--text-dim);
-  font-size: var(--fs-sm);
-  line-height: 1;
-}
-
 .preview {
   margin: 0;
   padding: var(--sp-3) 0;
@@ -442,36 +428,6 @@ async function apply(font: FontItem, variantIndex = 0) {
 .preview.is-extra-large {
   font-size: var(--preview-xl);
   line-height: var(--preview-xl-lh);
-}
-
-.weights {
-  padding-bottom: var(--sp-1);
-}
-
-.weight {
-  width: 18px;
-  height: 18px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  border: 1px solid var(--bg-raise);
-  border-radius: var(--r-md);
-  background: var(--bg-raise);
-  color: var(--c-text-chip);
-  font-family: Georgia, "Times New Roman", serif;
-  font-size: var(--fs-sm);
-  line-height: 1;
-}
-
-.weight:hover {
-  border-color: var(--accent-soft);
-  color: var(--c-text-inverse);
-}
-
-.weight-more {
-  color: var(--text-faint);
-  font-size: var(--fs-xs);
 }
 
 .sentinel {

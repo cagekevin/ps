@@ -23,6 +23,8 @@
   /* ---------- 颜色：描边 ---------- */
   --c-border: #2e2e2e;
   --c-border-strong: #4b4b4b;
+  /* 字重预览选中框（原版 pre.font-manage__font-weight__pre--active） */
+  --c-border-checked: #6e6e6e;
   --c-border-float: hsla(0, 0%, 100%, 0.1);
 
   /* ---------- 颜色：文字 ---------- */
