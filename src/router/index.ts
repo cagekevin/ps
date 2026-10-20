@@ -29,11 +29,12 @@ export const routes: RouteRecordRaw[] = [
   // 先落到字体管理，等字体页做完改回 /fontSet
   { path: '/', redirect: '/fontManage' },
 
+  // 顺序对齐原版导航配置：自定义 → 常用 → 字体面板 → 字体管理 → 样式 → 动作 → 重命名
   {
-    path: '/fontSet',
-    name: 'FontSet',
+    path: '/custom',
+    name: 'Custom',
     component: Placeholder,
-    meta: { title: '字体', nav: true, icon: 'icon-nav_zitimianban', glyph: '字' },
+    meta: { title: '自定义', nav: true, icon: 'icon-nav_zidingyikuangjia', glyph: '自' },
   },
   {
     path: '/commonUse',
@@ -42,10 +43,16 @@ export const routes: RouteRecordRaw[] = [
     meta: { title: '常用', nav: true, icon: 'icon-nav_changyonggongneng', glyph: '常' },
   },
   {
-    path: '/custom',
-    name: 'Custom',
+    path: '/fontSet',
+    name: 'FontSet',
     component: Placeholder,
-    meta: { title: '自定义', nav: true, icon: 'icon-nav_zidingyikuangjia', glyph: '自' },
+    meta: { title: '字体', nav: true, icon: 'icon-nav_zitimianban', glyph: '字' },
+  },
+  {
+    path: '/fontManage',
+    name: 'FontManage',
+    component: FontManagePage,
+    meta: { title: '字体管理', nav: true, icon: 'icon-nav_zitiguanli', glyph: '管' },
   },
   {
     path: '/style',
@@ -64,12 +71,6 @@ export const routes: RouteRecordRaw[] = [
     name: 'Rename',
     component: Placeholder,
     meta: { title: '重命名', nav: true, icon: 'icon-nav_chongmingmingtuceng', glyph: '名' },
-  },
-  {
-    path: '/fontManage',
-    name: 'FontManage',
-    component: FontManagePage,
-    meta: { title: '字体管理', nav: true, icon: 'icon-nav_zitiguanli', glyph: '管' },
   },
   {
     path: '/set',

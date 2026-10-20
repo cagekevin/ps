@@ -19,14 +19,15 @@ const buildTime = __BUILD_TIME__
   <div class="layout">
     <nav class="nav">
       <router-link v-for="item in navRoutes" :key="item.path" :to="item.path" class="nav-item">
-        <Icon v-if="item.meta?.icon" :name="item.meta.icon" size="md" />
+        <!-- 原版导航图标统一 svg-24 -->
+        <Icon v-if="item.meta?.icon" :name="item.meta.icon" size="2xl" />
         <span v-else class="glyph">{{ item.meta?.glyph }}</span>
       </router-link>
 
       <div class="nav-spacer" />
 
       <router-link v-for="item in navBottomRoutes" :key="item.path" :to="item.path" class="nav-item">
-        <Icon v-if="item.meta?.icon" :name="item.meta.icon" size="md" />
+        <Icon v-if="item.meta?.icon" :name="item.meta.icon" size="2xl" />
         <span v-else class="glyph">{{ item.meta?.glyph }}</span>
       </router-link>
 
@@ -75,10 +76,11 @@ const buildTime = __BUILD_TIME__
   letter-spacing: 0;
 }
 
+/* 原版 #nav 宽 40，导航项撑满 40×40 */
 .nav-item {
   position: relative;
-  width: 32px;
-  height: 32px;
+  width: var(--nav-w);
+  height: var(--nav-w);
   border-radius: 0;
   display: flex;
   align-items: center;
