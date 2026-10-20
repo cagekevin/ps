@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import GMenu from '@/components/GMenu.vue'
+import GMenuItem from '@/components/GMenuItem.vue'
 
 /**
  * 标签右键菜单。对应原版 font-manage__tag-group__context-menu。
- * 只有两项：重命名 / 删除。
+ * 内容形态复用 GMenu / GMenuItem，这里只负责「定位到鼠标位置」和「点外部关闭」。
  */
 const props = defineProps<{
   visible: boolean
@@ -22,6 +24,12 @@ const top = ref(props.y)
 
 function close() {
   emit('update:visible', false)
+}
+
+function onSelect(value: string | number) {
+  close()
+  if (value === 'rename') emit('rename')
+  else if (value === 'remove') emit('remove')
 }
 
 function onDocDown(event: MouseEvent) {
@@ -55,36 +63,23 @@ onBeforeUnmount(() => {
 <template>
   <Teleport to="body">
     <div v-if="visible" ref="menuRef" class="tcm" :style="{ left: `${x}px`, top: `${top}px` }">
-      <div class="tcm__item" @click="emit('rename')">重命名</div>
-      <div class="tcm__item" @click="emit('remove')">删除</div>
+      <GMenu @select="onSelect">
+        <GMenuItem value="rename">重命名</GMenuItem>
+        <GMenuItem value="remove">删除</GMenuItem>
+      </GMenu>
     </div>
   </Teleport>
 </template>
 
 <style scoped>
+/* 只负责浮层外观，菜单项样式来自 GMenu / GMenuItem */
 .tcm {
   position: fixed;
   z-index: var(--z-dropdown);
   min-width: 100px;
-  padding: var(--sp-3) 0;
   border: 1px solid var(--c-border-float);
   border-radius: var(--r-md);
   background: var(--c-float);
   box-shadow: var(--shadow-pop);
-}
-
-.tcm__item {
-  height: var(--h-control);
-  padding: 0 var(--sp-5);
-  display: flex;
-  align-items: center;
-  color: var(--c-text-strong);
-  font-size: var(--fs-md);
-  cursor: pointer;
-  white-space: nowrap;
-}
-
-.tcm__item:hover {
-  background: var(--c-surface-raised);
 }
 </style>

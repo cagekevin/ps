@@ -25,7 +25,7 @@ import Icon from '@/components/Icon.vue'
 
 const store = useFontStore()
 const feedback = useFeedbackStore()
-const { tags, previewMode, activeFamily, stars, customPreviewText } = storeToRefs(store)
+const { tags, tagsError, previewMode, activeFamily, stars, customPreviewText } = storeToRefs(store)
 
 /** 预览文案：用户自定义优先，否则按语言取默认 */
 const showTextPanel = ref(false)
@@ -280,7 +280,8 @@ async function apply(font: FontItem, variantIndex = 0) {
           <span>我的标签</span>
           <button class="icon-btn is-plain" type="button" title="新建标签" @click="openCreate">+</button>
         </div>
-        <div class="tag-list u-row">
+        <p v-if="tagsError" class="tags-error">{{ tagsError }}（标签读取失败，字体列表不受影响）</p>
+        <div v-else class="tag-list u-row">
           <button
             v-for="tag in tags"
             :key="tag.text"
@@ -416,9 +417,10 @@ async function apply(font: FontItem, variantIndex = 0) {
 </template>
 
 <style scoped>
+/* 和 GInput（--h-control）同排，高度必须一致 */
 .icon-btn {
-  width: var(--h-control-sm);
-  height: var(--h-control-sm);
+  width: var(--h-control);
+  height: var(--h-control);
   display: inline-flex;
   align-items: center;
   justify-content: center;
@@ -480,6 +482,14 @@ async function apply(font: FontItem, variantIndex = 0) {
   gap: var(--sp-2);
 }
 
+/* 标签读不到时要说一句，不能让标签区静默变空 */
+.tags-error {
+  margin: 0;
+  color: var(--danger);
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+}
+
 .tag {
   /* 原版 .font-manage__tag__content>div { padding: 4px 7px } */
   padding: var(--sp-2) var(--sp-exact-7);
@@ -489,6 +499,7 @@ async function apply(font: FontItem, variantIndex = 0) {
   color: var(--c-text-onchip);
   font-size: var(--fs-md);
   line-height: 16px;
+  white-space: nowrap;
 }
 
 .tag:hover {
@@ -502,8 +513,8 @@ async function apply(font: FontItem, variantIndex = 0) {
 
 .list-head {
   height: var(--h-row);
+  /* 只留上边线：下边线和 PageShell 工具条自带的 border-bottom 会叠成 2px */
   border-top: 1px solid var(--border);
-  border-bottom: 1px solid var(--border);
   color: var(--c-text-muted);
   font-size: var(--fs-md);
 }
@@ -554,6 +565,7 @@ async function apply(font: FontItem, variantIndex = 0) {
 .retry {
   height: var(--h-control-sm);
   padding: 0 var(--sp-5);
+  white-space: nowrap;
   border: 1px solid var(--bg-raise);
   border-radius: var(--r-md);
   background: var(--bg-raise);
@@ -616,14 +628,19 @@ async function apply(font: FontItem, variantIndex = 0) {
   padding-bottom: var(--sp-6);
 }
 
-/* hover 才出现的操作区：打标签 + 星级 */
+/* 操作区常显（低对比），hover 时变亮。
+   不隐藏的原因：① display 切换会让 flex 挤压家族名，文字左右跳动
+   ② 星级没有别的入口，藏起来就等于点不到（右键只承载打标签） */
 .actions {
-  display: none;
+  display: flex;
   gap: var(--sp-1);
+  opacity: 0.45;
+  transition: opacity var(--dur-fast) var(--ease);
 }
 
-.font-item:hover .actions {
-  display: flex;
+.font-item:hover .actions,
+.font-item.is-active .actions {
+  opacity: 1;
 }
 
 .act {
