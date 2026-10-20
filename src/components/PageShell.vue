@@ -51,16 +51,31 @@ withDefaults(
   display: flex;
   align-items: center;
   gap: var(--sp-3);
-  background: var(--bg-panel);
+  background: var(--c-header);
   border-bottom: 1px solid var(--border);
 }
 
 h1 {
+  position: relative;
+  height: 100%;
   margin: 0;
   flex: 1;
+  display: flex;
+  align-items: center;
   color: var(--text-strong);
   font-size: var(--fs-lg);
   font-weight: 500;
+}
+
+/* 当前页标识：标题下方 18×2 的蓝线（原版 .tabs__nav__bar--active:after） */
+h1::after {
+  content: '';
+  position: absolute;
+  left: 0;
+  bottom: 0;
+  width: 18px;
+  height: 2px;
+  background: var(--accent);
 }
 
 .shell__count {

@@ -491,10 +491,10 @@ async function apply(font: FontItem, variantIndex = 0) {
   padding: var(--sp-4) 0;
 }
 
-/* 原版搜索框高 28、圆角 6 */
+/* 原版搜索框继承 .base-input：高 30、圆角 5 */
 .search-row :deep(.g-input) {
-  height: var(--h-search);
-  border-radius: var(--r-lg);
+  height: var(--h-field);
+  border-radius: var(--r-input);
 }
 
 /* 原版底部工具条高 24、底色 #545454 */

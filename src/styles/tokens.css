@@ -10,7 +10,7 @@
   /* ---------- 颜色：底层 ----------
      原版 #nav{background:#535353}、index.html body{background:#535353}，
      这是整个面板的基色，不是 #333。 */
-  --c-bg: #535353;
+  --c-bg: #363636;
   --c-surface: #363636;
   /* 比表面更深的凹陷层：输入框（.base-input）、导航激活项（.nav-item-act） */
   --c-sunken: #222;
@@ -38,8 +38,10 @@
      hover 统一用半透明白层，不逐组件定义颜色 */
   --c-hover-1: hsla(0, 0%, 100%, 0.06);
   --c-hover-2: hsla(0, 0%, 100%, 0.1);
-  /* 侧边栏：原版截图比内容区深 */
-  --c-nav: #333333;
+  /* 侧边栏：原版截图里明显比内容区(#363636)深 */
+  --c-nav: #2b2b2b;
+  /* 页头：比列表项略深 */
+  --c-header: #333333;
   /* 收藏星标：金色是通用语义 */
   --c-star: #ffb400;
   /* 禁用按钮（原版 .preview-text__btn--disable） */
@@ -138,6 +140,8 @@
   --r-xs: 3px;
   --r-sm: 2px;
   --r-md: 4px;
+  /* 输入框圆角：原版 .base-input{border-radius:5px} */
+  --r-input: 5px;
   --r-lg: 6px;
   --r-pill: 999px;
 
