@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { ref, watch } from 'vue'
+import { useDismiss } from '@/composables/useDismiss'
 import GMenu from '@/components/GMenu.vue'
 import GMenuItem from '@/components/GMenuItem.vue'
 
@@ -32,14 +33,7 @@ function onSelect(value: string | number) {
   else if (value === 'remove') emit('remove')
 }
 
-function onDocDown(event: MouseEvent) {
-  if (!props.visible) return
-  if (menuRef.value && !menuRef.value.contains(event.target as Node)) close()
-}
-
-function onKeydown(event: KeyboardEvent) {
-  if (event.key === 'Escape') close()
-}
+useDismiss(() => props.visible, menuRef, close)
 
 watch(
   () => props.visible,
@@ -49,15 +43,7 @@ watch(
   },
 )
 
-onMounted(() => {
-  document.addEventListener('mousedown', onDocDown)
-  document.addEventListener('keydown', onKeydown)
-})
 
-onBeforeUnmount(() => {
-  document.removeEventListener('mousedown', onDocDown)
-  document.removeEventListener('keydown', onKeydown)
-})
 </script>
 
 <template>

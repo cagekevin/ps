@@ -1,7 +1,10 @@
 <script setup lang="ts">
+import { ref } from 'vue'
+import { useDismiss } from '@/composables/useDismiss'
+
 /**
- * 弹窗，对应原面板的 $msg（showErr / showErrHtml）。
- * toast 放不下详情的时候用它：批量失败汇总、需要用户确认的危险操作。
+ * 弹窗外壳。所有对话框都用它，不要自己写遮罩。
+ * 行为固定：居中、点遮罩关闭、Esc 关闭、右上角 × 关闭。
  */
 const props = withDefaults(
   defineProps<{
@@ -26,13 +29,17 @@ function onCancel() {
   emit('cancel')
   visible.value = false
 }
+
+// 遮罩点击已负责「点外部关闭」，这里只补 Esc
+const modalRef = ref<HTMLElement>()
+useDismiss(() => visible.value, modalRef, onCancel, { outside: false })
 </script>
 
 <template>
   <Teleport to="body">
     <transition name="scale">
       <div v-if="visible" class="modal-mask" @click.self="onCancel">
-        <div class="modal" :style="{ width: `${props.width}px` }">
+        <div ref="modalRef" class="modal" :style="{ width: `${props.width}px` }">
           <header class="modal__header">
             <span class="modal__title">{{ title }}</span>
             <button class="modal__close" type="button" @click="onCancel">×</button>

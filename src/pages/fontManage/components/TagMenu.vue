@@ -1,6 +1,7 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import type { FontTag } from '@/cep/types'
+import { useDismiss } from '@/composables/useDismiss'
 
 /**
  * 字体标签弹层。对应原版截图：
@@ -41,14 +42,7 @@ function submit() {
   keyword.value = ''
 }
 
-function onDocDown(event: MouseEvent) {
-  if (!props.visible) return
-  if (boxRef.value && !boxRef.value.contains(event.target as Node)) close()
-}
-
-function onKeydown(event: KeyboardEvent) {
-  if (event.key === 'Escape') close()
-}
+useDismiss(() => props.visible, boxRef, close)
 
 watch(
   () => props.visible,
@@ -59,15 +53,7 @@ watch(
   },
 )
 
-onMounted(() => {
-  document.addEventListener('mousedown', onDocDown)
-  document.addEventListener('keydown', onKeydown)
-})
 
-onBeforeUnmount(() => {
-  document.removeEventListener('mousedown', onDocDown)
-  document.removeEventListener('keydown', onKeydown)
-})
 </script>
 
 <template>

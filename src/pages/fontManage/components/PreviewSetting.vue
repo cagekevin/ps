@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import { onBeforeUnmount, onMounted, ref } from 'vue'
+import { ref } from 'vue'
+import { useDismiss } from '@/composables/useDismiss'
 import Icon from '@/components/Icon.vue'
 import { PREVIEW_LABEL, PREVIEW_MODES, type PreviewMode } from '@/stores/font'
 
@@ -23,24 +24,11 @@ function pick(mode: PreviewMode) {
   emit('update:mode', mode)
 }
 
-function onDocDown(event: MouseEvent) {
-  if (!open.value) return
-  if (cardRef.value && !cardRef.value.contains(event.target as Node)) open.value = false
-}
-
-function onKeydown(event: KeyboardEvent) {
-  if (event.key === 'Escape') open.value = false
-}
-
-onMounted(() => {
-  document.addEventListener('mousedown', onDocDown)
-  document.addEventListener('keydown', onKeydown)
+useDismiss(() => open.value, cardRef, () => {
+  open.value = false
 })
 
-onBeforeUnmount(() => {
-  document.removeEventListener('mousedown', onDocDown)
-  document.removeEventListener('keydown', onKeydown)
-})
+
 </script>
 
 <template>
