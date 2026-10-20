@@ -185,8 +185,13 @@ onMounted(() => {
   void store.loadStars()
 })
 
+/**
+ * 预览字体栈。用**当前选中字重**的 PostScript 名（原版 font-manage-list 的
+ * `postScriptNames[family]` 状态）——选了 Bold，预览就该是 Bold。
+ */
 function previewFamily(font: FontItem) {
-  const ps = font.postScriptNames[0] ?? font.family
+  const index = currentWeight(font.family)
+  const ps = font.postScriptNames[index] ?? font.postScriptNames[0] ?? font.family
   return `"${ps}", "${font.family}"`
 }
 
