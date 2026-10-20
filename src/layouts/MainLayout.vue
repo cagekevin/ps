@@ -10,6 +10,9 @@ import ErrorBoundary from '@/components/ErrorBoundary.vue'
 function reload() {
   location.reload()
 }
+
+/** 构建时间，显示在导航底部，用来确认面板跑的是不是最新构建 */
+const buildTime = __BUILD_TIME__
 </script>
 
 <template>
@@ -27,7 +30,9 @@ function reload() {
         <span v-else class="glyph">{{ item.meta?.glyph }}</span>
       </router-link>
 
-      <button class="nav-item reload" @click="reload">↻</button>
+      <button class="nav-item reload" type="button" title="重新加载" @click="reload">↻</button>
+      <!-- 构建时间：用来确认面板跑的是不是最新构建 -->
+      <span class="build-stamp" :title="`构建于 ${buildTime}`">{{ buildTime.slice(11) }}</span>
     </nav>
 
     <main class="content">
@@ -59,7 +64,15 @@ function reload() {
   flex-direction: column;
   align-items: center;
   padding: var(--sp-2) 0;
-  background: var(--bg);
+  background: var(--c-nav);
+}
+
+.build-stamp {
+  margin-bottom: var(--sp-2);
+  color: var(--c-text-faint);
+  font-size: var(--fs-xs);
+  line-height: 1;
+  letter-spacing: 0;
 }
 
 .nav-item {
