@@ -109,10 +109,27 @@ function countTemplate(content) {
   return count
 }
 
+/**
+ * 注释里的色值不算违规（注释里写「原版是 #535353」是正常文档行为）。
+ * 修复时也要跳过注释，否则会把注释内容也改写掉。
+ */
+function maskComments(css) {
+  const store = []
+  const masked = css.replace(/\/\*[\s\S]*?\*\//g, (match) => {
+    store.push(match)
+    return `\u0000C${store.length - 1}\u0000`
+  })
+  return {
+    masked,
+    restore: (text) => text.replace(/\u0000C(\d+)\u0000/g, (_m, index) => store[Number(index)]),
+  }
+}
+
 function countViolations(css) {
+  const { masked } = maskComments(css)
   let count = 0
   for (const re of [COLOR_RE, FS_RE, RADIUS_RE]) {
-    const hits = css.match(re)
+    const hits = masked.match(re)
     if (hits) count += hits.length
   }
   return count
@@ -148,8 +165,9 @@ function fix() {
     const content = readFileSync(abs, 'utf8')
     let fixed = 0
 
-    const applyFix = (css) => {
-      let out = css.replace(COLOR_RE, (match) => {
+    const applyFix = (rawCss) => {
+      const { masked, restore } = maskComments(rawCss)
+      let out = masked.replace(COLOR_RE, (match) => {
         const hit = maps.colorMap.get(norm(match))
         if (!hit) return match
         fixed++
@@ -167,7 +185,7 @@ function fix() {
         fixed++
         return `border-radius: ${hit}`
       })
-      return out
+      return restore(out)
     }
 
     let next = abs.endsWith('.vue') ? mapStyleBlocks(content, applyFix) : applyFix(content)
