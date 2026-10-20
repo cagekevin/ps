@@ -52,27 +52,26 @@ function reload() {
   background: var(--bg);
 }
 
+/* 原版：#nav{width:40px;height:100vh;background:#535353}，导航项 40×40 无圆角 */
 .nav {
   flex: 0 0 var(--nav-w);
   width: var(--nav-w);
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: var(--sp-2) 0;
+  padding: 0;
   background: var(--bg);
-  border-right: 1px solid var(--border);
 }
 
 .nav-item {
   position: relative;
-  width: var(--nav-item);
-  height: var(--nav-item);
-  margin-bottom: var(--sp-1);
+  width: var(--nav-w);
+  height: var(--nav-w);
   display: flex;
   align-items: center;
   justify-content: center;
   border: 0;
-  border-radius: var(--r-md);
+  border-radius: 0;
   background: transparent;
   color: var(--c-icon);
   text-decoration: none;
@@ -83,21 +82,10 @@ function reload() {
   color: var(--c-text-inverse);
 }
 
+/* 原版 .nav-item-act{color:#006fff;background:#222}：凹陷底 + 蓝色图标 */
 .nav-item.router-link-active {
-  background: var(--bg-active);
-  color: var(--c-text-inverse);
-}
-
-.nav-item.router-link-active::before {
-  content: '';
-  position: absolute;
-  left: calc(var(--sp-2) * -1);
-  top: 50%;
-  transform: translateY(-50%);
-  width: var(--sp-1);
-  height: 16px;
-  border-radius: var(--r-sm);
-  background: var(--accent);
+  background: var(--bg-sunken);
+  color: var(--accent);
 }
 
 .glyph {

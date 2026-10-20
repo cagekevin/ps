@@ -7,9 +7,13 @@
  * 色值来源：05-官方资源/04-CEP资源包/CEP001-设计助理/css/app.bf68b505.css
  */
 :root {
-  /* ---------- 颜色：底层 ---------- */
-  --c-bg: #333;
+  /* ---------- 颜色：底层 ----------
+     原版 #nav{background:#535353}、index.html body{background:#535353}，
+     这是整个面板的基色，不是 #333。 */
+  --c-bg: #535353;
   --c-surface: #363636;
+  /* 比表面更深的凹陷层：输入框（.base-input）、导航激活项（.nav-item-act） */
+  --c-sunken: #222;
   --c-surface-hover: #3d3d3d;
   --c-surface-active: #424242;
   --c-surface-raised: #4b4b4b;
@@ -136,6 +140,7 @@
 
   /* ---------- 语义别名：组件里优先用这些 ---------- */
   --bg: var(--c-bg);
+  --bg-sunken: var(--c-sunken);
   --bg-panel: var(--c-surface);
   --bg-hover: var(--c-surface-hover);
   --bg-active: var(--c-surface-active);
