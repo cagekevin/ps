@@ -168,6 +168,33 @@ export async function toggleFontTag(tagText: string, family: string): Promise<vo
   })
 }
 
+/** 新建标签 */
+export async function createFontTag(text: string): Promise<void> {
+  if (!hasCep()) return mock.createFontTag(text)
+
+  await tagFile.update((list) => {
+    if (list.some((item) => item.text === text)) return
+    list.push({ text, arr: [], xz: false })
+  })
+}
+
+/** 重命名标签（关联的字体跟着走） */
+export async function renameFontTag(from: string, to: string): Promise<void> {
+  if (!hasCep()) return mock.renameFontTag(from, to)
+
+  await tagFile.update((list) => {
+    const tag = list.find((item) => item.text === from)
+    if (tag) tag.text = to
+  })
+}
+
+/** 删除标签（连同它和字体的关联） */
+export async function deleteFontTag(text: string): Promise<void> {
+  if (!hasCep()) return mock.deleteFontTag(text)
+
+  await tagFile.update((list) => list.filter((item) => item.text !== text))
+}
+
 /** 把字体设到当前选中的图层上，variantIndex 对应 weights/names/postScriptNames 的下标 */
 export async function setFont(font: FontItem, variantIndex = 0): Promise<void> {
   if (!hasCep()) return mock.setFont(font, variantIndex)

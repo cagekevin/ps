@@ -13,6 +13,9 @@ import TagMenu from './components/TagMenu.vue'
 import EmptyState from './components/EmptyState.vue'
 import PreviewSetting from './components/PreviewSetting.vue'
 import PreviewText from './components/PreviewText.vue'
+import TagCreator from './components/TagCreator.vue'
+import TagContextMenu from './components/TagContextMenu.vue'
+import CepModal from '@/components/CepModal.vue'
 import PageShell from '@/components/PageShell.vue'
 import GInput from '@/components/GInput.vue'
 import GDropdown from '@/components/GDropdown.vue'
@@ -48,6 +51,82 @@ function openTagMenu(event: MouseEvent, font: FontItem) {
 function onTagToggle(text: string) {
   if (!tagMenu.value.family) return
   void store.toggleTag(text, tagMenu.value.family)
+}
+
+/* ---------- 标签的新建 / 重命名 / 删除 ---------- */
+
+const tagCreator = ref({
+  visible: false,
+  mode: 'create' as 'create' | 'rename',
+  from: '',
+  initial: '',
+})
+const tagCtx = ref({ visible: false, x: 0, y: 0, tag: '' })
+const tagDelete = ref({ visible: false, tag: '', count: 0 })
+
+function openCreate() {
+  tagCreator.value = { visible: true, mode: 'create', from: '', initial: '' }
+}
+
+function openTagCtx(event: MouseEvent, tag: string) {
+  event.preventDefault()
+  tagCtx.value = { visible: true, x: event.clientX, y: event.clientY, tag }
+}
+
+function startRename() {
+  const tag = tagCtx.value.tag
+  tagCtx.value.visible = false
+  tagCreator.value = { visible: true, mode: 'rename', from: tag, initial: tag }
+}
+
+function askDelete() {
+  const tag = tagCtx.value.tag
+  const count = tags.value.find((item) => item.text === tag)?.arr.length ?? 0
+  tagCtx.value.visible = false
+  tagDelete.value = { visible: true, tag, count }
+}
+
+async function submitTag(value: string) {
+  if (!value) {
+    feedback.error('标签名不能为空')
+    tagCreator.value.visible = true
+    return
+  }
+  if (tags.value.some((item) => item.text === value && item.text !== tagCreator.value.from)) {
+    feedback.error('已有同名标签')
+    tagCreator.value.visible = true
+    return
+  }
+
+  if (tagCreator.value.mode === 'create') {
+    const failure = await store.createTag(value)
+    if (failure) {
+      feedback.error(failure)
+      return
+    }
+    feedback.ok(`已新建标签「${value}」`)
+    return
+  }
+
+  if (value === tagCreator.value.from) return
+  const failure = await store.renameTag(tagCreator.value.from, value)
+  if (failure) {
+    feedback.error(failure)
+    return
+  }
+  if (activeTag.value === tagCreator.value.from) activeTag.value = value
+  feedback.ok(`已重命名为「${value}」`)
+}
+
+async function confirmDelete() {
+  const tag = tagDelete.value.tag
+  const failure = await store.deleteTag(tag)
+  if (failure) {
+    feedback.error(failure)
+    return
+  }
+  if (activeTag.value === tag) activeTag.value = ''
+  feedback.ok(`已删除标签「${tag}」`)
 }
 
 const keyword = ref('')
@@ -199,7 +278,7 @@ async function apply(font: FontItem, variantIndex = 0) {
       <section class="tags">
         <div class="tags-head u-row">
           <span>我的标签</span>
-          <button class="icon-btn is-plain" disabled type="button">+</button>
+          <button class="icon-btn is-plain" type="button" title="新建标签" @click="openCreate">+</button>
         </div>
         <div class="tag-list u-row">
           <button
@@ -209,6 +288,7 @@ async function apply(font: FontItem, variantIndex = 0) {
             :class="{ 'is-active': activeTag === tag.text }"
             type="button"
             @click="activeTag = activeTag === tag.text ? '' : tag.text"
+            @contextmenu="openTagCtx($event, tag.text)"
           >
             {{ tag.text }}
           </button>
@@ -302,6 +382,36 @@ async function apply(font: FontItem, variantIndex = 0) {
       :active="activeTagsOf"
       @toggle="onTagToggle"
     />
+
+    <TagContextMenu
+      v-model:visible="tagCtx.visible"
+      :x="tagCtx.x"
+      :y="tagCtx.y"
+      @rename="startRename"
+      @remove="askDelete"
+    />
+
+    <TagCreator
+      v-model:visible="tagCreator.visible"
+      :mode="tagCreator.mode"
+      :initial="tagCreator.initial"
+      @submit="submitTag"
+    />
+
+    <CepModal
+      v-model:visible="tagDelete.visible"
+      title="删除标签"
+      :width="280"
+      ok-text="删除"
+      @ok="confirmDelete"
+    >
+      <p class="del-tip">
+        确定删除标签「{{ tagDelete.tag }}」吗？
+        <template v-if="tagDelete.count">
+          该标签下有 {{ tagDelete.count }} 个字体，删除后关联会一起消失。
+        </template>
+      </p>
+    </CepModal>
   </PageShell>
 </template>
 
@@ -584,5 +694,12 @@ async function apply(font: FontItem, variantIndex = 0) {
 .footer-tip {
   color: var(--text-faint);
   font-size: var(--fs-xs);
+}
+
+.del-tip {
+  margin: 0;
+  color: var(--c-text-strong);
+  font-size: var(--fs-md);
+  line-height: 1.6;
 }
 </style>

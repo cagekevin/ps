@@ -1,6 +1,15 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import { getFontStars, getFontTags, setFont, setFontStar, toggleFontTag } from '@/cep/ps'
+import {
+  createFontTag,
+  deleteFontTag,
+  getFontStars,
+  getFontTags,
+  renameFontTag,
+  setFont,
+  setFontStar,
+  toggleFontTag,
+} from '@/cep/ps'
 import { describeCepError } from '@/cep/eval-script'
 import { usePersistedRef } from '@/composables/usePersisted'
 import type { FontItem, FontTag } from '@/cep/types'
@@ -64,6 +73,37 @@ export const useFontStore = defineStore('font', () => {
     }
   }
 
+  /** 新建 / 重命名 / 删除标签，成功返回 null，失败返回文案 */
+  async function createTag(text: string): Promise<string | null> {
+    try {
+      await createFontTag(text)
+      tags.value = await getFontTags()
+      return null
+    } catch (e) {
+      return describeCepError(e)
+    }
+  }
+
+  async function renameTag(from: string, to: string): Promise<string | null> {
+    try {
+      await renameFontTag(from, to)
+      tags.value = await getFontTags()
+      return null
+    } catch (e) {
+      return describeCepError(e)
+    }
+  }
+
+  async function deleteTag(text: string): Promise<string | null> {
+    try {
+      await deleteFontTag(text)
+      tags.value = await getFontTags()
+      return null
+    } catch (e) {
+      return describeCepError(e)
+    }
+  }
+
   async function toggleTag(tagText: string, family: string) {
     try {
       await toggleFontTag(tagText, family)
@@ -110,6 +150,9 @@ export const useFontStore = defineStore('font', () => {
     loadStars,
     rate,
     toggleTag,
+    createTag,
+    renameTag,
+    deleteTag,
     cyclePreview,
     apply,
   }

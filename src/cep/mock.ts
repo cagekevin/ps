@@ -55,6 +55,26 @@ export async function toggleFontTag(tagText: string, family: string): Promise<vo
   tag.arr = arr
 }
 
+export async function createFontTag(text: string): Promise<void> {
+  await wait(40)
+  const list = tagsJson as unknown as FontTag[]
+  if (list.some((t) => t.text === text)) return
+  list.push({ text, arr: [], xz: false })
+}
+
+export async function renameFontTag(from: string, to: string): Promise<void> {
+  await wait(40)
+  const tag = (tagsJson as unknown as FontTag[]).find((t) => t.text === from)
+  if (tag) tag.text = to
+}
+
+export async function deleteFontTag(text: string): Promise<void> {
+  await wait(40)
+  const list = tagsJson as unknown as FontTag[]
+  const index = list.findIndex((t) => t.text === text)
+  if (index >= 0) list.splice(index, 1)
+}
+
 export async function setFont(font: FontItem, variantIndex = 0): Promise<void> {
   await wait(120)
   const weight = font.weights[variantIndex] ?? '?'
