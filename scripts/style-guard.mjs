@@ -139,10 +139,13 @@ function maskComments(css) {
   }
 }
 
+/** 原版有 64 处 !important，是维护噩梦；我们一律禁止 */
+const IMPORTANT_RE = /!important/g
+
 function countViolations(css) {
   const { masked } = maskComments(css)
   let count = 0
-  for (const re of [COLOR_RE, FS_RE, RADIUS_RE]) {
+  for (const re of [COLOR_RE, FS_RE, RADIUS_RE, IMPORTANT_RE]) {
     const hits = masked.match(re)
     if (hits) count += hits.length
   }
@@ -161,6 +164,13 @@ function collect() {
 
     let count = countViolations(css)
     if (abs.endsWith('.vue')) count += countTemplate(content)
+
+    // 原版残留 40 处 console.log，我们统一走 utils/logger.ts
+    if (!rel.endsWith('utils/logger.ts')) {
+      const logs = content.match(/\bconsole\.log\(/g)
+      if (logs) count += logs.length
+    }
+
     if (count > 0) result[rel] = count
   }
   return result
