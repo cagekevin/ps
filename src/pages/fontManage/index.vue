@@ -188,6 +188,14 @@ const hasFilter = computed(
 
 const filterOn = computed(() => Object.values(filterState.value).some((ids) => ids.length > 0))
 
+/** 筛选按钮角标上的数量（原版 Badge :count） */
+const filterCount = computed(() =>
+  Object.values(filterState.value).reduce((sum, ids) => sum + ids.length, 0),
+)
+
+/** 标签区展开/收起（原版 user-tag-filter 的 chevron_down） */
+const tagsOpen = ref(true)
+
 /**
  * 只显示真正有数据支撑的分组。
  * 类型/风格/评分依赖 classification.json 的 presets，而那 1178 条全是云端字体，
@@ -285,8 +293,10 @@ async function apply(font: FontItem, variantIndex = 0) {
         </GInput>
         <GDropdown v-model:visible="filterOpen" placement="bottom-end" class="filter-dropdown">
           <template #trigger>
+            <!-- 原版：<Badge :count="tags.length"><Icon type="filter" /></Badge> -->
             <button class="filter-btn" :class="{ 'is-on': filterOn }" type="button">
               <Icon name="iconguolv" size="lg" />
+              <span v-if="filterCount" class="filter-badge">{{ filterCount }}</span>
             </button>
           </template>
           <FilterPanel v-model="filterState" :categories="usableCategories" />
@@ -308,10 +318,22 @@ async function apply(font: FontItem, variantIndex = 0) {
       <section class="tags">
         <div class="tags-head u-row">
           <span>我的标签</span>
-          <button class="tags-add" type="button" @click="openCreate">+</button>
+          <div class="tags-tools u-row">
+            <button class="tags-add" type="button" @click="openCreate">+</button>
+            <!-- 原版：<Icon type="chevron_down" />，标签超过 94px 时折叠 -->
+            <button
+              v-if="tags.length"
+              class="tags-toggle"
+              :class="{ 'is-open': tagsOpen }"
+              type="button"
+              @click="tagsOpen = !tagsOpen"
+            >
+              <Icon name="iconxiala" size="sm" />
+            </button>
+          </div>
         </div>
         <p v-if="tagsError" class="tags-error">{{ tagsError }}（标签读取失败，字体列表不受影响）</p>
-        <div v-else class="tag-list u-row">
+        <div v-else class="tag-list u-row" :class="{ 'is-collapsed': !tagsOpen }">
           <button
             v-for="tag in tags"
             :key="tag.text"
@@ -473,8 +495,55 @@ async function apply(font: FontItem, variantIndex = 0) {
   color: var(--c-icon);
 }
 
+.filter-btn {
+  position: relative;
+}
+
 .filter-btn.is-on {
   color: var(--accent-soft);
+}
+
+/* 原版 Badge :count —— 已选条件数 */
+.filter-badge {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  min-width: 12px;
+  height: 12px;
+  padding: 0 var(--sp-1);
+  border-radius: var(--r-pill);
+  background: var(--accent);
+  color: var(--c-text-inverse);
+  font-size: var(--fs-xs);
+  line-height: 12px;
+  text-align: center;
+  box-sizing: border-box;
+}
+
+.tags-tools {
+  margin-left: auto;
+  gap: var(--sp-2);
+}
+
+.tags-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--c-icon);
+  transition: transform var(--dur-fast) var(--ease);
+}
+
+.tags-toggle.is-open {
+  transform: rotate(180deg);
+}
+
+/* 原版 .user-tag-filter-hidden{max-height:94px;overflow-y:hidden} */
+.tag-list.is-collapsed {
+  max-height: 94px;
+  overflow: hidden;
 }
 
 /* 下拉容器默认 min-width:100%（触发器只有 24px），面板会被压成一条。
