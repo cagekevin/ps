@@ -161,7 +161,32 @@ bind(computed(() => items.value.filter(/* ... */)))   // 有筛选才需要
 
 标 `done` 之前，依赖必须全部 `done`——校验会拦住"假装完成"。
 
-### 13. 日志只在三种情况下写
+### 13. 猜的东西必须标 `UNVERIFIED`
+
+凡是**没实测过**的结论——jsx 返回结构、颜色值、尺寸、CSS 特性可用性——在代码里写：
+
+```ts
+// UNVERIFIED: ztgl_xxx 的返回结构按文档推断，未实测
+```
+
+```css
+/* UNVERIFIED: 这个底色是从截图目测的，未在 CSS 里找到对应规则 */
+```
+
+```ts
+// UNVERIFIED: 假设 CEP 12 是 Chromium 99，未在真机确认
+```
+
+理由：这一轮返工了 9 次，全部源于"看起来合理"被当成了"事实"。标记的作用不是防止犯错，
+而是让错误**可被发现**——`grep UNVERIFIED` 就能列出所有待验证项。
+
+查到证据后，把标记换成依据：
+
+```ts
+// 依据：56d7.js:2190 jsx("ztgl_setFont", [hjm, mz, ez])
+```
+
+### 14. 日志只在三种情况下写
 
 ```powershell
 npm run log:new "主题"    # 建一篇，带固定区块
