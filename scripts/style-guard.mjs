@@ -83,6 +83,20 @@ function mapStyleBlocks(content, fn) {
   })
 }
 
+/**
+ * 只取出 <style> 块的内容用于计数。
+ * 注意不能直接用 mapStyleBlocks(content, b => b) —— 那是"原样替换"，
+ * 返回的仍是整个文件（含模板），会把模板里的 SVG fill 属性误判成硬编码。
+ */
+function extractStyle(content) {
+  const blocks = []
+  content.replace(/(<style[^>]*>)([\s\S]*?)(<\/style>)/g, (_m, _open, body) => {
+    blocks.push(body)
+    return ''
+  })
+  return blocks.join('\n')
+}
+
 /** 模板规则（不只 <style>）：图标尺寸必须用预设名 */
 const TEMPLATE_RULES = [
   {
@@ -142,7 +156,7 @@ function collect() {
     if (ALLOW_FILES.has(rel)) continue
 
     const content = readFileSync(abs, 'utf8')
-    const css = abs.endsWith('.vue') ? mapStyleBlocks(content, (b) => b) : content
+    const css = abs.endsWith('.vue') ? extractStyle(content) : content
     if (!css.trim()) continue
 
     let count = countViolations(css)
@@ -208,7 +222,7 @@ function fix() {
     }
 
     // 修完还剩多少（这些是 token 里没有对应值的，需要人工决定）
-    const remainingCss = abs.endsWith('.vue') ? mapStyleBlocks(next, (b) => b) : next
+    const remainingCss = abs.endsWith('.vue') ? extractStyle(next) : next
     let left = countViolations(remainingCss)
     if (abs.endsWith('.vue')) left += countTemplate(next)
     if (left > 0) leftovers.push({ file: rel, count: left })

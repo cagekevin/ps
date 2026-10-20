@@ -10,6 +10,7 @@ import { useElementWidth } from '@/composables/useElementWidth'
 import FontWeight from './components/FontWeight.vue'
 import Rating from './components/Rating.vue'
 import TagMenu from './components/TagMenu.vue'
+import EmptyState from './components/EmptyState.vue'
 import PageShell from '@/components/PageShell.vue'
 import GInput from '@/components/GInput.vue'
 import GDropdown from '@/components/GDropdown.vue'
@@ -208,8 +209,7 @@ async function apply(font: FontItem, variantIndex = 0) {
     <div v-else-if="loading && !items.length" class="state">正在读取系统字体…</div>
 
     <div v-else-if="!visible.length" class="state">
-      <Icon name="iconsousuo" size="2xl" class="state__icon" />
-      <p>没有找到匹配的字体</p>
+      <EmptyState />
       <button v-if="hasFilter" class="retry" type="button" @click="clearFilters">清除筛选</button>
     </div>
 
@@ -539,10 +539,6 @@ async function apply(font: FontItem, variantIndex = 0) {
 
 .font-list.is-double .sentinel {
   grid-column: 1 / -1;
-}
-
-.state__icon {
-  color: var(--bg-raise);
 }
 
 .sentinel {
