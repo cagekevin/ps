@@ -142,10 +142,38 @@ function maskComments(css) {
 /** 原版有 64 处 !important，是维护噩梦；我们一律禁止 */
 const IMPORTANT_RE = /!important/g
 
+/** 负 margin 是布局补丁，一律禁止（查 1） */
+const MARGIN_NEG_RE = /margin:\s*-/g
+
+/**
+ * 静默失败检查（查 7）：store 里声明的 xxxError 必须在某个组件里被渲染。
+ * 反例：tagsError 赋值 5 次、模板 0 次引用 —— 读失败时用户只看到"空的"。
+ */
+function checkSilentErrors() {
+  const storeDir = join(SRC, 'stores')
+  if (!existsSync(storeDir)) return []
+
+  const vueText = walk(SRC)
+    .filter((f) => f.endsWith('.vue'))
+    .map((f) => readFileSync(f, 'utf8'))
+    .join('\n')
+
+  const problems = []
+  for (const file of walk(storeDir)) {
+    const text = readFileSync(file, 'utf8')
+    for (const m of text.matchAll(/const (\w*Error) = ref\(/g)) {
+      if (!vueText.includes(m[1])) {
+        problems.push(`${relative(root, file).replace(/\\/g, '/')} 的 ${m[1]} 没有被任何组件渲染`)
+      }
+    }
+  }
+  return problems
+}
+
 function countViolations(css) {
   const { masked } = maskComments(css)
   let count = 0
-  for (const re of [COLOR_RE, FS_RE, RADIUS_RE, IMPORTANT_RE]) {
+  for (const re of [COLOR_RE, FS_RE, RADIUS_RE, IMPORTANT_RE, MARGIN_NEG_RE]) {
     const hits = masked.match(re)
     if (hits) count += hits.length
   }
@@ -278,7 +306,16 @@ if (command === 'fix') {
     process.exit(1)
   }
 
+  // 查 7：store 里的 xxxError 必须被渲染，否则就是静默失败
+  const silent = checkSilentErrors()
+  if (silent.length) {
+    console.error('\n[style] 静默失败（读不到 ≠ 没有）：\n')
+    for (const p of silent) console.error(`  ${p}`)
+    console.error('\n  这些错误状态被赋值了但没有任何组件渲染，用户只会看到"空的"。\n')
+    process.exit(1)
+  }
+
   const tightened = Object.entries(baseline).filter(([file, allowed]) => (current[file] ?? 0) < allowed)
-  console.log('[style] 通过：无新增硬编码')
+  console.log('[style] 通过：无新增硬编码、无负 margin、无静默失败')
   if (tightened.length) console.log(`[style] ${tightened.length} 个文件的违规数已下降，可执行 npm run style:baseline 收紧`)
 }

@@ -32,6 +32,8 @@ button {
   font: inherit;
   color: inherit;
   cursor: pointer;
+  /* 按钮/标签一律单行——写在这里就不用每个组件记得加（查 5 的前置） */
+  white-space: nowrap;
 }
 
 /* ---------- 状态约定（所有组件按这个来） ----------
