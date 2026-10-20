@@ -76,14 +76,13 @@ useDismiss(() => open.value, cardRef, () => {
   border-radius: var(--r-md);
   background: transparent;
   color: var(--c-icon);
+  transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
 }
 
-/* 原版 .preview-setting__actions>.gdaicon:active, :hover 同一条规则 */
+/* 用白色叠加，不用原版的 rgba(0,0,0,.25)——黑底上会像"图标变黑" */
 .ps__icon:hover,
 .ps__icon:active {
-  background: var(--c-mask-soft);
-  border-color: var(--c-border-float-strong);
-  border-radius: var(--r-md);
+  background: var(--c-hover-2);
   color: var(--c-text-inverse);
 }
 
