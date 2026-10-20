@@ -1,0 +1,68 @@
+import { defineStore } from 'pinia'
+import { ref } from 'vue'
+import { getFontTags, setFont } from '@/cep/ps'
+import { describeCepError } from '@/cep/eval-script'
+import { usePersistedRef } from '@/composables/usePersisted'
+import type { FontItem, FontTag } from '@/cep/types'
+
+/** 预览档位，对齐原面板的 xg 数组 */
+export type PreviewMode = 'none' | 'small' | 'medium' | 'large' | 'extra-large'
+
+export const PREVIEW_MODES: PreviewMode[] = ['none', 'small', 'medium', 'large', 'extra-large']
+
+export const PREVIEW_LABEL: Record<PreviewMode, string> = {
+  none: '普通列表',
+  small: '小预览',
+  medium: '中预览',
+  large: '大预览',
+  'extra-large': '超大预览',
+}
+
+/** 原面板的判定：家族名是纯 ASCII 就当英文，否则中文 */
+export function familyLang(family: string): 'en' | 'cn' {
+  return /^[a-zA-Z0-9. -_?]*$/.test(family) ? 'en' : 'cn'
+}
+
+export function previewText(family: string): string {
+  return familyLang(family) === 'en' ? 'Crazy Design' : '设计助理'
+}
+
+/**
+ * 字体相关的跨页面状态。
+ * 列表数据不在这里 —— 列表归页面自己的 useListPage 管，
+ * store 只放"多个页面都要用"的东西（标签、预览档位、最近应用）。
+ */
+export const useFontStore = defineStore('font', () => {
+  const tags = ref<FontTag[]>([])
+  const tagsError = ref('')
+  const activeFamily = ref('')
+  const previewMode = usePersistedRef<PreviewMode>('font.previewMode', 'small')
+
+  async function loadTags() {
+    if (tags.value.length) return
+    tagsError.value = ''
+    try {
+      tags.value = await getFontTags()
+    } catch (e) {
+      tagsError.value = describeCepError(e)
+    }
+  }
+
+  function cyclePreview() {
+    const index = PREVIEW_MODES.indexOf(previewMode.value)
+    previewMode.value = PREVIEW_MODES[(index + 1) % PREVIEW_MODES.length]
+  }
+
+  /** 成功返回 null，失败返回可展示文案 */
+  async function apply(font: FontItem, variantIndex = 0): Promise<string | null> {
+    try {
+      await setFont(font, variantIndex)
+      activeFamily.value = font.family
+      return null
+    } catch (e) {
+      return describeCepError(e)
+    }
+  }
+
+  return { tags, tagsError, activeFamily, previewMode, loadTags, cyclePreview, apply }
+})

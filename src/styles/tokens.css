@@ -1,0 +1,138 @@
+/**
+ * 设计 token —— 全项目唯一的数值来源。
+ *
+ * 规则：组件样式里只允许引用变量，不允许出现 #hex、rgb()、font-size: 12px、border-radius: 4px。
+ * 想改外观：改这个文件，全项目生效。不要在组件里找。
+ *
+ * 色值来源：05-官方资源/04-CEP资源包/CEP001-设计助理/css/app.bf68b505.css
+ */
+:root {
+  /* ---------- 颜色：底层 ---------- */
+  --c-bg: #333;
+  --c-surface: #363636;
+  --c-surface-hover: #3d3d3d;
+  --c-surface-active: #424242;
+  --c-surface-raised: #4b4b4b;
+  --c-surface-raised-hover: #575757;
+  --c-input: #2c2c2c;
+
+  /* 浮层（下拉、toast、弹窗）与遮罩 */
+  --c-float: rgba(64, 64, 64, 0.96);
+  --c-mask: rgba(0, 0, 0, 0.45);
+
+  /* ---------- 颜色：描边 ---------- */
+  --c-border: #2e2e2e;
+  --c-border-strong: #4b4b4b;
+  --c-border-float: hsla(0, 0%, 100%, 0.1);
+
+  /* ---------- 颜色：文字 ---------- */
+  --c-text: #c3c3c3;
+  --c-text-strong: #f5f5f5;
+  --c-text-dim: #9a9a9a;
+  --c-text-faint: #8e8e8e;
+  --c-text-inverse: #ffffff;
+  /* 导航/工具条图标（原版 .font-manage__layouts__tabs__menu__icon） */
+  --c-icon: #cacaca;
+  --c-icon-strong: #6f6f6f;
+  /* 标签 chip 上的文字（原版 hsla(0,0%,100%,.95)） */
+  --c-text-onchip: hsla(0, 0%, 100%, 0.95);
+  /* 计数/次要信息（原版 filter_count #b3b3b3） */
+  --c-text-muted: #b3b3b3;
+  /* 字体预览文字 */
+  --c-text-preview: #e0e0e0;
+  /* 字重芯片文字 */
+  --c-text-chip: #c0c0c0;
+
+  /* ---------- 颜色：语义 ---------- */
+  --c-accent: #006fff;
+  --c-accent-hover: #2a86ff;
+  --c-accent-soft: #759fff;
+  --c-danger: #f14c4c;
+  --c-ok: #4ec9b0;
+  --c-warn: #dcdcaa;
+
+  /* 半透明语义色（背景用） */
+  --c-accent-a16: rgba(14, 99, 156, 0.22);
+  --c-danger-a16: rgba(241, 76, 76, 0.16);
+  --c-ok-a18: rgba(78, 201, 176, 0.18);
+  --c-warn-a18: rgba(220, 220, 170, 0.18);
+
+  /* ---------- 间距阶梯 ---------- */
+  --sp-1: 2px;
+  --sp-2: 4px;
+  --sp-3: 6px;
+  --sp-4: 8px;
+  --sp-5: 12px;
+  --sp-6: 16px;
+  --sp-7: 24px;
+
+  /* ---------- 字号阶梯 ---------- */
+  --fs-xs: 10px;
+  --fs-sm: 11px;
+  --fs-md: 12px;
+  --fs-lg: 13px;
+  --fs-base: 14px;
+  --fs-xl: 15px;
+  --fs-2xl: 18px;
+
+  /* 字体预览档位（原版 xg 数组对应的字号/行高） */
+  --preview-sm: 24px;
+  --preview-sm-lh: 34px;
+  --preview-md: 38px;
+  --preview-md-lh: 53px;
+  --preview-lg: 50px;
+  --preview-lg-lh: 70px;
+  --preview-xl: 72px;
+  --preview-xl-lh: 101px;
+
+  /* ---------- 圆角 ---------- */
+  --r-xs: 3px;
+  --r-sm: 2px;
+  --r-md: 4px;
+  --r-pill: 999px;
+
+  /* ---------- 尺寸 ---------- */
+  --nav-w: 40px;
+  --h-header: 40px;
+  --h-toolbar: 28px;
+  --h-control: 28px;
+  --h-control-sm: 24px;
+  --h-row: 26px;
+  --nav-item: 30px;
+
+  /* ---------- 层级 ---------- */
+  --z-dropdown: 50;
+  --z-tooltip: 60;
+  --z-modal: 8000;
+  --z-toast: 9000;
+
+  /* ---------- 阴影 ---------- */
+  --shadow-pop: 0 4px 20px rgba(0, 0, 0, 0.4);
+  --shadow-float: 0 4px 20px rgba(0, 0, 0, 0.45);
+
+  /* ---------- 动效（motion.css 里也定义了，这里做语义别名） ---------- */
+  --dur-fast: 120ms;
+  --dur-base: 180ms;
+  --dur-slow: 240ms;
+  --ease: cubic-bezier(0.2, 0.8, 0.2, 1);
+
+  /* ---------- 语义别名：组件里优先用这些 ---------- */
+  --bg: var(--c-bg);
+  --bg-panel: var(--c-surface);
+  --bg-hover: var(--c-surface-hover);
+  --bg-active: var(--c-surface-active);
+  --bg-raise: var(--c-surface-raised);
+  --border: var(--c-border);
+  --border-strong: var(--c-border-strong);
+  --text: var(--c-text);
+  --text-strong: var(--c-text-strong);
+  --text-dim: var(--c-text-dim);
+  --text-faint: var(--c-text-faint);
+  --accent: var(--c-accent);
+  --accent-hover: var(--c-accent-hover);
+  --accent-soft: var(--c-accent-soft);
+  --danger: var(--c-danger);
+  --ok: var(--c-ok);
+  --warn: var(--c-warn);
+  --header-h: var(--h-header);
+}

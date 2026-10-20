@@ -1,0 +1,73 @@
+/**
+ * 只放 reset 和基础排版。数值全部来自 tokens.css。
+ * 想改颜色/字号/间距，去改 tokens.css，不要改这里。
+ */
+* {
+  box-sizing: border-box;
+}
+
+html,
+body,
+#app {
+  height: 100%;
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  background: var(--bg);
+  color: var(--text);
+  font: var(--fs-md) / 1.5 "Microsoft YaHei", "PingFang SC", -apple-system, "Segoe UI", sans-serif;
+  overflow: hidden;
+  -webkit-user-select: none;
+  user-select: none;
+}
+
+input {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+}
+
+/* ---------- 状态约定（所有组件按这个来） ----------
+
+   hover     → background: var(--bg-hover)     文字 var(--text)
+   active    → background: var(--bg-active)    文字 var(--c-text-inverse)
+   disabled  → opacity: .45 + cursor: default
+   focus     → 2px 外描边 var(--accent)，见下
+   selected  → background: var(--bg-active) + 左侧 2px var(--accent) 指示条
+
+   不要给 hover 用两套颜色（之前 --bg-hover 和 --c-surface-raised-hover 混用）。
+   键盘可达性：不要写 outline: none，除非同时提供替代的焦点样式。            */
+
+:focus-visible {
+  outline: 2px solid var(--accent);
+  outline-offset: 1px;
+}
+
+:focus:not(:focus-visible) {
+  outline: none;
+}
+
+::-webkit-scrollbar {
+  width: var(--sp-4);
+  height: var(--sp-4);
+}
+
+::-webkit-scrollbar-thumb {
+  background: var(--c-border-strong);
+  border-radius: var(--r-md);
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background: var(--c-surface-raised-hover);
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}

@@ -1,0 +1,204 @@
+/**
+ * 样式守卫 —— 优先自动修，修不了才报错。
+ *
+ *   node scripts/style-guard.mjs            检查（默认）
+ *   node scripts/style-guard.mjs --fix      自动把已知裸值替换成 token，修不了的列出来
+ *   node scripts/style-guard.mjs --update   把当前违规数量写进 docs/style-baseline.json
+ *
+ * 设计依据见 docs/架构决策.md ADR-10：自动修复的成本 ≈ 0，报错阻止要人肉改，贵一个数量级。
+ */
+import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs'
+import { join, relative } from 'node:path'
+import { fileURLToPath } from 'node:url'
+
+const root = fileURLToPath(new URL('..', import.meta.url))
+const SRC = join(root, 'src')
+const TOKENS = join(root, 'src', 'styles', 'tokens.css')
+const BASELINE = join(root, 'docs', 'style-baseline.json')
+
+/** token 文件本身当然可以写裸值 */
+const ALLOW_FILES = new Set(['src/styles/tokens.css', 'src/styles/global.css', 'src/styles/motion.css'])
+
+const COLOR_RE = /#[0-9a-fA-F]{3,8}\b|\brgba?\([^)]*\)|\bhsla?\([^)]*\)/g
+const FS_RE = /font-size:\s*(\d+)px/g
+const RADIUS_RE = /border-radius:\s*(\d+)px/g
+
+/** 归一化，让 rgba(64,64,64,.96) 和 rgba(64, 64, 64, 0.96) 能对上 */
+function norm(value) {
+  let out = value
+    .toLowerCase()
+    .replace(/\s+/g, '')
+    .replace(/(^|[^\d])\.(\d)/g, (_m, a, b) => `${a}0.${b}`)
+
+  // #fff 和 #ffffff 要能对上
+  const short = out.match(/^#([0-9a-f]{3,4})$/)
+  if (short) out = '#' + short[1].split('').map((c) => c + c).join('')
+
+  return out
+}
+
+/** 从 tokens.css 反推「字面值 → 变量名」的映射 */
+function buildMaps() {
+  const css = readFileSync(TOKENS, 'utf8')
+  const colorMap = new Map()
+  const fsMap = new Map()
+  const radiusMap = new Map()
+
+  for (const m of css.matchAll(/--([a-z0-9-]+):\s*([^;]+);/gi)) {
+    const name = m[1]
+    const value = m[2].trim()
+    if (value.includes('var(')) continue // 别名不参与反查
+
+    // --fs-* 和 --preview-*（排除 --preview-*-lh 那种行高）
+    if (name.startsWith('fs-') || (name.startsWith('preview-') && !name.endsWith('-lh'))) {
+      const px = value.match(/^(\d+)px$/)
+      if (px) fsMap.set(px[1], `var(--${name})`)
+      continue
+    }
+    if (name.startsWith('r-')) {
+      const px = value.match(/^(\d+)px$/)
+      if (px) radiusMap.set(px[1], `var(--${name})`)
+      continue
+    }
+    if (name.startsWith('c-')) colorMap.set(norm(value), `var(--${name})`)
+  }
+
+  return { colorMap, fsMap, radiusMap }
+}
+
+function walk(dir) {
+  const out = []
+  for (const name of readdirSync(dir)) {
+    const abs = join(dir, name)
+    if (statSync(abs).isDirectory()) out.push(...walk(abs))
+    else if (name.endsWith('.vue') || name.endsWith('.css')) out.push(abs)
+  }
+  return out
+}
+
+/** 只处理 <style> 块，模板和脚本一律不动 */
+function mapStyleBlocks(content, fn) {
+  return content.replace(/(<style[^>]*>)([\s\S]*?)(<\/style>)/g, (_m, open, body, close) => {
+    return open + fn(body) + close
+  })
+}
+
+function countViolations(css) {
+  let count = 0
+  for (const re of [COLOR_RE, FS_RE, RADIUS_RE]) {
+    const hits = css.match(re)
+    if (hits) count += hits.length
+  }
+  return count
+}
+
+function collect() {
+  const result = {}
+  for (const abs of walk(SRC)) {
+    const rel = relative(root, abs).replace(/\\/g, '/')
+    if (ALLOW_FILES.has(rel)) continue
+
+    const content = readFileSync(abs, 'utf8')
+    const css = abs.endsWith('.vue') ? mapStyleBlocks(content, (b) => b) : content
+    if (!css.trim()) continue
+
+    const count = countViolations(css)
+    if (count > 0) result[rel] = count
+  }
+  return result
+}
+
+function fix() {
+  const maps = buildMaps()
+  let totalFixed = 0
+  let touched = 0
+  const leftovers = []
+
+  for (const abs of walk(SRC)) {
+    const rel = relative(root, abs).replace(/\\/g, '/')
+    if (ALLOW_FILES.has(rel)) continue
+
+    const content = readFileSync(abs, 'utf8')
+    let fixed = 0
+
+    const applyFix = (css) => {
+      let out = css.replace(COLOR_RE, (match) => {
+        const hit = maps.colorMap.get(norm(match))
+        if (!hit) return match
+        fixed++
+        return hit
+      })
+      out = out.replace(FS_RE, (match, px) => {
+        const hit = maps.fsMap.get(px)
+        if (!hit) return match
+        fixed++
+        return `font-size: ${hit}`
+      })
+      out = out.replace(RADIUS_RE, (match, px) => {
+        const hit = maps.radiusMap.get(px)
+        if (!hit) return match
+        fixed++
+        return `border-radius: ${hit}`
+      })
+      return out
+    }
+
+    const next = abs.endsWith('.vue') ? mapStyleBlocks(content, applyFix) : applyFix(content)
+
+    if (fixed > 0) {
+      writeFileSync(abs, next, 'utf8')
+      totalFixed += fixed
+      touched++
+      console.log(`  ${rel}  修复 ${fixed} 处`)
+    }
+
+    // 修完还剩多少（这些是 token 里没有对应值的，需要人工决定）
+    const remainingCss = abs.endsWith('.vue') ? mapStyleBlocks(next, (b) => b) : next
+    const left = countViolations(remainingCss)
+    if (left > 0) leftovers.push({ file: rel, count: left })
+  }
+
+  console.log(`\n[style] 自动修复 ${totalFixed} 处，涉及 ${touched} 个文件`)
+
+  if (leftovers.length) {
+    console.log('[style] 剩余无法自动映射的（需要人工决定是加 token 还是保留）：')
+    for (const item of leftovers) console.log(`  ${item.file}  ${item.count} 处`)
+  }
+
+  console.log('\n[style] 建议接着执行：npm run style:baseline   （收紧允许上限）')
+}
+
+const command = process.argv.includes('--fix')
+  ? 'fix'
+  : process.argv.includes('--update')
+    ? 'update'
+    : 'check'
+
+if (command === 'fix') {
+  fix()
+} else if (command === 'update') {
+  const current = collect()
+  writeFileSync(BASELINE, `${JSON.stringify(current, null, 2)}\n`, 'utf8')
+  const total = Object.values(current).reduce((a, b) => a + b, 0)
+  console.log(`[style] 已写入 baseline：${Object.keys(current).length} 个文件，${total} 处待清理`)
+} else {
+  const current = collect()
+  const baseline = existsSync(BASELINE) ? JSON.parse(readFileSync(BASELINE, 'utf8')) : {}
+  const problems = []
+
+  for (const [file, count] of Object.entries(current)) {
+    const allowed = baseline[file] ?? 0
+    if (count > allowed) problems.push({ file, count, allowed })
+  }
+
+  if (problems.length) {
+    console.error('\n[style] 有硬编码样式，超出允许数量：\n')
+    for (const p of problems) console.error(`  ${p.file}  ${p.count} 处（上限 ${p.allowed}）`)
+    console.error('\n  先试 npm run style:fix 自动修，修不了再手动加 token。\n')
+    process.exit(1)
+  }
+
+  const tightened = Object.entries(baseline).filter(([file, allowed]) => (current[file] ?? 0) < allowed)
+  console.log('[style] 通过：无新增硬编码')
+  if (tightened.length) console.log(`[style] ${tightened.length} 个文件的违规数已下降，可执行 npm run style:baseline 收紧`)
+}
