@@ -90,9 +90,11 @@ onBeforeUnmount(() => {
   color: var(--c-icon);
 }
 
+/* 原版 .preview-setting__actions>.gdaicon:hover{background:rgba(0,0,0,.25);border:1px solid hsla(0,0%,100%,.2)} */
 .ps__icon:hover {
-  background: var(--c-mask);
-  border-color: var(--c-border-float);
+  background: var(--c-mask-soft);
+  border-color: var(--c-border-float-strong);
+  border-radius: var(--r-md);
   color: var(--c-text-inverse);
 }
 

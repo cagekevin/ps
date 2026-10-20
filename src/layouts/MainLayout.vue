@@ -70,15 +70,19 @@ function reload() {
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 0;
+  border: 1px solid transparent;
   border-radius: 0;
   background: transparent;
   color: var(--c-icon);
   text-decoration: none;
+  box-sizing: border-box;
 }
 
+/* 原版 .sub-nav-item-inner:hover{background:#4b4b4b;border:1px solid #6e6e6e;border-radius:4px} */
 .nav-item:hover {
-  background: var(--bg-hover);
+  background: var(--c-surface-raised);
+  border: 1px solid var(--c-border-checked);
+  border-radius: var(--r-md);
   color: var(--c-text-inverse);
 }
 

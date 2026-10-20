@@ -617,6 +617,8 @@ async function apply(font: FontItem, variantIndex = 0) {
 .family {
   flex: 1;
   min-width: 0;
+  /* 原版 __font-family 的 max-width: calc(100% - 60px)，给右侧操作区预留位置 */
+  max-width: calc(100% - 60px);
   color: var(--c-text-strong);
   font-size: var(--fs-md);
   white-space: nowrap;
@@ -633,19 +635,17 @@ async function apply(font: FontItem, variantIndex = 0) {
   padding-bottom: var(--sp-6);
 }
 
-/* 操作区常显（低对比），hover 时变亮。
-   不隐藏的原因：① display 切换会让 flex 挤压家族名，文字左右跳动
-   ② 星级没有别的入口，藏起来就等于点不到（右键只承载打标签） */
+/* 原版 .font-manage__list-item:hover .font-manage__list-item__actions{display:flex}
+   家族名用 max-width 预留 60px（原版 __font-family 的 calc(100% - 60px)），
+   所以显示时不挤压文字，也不会抖 */
 .actions {
-  display: flex;
+  display: none;
   gap: var(--sp-1);
-  opacity: 0.45;
-  transition: opacity var(--dur-fast) var(--ease);
 }
 
 .font-item:hover .actions,
 .font-item.is-active .actions {
-  opacity: 1;
+  display: flex;
 }
 
 .act {
@@ -661,9 +661,9 @@ async function apply(font: FontItem, variantIndex = 0) {
   color: var(--c-icon);
 }
 
+/* 原版没有给这个图标加背景，只有图标变白（.contextHover:hover .icon{fill:#fff}） */
 .act:hover {
-  background: var(--bg-raise);
-  color: var(--text-strong);
+  color: var(--c-text-inverse);
 }
 
 .preview {

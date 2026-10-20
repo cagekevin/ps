@@ -23,6 +23,10 @@
   /* 浮层（下拉、toast、弹窗）与遮罩 */
   --c-float: rgba(64, 64, 64, 0.96);
   --c-mask: rgba(0, 0, 0, 0.45);
+  /* 图标按钮 hover 底（原版 .preview-setting__actions>.gdaicon:hover rgba(0,0,0,.25)） */
+  --c-mask-soft: rgba(0, 0, 0, 0.25);
+  /* 图标按钮 hover 边（原版 hsla(0,0%,100%,.2)） */
+  --c-border-float-strong: hsla(0, 0%, 100%, 0.2);
   /* 底部工具条（原版 .preview-setting__actions background:#545454） */
   --c-bar: #545454;
   /* 下拉选中项底色（原版 .preview-setting__card>div:hover background:#3565ff） */
