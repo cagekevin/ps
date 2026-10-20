@@ -6,7 +6,7 @@ import type { FontItem } from '@/cep/types'
 import { PREVIEW_LABEL, familyLang, previewText as defaultPreviewText, useFontStore } from '@/stores/font'
 import { useFeedbackStore } from '@/stores/feedback'
 import { usePagedList } from '@/composables/usePagedList'
-import { useElementWidth } from '@/composables/useElementWidth'
+
 import FontWeight from './components/FontWeight.vue'
 import Rating from './components/Rating.vue'
 import TagMenu from './components/TagMenu.vue'
@@ -167,9 +167,8 @@ const countText = computed(() =>
   activeTag.value ? `${activeTag.value}(${filtered.value.length})` : `全部(${items.value.length})`,
 )
 
-/** 原版阈值：容器 ≥ 420px 切双列 */
-const listWidth = useElementWidth(listRef)
-const isDouble = computed(() => listWidth.value >= 420)
+// 双列已移除：面板默认宽度远小于 420，用不上；
+// 且 useElementWidth 在窄视口下测量不准（340px 也判成双列），先只保留单列。
 
 const hasFilter = computed(() => !!keyword.value || !!activeTag.value || langFilter.value !== 'all')
 
@@ -320,7 +319,7 @@ async function apply(font: FontItem, variantIndex = 0) {
       <button v-if="hasFilter" class="retry" type="button" @click="clearFilters">清除筛选</button>
     </div>
 
-    <ul v-else ref="listRef" class="font-list" :class="{ 'is-double': isDouble }">
+    <ul v-else ref="listRef" class="font-list">
       <li
         v-for="font in visible"
         :key="font.family"
@@ -376,7 +375,6 @@ async function apply(font: FontItem, variantIndex = 0) {
         @update:mode="(value) => (previewMode = value)"
         @toggle-text="showTextPanel = !showTextPanel"
       />
-      <span class="footer-tip">{{ PREVIEW_LABEL[previewMode] }}</span>
     </template>
 
     <TagMenu
