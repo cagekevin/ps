@@ -44,6 +44,11 @@ export default defineConfig({
   // CEP 走 file://，必须是相对路径
   base: './',
   plugins: [vue(), cepHtml()],
+
+  // 构建时间戳：排查"改了没生效"时，先确认面板里跑的是哪次构建
+  define: {
+    __BUILD_TIME__: JSON.stringify(new Date().toISOString().slice(0, 19).replace('T', ' ')),
+  },
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),

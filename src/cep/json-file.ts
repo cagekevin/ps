@@ -1,4 +1,4 @@
-import { readTextSmart, userDir, writeTextFile } from './fs'
+import { readTextSmart, userDir, writeTextFile, writeTextFileAtomic } from './fs'
 import { log } from '@/utils/logger'
 
 /**
@@ -45,7 +45,10 @@ export function jsonFile<T>(name: string, fallback: () => T, opts: JsonFileOptio
   function write(value: T, previous?: string | null) {
     try {
       if (backup && previous) writeTextFile(`${path()}.bak`, previous)
-      writeTextFile(path(), JSON.stringify(value))
+      // 原子写：先 .tmp 再 rename，防止写一半崩溃留下半截 JSON
+      if (!writeTextFileAtomic(path(), JSON.stringify(value))) {
+        writeTextFile(path(), JSON.stringify(value))
+      }
     } catch (e) {
       log.error('jsonFile', `${name} 写入失败`, e)
       throw e

@@ -69,6 +69,23 @@ export function writeTextFile(absPath: string, text: string): void {
  * 用 ExtendScript 的 File 读文件——Node 不可用时的兜底。
  * 这样即使 manifest 少配了 --enable-nodejs，读数据文件也不会全废。
  */
+/**
+ * 原子写：先写 .tmp 再改名，避免写到一半崩溃留下半截 JSON。
+ * Node 不可用时返回 false，调用方退回普通写。
+ */
+export function writeTextFileAtomic(absPath: string, text: string): boolean {
+  if (!hasNode()) return false
+  try {
+    const fs = nodeRequire('fs')
+    const tmp = `${absPath}.tmp`
+    writeTextFile(tmp, text)
+    fs.renameSync(tmp, absPath)
+    return true
+  } catch {
+    return false
+  }
+}
+
 export async function readTextViaJsx(absPath: string): Promise<string | null> {
   const script =
     `(function(){try{var __f = new File(${JSON.stringify(toPosix(absPath))});` +

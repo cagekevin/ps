@@ -15,6 +15,7 @@ injectSprite()
 
 // 环境自检：CEP 的 Chromium 版本决定哪些 CSS 特性可用（@container、:focus-visible、@layer）。
 // 这条只在控制台打一次，用来把"CEP 12 = Chromium 99"从猜测变成事实。
+log.info('env', `构建时间: ${__BUILD_TIME__}`)
 log.info('env', `UA: ${navigator.userAgent}`)
 log.info('env', `inCep=${typeof window.__adobe_cep__ === 'object'} node=${typeof window.require === 'function'}`)
 

@@ -11,6 +11,7 @@
     "ledger": "node scripts/ledger.mjs",
     "log:new": "node scripts/log.mjs new",
     "log:index": "node scripts/log.mjs index",
+    "interactions": "node scripts/interactions.mjs",
     "registry": "node scripts/registry.mjs fix && node scripts/registry.mjs gen",
     "style:fix": "node scripts/style-guard.mjs --fix",
     "style:baseline": "node scripts/style-guard.mjs --update",

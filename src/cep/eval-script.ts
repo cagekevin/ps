@@ -44,10 +44,31 @@ export function describeCepError(e: unknown): string {
 }
 
 /**
+ * jsx 调用串行队列。
+ *
+ * ExtendScript 是单线程的，并发发多条 evalScript 时返回顺序不保证。
+ * 表现：快速连点 3 个字体，最后生效的可能不是最后点的那一个。
+ * 这里用 Promise 链保证先进先出；某条失败不影响后续。
+ */
+let queue: Promise<unknown> = Promise.resolve()
+
+/**
  * 裸 evalScript：只负责把字符串丢进去、把字符串拿回来，带超时。
  * 需要结构化错误和返回值解析，用 jsxCall。
+ *
+ * 注意：所有调用都会排队，不会并发进入 ExtendScript。
  */
 export function evalScriptRaw(script: string, timeout = DEFAULT_TIMEOUT): Promise<string> {
+  const task = queue.then(() => runScript(script, timeout))
+  // 队列继续往下走，失败也不阻塞
+  queue = task.then(
+    () => undefined,
+    () => undefined,
+  )
+  return task
+}
+
+function runScript(script: string, timeout: number): Promise<string> {
   const bridge = window.__adobe_cep__
   if (!bridge) {
     return Promise.reject(new CepError('NO_CEP', '当前不在 CEP 环境里，无法调用 ExtendScript'))

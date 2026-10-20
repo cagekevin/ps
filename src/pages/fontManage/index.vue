@@ -232,10 +232,17 @@ async function apply(font: FontItem, variantIndex = 0) {
               >{{ font.family }}</span
             >
             <div class="actions u-row">
-              <button class="act" type="button" @click.stop="openTagMenu($event, font)">
+              <button
+                class="act"
+                type="button"
+                title="打标签（右键字体行也可以）"
+                @click.stop="openTagMenu($event, font)"
+              >
                 <Icon name="iconbiaoqian" />
               </button>
-              <Rating :selected="stars[font.family] ?? 0" @rating="(value) => store.rate(font.family, value)" />
+              <span title="点击收藏，再点一次取消">
+                <Rating :selected="stars[font.family] ?? 0" @rating="(value) => store.rate(font.family, value)" />
+              </span>
             </div>
           </div>
 
