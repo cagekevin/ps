@@ -336,7 +336,8 @@ async function apply(font: FontItem, variantIndex = 0) {
 }
 
 .tag {
-  padding: var(--sp-2) var(--sp-3);
+  /* 原版 .font-manage__tag__content>div { padding: 4px 7px } */
+  padding: var(--sp-2) var(--sp-exact-7);
   border: 1px solid var(--bg-raise);
   border-radius: var(--r-md);
   background: var(--bg-raise);

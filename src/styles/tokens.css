@@ -73,6 +73,10 @@
   --sp-5: 12px;
   --sp-6: 16px;
   --sp-7: 24px;
+  /* 原版精确值：不在语义阶梯内，只在需要像素级还原时用（依据见 docs/视觉规范.md） */
+  --sp-exact-3: 3px; /* 原版 .hcf__footer padding:3px */
+  --sp-exact-7: 7px; /* 原版 .tag__content>div padding:4px 7px */
+  --sp-exact-10: 10px; /* 原版 .tabs__nav padding:0 10px */
 
   /* ---------- 字号阶梯 ---------- */
   --fs-xs: 10px;
