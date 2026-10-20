@@ -188,10 +188,15 @@ export async function setFont(font: FontItem, variantIndex = 0): Promise<void> {
   }
 
   // 参数顺序对齐原面板：jsx("ztgl_setFont", [hjm, mz, zz])
-  await jsxCall('ztgl_setFont', [postScriptName, name, weight], {
+  // 返回是 { err, msg }，原版判断 i.err == 1 才提示错误 —— 这里同样要判，否则失败也会显示成功
+  const res = await jsxCall<{ err?: number; msg?: string } | null>('ztgl_setFont', [postScriptName, name, weight], {
     label: `设置字体 ${font.family}`,
     timeout: 20000,
   })
+
+  if (res && typeof res === 'object' && res.err === 1) {
+    throw new CepError('JSX', res.msg || `设置字体失败：${font.family}`)
+  }
 }
 
 /** 当前选中图层状态 */

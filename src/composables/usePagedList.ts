@@ -30,7 +30,8 @@ export function usePagedList<T>(
     sentinelRef?: Ref<HTMLElement | undefined>
   } = {},
 ) {
-  const pageSize = opts.pageSize ?? 60
+  // 原版字体页 store 里是 pageSize: 30，这里对齐
+  const pageSize = opts.pageSize ?? 30
 
   const items = ref([]) as Ref<T[]>
   const loading = ref(false)
