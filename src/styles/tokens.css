@@ -42,6 +42,8 @@
   --c-text-muted: #b3b3b3;
   /* 字体预览文字 */
   --c-text-preview: #e0e0e0;
+  /* 无预览模式下的家族名（原版 __name--no-preview #eaeaea） */
+  --c-text-name: #eaeaea;
   /* 字重芯片文字 */
   --c-text-chip: #c0c0c0;
 
@@ -75,6 +77,9 @@
   --fs-lg: 13px;
   --fs-base: 14px;
   --fs-xl: 15px;
+  /* 无预览模式下的家族名（原版 16px/22px） */
+  --fs-name: 16px;
+  --fs-name-lh: 22px;
   --fs-2xl: 18px;
 
   /* 字体预览档位（原版 xg 数组对应的字号/行高） */

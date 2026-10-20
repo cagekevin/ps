@@ -6,6 +6,7 @@ import type { FontItem } from '@/cep/types'
 import { PREVIEW_LABEL, familyLang, previewText, useFontStore } from '@/stores/font'
 import { useFeedbackStore } from '@/stores/feedback'
 import { usePagedList } from '@/composables/usePagedList'
+import { useElementWidth } from '@/composables/useElementWidth'
 import FontWeight from './components/FontWeight.vue'
 import Rating from './components/Rating.vue'
 import TagMenu from './components/TagMenu.vue'
@@ -76,6 +77,18 @@ bind(filtered)
 const countText = computed(() =>
   activeTag.value ? `${activeTag.value}(${filtered.value.length})` : `全部(${items.value.length})`,
 )
+
+/** 原版阈值：容器 ≥ 420px 切双列 */
+const listWidth = useElementWidth(listRef)
+const isDouble = computed(() => listWidth.value >= 420)
+
+const hasFilter = computed(() => !!keyword.value || !!activeTag.value || langFilter.value !== 'all')
+
+function clearFilters() {
+  keyword.value = ''
+  activeTag.value = ''
+  langFilter.value = 'all'
+}
 
 onMounted(() => {
   void load()
@@ -194,9 +207,13 @@ async function apply(font: FontItem, variantIndex = 0) {
 
     <div v-else-if="loading && !items.length" class="state">正在读取系统字体…</div>
 
-    <div v-else-if="!visible.length" class="state">没有匹配的字体</div>
+    <div v-else-if="!visible.length" class="state">
+      <Icon name="iconsousuo" :size="44" class="state__icon" />
+      <p>没有找到匹配的字体</p>
+      <button v-if="hasFilter" class="retry" type="button" @click="clearFilters">清除筛选</button>
+    </div>
 
-    <ul v-else ref="listRef" class="font-list">
+    <ul v-else ref="listRef" class="font-list" :class="{ 'is-double': isDouble }">
       <li
         v-for="font in visible"
         :key="font.family"
@@ -208,7 +225,12 @@ async function apply(font: FontItem, variantIndex = 0) {
         <span class="a-mark">A</span>
         <div class="item-body">
           <div class="name-row u-row u-gap-3">
-            <span class="family">{{ font.family }}</span>
+            <span
+              class="family"
+              :class="{ 'is-name-only': previewMode === 'none' }"
+              :style="previewMode === 'none' ? { fontFamily: previewFamily(font) } : undefined"
+              >{{ font.family }}</span
+            >
             <div class="actions u-row">
               <button class="act" type="button" @click.stop="openTagMenu($event, font)">
                 <Icon name="iconbiaoqian" :size="12" />
@@ -432,11 +454,20 @@ async function apply(font: FontItem, variantIndex = 0) {
 .family {
   flex: 1;
   min-width: 0;
-  color: var(--text-dim);
+  color: var(--c-text-strong);
   font-size: var(--fs-md);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;
+}
+
+/* 无预览模式：家族名用字体本身渲染，字号放大（原版 __name--no-preview） */
+.family.is-name-only {
+  color: var(--c-text-name);
+  font-size: var(--fs-name);
+  line-height: var(--fs-name-lh);
+  font-weight: 400;
+  padding-bottom: var(--sp-6);
 }
 
 /* hover 才出现的操作区：打标签 + 星级 */
@@ -494,6 +525,24 @@ async function apply(font: FontItem, variantIndex = 0) {
 .preview.is-extra-large {
   font-size: var(--preview-xl);
   line-height: var(--preview-xl-lh);
+}
+
+/* 面板拉宽到 420px 以上切双列（原版 font-manage__list--double-cols） */
+.font-list.is-double {
+  display: grid;
+  grid-template-columns: 50% 50%;
+}
+
+.font-list.is-double .font-item {
+  min-width: 0;
+}
+
+.font-list.is-double .sentinel {
+  grid-column: 1 / -1;
+}
+
+.state__icon {
+  color: var(--bg-raise);
 }
 
 .sentinel {
