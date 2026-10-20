@@ -23,6 +23,13 @@
   /* 浮层（下拉、toast、弹窗）与遮罩 */
   --c-float: rgba(64, 64, 64, 0.96);
   --c-mask: rgba(0, 0, 0, 0.45);
+  /* 底部工具条（原版 .preview-setting__actions background:#545454） */
+  --c-bar: #545454;
+  /* 下拉选中项底色（原版 .preview-setting__card>div:hover background:#3565ff） */
+  --c-accent-solid: #3565ff;
+  /* 禁用按钮（原版 .preview-text__btn--disable） */
+  --c-disabled-bg: #3d3d3d;
+  --c-disabled-text: #7b7b7b;
 
   /* ---------- 颜色：描边 ---------- */
   --c-border: #2e2e2e;
@@ -127,6 +134,8 @@
   --nav-item: 30px;
 
   /* ---------- 层级 ---------- */
+  /* 组件内部叠放（图标压在输入框上这类） */
+  --z-base: 1;
   --z-dropdown: 50;
   --z-tooltip: 60;
   --z-modal: 8000;

@@ -3,7 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import { getFontList } from '@/cep/ps'
 import type { FontItem } from '@/cep/types'
-import { PREVIEW_LABEL, familyLang, previewText, useFontStore } from '@/stores/font'
+import { PREVIEW_LABEL, familyLang, previewText as defaultPreviewText, useFontStore } from '@/stores/font'
 import { useFeedbackStore } from '@/stores/feedback'
 import { usePagedList } from '@/composables/usePagedList'
 import { useElementWidth } from '@/composables/useElementWidth'
@@ -11,6 +11,8 @@ import FontWeight from './components/FontWeight.vue'
 import Rating from './components/Rating.vue'
 import TagMenu from './components/TagMenu.vue'
 import EmptyState from './components/EmptyState.vue'
+import PreviewSetting from './components/PreviewSetting.vue'
+import PreviewText from './components/PreviewText.vue'
 import PageShell from '@/components/PageShell.vue'
 import GInput from '@/components/GInput.vue'
 import GDropdown from '@/components/GDropdown.vue'
@@ -20,7 +22,14 @@ import Icon from '@/components/Icon.vue'
 
 const store = useFontStore()
 const feedback = useFeedbackStore()
-const { tags, previewMode, activeFamily, stars } = storeToRefs(store)
+const { tags, previewMode, activeFamily, stars, customPreviewText } = storeToRefs(store)
+
+/** 预览文案：用户自定义优先，否则按语言取默认 */
+const showTextPanel = ref(false)
+
+function sampleText(font: FontItem) {
+  return customPreviewText.value || defaultPreviewText(font.family)
+}
 
 /** 右键标签菜单的位置和当前字体 */
 const tagMenu = ref({ visible: false, x: 0, y: 0, family: '' })
@@ -175,6 +184,18 @@ async function apply(font: FontItem, variantIndex = 0) {
         </GDropdown>
       </div>
 
+      <div v-if="showTextPanel" class="text-panel">
+        <PreviewText
+          :current="customPreviewText"
+          @apply="
+            (value) => {
+              customPreviewText = value
+              showTextPanel = false
+            }
+          "
+        />
+      </div>
+
       <section class="tags">
         <div class="tags-head u-row">
           <span>我的标签</span>
@@ -251,7 +272,7 @@ async function apply(font: FontItem, variantIndex = 0) {
             class="preview"
             :class="`is-${previewMode}`"
             :style="{ fontFamily: previewFamily(font) }"
-            >{{ previewText(font.family) }}</pre
+            >{{ sampleText(font) }}</pre
           >
 
           <FontWeight
@@ -265,9 +286,11 @@ async function apply(font: FontItem, variantIndex = 0) {
     </ul>
 
     <template #footer>
-      <button class="icon-btn" type="button" @click="store.cyclePreview()">
-        <Icon :name="previewMode === 'none' ? 'iconyincang' : 'iconxianshi'" size="sm" />
-      </button>
+      <PreviewSetting
+        :mode="previewMode"
+        @update:mode="(value) => (previewMode = value)"
+        @toggle-text="showTextPanel = !showTextPanel"
+      />
       <span class="footer-tip">{{ PREVIEW_LABEL[previewMode] }}</span>
     </template>
 
@@ -321,6 +344,10 @@ async function apply(font: FontItem, variantIndex = 0) {
 
 .search-row :deep(.g-input) {
   flex: 1;
+}
+
+.text-panel {
+  padding: 0 var(--sp-4) var(--sp-4);
 }
 
 .tags {

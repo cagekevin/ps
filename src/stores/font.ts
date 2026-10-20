@@ -38,6 +38,8 @@ export const useFontStore = defineStore('font', () => {
   const stars = ref<Record<string, number>>({})
   const activeFamily = ref('')
   const previewMode = usePersistedRef<PreviewMode>('font.previewMode', 'small')
+  /** 用户自定义的预览文案；空字符串表示用默认（按语言自动选） */
+  const customPreviewText = usePersistedRef<string>('font.previewText', '')
 
   async function loadStars() {
     try {
@@ -103,6 +105,7 @@ export const useFontStore = defineStore('font', () => {
     stars,
     activeFamily,
     previewMode,
+    customPreviewText,
     loadTags,
     loadStars,
     rate,
