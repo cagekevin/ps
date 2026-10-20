@@ -31,6 +31,17 @@
   --c-bar: #545454;
   /* 下拉选中项底色（原版 .preview-setting__card>div:hover background:#3565ff） */
   --c-accent-solid: #3565ff;
+  /* 新建标签按钮（原版 .tag-input__create background:#3968ff） */
+  --c-create: #3968ff;
+
+  /* ---------- 自设计层（不再照抄原版）----------
+     hover 统一用半透明白层，不逐组件定义颜色 */
+  --c-hover-1: hsla(0, 0%, 100%, 0.06);
+  --c-hover-2: hsla(0, 0%, 100%, 0.1);
+  /* 侧边栏比内容区深一档，层次更清楚 */
+  --c-nav: #3a3a3a;
+  /* 收藏星标：金色是通用语义 */
+  --c-star: #ffb400;
   /* 禁用按钮（原版 .preview-text__btn--disable） */
   --c-disabled-bg: #3d3d3d;
   --c-disabled-text: #7b7b7b;
@@ -86,6 +97,7 @@
   --sp-7: 24px;
   /* 原版精确值：不在语义阶梯内，只在需要像素级还原时用（依据见 docs/视觉规范.md） */
   --sp-exact-3: 3px; /* 原版 .hcf__footer padding:3px */
+  --sp-exact-5: 5px; /* 原版 .preview-setting__card>div padding:5px 30px */
   --sp-exact-7: 7px; /* 原版 .tag__content>div padding:4px 7px */
   --sp-exact-10: 10px; /* 原版 .tabs__nav padding:0 10px */
 
@@ -126,6 +138,7 @@
   --r-xs: 3px;
   --r-sm: 2px;
   --r-md: 4px;
+  --r-lg: 6px;
   --r-pill: 999px;
 
   /* ---------- 尺寸 ---------- */
@@ -135,6 +148,8 @@
   --h-control: 28px;
   --h-control-sm: 24px;
   --h-row: 26px;
+  /* 预览文案输入框（原版 .preview-text>input height:30px） */
+  --h-field: 30px;
   --nav-item: 30px;
 
   /* ---------- 层级 ---------- */

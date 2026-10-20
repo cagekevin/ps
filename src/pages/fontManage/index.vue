@@ -256,7 +256,7 @@ async function apply(font: FontItem, variantIndex = 0) {
         </GInput>
         <GDropdown v-model:visible="filterOpen" placement="bottom-end">
           <template #trigger>
-            <button class="icon-btn" :class="{ 'is-on': langFilter !== 'all' }" type="button">
+            <button class="filter-btn" :class="{ 'is-on': langFilter !== 'all' }" type="button">
               <Icon name="iconguolv" size="lg" />
             </button>
           </template>
@@ -283,7 +283,6 @@ async function apply(font: FontItem, variantIndex = 0) {
       <section class="tags">
         <div class="tags-head u-row">
           <span>我的标签</span>
-          <button class="icon-btn is-plain" type="button" title="新建标签" @click="openCreate">+</button>
         </div>
         <p v-if="tagsError" class="tags-error">{{ tagsError }}（标签读取失败，字体列表不受影响）</p>
         <div v-else class="tag-list u-row">
@@ -299,6 +298,8 @@ async function apply(font: FontItem, variantIndex = 0) {
             {{ tag.text }}
           </button>
         </div>
+        <!-- 原版 .tag-input__create：蓝色文字按钮，不是裸加号 -->
+        <button class="tag-create" type="button" @click="openCreate">新建标签</button>
       </section>
 
       <div class="list-head u-row u-gap-2">
@@ -436,6 +437,37 @@ async function apply(font: FontItem, variantIndex = 0) {
   font-size: var(--fs-base);
 }
 
+/* 搜索框右侧的漏斗按钮（在框外） */
+.filter-btn {
+  width: var(--h-control);
+  height: var(--h-control);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--c-icon);
+}
+
+.filter-btn.is-on {
+  color: var(--accent-soft);
+}
+
+/* 原版 .tag-input__create{padding:6px 12px;margin:8px 0;background:#3968ff;border-radius:4px;width:fit-content} */
+.tag-create {
+  margin: var(--sp-4) 0;
+  padding: var(--sp-3) var(--sp-5);
+  border: 0;
+  border-radius: var(--r-md);
+  background: var(--c-create);
+  color: var(--c-text-inverse);
+  font-size: var(--fs-md);
+  line-height: 16px;
+  width: fit-content;
+}
+
 .icon-btn:hover:not(:disabled) {
   background: var(--bg-raise);
   color: var(--c-text-inverse);
@@ -496,23 +528,28 @@ async function apply(font: FontItem, variantIndex = 0) {
 }
 
 .tag {
-  /* 原版 .font-manage__tag__content>div { padding: 4px 7px } */
-  padding: var(--sp-2) var(--sp-exact-7);
-  border: 1px solid var(--bg-raise);
-  border-radius: var(--r-md);
-  background: var(--bg-raise);
+  padding: var(--sp-2) var(--sp-4);
+  border: 0;
+  border-radius: var(--r-pill);
+  background: var(--c-hover-1);
   color: var(--c-text-onchip);
   font-size: var(--fs-md);
   line-height: 16px;
   white-space: nowrap;
+  transition: background var(--dur-fast) var(--ease);
+}
+
+.tag:hover {
+  background: var(--c-hover-2);
 }
 
 .tag:hover {
   border-color: var(--accent-soft);
 }
 
+/* 选中：蓝底白字，符合常理 */
 .tag.is-active {
-  border-color: var(--accent-soft);
+  background: var(--accent);
   color: var(--c-text-inverse);
 }
 
@@ -596,12 +633,18 @@ async function apply(font: FontItem, variantIndex = 0) {
   cursor: pointer;
 }
 
-.font-item:hover {
-  background: var(--bg-active);
+.font-item {
+  transition: background var(--dur-fast) var(--ease);
 }
 
+.font-item:hover {
+  background: var(--c-hover-1);
+}
+
+/* 当前应用的字体：白 10% 底 + 左侧 2px 蓝条 */
 .font-item.is-active {
-  background: var(--bg-active);
+  background: var(--c-hover-2);
+  box-shadow: inset 2px 0 0 var(--accent);
 }
 
 .item-body {
@@ -612,6 +655,12 @@ async function apply(font: FontItem, variantIndex = 0) {
 .name-row {
   height: 15px;
   line-height: 1;
+}
+
+/* 原版 __header{height:15px;padding:0 8px}，操作区绝对定位在它里面 */
+.name-row {
+  position: relative;
+  height: 15px;
 }
 
 .family {
@@ -638,9 +687,14 @@ async function apply(font: FontItem, variantIndex = 0) {
 /* 原版 .font-manage__list-item:hover .font-manage__list-item__actions{display:flex}
    家族名用 max-width 预留 60px（原版 __font-family 的 calc(100% - 60px)），
    所以显示时不挤压文字，也不会抖 */
+/* 原版 __actions{position:absolute;right:0;top:0;padding:0 8px} —— 绝对定位，不参与 flex 挤压 */
 .actions {
   display: none;
   gap: var(--sp-1);
+  position: absolute;
+  right: 0;
+  top: 0;
+  padding: 0 var(--sp-4);
 }
 
 .font-item:hover .actions,

@@ -65,11 +65,10 @@ function leave() {
   line-height: 1;
 }
 
+/* 收藏用金色，符合常理 */
 .rating__star.is-on {
-  color: var(--c-text-muted);
+  color: var(--c-star);
 }
 
-.rating__star:hover {
-  color: var(--text-strong);
-}
+/* 原版星级只有 --active 变色，没有 hover 规则 —— 按规范不加 */
 </style>

@@ -36,16 +36,23 @@ button {
   white-space: nowrap;
 }
 
-/* ---------- 状态约定（所有组件按这个来） ----------
+/* ---------- 状态约定 ----------
 
-   hover     → background: var(--bg-hover)     文字 var(--text)
-   active    → background: var(--bg-active)    文字 var(--c-text-inverse)
-   disabled  → opacity: .45 + cursor: default
-   focus     → 2px 外描边 var(--accent)，见下
-   selected  → background: var(--bg-active) + 左侧 2px var(--accent) 指示条
+   ⚠️ 这套设计**没有统一的 hover 色**。原版每类元素都不一样：
+       导航      → 背景 #4b4b4b + 边框 #6e6e6e + 圆角 4
+       列表行    → 背景 #424242
+       标签 chip → 只变边框 #759fff
+       字重 chip → 只变边框 #6e6e6e
+       星级      → 只变图标色 #b3b3b3
+       图标按钮  → 背景 rgba(0,0,0,.25) + 边框 hsla(0,0%,100%,.2)
 
-   不要给 hover 用两套颜色（之前 --bg-hover 和 --c-surface-raised-hover 混用）。
-   键盘可达性：不要写 outline: none，除非同时提供替代的焦点样式。            */
+   ⇒ 写任何状态前，先在原版 app.bf68b505.css 里搜该选择器的 :hover / :active / --active。
+   ⇒ 原版没有的，**不要自己加**（星级 hover、筛选按钮 hover 都是多加的）。
+   ⇒ active 与 hover 同一条规则时，写在一起。
+
+   只有两条是全局的：
+       全局 disabled → opacity: .45 + cursor: default
+       全局 focus    → 2px var(--accent) 描边（见下，别写 outline: none）      */
 
 :focus-visible {
   outline: 2px solid var(--accent);

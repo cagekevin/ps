@@ -90,8 +90,9 @@ onBeforeUnmount(() => {
   color: var(--c-icon);
 }
 
-/* 原版 .preview-setting__actions>.gdaicon:hover{background:rgba(0,0,0,.25);border:1px solid hsla(0,0%,100%,.2)} */
-.ps__icon:hover {
+/* 原版 .preview-setting__actions>.gdaicon:active, :hover 同一条规则 */
+.ps__icon:hover,
+.ps__icon:active {
   background: var(--c-mask-soft);
   border-color: var(--c-border-float-strong);
   border-radius: var(--r-md);
@@ -112,9 +113,10 @@ onBeforeUnmount(() => {
   color: var(--c-text-name);
 }
 
+/* 原版 __card>div{padding:5px 30px} */
 .ps__item {
   position: relative;
-  padding: var(--sp-3) 30px;
+  padding: var(--sp-exact-5) 30px;
   font-size: var(--fs-md);
   cursor: pointer;
 }

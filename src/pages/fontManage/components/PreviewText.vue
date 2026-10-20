@@ -27,7 +27,7 @@ function apply() {
 
 <template>
   <div class="pt">
-    <Icon name="iconzihaodaxiao1" class="pt__icon" />
+    <Icon name="iconzihaodaxiao1" size="xl" class="pt__icon" />
     <input
       v-model="text"
       class="pt__input"
@@ -60,7 +60,7 @@ function apply() {
 
 .pt__input {
   flex: 1;
-  height: 30px;
+  height: var(--h-field);
   padding-left: 28px;
   border: 1px solid var(--c-border-checked);
   border-radius: var(--r-md);
@@ -81,7 +81,7 @@ function apply() {
 
 .pt__btn {
   margin-left: var(--sp-1);
-  height: 30px;
+  height: var(--h-field);
   padding: 0 var(--sp-5);
   border: 1px solid var(--c-surface-raised);
   border-radius: var(--r-md);

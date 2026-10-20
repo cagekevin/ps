@@ -16,14 +16,14 @@ function reload() {
   <div class="layout">
     <nav class="nav">
       <router-link v-for="item in navRoutes" :key="item.path" :to="item.path" class="nav-item">
-        <Icon v-if="item.meta?.icon" :name="item.meta.icon" size="lg" />
+        <Icon v-if="item.meta?.icon" :name="item.meta.icon" size="md" />
         <span v-else class="glyph">{{ item.meta?.glyph }}</span>
       </router-link>
 
       <div class="nav-spacer" />
 
       <router-link v-for="item in navBottomRoutes" :key="item.path" :to="item.path" class="nav-item">
-        <Icon v-if="item.meta?.icon" :name="item.meta.icon" size="lg" />
+        <Icon v-if="item.meta?.icon" :name="item.meta.icon" size="md" />
         <span v-else class="glyph">{{ item.meta?.glyph }}</span>
       </router-link>
 
@@ -59,37 +59,35 @@ function reload() {
   display: flex;
   flex-direction: column;
   align-items: center;
-  padding: 0;
-  background: var(--bg);
+  padding: var(--sp-2) 0;
+  background: var(--c-nav);
 }
 
 .nav-item {
   position: relative;
-  width: var(--nav-w);
-  height: var(--nav-w);
+  width: 32px;
+  height: 32px;
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 1px solid transparent;
-  border-radius: 0;
+  border: 0;
+  border-radius: var(--r-lg);
   background: transparent;
   color: var(--c-icon);
   text-decoration: none;
   box-sizing: border-box;
+  transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
 }
 
-/* 原版 .sub-nav-item-inner:hover{background:#4b4b4b;border:1px solid #6e6e6e;border-radius:4px} */
 .nav-item:hover {
-  background: var(--c-surface-raised);
-  border: 1px solid var(--c-border-checked);
-  border-radius: var(--r-md);
+  background: var(--c-hover-1);
   color: var(--c-text-inverse);
 }
 
-/* 原版 .nav-item-act{color:#006fff;background:#222}：凹陷底 + 蓝色图标 */
+/* 当前所在：白 10% 底 + 强调色图标，一眼能看出 */
 .nav-item.router-link-active {
-  background: var(--bg-sunken);
-  color: var(--accent);
+  background: var(--c-hover-2);
+  color: var(--accent-soft);
 }
 
 .glyph {
