@@ -448,8 +448,9 @@ async function apply(font: FontItem, variantIndex = 0) {
   cursor: default;
 }
 
+/* 左右留白由 PageShell 的工具条统一提供，这里只管上下 */
 .search-row {
-  padding: var(--sp-4);
+  padding: var(--sp-4) 0;
 }
 
 .search-row :deep(.g-input) {
@@ -457,11 +458,11 @@ async function apply(font: FontItem, variantIndex = 0) {
 }
 
 .text-panel {
-  padding: 0 var(--sp-4) var(--sp-4);
+  padding-bottom: var(--sp-4);
 }
 
 .tags {
-  padding: 0 var(--sp-4) var(--sp-4);
+  padding-bottom: var(--sp-4);
 }
 
 .tags-head {
@@ -501,7 +502,6 @@ async function apply(font: FontItem, variantIndex = 0) {
 
 .list-head {
   height: var(--h-row);
-  padding: 0 var(--sp-4);
   border-top: 1px solid var(--border);
   border-bottom: 1px solid var(--border);
   color: var(--c-text-muted);
@@ -572,7 +572,8 @@ async function apply(font: FontItem, variantIndex = 0) {
 
 .font-item {
   gap: var(--sp-2);
-  padding: var(--sp-3) var(--sp-4) var(--sp-3) 0;
+  /* 列表项背景要撑满整行（hover 才是全宽），所以左右留白在项内自己给 */
+  padding: var(--sp-3) var(--page-pad-x);
   background: var(--bg-panel);
   border-bottom: 1px solid var(--border);
   cursor: pointer;

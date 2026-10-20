@@ -47,7 +47,7 @@ withDefaults(
 .shell__header {
   flex: 0 0 auto;
   height: var(--page-header-height, var(--h-header));
-  padding: 0 var(--sp-4) 0 var(--sp-5);
+  padding: 0 var(--page-pad-x);
   display: flex;
   align-items: center;
   gap: var(--sp-3);
@@ -68,8 +68,10 @@ h1 {
   font-size: var(--fs-sm);
 }
 
+/* 左右留白统一在这里给，页面里的区块不要再写 padding-left/right */
 .shell__toolbar {
   flex: 0 0 auto;
+  padding: 0 var(--page-pad-x);
   background: var(--bg-panel);
   border-bottom: 1px solid var(--border);
 }
@@ -85,7 +87,7 @@ h1 {
   align-items: center;
   gap: var(--sp-3);
   height: 30px;
-  padding: 0 var(--sp-4);
+  padding: 0 var(--page-pad-x);
   background: var(--bg-panel);
   border-top: 1px solid var(--border);
 }
