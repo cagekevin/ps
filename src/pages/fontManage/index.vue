@@ -3,7 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import { getFontList } from '@/cep/ps'
 import type { FontItem } from '@/cep/types'
-import { PREVIEW_LABEL, familyLang, previewText as defaultPreviewText, useFontStore } from '@/stores/font'
+import { PREVIEW_LABEL, previewText as defaultPreviewText, useFontStore } from '@/stores/font'
 import { useFeedbackStore } from '@/stores/feedback'
 import { usePagedList } from '@/composables/usePagedList'
 
@@ -11,6 +11,8 @@ import FontWeight from './components/FontWeight.vue'
 import Rating from './components/Rating.vue'
 import TagMenu from './components/TagMenu.vue'
 import EmptyState from './components/EmptyState.vue'
+import FilterPanel from './components/FilterPanel.vue'
+import { getClassification, matchFilter, type Classification, type FilterState } from '@/cep/classification'
 import PreviewSetting from './components/PreviewSetting.vue'
 import PreviewText from './components/PreviewText.vue'
 import TagCreator from './components/TagCreator.vue'
@@ -131,7 +133,9 @@ async function confirmDelete() {
 
 const keyword = ref('')
 const activeTag = ref('')
-const langFilter = ref<'all' | 'cn' | 'en'>('all')
+/** 筛选面板选中的条件：{ 分类key: [标签id] } */
+const filterState = ref<FilterState>({})
+const classification = ref<Classification>({ categories: [], presets: {} })
 const menuOpen = ref(false)
 const filterOpen = ref(false)
 
@@ -151,7 +155,7 @@ const filtered = computed(() => {
 
   return items.value.filter((font) => {
     if (tagFonts && !tagFonts.includes(font.family)) return false
-    if (langFilter.value !== 'all' && familyLang(font.family) !== langFilter.value) return false
+    if (!matchFilter(font.family, filterState.value, classification.value.presets)) return false
     if (!kw) return true
     return (
       font.family.toLowerCase().includes(kw) ||
@@ -170,18 +174,28 @@ const countText = computed(() =>
 // 双列已移除：面板默认宽度远小于 420，用不上；
 // 且 useElementWidth 在窄视口下测量不准（340px 也判成双列），先只保留单列。
 
-const hasFilter = computed(() => !!keyword.value || !!activeTag.value || langFilter.value !== 'all')
+const hasFilter = computed(
+  () =>
+    !!keyword.value ||
+    !!activeTag.value ||
+    Object.values(filterState.value).some((ids) => ids.length > 0),
+)
+
+const filterOn = computed(() => Object.values(filterState.value).some((ids) => ids.length > 0))
 
 function clearFilters() {
   keyword.value = ''
   activeTag.value = ''
-  langFilter.value = 'all'
+  filterState.value = {}
 }
 
 onMounted(() => {
   void load()
   void store.loadTags()
   void store.loadStars()
+  void getClassification().then((data) => {
+    classification.value = data
+  })
 })
 
 /**
@@ -206,10 +220,7 @@ function onMenuSelect(value: string | number) {
   else if (value === 'preview') store.cyclePreview()
 }
 
-function onLangSelect(value: string | number) {
-  filterOpen.value = false
-  langFilter.value = value as 'all' | 'cn' | 'en'
-}
+
 
 /** 每个家族当前选中的字重下标 */
 const weightIndex = ref<Record<string, number>>({})
@@ -260,15 +271,11 @@ async function apply(font: FontItem, variantIndex = 0) {
         </GInput>
         <GDropdown v-model:visible="filterOpen" placement="bottom-end">
           <template #trigger>
-            <button class="filter-btn" :class="{ 'is-on': langFilter !== 'all' }" type="button">
+            <button class="filter-btn" :class="{ 'is-on': filterOn }" type="button" title="筛选">
               <Icon name="iconguolv" size="lg" />
             </button>
           </template>
-          <GMenu :model-value="langFilter" @select="onLangSelect">
-            <GMenuItem value="all">全部语言</GMenuItem>
-            <GMenuItem value="cn">中文</GMenuItem>
-            <GMenuItem value="en">英文</GMenuItem>
-          </GMenu>
+          <FilterPanel v-model="filterState" :categories="classification.categories" />
         </GDropdown>
       </div>
 
