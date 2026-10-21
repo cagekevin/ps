@@ -127,7 +127,6 @@ if (import.meta.env.DEV) console.info(`[build] ${__BUILD_TIME__}`)
 .nav-item:hover::after {
   opacity: 1;
 }
-}
 
 .glyph {
   font-size: var(--fs-lg);

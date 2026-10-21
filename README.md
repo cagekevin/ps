@@ -1,4 +1,4 @@
-# 设计助理 · 新面板（v5）
+﻿# 设计助理 · 新面板（v5）
 
 Vue 3 + TypeScript + Vite + Pinia，跑在 CEP 12（PS 2022+）里。
 PS 能力层继续调原厂 jsxbin，不重写。
@@ -15,7 +15,7 @@ PS 能力层继续调原厂 jsxbin，不重写。
 | 模板库 / 素材库 / 专题（`/template` `/material` `/topics` `/topic`） | 云端内容，离线不可用 |
 
 > 注：`Overprint.js` 这个文件名叫「叠印」，实际功能是**变量设置 + 批量套版**（`switchdata: ["变量设置", "批量套版"]`），
-> 跟印刷的叠印无关。判断依据见 `BUILD-SPEC/03-交互链路/Overprint.md`。
+> 跟印刷的叠印无关。判断依据见 `../reference/组件文档/03-交互链路/Overprint.md`。
 
 ## 目录
 
@@ -29,7 +29,7 @@ src/
 │  ├─ mock.ts          浏览器假数据（数据来自真实 SysFont2.json）
 │  └─ types.ts         与 jsx 交换的数据结构
 ├─ stores/         Pinia
-├─ router/         15 条路由，对齐 BUILD-SPEC/11-组件树.md
+├─ router/         15 条路由，对齐 ../reference/组件文档/11-组件树.md
 ├─ components/     通用组件：Icon / GButton / GInput / GDropdown / GMenu / GTooltip / NewSpin / BackTop
 ├─ assets/         icons-sprite.svg（189 个图标，从原面板抽出来的）
 ├─ layouts/        左侧导航 + 内容区
@@ -83,7 +83,7 @@ reg query "HKCU\Software\Adobe\CSXS.12" /v PlayerDebugMode   # 要是 1
 我们把它整段抽出来了，共 189 个（原文件里另有 52 个 `fol-icon-test*` 测试图标，已剔除）：
 
 ```powershell
-cd ..\10-逆向流水线
+cd ..\tools
 node 14-sprite.cjs      # 重新生成 src/assets/icons-sprite.svg 和 src/components/icon/names.ts
 ```
 

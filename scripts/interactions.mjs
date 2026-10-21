@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 从原版 render 函数里提取交互点，生成「原版交互清单」。
  *
  *   node scripts/interactions.mjs
@@ -14,7 +14,7 @@ import { join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const root = fileURLToPath(new URL('..', import.meta.url))
-const SRC_DIR = join(root, '..', '90-归档', '03-源码还原', 'webcrack输出', 'app')
+const SRC_DIR = join(root, '..', 'archive', '03-源码还原', 'webcrack输出', 'app')
 const OUT = join(root, 'docs', '交互清单.md')
 
 function walk(dir, out = []) {
