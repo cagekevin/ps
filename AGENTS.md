@@ -19,8 +19,8 @@ UI 和数据流全部重写；PS 能力层继续调原厂 jsxbin（`public/lib/a
 5. `docs/架构决策.md` —— 为什么这么设计，别轻易推翻
 6. `docs/log/index.md` —— 最近踩过什么坑、做过什么决策
 7. `README.md` —— 命令、目录
-8. `../reference/组件文档/12-组件复用度.md` —— 哪些组件该先写
-9. 要改的页面对应的 `../reference/组件文档/02-组件/<组件>.md` 和 `08-模板/tpl_<组件>.md`
+8. `../reference/02-组件文档/12-组件复用度.md` —— 哪些组件该先写
+9. 要改的页面对应的 `../reference/02-组件文档/02-组件/<组件>.md` 和 `08-模板/tpl_<组件>.md`
 
 ## 硬规则
 
@@ -72,7 +72,7 @@ bind(computed(() => items.value.filter(/* ... */)))   // 有筛选才需要
 清理完一个文件后跑 `npm run style:baseline` 收紧。
 
 需要新色值/新尺寸时：先加到 `tokens.css`，再在组件里引用。
-色值来源必须是 `../reference/04-CEP资源包/CEP001-设计助理/css/app.bf68b505.css` 里的真实值，
+色值来源必须是 `../reference/03-原版安装包/04-CEP资源包/CEP001-设计助理/css/app.bf68b505.css` 里的真实值，
 不要凭截图目测（这一条踩过坑）。
 
 **字号和图标**：一律查 `docs/视觉规范.md`。图标用预设名（`size="xs"`），
@@ -105,7 +105,7 @@ bind(computed(() => items.value.filter(/* ... */)))   // 有筛选才需要
 
 ### 7. jsx 返回结构必须实测
 
-`../reference/组件文档/06-jsx契约.md` 只有**调用侧参数**，没有返回结构。
+`../reference/02-组件文档/06-jsx契约.md` 只有**调用侧参数**，没有返回结构。
 写新页面时先在 PS 里跑一次、把真实返回抓成 fixture 放 `src/mocks/`，再定义类型。
 （字体页就因为猜返回结构返工了三次：`"ok"` vs 数组、`name/zz/mz/hjm` vs `family/weights/names/postScriptNames`。）
 
@@ -169,17 +169,17 @@ bind(computed(() => items.value.filter(/* ... */)))   // 有筛选才需要
 
 | 想知道 | 去哪查（不要问人） |
 |---|---|
-| 颜色 / 尺寸 / 圆角 | `../reference/04-CEP资源包/CEP001-设计助理/css/app.bf68b505.css` |
-| **原版源码（未压缩、可读）** | **`../reference/原版源码/panel/js/app.v4.js`**（2.5MB / 73946 行，有缩进） |
-| 原版组件有哪些 props / computed / methods / 文案 | `../reference/组件文档/02-组件/<组件>.md` |
-| 原版的 DOM 结构和嵌套 | `../reference/组件文档/08-模板/tpl_<组件>_L<行号>.md`（带层级 + render 源码） |
-| 原版样式 | `../reference/原版源码/panel/css/app.bf68b505.css`（压缩，**必须先用上面的 JS/结构树确认类名再查**） |
+| 颜色 / 尺寸 / 圆角 | `../reference/03-原版安装包/04-CEP资源包/CEP001-设计助理/css/app.bf68b505.css` |
+| **原版源码（未压缩、可读）** | **`../reference/01-原版源码/panel/js/app.v4.js`**（2.5MB / 73946 行，有缩进） |
+| 原版组件有哪些 props / computed / methods / 文案 | `../reference/02-组件文档/02-组件/<组件>.md` |
+| 原版的 DOM 结构和嵌套 | `../reference/02-组件文档/08-模板/tpl_<组件>_L<行号>.md`（带层级 + render 源码） |
+| 原版样式 | `../reference/01-原版源码/panel/css/app.bf68b505.css`（压缩，**必须先用上面的 JS/结构树确认类名再查**） |
 
 > ⚠️ **不要直接拿压缩 CSS 里的选择器当结论。** 那份 CSS 里新旧两套组件混在一起
 > （`.nav-item` 40×40 是左侧导航，`.sub-nav-item` 26×26 是另一个组件；
 > `.nav-item-act` 是旧版、`.nav-item-active` 是新版）。只看 CSS 会选错。
 > 正确顺序：**app.v4.js 找 render → 拿到真实类名 → 再去 CSS 查那条类名**。
-| 组件有哪些 props / 方法 | `../reference/组件文档/02-组件/<组件>.md` |
+| 组件有哪些 props / 方法 | `../reference/02-组件文档/02-组件/<组件>.md` |
 | jsx 返回结构 | 先查 `docs/jsx-契约.md`；没有再实测（`#/__probe`） |
 | CEP 版本 / 环境能力 | 原版 `CSXS/manifest.xml` 的 `RequiredRuntime` + 本机注册表 |
 | 数据文件长什么样 | 直接读 `%APPDATA%\SheJiZhuLi\*.json` |

@@ -28,14 +28,14 @@ if (import.meta.env.DEV) console.info(`[build] ${__BUILD_TIME__}`)
 
       <div class="nav-spacer" />
 
+      <!-- 原版底部是 .sub-nav-item：26×26、图标 16px -->
       <router-link
         v-for="item in navBottomRoutes"
         :key="item.path"
         :to="item.path"
-        class="nav-item"
-        :data-label="item.meta?.title"
+        class="nav-item is-sub"
       >
-        <Icon v-if="item.meta?.icon" :name="item.meta.icon" size="2xl" />
+        <Icon v-if="item.meta?.icon" :name="item.meta.icon" size="md" />
         <span v-else class="glyph">{{ item.meta?.glyph }}</span>
       </router-link>
 
@@ -126,6 +126,24 @@ if (import.meta.env.DEV) console.info(`[build] ${__BUILD_TIME__}`)
 
 .nav-item:hover::after {
   opacity: 1;
+}
+
+/* 原版底部是另一套：.sub-nav-item{width:26px;height:26px} 装 .sub-nav-item-inner，
+   图标 svg-16，hover #4b4b4b + 1px #6e6e6e，没有滑出标签。 */
+.nav-item.is-sub {
+  width: var(--nav-item);
+  height: var(--nav-item);
+  border: 1px solid transparent;
+  border-radius: var(--r-md);
+}
+
+.nav-item.is-sub:hover {
+  background: var(--c-surface-raised);
+  border-color: var(--c-border-checked);
+}
+
+.nav-item.is-sub::after {
+  content: none;
 }
 
 .glyph {

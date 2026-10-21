@@ -15,7 +15,7 @@ PS 能力层继续调原厂 jsxbin，不重写。
 | 模板库 / 素材库 / 专题（`/template` `/material` `/topics` `/topic`） | 云端内容，离线不可用 |
 
 > 注：`Overprint.js` 这个文件名叫「叠印」，实际功能是**变量设置 + 批量套版**（`switchdata: ["变量设置", "批量套版"]`），
-> 跟印刷的叠印无关。判断依据见 `../reference/组件文档/03-交互链路/Overprint.md`。
+> 跟印刷的叠印无关。判断依据见 `../reference/02-组件文档/03-交互链路/Overprint.md`。
 
 ## 目录
 
@@ -29,7 +29,7 @@ src/
 │  ├─ mock.ts          浏览器假数据（数据来自真实 SysFont2.json）
 │  └─ types.ts         与 jsx 交换的数据结构
 ├─ stores/         Pinia
-├─ router/         15 条路由，对齐 ../reference/组件文档/11-组件树.md
+├─ router/         15 条路由，对齐 ../reference/02-组件文档/11-组件树.md
 ├─ components/     通用组件：Icon / GButton / GInput / GDropdown / GMenu / GTooltip / NewSpin / BackTop
 ├─ assets/         icons-sprite.svg（189 个图标，从原面板抽出来的）
 ├─ layouts/        左侧导航 + 内容区
