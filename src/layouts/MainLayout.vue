@@ -14,13 +14,7 @@ if (import.meta.env.DEV) console.info(`[build] ${__BUILD_TIME__}`)
 <template>
   <div class="layout">
     <nav class="nav">
-      <router-link
-        v-for="item in navRoutes"
-        :key="item.path"
-        :to="item.path"
-        class="nav-item"
-        :data-label="item.meta?.title"
-      >
+      <router-link v-for="item in navRoutes" :key="item.path" :to="item.path" class="nav-item">
         <!-- 原版导航图标统一 svg-24 -->
         <Icon v-if="item.meta?.icon" :name="item.meta.icon" size="2xl" />
         <span v-else class="glyph">{{ item.meta?.glyph }}</span>
@@ -103,37 +97,7 @@ if (import.meta.env.DEV) console.info(`[build] ${__BUILD_TIME__}`)
   color: var(--c-text-inverse);
 }
 
-/* SVG <use> 随父级背景重绘会重新解析 symbol，在旧版 Chromium 里表现为图标闪一下。
-   把图标放到独立合成层，父级怎么重绘都不影响它。 */
-.nav-item > svg {
-  transform: translateZ(0);
-}
 
-/* 原版 .tips：left:40px、满高、左右 20px 内边距、右侧圆角、z-index 99 */
-.nav-item::after {
-  content: attr(data-label);
-  position: absolute;
-  left: 100%;
-  top: 0;
-  z-index: var(--z-dropdown);
-  height: 100%;
-  display: flex;
-  align-items: center;
-  padding: 0 var(--sp-6);
-  border-radius: 0 var(--r-input) var(--r-input) 0;
-  /* 和悬停项同色，两者拼成一条，不出现深浅断层 */
-  background: var(--c-nav-active);
-  color: var(--c-text-inverse);
-  font-size: var(--fs-md);
-  line-height: 1;
-  white-space: nowrap;
-  opacity: 0;
-  pointer-events: none;
-}
-
-.nav-item:hover::after {
-  opacity: 1;
-}
 
 /* 原版底部是另一套：.sub-nav-item{width:26px;height:26px} 装 .sub-nav-item-inner，
    图标 svg-16，hover #4b4b4b + 1px #6e6e6e，没有滑出标签。 */
