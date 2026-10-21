@@ -14,7 +14,13 @@ if (import.meta.env.DEV) console.info(`[build] ${__BUILD_TIME__}`)
 <template>
   <div class="layout">
     <nav class="nav">
-      <router-link v-for="item in navRoutes" :key="item.path" :to="item.path" class="nav-item">
+      <router-link
+        v-for="item in navRoutes"
+        :key="item.path"
+        :to="item.path"
+        class="nav-item"
+        :data-label="item.meta?.title"
+      >
         <!-- 原版导航图标统一 svg-24 -->
         <Icon v-if="item.meta?.icon" :name="item.meta.icon" size="2xl" />
         <span v-else class="glyph">{{ item.meta?.glyph }}</span>
@@ -89,15 +95,39 @@ if (import.meta.env.DEV) console.info(`[build] ${__BUILD_TIME__}`)
   color: var(--c-text-inverse);
 }
 
-/* 原版 hover 是 rgba(0,0,0,.9)（近黑），但那要和右侧滑出的黑标签连成一条才合理。
-   我们不做黑标签，近黑单独出现就是一次大幅跳变，看起来像闪。
-   改成与激活态同色 #434343，色差小，不需要过渡也不会刺眼。 */
+/* 原版 hover 是 rgba(0,0,0,.9)（近黑），但它本来就要和右侧滑出的标签
+   拼成一条连续的深色条。这里用 #434343（与激活态同色），
+   色差小，不需要过渡也不会刺眼。 */
 .nav-item:hover {
   background: var(--c-nav-active);
   color: var(--c-text-inverse);
 }
 
+/* 原版 .tips{left:40px;height:100%;padding:0 20px;border-radius:0 5px 5px 0;z-index:99}
+   悬停时从右侧滑出，显示该页名称 */
+.nav-item::after {
+  content: attr(data-label);
+  position: absolute;
+  left: 100%;
+  top: 0;
+  z-index: var(--z-dropdown);
+  height: 100%;
+  display: flex;
+  align-items: center;
+  padding: 0 var(--sp-6);
+  border-radius: 0 var(--r-input) var(--r-input) 0;
+  background: var(--c-nav-active);
+  color: var(--c-text-inverse);
+  font-size: var(--fs-md);
+  line-height: 1;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+}
 
+.nav-item:hover::after {
+  opacity: 1;
+}
 
 /* 原版底部是另一套：.sub-nav-item{width:26px;height:26px} 装 .sub-nav-item-inner，
    图标 svg-16，hover #4b4b4b + 1px #6e6e6e，没有滑出标签。 */
@@ -124,33 +154,6 @@ if (import.meta.env.DEV) console.info(`[build] ${__BUILD_TIME__}`)
 
 .nav-spacer {
   flex: 1;
-}
-
-.nav-mode {
-  width: 26px;
-  height: 14px;
-  margin: var(--sp-1) 0 var(--sp-2);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--r-sm);
-  font-size: var(--fs-xs);
-  letter-spacing: 0.3px;
-}
-
-.nav-mode.ps {
-  background: var(--c-ok-a18);
-  color: var(--ok);
-}
-
-.nav-mode.mock {
-  background: var(--c-warn-a18);
-  color: var(--warn);
-}
-
-.reload {
-  margin-bottom: 0;
-  font-size: var(--fs-lg);
 }
 
 .content {
