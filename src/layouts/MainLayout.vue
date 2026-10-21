@@ -44,10 +44,9 @@ if (import.meta.env.DEV) console.info(`[build] ${__BUILD_TIME__}`)
 
     <main class="content">
       <ErrorBoundary>
+        <!-- 页面切换不做淡入淡出：整页渐变会让人以为在闪 -->
         <router-view v-slot="{ Component }">
-          <transition name="page" mode="out-in">
-            <component :is="Component" />
-          </transition>
+          <component :is="Component" />
         </router-view>
       </ErrorBoundary>
     </main>

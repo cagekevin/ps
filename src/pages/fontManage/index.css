@@ -300,7 +300,6 @@
   background: var(--bg-panel);
   border-bottom: 1px solid var(--border);
   cursor: pointer;
-  transition: background var(--dur-fast) var(--ease);
 }
 
 /* 原版 .list-item--active,:hover{background:#424242} —— 两者同色 */

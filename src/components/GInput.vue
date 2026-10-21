@@ -52,7 +52,6 @@ function clear() {
   border-radius: var(--input-radius, var(--r-md));
   background: var(--c-input);
   color: var(--text);
-  transition: border-color var(--dur-fast) var(--ease);
 }
 
 /* 尺寸档位同样走变量，页面设了 --input-height 就能覆盖 */

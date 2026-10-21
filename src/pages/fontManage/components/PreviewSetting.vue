@@ -76,7 +76,6 @@ useDismiss(() => open.value, cardRef, () => {
   border-radius: var(--r-md);
   background: transparent;
   color: var(--c-icon);
-  transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
 }
 
 /* 原版 .preview-setting__actions>.gdaicon:active,:hover

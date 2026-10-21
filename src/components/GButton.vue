@@ -38,8 +38,6 @@ defineEmits<{ (e: 'click', ev: MouseEvent): void }>()
   background: var(--bg-raise);
   color: var(--text-strong);
   white-space: nowrap;
-  transition: background var(--dur-fast) var(--ease), border-color var(--dur-fast) var(--ease),
-    color var(--dur-fast) var(--ease);
 }
 
 .g-btn--small {
