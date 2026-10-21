@@ -142,6 +142,42 @@ function maskComments(css) {
 /** 原版有 64 处 !important，是维护噩梦；我们一律禁止 */
 const IMPORTANT_RE = /!important/g
 
+/**
+ * 样式分层守卫：
+ *   ① 禁止 :deep() —— 页面不该从外部改公共组件内部，
+ *      需要不同尺寸就让公共组件读 CSS 变量（--input-height 这类）
+ *   ② 同一文件内同一个选择器只能出现一次 —— 反复追加会让样式变成补丁堆
+ */
+function checkLayering() {
+  const problems = []
+  for (const file of walk(SRC)) {
+    if (!file.endsWith('.vue') && !file.endsWith('.css')) continue
+    const text = readFileSync(file, 'utf8')
+    const rel = relative(root, file).replace(/\\/g, '/')
+
+    // 先剥掉注释，否则注释里写的 :deep() 也会被算成违规
+    const stripped = text.replace(/\/\*[\s\S]*?\*\//g, '')
+
+    const deep = stripped.match(/:deep\(/g)
+    if (deep) problems.push(`${rel} 用了 ${deep.length} 处 :deep()，改用 CSS 变量出口`)
+
+    // 只看 <style> 里的规则，避免把模板里的东西算进来
+    const styleStart = stripped.indexOf('<style')
+    const styles = styleStart >= 0 ? stripped.slice(styleStart) : stripped
+    const seen = new Map()
+    for (const m of styles.matchAll(/([^{}@/]+)\{[^}]*\}/g)) {
+      const sel = m[1].trim().replace(/\s+/g, ' ')
+      if (!sel || sel.startsWith('/*')) continue
+      seen.set(sel, (seen.get(sel) ?? 0) + 1)
+    }
+    const dup = [...seen].filter(([, n]) => n > 1)
+    if (dup.length) {
+      problems.push(`${rel} 有重复选择器：${dup.map(([s, n]) => `${s}×${n}`).join('、')}`)
+    }
+  }
+  return problems
+}
+
 /** 负 margin 是布局补丁，一律禁止（查 1） */
 const MARGIN_NEG_RE = /margin:\s*-/g
 
@@ -341,6 +377,15 @@ if (command === 'fix') {
     console.error('\n[style] 图标名不存在（会渲染成空白）：\n')
     for (const p of badIcons) console.error(`  ${p}`)
     console.error('\n  去 src/components/icon/names.ts 里找真实名字，别猜。\n')
+    process.exit(1)
+  }
+
+  // 样式分层：禁止 :deep() 穿透，禁止同一文件重复选择器
+  const layering = checkLayering()
+  if (layering.length) {
+    console.error('\n[style] 样式分层问题：\n')
+    for (const p of layering) console.error(`  ${p}`)
+    console.error('\n  :deep() → 改用 CSS 变量出口；重复选择器 → 合并成一条。\n')
     process.exit(1)
   }
 

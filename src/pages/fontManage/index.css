@@ -1,0 +1,424 @@
+/* ============================================================
+   字体管理页 · 页面级样式
+   ------------------------------------------------------------
+   分工：
+     tokens.css          颜色 / 字号 / 间距 / 圆角（唯一出处）
+     global.css          reset + u-row / u-gap / u-stack
+     PageShell.vue       外壳（唯一给左右留白的地方）
+     本文件              页面布局 + 本页私有元素
+     components/*.vue    组件内部，各自 scoped
+
+   规则：
+     1. 不改公共组件的内部结构：需要不同尺寸就设 CSS 变量，
+        公共组件用 var(--x, 默认值) 读取
+     2. 颜色/字号/间距一律走 token，不写裸值
+     3. 一个选择器只出现一次
+   ============================================================ */
+
+/* ---------- 1. 外壳参数（通过 class 落到 PageShell 根节点） ---------- */
+
+/* 原版 .hcf__footer{padding:3px} + __actions{background:#545454;height:24px} */
+.fm-shell {
+  --shell-footer-height: var(--h-footer);
+  --shell-footer-padding: 0 var(--sp-exact-3);
+  --shell-footer-bg: var(--c-bar);
+}
+
+/* 页头右上角的更多按钮（原版 .tabs__menu__icon，16px，无背景） */
+.icon-btn {
+  width: var(--h-control);
+  height: var(--h-control);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--c-icon);
+}
+
+.icon-btn:hover {
+  background: var(--c-hover-2);
+  color: var(--c-text-inverse);
+}
+
+/* ---------- 2. 搜索行 ---------- */
+
+/* 原版 __header__search{position:relative} + .search{margin-right:34px}
+   + .filter-preview__header{position:absolute;right:0} */
+.search-row {
+  position: relative;
+  padding: var(--sp-4) 0;
+  /* 输入框高度 30 / 圆角 5 / 右侧给漏斗留 34px，由 GInput 读取 */
+  --input-height: var(--h-field);
+  --input-radius: var(--r-input);
+  --input-margin-right: 34px;
+}
+
+/* 原版漏斗：框外右侧，24×24 */
+.filter-btn {
+  position: relative;
+  width: var(--h-control);
+  height: var(--h-control);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-md);
+  background: transparent;
+  color: var(--c-icon);
+}
+
+.filter-btn:hover {
+  background: var(--c-hover-2);
+}
+
+.filter-btn.is-on {
+  color: var(--accent-soft);
+}
+
+/* 原版 Badge :count */
+.filter-badge {
+  position: absolute;
+  top: -2px;
+  right: -2px;
+  min-width: 12px;
+  height: 12px;
+  padding: 0 var(--sp-1);
+  border-radius: var(--r-pill);
+  background: var(--accent);
+  color: var(--c-text-inverse);
+  font-size: var(--fs-xs);
+  line-height: 12px;
+  text-align: center;
+  box-sizing: border-box;
+}
+
+.filter-dropdown {
+  position: absolute;
+  top: var(--sp-4);
+  right: 0;
+  /* 下拉面板宽度：触发器只有 24px，默认 min-width:100% 会压成一条 */
+  --dropdown-width: max-content;
+  --dropdown-max-width: calc(100vw - 56px);
+}
+
+/* ---------- 3. 预览文案面板 ---------- */
+
+.text-panel {
+  padding-bottom: var(--sp-4);
+}
+
+/* ---------- 4. 我的标签 ---------- */
+
+.tags {
+  padding-bottom: var(--sp-4);
+}
+
+/* 原版 __header{margin-top:8px;margin-bottom:4px} */
+.tags-head {
+  height: 22px;
+  margin-top: var(--sp-4);
+  margin-bottom: var(--sp-2);
+  color: var(--text-dim);
+  font-size: var(--fs-md);
+}
+
+/* 原版 >span{transform:scale(.91666667) translate(-2px);font-weight:500} */
+.tags-head span {
+  flex: 1;
+  font-weight: 500;
+  transform: scale(0.91666667) translate(-2px);
+  transform-origin: left center;
+}
+
+.tags-tools {
+  margin-left: auto;
+  gap: var(--sp-2);
+}
+
+.tags-add {
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--c-icon);
+  font-size: var(--fs-xl);
+  line-height: 1;
+}
+
+.tags-add:hover {
+  color: var(--c-text-inverse);
+}
+
+/* 原版 .gdaicon 的 chevron_down */
+.tags-toggle {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--c-icon);
+  transition: transform var(--dur-fast) var(--ease);
+}
+
+.tags-toggle.is-open {
+  transform: rotate(180deg);
+}
+
+.tag-list {
+  flex-wrap: wrap;
+  gap: var(--sp-2);
+}
+
+/* 原版 .user-tag-filter-hidden{max-height:94px;overflow-y:hidden} */
+.tag-list.is-collapsed {
+  max-height: 94px;
+  overflow: hidden;
+}
+
+/* 读不到标签时要说一句，不能让标签区静默变空 */
+.tags-error {
+  margin: 0;
+  color: var(--danger);
+  font-size: var(--fs-sm);
+  line-height: 1.5;
+}
+
+/* 原版 tag__content{background:#4b4b4b;border:1px solid #4b4b4b;border-radius:4px}
+   + tag__content>div{padding:4px 7px} */
+.tag {
+  padding: var(--sp-2) var(--sp-exact-7);
+  border: 1px solid var(--c-surface-raised);
+  border-radius: var(--r-md);
+  background: var(--c-surface-raised);
+  color: var(--c-text-onchip);
+  font-size: var(--fs-md);
+  line-height: 16px;
+  white-space: nowrap;
+}
+
+/* 原版 tag__content--active,:hover{border:1px solid #759fff} —— 只变边框 */
+.tag:hover {
+  border-color: var(--accent-soft);
+}
+
+.tag.is-active {
+  border-color: var(--accent);
+}
+
+/* ---------- 5. 计数行 ---------- */
+
+/* 原版：全部(259) 单独一行，位于标签与列表之间 */
+.list-head {
+  flex: 0 0 auto;
+  height: var(--h-row);
+  padding: 0 var(--page-pad-x);
+  border-top: 1px solid var(--border);
+  color: var(--c-text-muted);
+  font-size: var(--fs-md);
+}
+
+/* 原版 __filter_count span{color:#b3b3b3;transform:scale(.91666667) translate(-2px);font-weight:500} */
+.list-count {
+  flex: 1;
+  color: var(--c-star-on);
+  font-weight: 500;
+  transform: scale(0.91666667) translate(-2px);
+  transform-origin: left center;
+}
+
+.clear-tag {
+  border: 0;
+  background: transparent;
+  color: var(--accent-soft);
+  font-size: var(--fs-sm);
+}
+
+/* ---------- 6. 状态（加载 / 错误 / 空） ---------- */
+
+.state {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--sp-5);
+  padding: var(--sp-7);
+  color: var(--text-faint);
+  font-size: var(--fs-md);
+  text-align: center;
+}
+
+.state.is-error {
+  color: var(--danger);
+}
+
+.state p {
+  margin: 0;
+  word-break: break-all;
+}
+
+.retry {
+  height: var(--h-control-sm);
+  padding: 0 var(--sp-5);
+  white-space: nowrap;
+  border: 1px solid var(--bg-raise);
+  border-radius: var(--r-md);
+  background: var(--bg-raise);
+  color: var(--text-strong);
+  font-size: var(--fs-md);
+}
+
+/* ---------- 7. 字体列表 ---------- */
+
+/* 原版 .list{display:grid} + --single-cols{grid-template-columns:100%} */
+.font-list {
+  flex: 1;
+  min-height: 0;
+  display: grid;
+  grid-template-columns: 100%;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  overflow-y: auto;
+}
+
+/* 原版 .list-item{border-bottom:1px solid #2e2e2e;background:#363636;padding-top:6px}
+   背景要撑满整行（hover 才全宽），所以左右留白放在项内 */
+.font-item {
+  gap: var(--sp-2);
+  padding: var(--sp-3) var(--page-pad-x);
+  background: var(--bg-panel);
+  border-bottom: 1px solid var(--border);
+  cursor: pointer;
+  transition: background var(--dur-fast) var(--ease);
+}
+
+/* 原版 .list-item--active,:hover{background:#424242} —— 两者同色 */
+.font-item:hover,
+.font-item.is-active {
+  background: var(--c-surface-active);
+}
+
+.item-body {
+  flex: 1;
+  min-width: 0;
+}
+
+/* 原版 __header{position:relative;padding:0 8px;line-height:1;height:15px}
+   操作区绝对定位在它里面 */
+.name-row {
+  position: relative;
+  height: 15px;
+  line-height: 1;
+}
+
+/* 原版 __font-family{flex-grow:0;flex-shrink:1;max-width:calc(100% - 60px);color:#f5f5f5} */
+.family {
+  flex: 0 1 auto;
+  min-width: 0;
+  max-width: calc(100% - 60px);
+  color: var(--text-strong);
+  font-size: var(--fs-md);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* 无预览模式：家族名用字体本身渲染（原版 __name--no-preview） */
+.family.is-name-only {
+  color: var(--c-text-name);
+  font-size: var(--fs-name);
+  line-height: var(--fs-name-lh);
+  font-weight: 400;
+  padding-bottom: var(--sp-6);
+}
+
+/* 原版 __actions{display:none;position:absolute;right:0;top:0;padding:0 8px}
+   + .list-item:hover __actions{display:flex}
+   家族名 max-width 已预留 60px，所以显示时不挤压文字、不抖动 */
+.actions {
+  position: absolute;
+  right: 0;
+  top: 0;
+  display: none;
+  gap: var(--sp-1);
+  padding: 0 var(--sp-4);
+}
+
+.font-item:hover .actions,
+.font-item.is-active .actions {
+  display: flex;
+}
+
+.act {
+  width: 18px;
+  height: 18px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--c-icon);
+}
+
+/* 原版这个图标 hover 只变白，不加背景 */
+.act:hover {
+  color: var(--c-text-inverse);
+}
+
+/* 原版 __preview{padding:6px 8px}，档位 24/38/50/72 + 行高 34/53/70/101 */
+.preview {
+  margin: 0;
+  padding: var(--sp-3) 0;
+  color: var(--c-text-preview);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.preview.is-small {
+  font-size: var(--preview-sm);
+  line-height: var(--preview-sm-lh);
+}
+
+.preview.is-medium {
+  font-size: var(--preview-md);
+  line-height: var(--preview-md-lh);
+}
+
+.preview.is-large {
+  font-size: var(--preview-lg);
+  line-height: var(--preview-lg-lh);
+}
+
+.preview.is-extra-large {
+  font-size: var(--preview-xl);
+  line-height: var(--preview-xl-lh);
+}
+
+/* 滚动哨兵，不占视觉空间 */
+.sentinel {
+  height: 1px;
+  list-style: none;
+}
+
+/* ---------- 8. 弹窗内容 ---------- */
+
+.del-tip {
+  margin: 0;
+  color: var(--c-text-strong);
+  font-size: var(--fs-md);
+  line-height: 1.6;
+}

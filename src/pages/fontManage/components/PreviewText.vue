@@ -69,8 +69,9 @@ function apply() {
   font-size: var(--fs-md);
 }
 
+/* 原版 input::placeholder{color:#b3b3b3} */
 .pt__input::placeholder {
-  color: var(--c-text-muted);
+  color: var(--c-star-on);
 }
 
 .pt__input:hover,
@@ -79,8 +80,9 @@ function apply() {
   outline: none;
 }
 
+/* 原版 __preview-text>button{margin:0 0 0 3px} */
 .pt__btn {
-  margin-left: var(--sp-1);
+  margin-left: var(--sp-exact-3);
   height: var(--h-field);
   padding: 0 var(--sp-5);
   border: 1px solid var(--c-surface-raised);

@@ -58,7 +58,10 @@ onBeforeUnmount(() => {
 .g-dropdown__panel {
   position: absolute;
   z-index: var(--z-dropdown);
+  /* 宽度出口：默认跟触发器同宽；页面需要更宽时设 --dropdown-width */
   min-width: 100%;
+  width: var(--dropdown-width, auto);
+  max-width: var(--dropdown-max-width, none);
   border: 1px solid var(--c-border-float);
   border-radius: var(--r-md);
   background: var(--c-float);

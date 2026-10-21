@@ -45,20 +45,24 @@ function clear() {
      否则按内容撑开，会把同一行的按钮挤出可视区 */
   flex: 1 1 0;
   min-width: 0;
+  /* 尺寸出口：页面需要不同规格时只改变量，不改这里的选择器 */
+  height: var(--input-height, var(--h-control));
+  margin-right: var(--input-margin-right, 0);
   border: 1px solid var(--c-input);
-  border-radius: var(--r-md);
+  border-radius: var(--input-radius, var(--r-md));
   background: var(--c-input);
   color: var(--text);
   transition: border-color var(--dur-fast) var(--ease);
 }
 
+/* 尺寸档位同样走变量，页面设了 --input-height 就能覆盖 */
 .g-input--small {
-  height: var(--h-control-sm);
+  height: var(--input-height, var(--h-control-sm));
   padding: 0 var(--sp-3);
 }
 
 .g-input--medium {
-  height: var(--h-control);
+  height: var(--input-height, var(--h-control));
   padding: 0 var(--sp-4);
 }
 

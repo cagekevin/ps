@@ -124,10 +124,6 @@ function pick(index: number) {
   line-height: 1;
 }
 
-.fw__count:hover {
-  border-color: var(--accent-soft);
-}
-
 .fw__dropdown {
   position: absolute;
   right: 0;
@@ -149,10 +145,6 @@ function pick(index: number) {
   line-height: 17px;
   cursor: pointer;
   white-space: nowrap;
-}
-
-.fw__option:hover {
-  color: var(--accent-soft);
 }
 
 .fw__check {

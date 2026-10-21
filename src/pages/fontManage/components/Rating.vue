@@ -56,18 +56,19 @@ function leave() {
   align-items: center;
 }
 
+/* 原版 .rating>div{padding-left:4px}；.rating .gdaicon{color:#cacaca} */
 .rating__star {
   padding: 0 0 0 var(--sp-2);
   border: 0;
   background: transparent;
-  color: var(--bg-raise);
+  color: var(--c-star);
   font-size: var(--fs-md);
   line-height: 1;
 }
 
-/* 收藏用金色，符合常理 */
+/* 原版 .rating__icon--active{color:#b3b3b3} */
 .rating__star.is-on {
-  color: var(--c-star);
+  color: var(--c-star-on);
 }
 
 /* 原版星级只有 --active 变色，没有 hover 规则 —— 按规范不加 */

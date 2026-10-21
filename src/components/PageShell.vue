@@ -101,14 +101,15 @@ h1::after {
   overflow: hidden;
 }
 
+/* 尺寸出口：页面通过根节点变量覆盖，不要用 :deep() 改这里 */
 .shell__footer {
   flex: 0 0 auto;
   display: flex;
   align-items: center;
   gap: var(--sp-3);
-  height: 30px;
-  padding: 0 var(--page-pad-x);
-  background: var(--bg-panel);
+  height: var(--shell-footer-height, var(--h-footer));
+  padding: var(--shell-footer-padding, 0 var(--page-pad-x));
+  background: var(--shell-footer-bg, var(--bg-panel));
   border-top: 1px solid var(--border);
 }
 </style>

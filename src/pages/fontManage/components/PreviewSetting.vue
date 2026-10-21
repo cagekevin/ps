@@ -89,16 +89,18 @@ useDismiss(() => open.value, cardRef, () => {
   color: var(--c-text-inverse);
 }
 
+/* 原版 __card{position:fixed;bottom:26px;left:43px;width:180px;padding:12px 0;
+   background:#404040;border:1px solid hsla(0,0%,100%,.1);border-radius:4px} */
 .ps__card {
   position: fixed;
   z-index: var(--z-dropdown);
-  left: calc(var(--nav-w) + var(--sp-1));
-  bottom: var(--sp-6);
+  left: 43px;
+  bottom: 26px;
   width: 180px;
   padding: var(--sp-5) 0;
   border: 1px solid var(--c-border-float);
   border-radius: var(--r-md);
-  background: var(--c-float);
+  background: var(--c-card);
   box-shadow: var(--shadow-pop);
   color: var(--c-text-name);
 }

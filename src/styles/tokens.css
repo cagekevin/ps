@@ -46,8 +46,11 @@
   --c-nav-active: #434343;
   /* 导航悬停：原版 .nav-item:hover{background-color:rgba(0,0,0,.9)}，与右侧滑出标签同色 */
   --c-nav-hover: rgba(0, 0, 0, 0.9);
-  /* 收藏星标：金色是通用语义 */
-  --c-star: #ffb400;
+  /* 收藏星标：原版 .rating .gdaicon{color:#cacaca}，--active{color:#b3b3b3} */
+  --c-star: #cacaca;
+  --c-star-on: #b3b3b3;
+  /* 浮层卡片：原版 .preview-setting__card{background:#404040} */
+  --c-card: #404040;
   /* 禁用按钮（原版 .preview-text__btn--disable） */
   --c-disabled-bg: #3d3d3d;
   --c-disabled-text: #7b7b7b;
