@@ -502,6 +502,13 @@ async function apply(font: FontItem, variantIndex = currentWeight(font.family)) 
   position: relative;
 }
 
+/* 原版 .filter-preview__header .gda-badge:active,:hover
+   { background:hsla(0,0%,100%,.1); border:1px solid hsla(0,0%,100%,.1) } */
+.filter-btn:hover {
+  background: var(--c-hover-2);
+  border: 1px solid var(--c-hover-2);
+}
+
 .filter-btn.is-on {
   color: var(--accent-soft);
 }
@@ -653,11 +660,9 @@ async function apply(font: FontItem, variantIndex = currentWeight(font.family)) 
   white-space: nowrap;
 }
 
-/* 原版 .tag__content:hover{border:1px solid #759fff}：只变边框。
-   底色略微提亮是我们的补充，因为纯边框在深色底上几乎看不出 hover。 */
+/* 原版 .font-manage__tag__content--active,:hover{border:1px solid #759fff} —— 只变边框 */
 .tag:hover {
   border-color: var(--accent-soft);
-  background: var(--c-surface-raised-hover);
 }
 
 .tags-add {
@@ -771,14 +776,20 @@ async function apply(font: FontItem, variantIndex = currentWeight(font.family)) 
   transition: background var(--dur-fast) var(--ease);
 }
 
-.font-item:hover {
-  background: var(--c-hover-1);
+/* 原版 .font-manage__list-item--active,.font-manage__list-item:hover{background:#424242}
+   —— hover 与选中同色，没有左侧指示条 */
+.font-item:hover,
+.font-item.is-active {
+  background: var(--c-surface-active);
 }
 
-/* 当前应用的字体：白 10% 底 + 左侧 2px 蓝条 */
-.font-item.is-active {
-  background: var(--c-hover-2);
-  box-shadow: inset 2px 0 0 var(--accent);
+/* 原版 .contextHover:hover{color:#fff} + .contextHover:hover .icon{fill:#fff}
+   —— hover 时家族名和操作图标一起变白 */
+.font-item:hover .family,
+.font-item.is-active .family,
+.font-item:hover .act,
+.font-item.is-active .act {
+  color: var(--c-text-inverse);
 }
 
 .item-body {

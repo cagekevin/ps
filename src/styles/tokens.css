@@ -158,7 +158,8 @@
   --h-search: 28px;
   /* 底部工具条（原版 .preview-setting__actions height:24px） */
   --h-footer: 24px;
-  --nav-item: 30px;
+  /* 原版 .sub-nav-item-inner{width:26px;height:26px}，hover 时在这里加边框 */
+  --nav-item: 26px;
 
   /* ---------- 层级 ---------- */
   /* ---------- 页面留白 ----------

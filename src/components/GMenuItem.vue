@@ -40,8 +40,9 @@ function onClick() {
   white-space: nowrap;
 }
 
+/* 原版 .font-manager__menu>div:hover{background-color:hsla(0,0%,100%,.1)} */
 .g-menu-item:hover {
-  background: var(--bg-raise);
+  background: var(--c-hover-2);
 }
 
 .g-menu-item.is-active {

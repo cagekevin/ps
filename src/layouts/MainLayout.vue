@@ -62,32 +62,34 @@ if (import.meta.env.DEV) console.info(`[build] ${__BUILD_TIME__}`)
   background: var(--c-nav);
 }
 
-/* 原版 #nav 宽 40，导航项撑满 40×40 */
+/* 原版 .sub-nav-item-inner{width:26px;height:26px}，在 40px 宽的导航条里居中 */
 .nav-item {
   position: relative;
-  width: var(--nav-w);
-  height: var(--nav-w);
-  border-radius: 0;
+  width: var(--nav-item);
+  height: var(--nav-item);
   display: flex;
   align-items: center;
   justify-content: center;
-  border: 0;
+  /* 透明边框占位，hover 时不发生尺寸跳变 */
+  border: 1px solid transparent;
+  border-radius: var(--r-md);
   background: transparent;
   color: var(--c-icon);
   text-decoration: none;
   box-sizing: border-box;
-  transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
 }
 
+/* 原版 .sub-nav-item-inner:hover{background:#4b4b4b;border:1px solid #6e6e6e;border-radius:4px} */
 .nav-item:hover {
-  background: var(--c-hover-2);
+  background: var(--c-surface-raised);
+  border-color: var(--c-border-checked);
   color: var(--c-text-inverse);
 }
 
-/* 当前所在：白 10% 底 + 强调色图标，一眼能看出 */
-/* 原版：.sub-nav-item-active 背景 #4b4b4b，图标变白 */
+/* 原版激活态与 hover 同一条规则，图标变白 */
 .nav-item.router-link-active {
   background: var(--c-surface-raised);
+  border-color: var(--c-border-checked);
   color: var(--c-text-inverse);
 }
 

@@ -79,10 +79,13 @@ useDismiss(() => open.value, cardRef, () => {
   transition: background var(--dur-fast) var(--ease), color var(--dur-fast) var(--ease);
 }
 
-/* 用白色叠加，不用原版的 rgba(0,0,0,.25)——黑底上会像"图标变黑" */
+/* 原版 .preview-setting__actions>.gdaicon:active,:hover
+   { background:rgba(0,0,0,.25); border:1px solid hsla(0,0%,100%,.2); border-radius:4px }
+   三件套必须齐全：只取背景不取边框/圆角，会像一块黑斑（之前就是这个错）。 */
 .ps__icon:hover,
 .ps__icon:active {
-  background: var(--c-hover-2);
+  background: var(--c-mask-soft);
+  border-color: var(--c-border-float-strong);
   color: var(--c-text-inverse);
 }
 
