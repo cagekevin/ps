@@ -14,7 +14,13 @@ if (import.meta.env.DEV) console.info(`[build] ${__BUILD_TIME__}`)
 <template>
   <div class="layout">
     <nav class="nav">
-      <router-link v-for="item in navRoutes" :key="item.path" :to="item.path" class="nav-item">
+      <router-link
+        v-for="item in navRoutes"
+        :key="item.path"
+        :to="item.path"
+        class="nav-item"
+        :data-label="item.meta?.title"
+      >
         <!-- 原版导航图标统一 svg-24 -->
         <Icon v-if="item.meta?.icon" :name="item.meta.icon" size="2xl" />
         <span v-else class="glyph">{{ item.meta?.glyph }}</span>
@@ -22,7 +28,13 @@ if (import.meta.env.DEV) console.info(`[build] ${__BUILD_TIME__}`)
 
       <div class="nav-spacer" />
 
-      <router-link v-for="item in navBottomRoutes" :key="item.path" :to="item.path" class="nav-item">
+      <router-link
+        v-for="item in navBottomRoutes"
+        :key="item.path"
+        :to="item.path"
+        class="nav-item"
+        :data-label="item.meta?.title"
+      >
         <Icon v-if="item.meta?.icon" :name="item.meta.icon" size="2xl" />
         <span v-else class="glyph">{{ item.meta?.glyph }}</span>
       </router-link>
@@ -62,35 +74,59 @@ if (import.meta.env.DEV) console.info(`[build] ${__BUILD_TIME__}`)
   background: var(--c-nav);
 }
 
-/* 原版 .sub-nav-item-inner{width:26px;height:26px}，在 40px 宽的导航条里居中 */
+/* 原版 .nav-item{width:40px;height:40px;line-height:40px;text-align:center;cursor:default} */
 .nav-item {
   position: relative;
-  width: var(--nav-item);
-  height: var(--nav-item);
+  width: var(--nav-w);
+  height: var(--nav-w);
   display: flex;
   align-items: center;
   justify-content: center;
-  /* 透明边框占位，hover 时不发生尺寸跳变 */
-  border: 1px solid transparent;
-  border-radius: var(--r-md);
+  border: 0;
   background: transparent;
   color: var(--c-icon);
   text-decoration: none;
   box-sizing: border-box;
+  cursor: default;
 }
 
-/* 原版 .sub-nav-item-inner:hover{background:#4b4b4b;border:1px solid #6e6e6e;border-radius:4px} */
-.nav-item:hover {
-  background: var(--c-surface-raised);
-  border-color: var(--c-border-checked);
-  color: var(--c-text-inverse);
-}
-
-/* 原版激活态与 hover 同一条规则，图标变白 */
+/* 原版 .nav-item-active{background-color:#434343} */
 .nav-item.router-link-active {
-  background: var(--c-surface-raised);
-  border-color: var(--c-border-checked);
+  background: var(--c-nav-active);
   color: var(--c-text-inverse);
+}
+
+/* 原版 .nav-item:hover,.tips{background-color:rgba(0,0,0,.9)}
+   悬停时本项和右侧滑出的标签拼成一条连续的黑色条 */
+.nav-item:hover {
+  background: var(--c-nav-hover);
+  color: var(--c-text-inverse);
+}
+
+/* 原版 .tips：left:40px、满高、左右 20px 内边距、右侧圆角、z-index 99 */
+.nav-item::after {
+  content: attr(data-label);
+  position: absolute;
+  left: 100%;
+  top: 0;
+  z-index: var(--z-dropdown);
+  height: 100%;
+  display: flex;
+  align-items: center;
+  padding: 0 var(--sp-6);
+  border-radius: 0 var(--r-input) var(--r-input) 0;
+  background: var(--c-nav-hover);
+  color: var(--c-text-inverse);
+  font-size: var(--fs-md);
+  line-height: 1;
+  white-space: nowrap;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.nav-item:hover::after {
+  opacity: 1;
+}
 }
 
 .glyph {

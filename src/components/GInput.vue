@@ -41,6 +41,10 @@ function clear() {
   display: flex;
   align-items: center;
   gap: var(--sp-3);
+  /* 放在 flex 行里要能收缩：flex-basis 0 + min-width 0，
+     否则按内容撑开，会把同一行的按钮挤出可视区 */
+  flex: 1 1 0;
+  min-width: 0;
   border: 1px solid var(--c-input);
   border-radius: var(--r-md);
   background: var(--c-input);
