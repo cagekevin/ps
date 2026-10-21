@@ -288,7 +288,7 @@ async function apply(font: FontItem, variantIndex = currentWeight(font.family)) 
     </template>
 
     <template #toolbar>
-      <div class="search-row u-row u-gap-2">
+      <div class="search-row">
         <GInput v-model="keyword" placeholder="搜索" clearable>
           <template #suffix>
             <Icon name="iconsousuo" size="sm" />
@@ -484,8 +484,9 @@ async function apply(font: FontItem, variantIndex = currentWeight(font.family)) 
   font-size: var(--fs-base);
 }
 
-/* 搜索框右侧的漏斗按钮（在框外） */
+/* 搜索框右侧的漏斗按钮（在框外，绝对定位到容器右边） */
 .filter-btn {
+  position: relative;
   width: var(--h-control);
   height: var(--h-control);
   display: inline-flex;
@@ -496,10 +497,6 @@ async function apply(font: FontItem, variantIndex = currentWeight(font.family)) 
   border-radius: var(--r-md);
   background: transparent;
   color: var(--c-icon);
-}
-
-.filter-btn {
-  position: relative;
 }
 
 /* 原版 .filter-preview__header .gda-badge:active,:hover
@@ -595,8 +592,9 @@ async function apply(font: FontItem, variantIndex = currentWeight(font.family)) 
   cursor: default;
 }
 
-/* 左右留白由 PageShell 的工具条统一提供，这里只管上下 */
+/* 原版结构：容器 relative，输入框 margin-right:34px，漏斗 absolute right:0 */
 .search-row {
+  position: relative;
   padding: var(--sp-4) 0;
 }
 
@@ -604,18 +602,21 @@ async function apply(font: FontItem, variantIndex = currentWeight(font.family)) 
 .search-row :deep(.g-input) {
   height: var(--h-field);
   border-radius: var(--r-input);
-  /* 不设 min-width:0 会把漏斗按钮挤出可视区 */
+  /* 给右侧漏斗留出 34px，不再依赖 flex 收缩 */
+  margin-right: 34px;
   min-width: 0;
+}
+
+.filter-dropdown {
+  position: absolute;
+  top: var(--sp-4);
+  right: 0;
 }
 
 /* 原版底部工具条高 24、底色 #545454 */
 :deep(.shell__footer) {
   height: var(--h-footer);
   background: var(--c-bar);
-}
-
-.search-row :deep(.g-input) {
-  flex: 1;
 }
 
 .text-panel {

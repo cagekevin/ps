@@ -55,6 +55,7 @@ withDefaults(
   border-bottom: 1px solid var(--border);
 }
 
+/* 原版 .tabs__nav__bar{font-size:12px;font-weight:500;color:#f5f5f5} */
 h1 {
   position: relative;
   height: 100%;
@@ -64,19 +65,21 @@ h1 {
   min-width: 0;
   display: flex;
   align-items: center;
-  color: var(--text-strong);
-  font-size: var(--fs-lg);
+  color: var(--c-text-strong);
+  font-size: var(--fs-md);
   font-weight: 500;
 }
 
-/* 当前页标识：标题下方 18×2 的蓝线（原版 .tabs__nav__bar--active:after） */
+/* 原版 .tabs__nav__bar--active:after{width:18px;height:2px;background:#006fff;
+   left:50%;transform:translateX(-9px)} —— 居中，不是靠左 */
 h1::after {
   content: '';
   position: absolute;
-  left: 0;
+  left: 50%;
   bottom: 0;
   width: 18px;
   height: 2px;
+  margin-left: -9px;
   background: var(--accent);
 }
 

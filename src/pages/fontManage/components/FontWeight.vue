@@ -104,10 +104,6 @@ function pick(index: number) {
   cursor: pointer;
 }
 
-.fw__glyph:hover {
-  border-color: var(--bg-raise);
-}
-
 .fw__glyph.is-current {
   border-color: var(--c-border-checked);
 }

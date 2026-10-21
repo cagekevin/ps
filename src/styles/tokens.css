@@ -40,8 +40,8 @@
   --c-hover-2: hsla(0, 0%, 100%, 0.1);
   /* 侧边栏：从原版截图取样得到 #535353（比内容区 #363636 亮） */
   --c-nav: #535353;
-  /* 页头：从原版截图取样得到 #424242（比列表项 #363636 亮） */
-  --c-header: #424242;
+  /* 页头：原版 .font-manage__layouts__tabs__nav{background:#333} */
+  --c-header: #333333;
   /* 导航激活：原版 .nav-item-active{background-color:#434343} */
   --c-nav-active: #434343;
   /* 导航悬停：原版 .nav-item:hover{background-color:rgba(0,0,0,.9)}，与右侧滑出标签同色 */
