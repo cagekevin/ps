@@ -651,8 +651,9 @@ async function apply(font: FontItem, variantIndex = currentWeight(font.family)) 
 }
 
 .tag {
-  padding: var(--sp-1) var(--sp-3);
-  border: 1px solid transparent;
+  /* 原版 tag__content>div{padding:4px 7px}；content 本身 border:1px solid #4b4b4b + bg #4b4b4b */
+  padding: var(--sp-2) var(--sp-exact-7);
+  border: 1px solid var(--c-surface-raised);
   border-radius: var(--r-md);
   background: var(--c-surface-raised);
   color: var(--c-text-onchip);
@@ -713,15 +714,6 @@ async function apply(font: FontItem, variantIndex = currentWeight(font.family)) 
   font-size: var(--fs-sm);
 }
 
-.a-mark {
-  flex: 0 0 auto;
-  width: 12px;
-  color: var(--c-icon-strong);
-  font-family: Georgia, "Times New Roman", serif;
-  font-size: var(--fs-md);
-  text-align: center;
-}
-
 .state {
   flex: 1;
   display: flex;
@@ -764,6 +756,7 @@ async function apply(font: FontItem, variantIndex = currentWeight(font.family)) 
   overflow-y: auto;
 }
 
+/* 原版 .font-manage__list-item{border-bottom:1px solid #2e2e2e;background:#363636;padding-top:6px} */
 .font-item {
   gap: var(--sp-2);
   /* 列表项背景要撑满整行（hover 才是全宽），所以左右留白在项内自己给 */
@@ -771,9 +764,6 @@ async function apply(font: FontItem, variantIndex = currentWeight(font.family)) 
   background: var(--bg-panel);
   border-bottom: 1px solid var(--border);
   cursor: pointer;
-}
-
-.font-item {
   transition: background var(--dur-fast) var(--ease);
 }
 
@@ -784,37 +774,25 @@ async function apply(font: FontItem, variantIndex = currentWeight(font.family)) 
   background: var(--c-surface-active);
 }
 
-/* 原版 .contextHover:hover{color:#fff} + .contextHover:hover .icon{fill:#fff}
-   —— hover 时家族名和操作图标一起变白 */
-.font-item:hover .family,
-.font-item.is-active .family,
-.font-item:hover .act,
-.font-item.is-active .act {
-  color: var(--c-text-inverse);
-}
-
 .item-body {
   flex: 1;
   min-width: 0;
 }
 
+/* 原版 __header{position:relative;padding:0 8px;line-height:1;height:15px}，
+   操作区绝对定位在它里面 */
 .name-row {
+  position: relative;
   height: 15px;
   line-height: 1;
 }
 
-/* 原版 __header{height:15px;padding:0 8px}，操作区绝对定位在它里面 */
-.name-row {
-  position: relative;
-  height: 15px;
-}
-
+/* 原版 __font-family{flex-grow:0;flex-shrink:1;max-width:calc(100% - 60px);color:#f5f5f5} */
 .family {
-  flex: 1;
+  flex: 0 1 auto;
   min-width: 0;
-  /* 原版 __font-family 的 max-width: calc(100% - 60px)，给右侧操作区预留位置 */
   max-width: calc(100% - 60px);
-  color: var(--c-text);
+  color: var(--text-strong);
   font-size: var(--fs-md);
   white-space: nowrap;
   overflow: hidden;
