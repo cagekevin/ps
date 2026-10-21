@@ -95,11 +95,18 @@ if (import.meta.env.DEV) console.info(`[build] ${__BUILD_TIME__}`)
   color: var(--c-text-inverse);
 }
 
-/* 原版 .nav-item:hover,.tips{background-color:rgba(0,0,0,.9)}
-   悬停时本项和右侧滑出的标签拼成一条连续的黑色条 */
+/* 原版 hover 是 rgba(0,0,0,.9)（近黑），但那要和右侧滑出的黑标签连成一条才合理。
+   我们不做黑标签，近黑单独出现就是一次大幅跳变，看起来像闪。
+   改成与激活态同色 #434343，色差小，不需要过渡也不会刺眼。 */
 .nav-item:hover {
-  background: var(--c-nav-hover);
+  background: var(--c-nav-active);
   color: var(--c-text-inverse);
+}
+
+/* SVG <use> 随父级背景重绘会重新解析 symbol，在旧版 Chromium 里表现为图标闪一下。
+   把图标放到独立合成层，父级怎么重绘都不影响它。 */
+.nav-item > svg {
+  transform: translateZ(0);
 }
 
 /* 原版 .tips：left:40px、满高、左右 20px 内边距、右侧圆角、z-index 99 */
@@ -114,7 +121,8 @@ if (import.meta.env.DEV) console.info(`[build] ${__BUILD_TIME__}`)
   align-items: center;
   padding: 0 var(--sp-6);
   border-radius: 0 var(--r-input) var(--r-input) 0;
-  background: var(--c-nav-hover);
+  /* 和悬停项同色，两者拼成一条，不出现深浅断层 */
+  background: var(--c-nav-active);
   color: var(--c-text-inverse);
   font-size: var(--fs-md);
   line-height: 1;
