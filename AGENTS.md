@@ -170,9 +170,15 @@ bind(computed(() => items.value.filter(/* ... */)))   // 有筛选才需要
 | 想知道 | 去哪查（不要问人） |
 |---|---|
 | 颜色 / 尺寸 / 圆角 | `05-官方资源/04-CEP资源包/CEP001-设计助理/css/app.bf68b505.css` |
-| 原版组件有哪些 props / computed / methods / 文案 | **`BUILD-SPEC/02-组件/<组件>.md`（首选，已整理好）** |
-| 原版的 DOM 结构和嵌套 | **`BUILD-SPEC/08-模板/tpl_<组件>_L<行号>.md`（带层级 + render 源码）** |
-| 上面两份都没有时才去翻 | `03-源码还原/webcrack输出/app/56d7.js` |
+| **原版源码（未压缩、可读）** | **`01-稳定版/V4-可编辑源码版/panel/js/app.v4.js`**（2.5MB / 73946 行，有缩进） |
+| 原版组件有哪些 props / computed / methods / 文案 | `BUILD-SPEC/02-组件/<组件>.md` |
+| 原版的 DOM 结构和嵌套 | `BUILD-SPEC/08-模板/tpl_<组件>_L<行号>.md`（带层级 + render 源码） |
+| 原版样式 | `01-稳定版/V4-可编辑源码版/panel/css/app.bf68b505.css`（压缩，**必须先用上面的 JS/结构树确认类名再查**） |
+
+> ⚠️ **不要直接拿压缩 CSS 里的选择器当结论。** 那份 CSS 里新旧两套组件混在一起
+> （`.nav-item` 40×40 是左侧导航，`.sub-nav-item` 26×26 是另一个组件；
+> `.nav-item-act` 是旧版、`.nav-item-active` 是新版）。只看 CSS 会选错。
+> 正确顺序：**app.v4.js 找 render → 拿到真实类名 → 再去 CSS 查那条类名**。
 | 组件有哪些 props / 方法 | `BUILD-SPEC/02-组件/<组件>.md` |
 | jsx 返回结构 | 先查 `docs/jsx-契约.md`；没有再实测（`#/__probe`） |
 | CEP 版本 / 环境能力 | 原版 `CSXS/manifest.xml` 的 `RequiredRuntime` + 本机注册表 |
