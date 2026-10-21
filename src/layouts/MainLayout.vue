@@ -62,14 +62,6 @@ if (import.meta.env.DEV) console.info(`[build] ${__BUILD_TIME__}`)
   background: var(--c-nav);
 }
 
-.build-stamp {
-  margin-bottom: var(--sp-2);
-  color: var(--c-text-faint);
-  font-size: var(--fs-xs);
-  line-height: 1;
-  letter-spacing: 0;
-}
-
 /* 原版 #nav 宽 40，导航项撑满 40×40 */
 .nav-item {
   position: relative;

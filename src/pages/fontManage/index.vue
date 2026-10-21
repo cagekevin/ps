@@ -12,7 +12,13 @@ import Rating from './components/Rating.vue'
 import TagMenu from './components/TagMenu.vue'
 import EmptyState from './components/EmptyState.vue'
 import FilterPanel from './components/FilterPanel.vue'
-import { getClassification, matchFilter, type Classification, type FilterState } from '@/cep/classification'
+import {
+  getClassification,
+  matchFilter,
+  usableCategories as usableCategoriesOf,
+  type Classification,
+  type FilterState,
+} from '@/cep/classification'
 import PreviewSetting from './components/PreviewSetting.vue'
 import PreviewText from './components/PreviewText.vue'
 import TagCreator from './components/TagCreator.vue'
@@ -196,14 +202,7 @@ const filterCount = computed(() =>
 /** 标签区展开/收起（原版 user-tag-filter 的 chevron_down） */
 const tagsOpen = ref(true)
 
-/**
- * 只显示真正有数据支撑的分组。
- * 类型/风格/评分依赖 classification.json 的 presets，而那 1178 条全是云端字体，
- * 系统字体一条都没有 —— 放出来点了也没反应，不如不显示。
- */
-const usableCategories = computed(() =>
-  classification.value.categories.filter((c) => c.key === 'language' || c.key === 'commercial'),
-)
+const usableCategories = computed(() => usableCategoriesOf(classification.value))
 
 function clearFilters() {
   keyword.value = ''
@@ -251,7 +250,11 @@ function currentWeight(family: string) {
   return weightIndex.value[family] ?? 0
 }
 
-async function apply(font: FontItem, variantIndex = 0) {
+/**
+ * 应用字体。不传字重时用**该家族当前选中的字重**——
+ * 之前默认 0，导致选了 Bold 之后再点这一行会用 Regular 覆盖，用户的选择白选。
+ */
+async function apply(font: FontItem, variantIndex = currentWeight(font.family)) {
   const failure = await store.apply(font, variantIndex)
   if (failure) {
     feedback.error(failure)
@@ -650,7 +653,10 @@ async function apply(font: FontItem, variantIndex = 0) {
   white-space: nowrap;
 }
 
+/* 原版 .tag__content:hover{border:1px solid #759fff}：只变边框。
+   底色略微提亮是我们的补充，因为纯边框在深色底上几乎看不出 hover。 */
 .tag:hover {
+  border-color: var(--accent-soft);
   background: var(--c-surface-raised-hover);
 }
 
@@ -672,10 +678,6 @@ async function apply(font: FontItem, variantIndex = 0) {
 
 .tags-add:hover {
   color: var(--c-text-inverse);
-}
-
-.tag:hover {
-  border-color: var(--accent-soft);
 }
 
 /* 选中：蓝色描边 */
@@ -879,20 +881,6 @@ async function apply(font: FontItem, variantIndex = 0) {
 .preview.is-extra-large {
   font-size: var(--preview-xl);
   line-height: var(--preview-xl-lh);
-}
-
-/* 面板拉宽到 420px 以上切双列（原版 font-manage__list--double-cols） */
-.font-list.is-double {
-  display: grid;
-  grid-template-columns: 50% 50%;
-}
-
-.font-list.is-double .font-item {
-  min-width: 0;
-}
-
-.font-list.is-double .sentinel {
-  grid-column: 1 / -1;
 }
 
 .sentinel {

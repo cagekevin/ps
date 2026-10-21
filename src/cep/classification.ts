@@ -97,6 +97,19 @@ export async function getClassification(): Promise<Classification> {
 /** 选中的筛选条件：{ 分类key: [标签id] } */
 export type FilterState = Record<string, number[]>
 
+/**
+ * 哪些分组对当前字体列表**真正有效**。
+ *
+ * 类型 / 风格 / 评分 依赖 `presets`，而那 1178 条全是云端字体（尔雅、字魂…），
+ * 系统字体一条都没有 —— 放出来点了也不会有任何变化，所以不显示。
+ * 这个判断属于数据层，不该散在页面里。
+ */
+const USABLE_KEYS = new Set(['language', 'commercial'])
+
+export function usableCategories(data: Classification): Category[] {
+  return data.categories.filter((c) => USABLE_KEYS.has(c.key))
+}
+
 /** 字体语言：按名称判断中英（和 stores/font.ts 的 familyLang 同规则） */
 function isChinese(family: string): boolean {
   return /[\u4e00-\u9fa5]/.test(family)
