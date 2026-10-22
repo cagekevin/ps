@@ -27,7 +27,8 @@
     "deploy": "npm run check && npm run build",
     "build:fast": "vite build",
     "typecheck": "vue-tsc --noEmit",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "prepare": "git config core.hooksPath scripts/hooks || true"
   },
   "dependencies": {
     "pinia": "^3.0.0",

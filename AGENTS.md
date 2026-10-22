@@ -301,6 +301,16 @@ grep -rn "export .*<概念词>" src  # 有哪些导出叫这个名字
 
 ## 硬规则
 
+### 0. 提交前拦截（已启用，别绕）
+
+`git config core.hooksPath scripts/hooks` 已设，`npm install` 时由 `prepare` 自动执行。
+pre-commit 会跑两件事，任一失败**直接拒绝提交**：
+
+- `node scripts/ledger.mjs` —— 台账格式。**说明列里写换行会把一行拆成多行**，解析时被静默吞掉，以前要等条数少 1 才发现。
+- `node scripts/stats.mjs --check` —— 规模数字是否与源码一致。
+
+失败信息会直接说怎么办。`--no-verify` 能跳过，但那是绕过唯一的格式护栏，别用。
+
 ### 1. 新增横切能力后跑一次 `npm run registry`
 
 它会扫描 `src/{cep,composables,stores,utils,styles}`，给未登记的文件**自动补骨架**，然后重写
