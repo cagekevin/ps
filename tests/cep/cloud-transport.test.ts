@@ -77,4 +77,25 @@ describe('cloud transport', () => {
 
     await expect(pullSnapshot()).rejects.toMatchObject({ message: '云端错误' })
   })
+
+  it('并发的两次请求是排队的，不是"在飞就报错"（T-77）', async () => {
+    let releaseFirst: (value: ReturnType<typeof response>) => void = () => {}
+    const fetchMock = vi
+      .fn()
+      .mockImplementationOnce(() => new Promise((resolve) => (releaseFirst = resolve)))
+      .mockResolvedValue(response('{"ok":true}'))
+    vi.stubGlobal('fetch', fetchMock)
+
+    const first = pullSnapshot()
+    const second = pullSnapshot()
+
+    // 第一次还没回来：第二个请求不许开始（以前这里会直接抛假的网络错误）
+    await Promise.resolve()
+    expect(fetchMock).toHaveBeenCalledTimes(1)
+
+    releaseFirst(response('{"ok":true}'))
+    await expect(first).resolves.toBeNull()
+    await expect(second).resolves.toBeNull()
+    expect(fetchMock).toHaveBeenCalledTimes(2)
+  })
 })

@@ -1,15 +1,18 @@
-// 契约测试，非实机：push 是注入的假实现，全程零网络（fetch 被 stub 成"一调用就失败"）
+// 契约测试，非实机：sync 是注入的假实现，全程零网络（fetch 被 stub 成"一调用就失败"）
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { CHANGE_SYNC_DELAY_MS, createChangeSync } from '@/cloud/change-sync'
-import type { PushUnitsResult } from '@/cloud/types'
+import {
+  CLOUD_SYNC_BACKOFF_MS,
+  CLOUD_SYNC_DEBOUNCE_MS,
+  CLOUD_SYNC_MAX_WAIT_MS,
+} from '@/config/cloud'
+import { createSyncQueue, type SyncOutcome } from '@/cloud/change-sync'
 
 const fetchGuard = vi.fn(() => {
   throw new Error('契约测试，非实机：禁止真实网络请求')
 })
 
-function ok(pushed: string[]): PushUnitsResult {
-  return { ok: true, count: pushed.length, pushed }
-}
+const ok: SyncOutcome = { ok: true }
+const fail: SyncOutcome = { ok: false, errorCode: 'CLOUD_NETWORK' }
 
 beforeEach(() => {
   vi.useFakeTimers()
@@ -23,124 +26,226 @@ afterEach(() => {
   vi.unstubAllGlobals()
 })
 
-describe('change sync（3 秒防抖）', () => {
-  it('默认延迟就是原版的 3 秒', () => {
-    expect(CHANGE_SYNC_DELAY_MS).toBe(3000)
-  })
+describe('同步队列：防抖 / 最大等待 / 退避 / 串行（ADR-21）', () => {
+  it('标完脏要等满 60 秒才发一次请求（不是 3 秒）', async () => {
+    const sync = vi.fn(async () => ok)
+    const queue = createSyncQueue({ sync })
 
-  it('连续改动只推一次，且在 3 秒后才推', async () => {
-    const push = vi.fn(async (units: string[]) => ok(units))
-    const sync = createChangeSync({ push })
+    queue.markDirty('action.library')
 
-    for (let i = 0; i < 5; i += 1) sync.notify('action.library')
-
-    await vi.advanceTimersByTimeAsync(CHANGE_SYNC_DELAY_MS - 1)
-    expect(push).not.toHaveBeenCalled()
+    await vi.advanceTimersByTimeAsync(CLOUD_SYNC_DEBOUNCE_MS - 1)
+    expect(sync).not.toHaveBeenCalled()
 
     await vi.advanceTimersByTimeAsync(1)
-    expect(push).toHaveBeenCalledTimes(1)
-    expect(push).toHaveBeenCalledWith(['action.library'])
+    expect(sync).toHaveBeenCalledTimes(1)
+    expect(sync).toHaveBeenCalledWith(['action.library'])
+    expect(queue.pendingUnits()).toEqual([])
+
+    queue.stop()
   })
 
-  it('不同 unit 合并成一次推送，同一 unit 去重', async () => {
-    const push = vi.fn(async (units: string[]) => ok(units))
-    const sync = createChangeSync({ push })
+  it('连续改动合并成一次；每来一次都重置静默期', async () => {
+    const sync = vi.fn(async () => ok)
+    const queue = createSyncQueue({ sync })
 
-    sync.notify('font.hierarchy')
-    sync.notify('action.library')
-    sync.notify('font.hierarchy')
+    queue.markDirty('font.hierarchy')
+    await vi.advanceTimersByTimeAsync(30_000)
+    queue.markDirty('action.library')
+    queue.markDirty('font.hierarchy')
 
-    expect(sync.pending()).toEqual(['action.library', 'font.hierarchy'])
-    await vi.advanceTimersByTimeAsync(CHANGE_SYNC_DELAY_MS)
+    await vi.advanceTimersByTimeAsync(CLOUD_SYNC_DEBOUNCE_MS - 1)
+    expect(sync).not.toHaveBeenCalled()
 
-    expect(push).toHaveBeenCalledTimes(1)
-    expect(push).toHaveBeenCalledWith(['action.library', 'font.hierarchy'])
-    expect(sync.pending()).toEqual([])
+    await vi.advanceTimersByTimeAsync(1)
+    expect(sync).toHaveBeenCalledTimes(1)
+    expect(sync).toHaveBeenCalledWith(['action.library', 'font.hierarchy'])
+
+    queue.stop()
   })
 
-  it('每来一次改动都重置计时（不会提前推半截）', async () => {
-    const push = vi.fn(async (units: string[]) => ok(units))
-    const sync = createChangeSync({ push })
+  it('手一直没停也要在 5 分钟到点时推一次（纯防抖会永远推不出去）', async () => {
+    const sync = vi.fn(async () => ok)
+    const queue = createSyncQueue({ sync })
 
-    sync.notify('font.hierarchy')
-    await vi.advanceTimersByTimeAsync(2000)
-    sync.notify('font.hierarchy')
-    await vi.advanceTimersByTimeAsync(2000)
-    expect(push).not.toHaveBeenCalled()
+    // 每 30 秒改一次：纯防抖会被无限重置，永远等不到静默期
+    const step = 30_000
+    queue.markDirty('action.library')
+    for (let elapsed = step; elapsed <= CLOUD_SYNC_MAX_WAIT_MS - step; elapsed += step) {
+      await vi.advanceTimersByTimeAsync(step)
+      queue.markDirty('action.library')
+    }
 
-    await vi.advanceTimersByTimeAsync(1000)
-    expect(push).toHaveBeenCalledTimes(1)
+    // 已推进到「最大等待 - 30 秒」：还没到点
+    expect(sync).not.toHaveBeenCalled()
+
+    await vi.advanceTimersByTimeAsync(step - 1)
+    expect(sync).not.toHaveBeenCalled()
+
+    // 到点必推，不管用户还在不在改
+    await vi.advanceTimersByTimeAsync(1)
+    expect(sync).toHaveBeenCalledTimes(1)
+
+    queue.stop()
   })
 
-  it('上一次推送没回来之前不开第二轮', async () => {
-    let resolveFirst: (result: PushUnitsResult) => void = () => {}
-    const push = vi.fn((units: string[]) =>
-      push.mock.calls.length === 1
-        ? new Promise<PushUnitsResult>((resolve) => {
-            resolveFirst = resolve
+  it('失败按 1 → 2 → 5 → 15 分钟退避，不每轮硬撞', async () => {
+    const sync = vi.fn(async () => fail)
+    const queue = createSyncQueue({ sync })
+
+    queue.markDirty('font.tags')
+    await vi.advanceTimersByTimeAsync(CLOUD_SYNC_DEBOUNCE_MS)
+    expect(sync).toHaveBeenCalledTimes(1)
+
+    for (const [index, delay] of CLOUD_SYNC_BACKOFF_MS.entries()) {
+      await vi.advanceTimersByTimeAsync(delay - 1)
+      expect(sync).toHaveBeenCalledTimes(index + 1)
+
+      await vi.advanceTimersByTimeAsync(1)
+      expect(sync).toHaveBeenCalledTimes(index + 2)
+      expect(queue.attempts()).toBe(index + 2)
+    }
+
+    // 用完之后一直按最后一档（15 分钟）
+    const last = CLOUD_SYNC_BACKOFF_MS[CLOUD_SYNC_BACKOFF_MS.length - 1]
+    await vi.advanceTimersByTimeAsync(last)
+    expect(sync).toHaveBeenCalledTimes(CLOUD_SYNC_BACKOFF_MS.length + 2)
+
+    queue.stop()
+  })
+
+  it('成功后退避归零、脏集合清空，之后不再自己重排', async () => {
+    const sync = vi
+      .fn<(units: string[]) => Promise<SyncOutcome>>()
+      .mockResolvedValueOnce(fail)
+      .mockResolvedValueOnce(ok)
+    const queue = createSyncQueue({ sync })
+
+    queue.markDirty('font.tags')
+    await vi.advanceTimersByTimeAsync(CLOUD_SYNC_DEBOUNCE_MS)
+    expect(queue.attempts()).toBe(1)
+
+    await vi.advanceTimersByTimeAsync(CLOUD_SYNC_BACKOFF_MS[0])
+    expect(queue.attempts()).toBe(0)
+    expect(queue.pendingUnits()).toEqual([])
+
+    await vi.advanceTimersByTimeAsync(60 * 60_000)
+    expect(sync).toHaveBeenCalledTimes(2)
+
+    queue.stop()
+  })
+
+  it('上一轮没回来不开第二轮，回来后再补一轮', async () => {
+    let release: (outcome: SyncOutcome) => void = () => {}
+    const sync = vi.fn<(units: string[]) => Promise<SyncOutcome>>(() =>
+      sync.mock.calls.length === 1
+        ? new Promise<SyncOutcome>((resolve) => {
+            release = resolve
           })
-        : Promise.resolve(ok(units)),
+        : Promise.resolve(ok),
     )
-    const sync = createChangeSync({ push })
+    const queue = createSyncQueue({ sync })
 
-    sync.notify('font.tags')
-    await vi.advanceTimersByTimeAsync(CHANGE_SYNC_DELAY_MS)
-    expect(push).toHaveBeenCalledTimes(1)
+    queue.markDirty('font.tags')
+    await vi.advanceTimersByTimeAsync(CLOUD_SYNC_DEBOUNCE_MS)
+    expect(sync).toHaveBeenCalledTimes(1)
 
-    sync.notify('action.library')
-    await vi.advanceTimersByTimeAsync(CHANGE_SYNC_DELAY_MS)
-    // 串行：第一轮还在飞，第二轮排队
-    expect(push).toHaveBeenCalledTimes(1)
+    queue.markDirty('action.library')
+    await vi.advanceTimersByTimeAsync(CLOUD_SYNC_DEBOUNCE_MS)
+    // 串行：第一轮还在飞，第二轮不许并发
+    expect(sync).toHaveBeenCalledTimes(1)
 
-    resolveFirst(ok(['font.tags']))
-    await sync.flush()
+    release(ok)
+    await vi.advanceTimersByTimeAsync(0)
+    await vi.advanceTimersByTimeAsync(CLOUD_SYNC_DEBOUNCE_MS)
 
-    expect(push).toHaveBeenCalledTimes(2)
-    expect(push.mock.calls[1][0]).toEqual(['action.library'])
+    expect(sync).toHaveBeenCalledTimes(2)
+    expect(sync.mock.calls[1][0]).toEqual(['action.library'])
+
+    queue.stop()
   })
 
-  it('push 抛错只交给 onError，下一轮照常', async () => {
-    const push = vi
-      .fn<(units: string[]) => Promise<PushUnitsResult>>()
-      .mockRejectedValueOnce(new Error('boom'))
-      .mockResolvedValueOnce(ok(['font.hierarchy']))
-    const onError = vi.fn()
-    const sync = createChangeSync({ push, onError })
+  it('手动整包（runSerial）与自动同步共用一条串行链', async () => {
+    let releaseManual: () => void = () => {}
+    const sync = vi.fn(async () => ok)
+    const queue = createSyncQueue({ sync })
 
-    sync.notify('font.hierarchy')
-    await vi.advanceTimersByTimeAsync(CHANGE_SYNC_DELAY_MS)
-    expect(onError).toHaveBeenCalledTimes(1)
+    const manual = queue.runSerial(
+      () =>
+        new Promise<void>((resolve) => {
+          releaseManual = resolve
+        }),
+    )
 
-    sync.notify('font.hierarchy')
-    await vi.advanceTimersByTimeAsync(CHANGE_SYNC_DELAY_MS)
-    expect(push).toHaveBeenCalledTimes(2)
+    queue.markDirty('action.library')
+    await vi.advanceTimersByTimeAsync(CLOUD_SYNC_DEBOUNCE_MS)
+    // 手动整包还在跑：自动那一轮必须等它
+    expect(sync).not.toHaveBeenCalled()
+
+    releaseManual()
+    await manual
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(sync).toHaveBeenCalledTimes(1)
+    expect(sync).toHaveBeenCalledWith(['action.library'])
+
+    queue.stop()
   })
 
-  it('flush 立即推送，不等计时器', async () => {
-    const push = vi.fn(async (units: string[]) => ok(units))
-    const onResult = vi.fn()
-    const sync = createChangeSync({ push, onResult })
+  it('被闸门挡下（没发请求）不进退避，5 分钟后慢轮询一次', async () => {
+    const skip: SyncOutcome = { ok: false, skip: true, errorCode: 'CLOUD_AUTO_SYNC_OFF' }
+    const sync = vi.fn(async () => skip)
+    const queue = createSyncQueue({ sync })
 
-    sync.notify('action.library')
-    await sync.flush()
+    queue.markDirty('font.tags')
+    await vi.advanceTimersByTimeAsync(CLOUD_SYNC_DEBOUNCE_MS)
+    expect(sync).toHaveBeenCalledTimes(1)
+    expect(queue.attempts()).toBe(0)
+    expect(queue.pendingUnits()).toEqual(['font.tags'])
 
-    expect(push).toHaveBeenCalledWith(['action.library'])
-    expect(onResult).toHaveBeenCalledWith(ok(['action.library']))
+    // 不是 1 分钟退避，是 5 分钟慢轮询
+    await vi.advanceTimersByTimeAsync(CLOUD_SYNC_BACKOFF_MS[0])
+    expect(sync).toHaveBeenCalledTimes(1)
 
-    // 计时器已经被 flush 取消，不会再推一次
-    await vi.advanceTimersByTimeAsync(CHANGE_SYNC_DELAY_MS)
-    expect(push).toHaveBeenCalledTimes(1)
+    await vi.advanceTimersByTimeAsync(CLOUD_SYNC_MAX_WAIT_MS - CLOUD_SYNC_BACKOFF_MS[0])
+    expect(sync).toHaveBeenCalledTimes(2)
+    expect(queue.attempts()).toBe(0)
+
+    queue.stop()
   })
 
-  it('stop 之后不再推送', async () => {
-    const push = vi.fn(async (units: string[]) => ok(units))
-    const sync = createChangeSync({ push })
+  it('requestSync 没有脏也跑一次 sweep（启动 / 变可见）', async () => {
+    const sync = vi.fn(async () => ok)
+    const queue = createSyncQueue({ sync })
 
-    sync.notify('action.library')
-    sync.stop()
-    await vi.advanceTimersByTimeAsync(CHANGE_SYNC_DELAY_MS * 2)
+    queue.requestSync('boot')
+    await vi.advanceTimersByTimeAsync(0)
 
-    expect(push).not.toHaveBeenCalled()
-    expect(sync.pending()).toEqual([])
+    expect(sync).toHaveBeenCalledWith([])
+
+    queue.stop()
+  })
+
+  it('flushDirty 没有脏就什么都不做（变隐藏不该白打请求）', async () => {
+    const sync = vi.fn(async () => ok)
+    const queue = createSyncQueue({ sync })
+
+    queue.flushDirty('hidden')
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(sync).not.toHaveBeenCalled()
+
+    queue.stop()
+  })
+
+  it('stop 之后不再推送，脏集合清空', async () => {
+    const sync = vi.fn(async () => ok)
+    const queue = createSyncQueue({ sync })
+
+    queue.markDirty('action.library')
+    queue.stop()
+    await vi.advanceTimersByTimeAsync(CLOUD_SYNC_DEBOUNCE_MS * 2)
+
+    expect(sync).not.toHaveBeenCalled()
+    expect(queue.pendingUnits()).toEqual([])
   })
 })

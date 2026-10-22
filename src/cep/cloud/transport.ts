@@ -17,18 +17,42 @@ import {
 import { getCloudUrl } from './config'
 
 const TIMEOUT_MS = 20_000
-let syncing = false
+
+/**
+ * 单进程 FIFO：同一时刻只有一个请求在飞（T-77）。
+ *
+ * 以前这里是"在飞就 `throw new CloudError('CLOUD_NETWORK','同步正在进行')`"：自动推送和手动上传
+ * 撞上时，被撞的那次会拿到一个**假的网络错误**，还会被 engine 记进 `pending('network')`。
+ * 改成排队后，撞车只是等一下。整段 pull→push 的互斥由 `cloudSyncQueue` 负责（同一队列里跑），
+ * 这里只保证"不多请求并发"。
+ *
+ * 跨进程（另一个面板 / 另一台机器）仍然不保证——服务端不做 CAS，见 ADR-21「代价」。
+ */
+let chain: Promise<unknown> = Promise.resolve()
+
+function serial<T>(task: () => Promise<T>): Promise<T> {
+  const next = chain.then(task, task)
+  chain = next.then(
+    () => undefined,
+    () => undefined,
+  )
+  return next
+}
 
 async function callGateway(
   action: 'push_data' | 'pull_data',
   data?: CloudSnapshot,
 ): Promise<Record<string, unknown>> {
-  if (syncing) throw new CloudError('CLOUD_NETWORK', '同步正在进行')
+  return serial(() => request(action, data))
+}
 
+async function request(
+  action: 'push_data' | 'pull_data',
+  data?: CloudSnapshot,
+): Promise<Record<string, unknown>> {
   const url = getCloudUrl()
   if (!url) throw new CloudError('CLOUD_NOT_CONFIGURED', '未配置同步地址')
 
-  syncing = true
   const controller = typeof AbortController === 'function' ? new AbortController() : null
   const timer = controller ? setTimeout(() => controller.abort(), TIMEOUT_MS) : null
 
@@ -73,7 +97,6 @@ async function callGateway(
     throw new CloudError('CLOUD_NETWORK', error instanceof Error ? error.message : '同步网络失败')
   } finally {
     if (timer) clearTimeout(timer)
-    syncing = false
   }
 }
 

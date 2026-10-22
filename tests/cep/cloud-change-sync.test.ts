@@ -1,17 +1,21 @@
-// 契约测试，非实机：pushUnits 是假实现，仓库用内存实现，全程零网络
+// 契约测试，非实机：sync 是假实现，仓库用内存实现，全程零网络
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { PushUnitsResult } from '@/cloud/types'
+import type { SyncOutcome } from '@/cloud/change-sync'
 
-const pushMock = vi.hoisted(() =>
-  vi.fn(async (units: string[]): Promise<PushUnitsResult> => ({
-    ok: true,
-    count: units.length,
-    pushed: units,
-  })),
-)
+/**
+ * 每个用例换一个新队列：mock 成活的 getter，订阅层每次 `markDirty` 都取到当前实例。
+ * 这样测的是真队列（防抖/串行）与真 repo.onChange 的接线，只有网络出口是假的。
+ */
+const holder = vi.hoisted(() => ({ queue: undefined as unknown }))
 
-vi.mock('@/cep/cloud/setup', () => ({ cloudEngine: { pushUnits: pushMock } }))
+vi.mock('@/cep/cloud/setup', () => ({
+  get cloudSyncQueue() {
+    return holder.queue
+  },
+}))
 
+const { createSyncQueue } = await import('@/cloud/change-sync')
+const { CLOUD_SYNC_DEBOUNCE_MS } = await import('@/config/cloud')
 const { startCloudChangeSync, stopCloudChangeSync } = await import('@/cep/cloud/change-sync')
 const { actionIndexRepo, actionLibraryRepo } = await import('@/cep/data/actions')
 const { hierarchyRepo } = await import('@/cep/data/font-extra')
@@ -21,16 +25,23 @@ const fetchGuard = vi.fn(() => {
   throw new Error('契约测试，非实机：禁止真实网络请求')
 })
 
-const DELAY = 3000
+const ok: SyncOutcome = { ok: true }
+
+type Queue = ReturnType<typeof createSyncQueue>
+let sync: ReturnType<typeof vi.fn>
+let queue: Queue
 
 beforeEach(async () => {
   vi.useFakeTimers()
   vi.stubGlobal('fetch', fetchGuard)
   fetchGuard.mockClear()
-  pushMock.mockClear()
   vi.spyOn(log, 'info').mockImplementation(() => undefined)
   vi.spyOn(log, 'warn').mockImplementation(() => undefined)
   vi.spyOn(log, 'error').mockImplementation(() => undefined)
+
+  sync = vi.fn(async () => ok)
+  queue = createSyncQueue({ sync })
+  holder.queue = queue
 
   // 先播种再启动：播种产生的写入不该被当成"用户改动"
   await actionIndexRepo.write({
@@ -43,60 +54,76 @@ beforeEach(async () => {
 
 afterEach(() => {
   stopCloudChangeSync()
+  queue.stop()
   expect(fetchGuard).not.toHaveBeenCalled()
   vi.useRealTimers()
   vi.unstubAllGlobals()
   vi.restoreAllMocks()
 })
 
-describe('syncChangeFileToServe 接线（T-55/T-56）', () => {
-  it('动作仓库索引改动（仓库增删改）→ 3 秒后推 action.library', async () => {
+describe('repo 改动 → 只标脏，60 秒后才由队列发一次推送（ADR-21）', () => {
+  it('动作仓库索引改动 → 60 秒后推 action.library', async () => {
     startCloudChangeSync()
 
     await actionIndexRepo.update((value) => {
       value.list.push({ name: '新仓库', fileName: 'sj_dz_new.json' })
     })
 
-    await vi.advanceTimersByTimeAsync(DELAY - 1)
-    expect(pushMock).not.toHaveBeenCalled()
+    await vi.advanceTimersByTimeAsync(CLOUD_SYNC_DEBOUNCE_MS - 1)
+    expect(sync).not.toHaveBeenCalled()
 
     await vi.advanceTimersByTimeAsync(1)
-    expect(pushMock).toHaveBeenCalledTimes(1)
-    expect(pushMock).toHaveBeenCalledWith(['action.library'])
+    expect(sync).toHaveBeenCalledTimes(1)
+    expect(sync).toHaveBeenCalledWith(['action.library'])
   })
 
   it('动作仓库文件改动（分组/动作）→ 同一条 action.library', async () => {
     startCloudChangeSync()
 
     await actionLibraryRepo.write([{ groupName: '新建文档', show: true, list: [] }])
-    await vi.advanceTimersByTimeAsync(DELAY)
+    await vi.advanceTimersByTimeAsync(CLOUD_SYNC_DEBOUNCE_MS)
 
-    expect(pushMock).toHaveBeenCalledTimes(1)
-    expect(pushMock).toHaveBeenCalledWith(['action.library'])
+    expect(sync).toHaveBeenCalledTimes(1)
+    expect(sync).toHaveBeenCalledWith(['action.library'])
   })
 
   it('层级预设改动 → 推 font.hierarchy', async () => {
     startCloudChangeSync()
 
     await hierarchyRepo.write({ index: 1, list: [{ name: '手机端', data: [72, 50, 28] }] })
-    await vi.advanceTimersByTimeAsync(DELAY)
+    await vi.advanceTimersByTimeAsync(CLOUD_SYNC_DEBOUNCE_MS)
 
-    expect(pushMock).toHaveBeenCalledTimes(1)
-    expect(pushMock).toHaveBeenCalledWith(['font.hierarchy'])
+    expect(sync).toHaveBeenCalledTimes(1)
+    expect(sync).toHaveBeenCalledWith(['font.hierarchy'])
   })
 
-  it('两类事件落在同一个 3 秒窗口里 → 合并成一次推送', async () => {
+  it('触发点本身一个请求都不发（59 秒内改三次仍是零请求）', async () => {
+    startCloudChangeSync()
+
+    await actionIndexRepo.update((value) => {
+      value.list.push({ name: '仓库二', fileName: 'sj_dz_two.json' })
+    })
+    await hierarchyRepo.write({ index: 1, list: [{ name: '手机端', data: [72, 50, 28] }] })
+    await actionLibraryRepo.write([{ groupName: '批量', show: true, list: [] }])
+
+    await vi.advanceTimersByTimeAsync(CLOUD_SYNC_DEBOUNCE_MS - 1)
+
+    expect(sync).not.toHaveBeenCalled()
+    expect(fetchGuard).not.toHaveBeenCalled()
+    expect(queue.pendingUnits()).toEqual(['action.library', 'font.hierarchy'])
+  })
+
+  it('两类改动落在同一个静默期 → 合并成一次推送', async () => {
     startCloudChangeSync()
 
     await actionIndexRepo.update((value) => {
       value.list.push({ name: '新仓库', fileName: 'sj_dz_new.json' })
     })
-    await actionLibraryRepo.write([{ groupName: '新建文档', show: true, list: [] }])
     await hierarchyRepo.write({ index: 1, list: [{ name: '手机端', data: [72, 50, 28] }] })
-    await vi.advanceTimersByTimeAsync(DELAY)
+    await vi.advanceTimersByTimeAsync(CLOUD_SYNC_DEBOUNCE_MS)
 
-    expect(pushMock).toHaveBeenCalledTimes(1)
-    expect(pushMock).toHaveBeenCalledWith(['action.library', 'font.hierarchy'])
+    expect(sync).toHaveBeenCalledTimes(1)
+    expect(sync).toHaveBeenCalledWith(['action.library', 'font.hierarchy'])
   })
 
   it('stop 之后不再推送', async () => {
@@ -104,8 +131,8 @@ describe('syncChangeFileToServe 接线（T-55/T-56）', () => {
     stopCloudChangeSync()
 
     await hierarchyRepo.write({ index: 1, list: [{ name: '手机端', data: [72, 50, 28] }] })
-    await vi.advanceTimersByTimeAsync(DELAY * 2)
+    await vi.advanceTimersByTimeAsync(CLOUD_SYNC_DEBOUNCE_MS * 2)
 
-    expect(pushMock).not.toHaveBeenCalled()
+    expect(sync).not.toHaveBeenCalled()
   })
 })

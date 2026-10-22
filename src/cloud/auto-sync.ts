@@ -1,48 +1,60 @@
-// 是什么：云同步的后台启动点——定时整包同步 + 事件驱动按 unit 推送（T-55/T-56）
-// 唯一入口：main.ts 只调 startCloudAutoSync()，两条后台链路都从这里起
-// 替代了什么：原版散落的定时器 + emit 监听；这里合成一个启动函数
+// 是什么：云同步的启动装配——启动补偿 + 可见性信号；**不再由时间驱动**（ADR-21）
+// 唯一入口：main.ts 只调 startCloudAutoSync()；所有触发点都只调队列，不发请求
+// 替代了什么：2 小时自链 `setTimeout`（原 :20-23,25-39）与 `if (document.hidden) return`（原 :30）
 // 谁在用：src/main.ts:74
-// 禁止：页面/组件不许 import；这里不直接发请求（都在 engine 内）
+// 禁止：页面/组件不许 import；这里不发请求（请求归 cep/cloud/setup.ts 的队列）
 
-import { CLOUD_SYNC_FIRST_DELAY_MS, CLOUD_SYNC_INTERVAL_MS } from '@/config/cloud'
+import { CLOUD_SYNC_FIRST_DELAY_MS } from '@/config/cloud'
 import { startCloudChangeSync } from '@/cep/cloud/change-sync'
-import { isAutoSyncEnabled, isCloudConfigured } from '@/cep/cloud/config'
-import { hasCloudLedger } from '@/cep/cloud/ledger'
-import { cloudEngine } from '@/cep/cloud/setup'
+import { cloudSyncQueue } from '@/cep/cloud/setup'
 
-const FIRST_DELAY_MS = CLOUD_SYNC_FIRST_DELAY_MS
-const INTERVAL_MS = CLOUD_SYNC_INTERVAL_MS
-
-let timer: ReturnType<typeof setTimeout> | null = null
 let started = false
-let running = false
+let bootTimer: ReturnType<typeof setTimeout> | null = null
 
-function scheduleNext(delay = INTERVAL_MS): void {
-  if (timer) clearTimeout(timer)
-  timer = setTimeout(() => void tick(), delay)
-}
-
-async function tick(): Promise<void> {
-  try {
-    if (!isAutoSyncEnabled() || !isCloudConfigured()) return
-    if (!hasCloudLedger()) return
-    if (typeof navigator !== 'undefined' && navigator.onLine === false) return
-    if (typeof document !== 'undefined' && document.hidden) return
-    if (running) return
-
-    running = true
-    await cloudEngine.upload()
-  } finally {
-    running = false
-    scheduleNext()
-  }
+/**
+ * 可见性当**信号**用，不当禁止用（ADR-21）。
+ *
+ * 原来 `document.hidden` 是"隐藏就跳过上传"——Chromium 的 Page Visibility 只节流定时器、
+ * 不阻止 `fetch`，那条判断的实际效果是"用户没盯着面板时永远不同步"，而 PS 里面板常驻后台是常态。
+ * 现在改成两个方向各做一件事：
+ * - 变隐藏：有脏立刻推一次（页面随时可能随 PS 一起被销毁）；
+ * - 变可见：sweep 一次，补上"隐藏期间别的机器改了云端 / 本机有掉队的改动"。
+ */
+function onVisibilityChange(): void {
+  const hidden = typeof document !== 'undefined' && document.visibilityState === 'hidden'
+  if (hidden) cloudSyncQueue.flushDirty('hidden')
+  else cloudSyncQueue.requestSync('visible')
 }
 
 export function startCloudAutoSync(): void {
   if (started) return
   started = true
-  // 事件驱动那条：层级预设 / 动作仓库改了就 3 秒后推自己那条 unit。
-  // 与上面的定时整包同步并存：定时器是兜底（离线/未配置期间的改动靠它补推）。
+
+  // 事件驱动那条：层级预设 / 动作仓库改了就标脏，由队列决定什么时候真发
   startCloudChangeSync()
-  scheduleNext(FIRST_DELAY_MS)
+
+  // 启动补偿：不等 2 小时，也不读 cloud.pending——pending 是"失败留下的痕迹"，不是触发源；
+  // "哪些 unit 本地更新"由 pushUnits 的三方比较判定（engine 里 base/mine/theirs）
+  if (!bootTimer) {
+    bootTimer = setTimeout(() => {
+      bootTimer = null
+      cloudSyncQueue.requestSync('boot')
+    }, CLOUD_SYNC_FIRST_DELAY_MS)
+  }
+
+  if (typeof document !== 'undefined' && typeof document.addEventListener === 'function') {
+    document.addEventListener('visibilitychange', onVisibilityChange)
+  }
+}
+
+/** 仅供测试与卸载：撤掉启动装配（队列本身的生命周期归 setup.ts） */
+export function stopCloudAutoSync(): void {
+  if (bootTimer) {
+    clearTimeout(bootTimer)
+    bootTimer = null
+  }
+  if (typeof document !== 'undefined' && typeof document.removeEventListener === 'function') {
+    document.removeEventListener('visibilitychange', onVisibilityChange)
+  }
+  started = false
 }
