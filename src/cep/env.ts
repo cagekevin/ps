@@ -42,4 +42,10 @@ export const DATA_FILES = {
   appFreePanel: 'sj_appFreePanel.json',
   /** 重命名预设：[{ name, show, list:string[] }]；原版路径 key 是 `path.rename`（app.v4.js:5219） */
   cmmRename: 'sj_cmmRename.ini',
+  /**
+   * 样式仓库索引：`{ index, list: [{ name, show?, color, gradient, font, style }] }`。
+   * 原版 `path.styleLibrary` = `user + "/sj_kuStoreInfo.ini"`（`app.v4.js:5221`）；
+   * 四个字段存的是**相对文件名**，格式见 `docs/生成/库文件格式契约.md` §2.2。
+   */
+  styleLibrary: 'sj_kuStoreInfo.ini',
 } as const

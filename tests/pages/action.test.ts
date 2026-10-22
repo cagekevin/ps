@@ -68,6 +68,17 @@ describe('动作页', () => {
     expect(wrapper.findAll('.action-item__run')).toHaveLength(3)
   })
 
+  it('底栏用公共 PageBottomBar（样式页同一份），图标按钮与竖线在位', async () => {
+    const wrapper = await mountPage()
+
+    const bar = wrapper.find('.g-bottom-bar')
+    expect(bar.exists()).toBe(true)
+    expect(bar.findAll('.g-bottom-bar__icon')).toHaveLength(4)
+    expect(bar.findAll('.g-bottom-bar__divider')).toHaveLength(1)
+    // 旧的页面私有底栏必须消失，否则就是两份皮肤
+    expect(wrapper.find('.action-bottom').exists()).toBe(false)
+  })
+
   it('点击动作调用 dz_callAction，传 group + name', async () => {
     const wrapper = await mountPage()
     const buttons = wrapper.findAll('.action-item__run')

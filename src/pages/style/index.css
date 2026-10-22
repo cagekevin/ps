@@ -1,0 +1,102 @@
+/**
+ * 样式页私有样式。
+ *
+ * 原版本页 scoped 只有 9 条（`app.bf68b505.css` 的 `data-v-7f4f5fe0` 段）：
+ * tab 25% / 选中色 / 竖线 / 回顶 / 底栏 / 滚动高度 / hover。
+ * tab 与底栏已提成 `MultiTabs` / `PageBottomBar`，所以这里只剩页面骨架与库格子。
+ */
+
+.style-page {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  flex-direction: column;
+  background: var(--c-surface);
+}
+
+/* 原版 .wrap-search{height:36px;line-height:28px;background:rgba(0,0,0,.4)}（app.v4.js:53750）。
+   底色用 --c-surface-active：token 里没有 rgba(0,0,0,.4)，且要与动作页仓库条同色（有意偏离） */
+.style-warehouse {
+  display: flex;
+  height: 36px;
+  flex: 0 0 36px;
+  align-items: center;
+  padding: 0 var(--sp-exact-10);
+  background: var(--c-surface-active);
+  color: var(--text);
+  font-size: var(--fs-md);
+}
+
+/* 原版 .switch.f-alignNone.mt10（app.v4.js:49654） */
+.style-tabs {
+  flex: 0 0 auto;
+  padding: var(--sp-exact-10) 0;
+}
+
+.style-body {
+  flex: 1;
+  min-height: 0;
+  padding: 0 var(--sp-exact-10);
+  overflow-y: auto;
+}
+
+.style-lib {
+  margin-bottom: var(--sp-1);
+}
+
+/* 原版 .f-baseX.f-br 的色块行：flex-wrap + 每块 50×26 / 圆角 5 / margin-top 6（app.v4.js:49953） */
+.style-items {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-exact-5);
+  padding: var(--sp-exact-5) 0 var(--sp-1);
+}
+
+/* 原版 .color-block{width:50px;height:26px;border:1px solid #d5d5d5;border-radius:5px}（app.v4.js:49960）。
+   token 里没有 #d5d5d5（浅色面板遗留），用 --c-swatch-border 同族深色描边（有意偏离） */
+.style-item {
+  display: flex;
+  width: 50px;
+  height: 26px;
+  align-items: center;
+  justify-content: center;
+  overflow: hidden;
+  border: 1px solid var(--c-swatch-border);
+  border-radius: var(--r-input);
+  cursor: pointer;
+}
+
+.style-item__swatch {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.style-item__text {
+  padding: 0 var(--sp-1);
+  overflow: hidden;
+  color: var(--text-strong);
+  font-size: var(--fs-sm);
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.style-hint {
+  margin: 0;
+  padding: var(--sp-4) 0;
+  color: var(--text-faint);
+  font-size: var(--fs-sm);
+}
+
+.style-hint--error {
+  color: var(--c-danger);
+}
+
+.style-error {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--sp-3);
+  padding: var(--sp-4) 0;
+}

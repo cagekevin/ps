@@ -19,6 +19,7 @@ import ActionAddContext from './components/ActionAddContext.vue'
 import ActionGrid, { type GridItem } from '@/components/ActionGrid.vue'
 import EmptyState from '@/components/EmptyState.vue'
 import GDropdown from '@/components/GDropdown.vue'
+import PageBottomBar from '@/components/PageBottomBar.vue'
 import FreePanelRegionPicker from '@/pages/freePanel/components/FreePanelRegionPicker.vue'
 
 const store = useActionStore()
@@ -333,7 +334,9 @@ async function confirmAdd(items: Array<{ group: string; name: string }>) {
 
 // ---------- 列布局 ----------
 const layoutMenu = ref(false)
-const layoutRef = ref<HTMLElement>()
+/** 底栏已提成公共组件（样式页也用）；菜单挂在底栏上，所以要拿它的根元素 */
+const bottomBar = ref<InstanceType<typeof PageBottomBar> | null>(null)
+const layoutRef = computed(() => bottomBar.value?.root ?? null)
 useDismiss(
   () => layoutMenu.value,
   layoutRef,
@@ -485,22 +488,22 @@ onMounted(async () => {
       </section>
     </div>
 
-    <div ref="layoutRef" class="action-bottom">
-      <button class="action-bottom__icon" type="button" title="添加分组" @click="openGroupCreate()">
+    <PageBottomBar ref="bottomBar">
+      <button class="g-bottom-bar__icon" type="button" title="添加分组" @click="openGroupCreate()">
         <Icon name="#iconxinjiandongzuofenzu" size="md" />
       </button>
       <button
-        class="action-bottom__icon"
+        class="g-bottom-bar__icon"
         type="button"
         title="显示方式"
         @click="layoutMenu = !layoutMenu"
       >
         <Icon name="#iconliebiao" size="md" />
       </button>
-      <span class="action-bottom__divider" />
+      <span class="g-bottom-bar__divider" />
       <GDropdown v-model:visible="importMenu" placement="top-start">
         <template #trigger>
-          <button class="action-bottom__icon" type="button" title="导入预设">
+          <button class="g-bottom-bar__icon" type="button" title="导入预设">
             <Icon name="#icondaoru" size="md" />
           </button>
         </template>
@@ -512,7 +515,7 @@ onMounted(async () => {
 
       <GDropdown v-model:visible="exportMenu" placement="top-start">
         <template #trigger>
-          <button class="action-bottom__icon" type="button" title="导出预设">
+          <button class="g-bottom-bar__icon" type="button" title="导出预设">
             <Icon name="#icondaochu" size="md" />
           </button>
         </template>
@@ -527,7 +530,7 @@ onMounted(async () => {
         <li><button type="button" @click="chooseLayout(2)">双列</button></li>
         <li><button type="button" @click="chooseLayout(3)">三列</button></li>
       </ul>
-    </div>
+    </PageBottomBar>
 
     <ul v-if="menu.visible" ref="menuRef" class="ctx-menu" :style="menuStyle">
       <template v-if="menu.kind === 'group'">

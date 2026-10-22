@@ -4,6 +4,10 @@ import Icon from '@/components/Icon.vue'
 /**
  * 原版 baseGroup（app.v4.js:2564-2621）：
  * 折叠箭头 + 标题 + 可选 header 插槽；展开后渲染默认插槽。
+ *
+ * 跨页共用（`docs/组件库/现有控件.md` 曾把它登记成"只属于动作页"，那是分类过期）：
+ * 原版同一个 `baseGroup` 同时给动作页（`app.v4.js:55086`）和样式页四库（`:49939` 等）用，
+ * 这里保持同一份——样式页不再写第二个折叠组头。
  */
 const props = withDefaults(
   defineProps<{

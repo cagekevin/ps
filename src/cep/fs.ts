@@ -100,6 +100,20 @@ export function writeBase64File(absPath: string, base64: string): boolean {
   }
 }
 
+/**
+ * base64 → UTF-8 文本。库文件 `.kus/.kug/.kux` 的 `data` 字段就是 `base64(库文件 JSON 文本)`。
+ *
+ * 原版走 `cep.encoding.convertion.b64_to_utf8`（`app.v4.js:72751-72760`）；
+ * 这里用 `atob` + `TextDecoder`，CEP 与 Node/jsdom 都有，不依赖 `cep.encoding`。
+ * 调用方必须先判 `typeof data === 'string'`——布尔 `false` 会在这里抛（契约 §2.5）。
+ */
+export function b64ToUtf8(base64: string): string {
+  const binary = atob(base64)
+  const bytes = new Uint8Array(binary.length)
+  for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
+  return new TextDecoder('utf-8').decode(bytes)
+}
+
 /** 删除文件；文件不存在视为成功（原版 delete 同语义） */
 export function removeFile(absPath: string): boolean {
   if (!hasNode()) return false

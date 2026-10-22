@@ -327,20 +327,21 @@ onMounted(() => {
   <!-- 原版这一页没有 header（.Rename 直接从 37px 顶条开始，app.v4.js:56478-56482），所以不传 title -->
   <PageShell class="rename-page">
     <template #footer>
+      <!-- 原版是 baseIcon + .base-icon（26×26，无尺寸类）→ 图标 1em，盒 26×26（:56762-56796） -->
       <button
         class="rename-bottom__icon"
         type="button"
         title="添加分组"
         @click="openModal('createGroup')"
       >
-        <Icon name="#iconxinjiandongzuofenzu" size="md" />
+        <Icon name="#iconxinjiandongzuofenzu" />
       </button>
       <span class="rename-bottom__divider" />
       <button class="rename-bottom__icon" type="button" title="导入预设" @click="importPreset">
-        <Icon name="#icondaoru" size="md" />
+        <Icon name="#icondaoru" />
       </button>
       <button class="rename-bottom__icon" type="button" title="导出预设" @click="exportPreset">
-        <Icon name="#icondaochu" size="md" />
+        <Icon name="#icondaochu" />
       </button>
     </template>
 
@@ -348,8 +349,9 @@ onMounted(() => {
       <template #extra>
         <GDropdown v-model:visible="filterOpen" placement="bottom-end">
           <template #trigger>
+            <!-- 原版 baseSvg 只有 .cursor.contextHover，无尺寸类 → 1em；色 #c3c3c3，hover 变白（:56504-56508） -->
             <button class="rename-filter" type="button" title="过滤子图层设置">
-              <Icon name="#iconguolv" size="sm" />
+              <Icon name="#iconguolv" />
             </button>
           </template>
           <div class="rename-filter__panel">
@@ -376,8 +378,9 @@ onMounted(() => {
           @enter="runRename"
         >
           <template #suffix>
+            <!-- 原版 baseIcon `.mr4.rename-svg` + hover="no"：无尺寸类 → 1em，色 #666 / hover #ddd（:56570-56579） -->
             <button class="rename-apply" type="button" title="重命名图层" @click.stop="runRename">
-              <Icon name="#iconyingyong" size="sm" />
+              <Icon name="#iconyingyong" />
             </button>
           </template>
         </GInput>
@@ -444,7 +447,8 @@ onMounted(() => {
                 title="添加预设"
                 @click="openModal('createItem', { groupIndex })"
               >
-                <Icon name="#iconchuangjian" size="xs" />
+                <!-- 原版 baseSvg 带 .svg-14 → 14px（:56694-56698），对应 size="sm" -->
+                <Icon name="#iconchuangjian" size="sm" />
               </button>
             </div>
             <EmptyState v-if="!group.list.length" compact text="该组还没有预设" />
@@ -563,18 +567,20 @@ onMounted(() => {
   gap: var(--sp-exact-10);
 }
 
+/* 原版 .rename-svg .icon{color:#666}（scoped data-v-2d612e86）；图标 1em 跟随字号 */
 .rename-apply {
   display: inline-flex;
   align-items: center;
   padding: 0;
   border: 0;
   background: transparent;
-  color: var(--text-faint);
+  color: var(--c-icon-muted);
   cursor: pointer;
 }
 
+/* 原版 .rename-svg .icon:hover{color:#ddd} */
 .rename-apply:hover {
-  color: var(--text-strong);
+  color: var(--c-icon-muted-hover);
 }
 
 .rename-hint {
@@ -655,14 +661,20 @@ onMounted(() => {
   margin-top: var(--sp-3);
 }
 
+/* 原版 baseSvg `.cursor.contextHover`：图标走全局 .icon 的 #c3c3c3，
+   hover 才变白（.contextHover:hover{color:#fff} + /deep/ .icon{fill:#fff}） */
 .rename-filter {
   display: inline-flex;
   align-items: center;
   padding: 0;
   border: 0;
   background: transparent;
-  color: var(--text-strong);
+  color: var(--text);
   cursor: pointer;
+}
+
+.rename-filter:hover {
+  color: var(--c-text-inverse);
 }
 
 .rename-filter__panel {
@@ -702,21 +714,25 @@ onMounted(() => {
   background: var(--c-hover-2);
 }
 
+/* 原版底条用 baseIcon → 全局 `.base-icon{width:26px;height:26px;border:1px solid transparent}`
+   + `:hover{background-color:rgba(0,0,0,.2);border-color:#444}`（data-v-63c7852d）。
+   图标本身无尺寸类 → 1em（按钮 font:inherit，跟随 12px）。 */
 .rename-bottom__icon {
   display: inline-flex;
-  width: var(--icon-lg);
-  height: var(--icon-lg);
+  width: 26px;
+  height: 26px;
   align-items: center;
   justify-content: center;
   padding: 0;
-  border: 0;
+  border: 1px solid transparent;
   background: transparent;
   color: var(--text);
   cursor: pointer;
 }
 
 .rename-bottom__icon:hover {
-  color: var(--text-strong);
+  border-color: var(--c-icon-hover-border);
+  background: var(--c-btn-muted);
 }
 
 /* 原版全局 .verline{width:1px;height:13px;background-color:#333;border:none} —— 可见的竖线。

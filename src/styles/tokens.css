@@ -118,6 +118,10 @@
   --c-ok-a18: rgba(78, 201, 176, 0.18);
   --c-warn-a18: rgba(220, 220, 170, 0.18);
 
+  /* 输入框右侧「应用」图标：原版 `.rename-svg .icon{color:#666}` / `:hover{color:#ddd}`
+     （scoped 块 data-v-2d612e86，对应 render app.v4.js:56570-56579） */
+  --c-icon-muted: #666;
+  --c-icon-muted-hover: #ddd;
   /* ---------- 重命名页（/rename）----------
      色板是**数据**不是主题色：原版 colorData 七色（app.v4.js:56905），逐个图层颜色标记 */
   --c-layer-1: #b0423f;
@@ -137,6 +141,9 @@
   --c-swatch-border: #535353;
   /* 分组竖线：原版 .verline{height:13px;border-left:2px solid #006fff}（app.v4.js:56774） */
   --h-verline: 13px;
+  /* Tab 之间的分隔竖线：原版 .vertical-line{width:1px;height:20px;background-color:#222}
+     （app.bf68b505.css 的 Style 页 scoped 段 data-v-7f4f5fe0，对应 render app.v4.js:49679） */
+  --h-vline: 20px;
 
   /* ---------- 间距阶梯 ---------- */
   --sp-1: 2px;
