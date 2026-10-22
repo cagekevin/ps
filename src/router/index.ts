@@ -19,6 +19,8 @@ declare module 'vue-router' {
 }
 
 const Placeholder = () => import('@/pages/_placeholder/index.vue')
+/** 自定义：框架生成（原版 Custom，app.v4.js:34774 `np()`） */
+const CustomPage = () => import('@/pages/custom/index.vue')
 /** 字体管理：我的字体列表 + 标签 + 预览（原版 font-manage.js） */
 const FontManagePage = () => import('@/pages/fontManage/index.vue')
 /** 常用：主体待实现 */
@@ -48,7 +50,7 @@ export const routes: RouteRecordRaw[] = [
   {
     path: '/custom',
     name: 'Custom',
-    component: Placeholder,
+    component: CustomPage,
     meta: { title: '自定义', nav: true, icon: 'icon-nav_zidingyikuangjia', glyph: '自' },
   },
   {
