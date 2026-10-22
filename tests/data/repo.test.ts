@@ -7,10 +7,17 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 const state = vi.hoisted(() => ({
   files: new Map<string, string>(),
   failWrite: false,
+  failRead: false,
 }))
 
 vi.mock('@/cep/fs', () => ({
-  readTextSmart: async (path: string) => state.files.get(path) ?? null,
+  hasNode: () => true,
+  readTextSmart: async (path: string) => {
+    if (state.failRead) throw new Error('EBUSY')
+    return state.files.get(path) ?? null
+  },
+  // CAS 比对用的同步读（D-26）：必须读到同一份磁盘内容
+  readTextFile: (path: string) => (state.failRead ? null : (state.files.get(path) ?? null)),
   writeTextFile: (path: string, text: string) => {
     if (state.failWrite) throw new Error('NO_NODE')
     state.files.set(path, text)
@@ -35,6 +42,7 @@ const PATH = '/user/sj_ztglStar.ini'
 beforeEach(() => {
   state.files.clear()
   state.failWrite = false
+  state.failRead = false
 })
 
 function createRepo() {
@@ -78,6 +86,27 @@ describe('fileRepo 写', () => {
       list.push({ name: 'B', star: 2 })
     })
     expect(state.files.get(`${PATH}.bak`)).toBe(JSON.stringify([{ name: 'A', star: 1 }]))
+  })
+
+  it('内容损坏时 update 拒绝写，原文件不动（D-42）', async () => {
+    state.files.set(PATH, '{oops')
+    await expect(
+      createRepo().update((list) => {
+        list.push({ name: 'B' })
+      }),
+    ).rejects.toThrow('拒绝覆盖写')
+    expect(state.files.get(PATH)).toBe('{oops')
+  })
+
+  it('读取失败时 update 拒绝写，不拿默认值覆盖（D-42）', async () => {
+    state.files.set(PATH, JSON.stringify([{ name: 'A' }]))
+    state.failRead = true
+    await expect(
+      createRepo().update((list) => {
+        list.push({ name: 'B' })
+      }),
+    ).rejects.toThrow('拒绝覆盖写')
+    expect(state.files.get(PATH)).toBe(JSON.stringify([{ name: 'A' }]))
   })
 
   it('首次写不生成 .bak（没有原文可备份）', async () => {

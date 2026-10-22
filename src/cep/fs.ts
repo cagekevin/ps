@@ -145,6 +145,46 @@ export function removeFile(absPath: string): boolean {
  * 用 ExtendScript 的 File 读文件——Node 不可用时的兜底。
  * 这样即使 manifest 少配了 --enable-nodejs，读数据文件也不会全废。
  */
+let tmpSeq = 0
+
+/**
+ * 本进程专属的临时文件名（D-42）。
+ *
+ * 之前固定用 `${absPath}.tmp`：主面板和独立面板是两个进程，同一份数据文件 = 同一个 tmp 名。
+ * A 写到一半 → B 截断重写 → A 的 rename 落盘的就是 B 的半截内容，**文件损坏**，
+ * 比丢一次更新更糟（丢更新只少一条，损坏会让下次读回退默认值）。
+ *
+ * 带 pid + 进程内序号 + 随机串后两个进程互不覆盖；同一文件系统内 rename 仍是原子的。
+ */
+function uniqueTmpPath(absPath: string): string {
+  const g = globalThis as unknown as { process?: { pid?: number } }
+  const pid = g.process?.pid ?? 0
+  tmpSeq += 1
+  return `${absPath}.${pid}-${tmpSeq}-${Math.random().toString(36).slice(2, 8)}.tmp`
+}
+
+/** 写 tmp 失败时别把垃圾文件留在用户目录里 */
+function dropTmp(fs: { unlinkSync: (path: string) => void }, tmp: string): void {
+  try {
+    fs.unlinkSync(tmp)
+  } catch {
+    // tmp 可能根本没写出来，删不掉属正常
+  }
+}
+
+/** 写 tmp → rename；失败清理 tmp 并抛 */
+function atomicReplace(absPath: string, text: string): void {
+  const fs = nodeRequire('fs')
+  const tmp = uniqueTmpPath(absPath)
+  try {
+    writeTextFile(tmp, text)
+    fs.renameSync(tmp, absPath)
+  } catch (e) {
+    dropTmp(fs, tmp)
+    throw e
+  }
+}
+
 /**
  * 写「用户自己选的路径」的导出文件。
  *
@@ -152,29 +192,24 @@ export function removeFile(absPath: string): boolean {
  * `grep -rn "readTextFile\|writeTextFile" src/pages src/commands` 必须为 0——
  * 通用写只给 data 层用；命令层要往用户选的路径写导出文件，走这个窄入口。
  *
- * 原子写：先写 `.tmp` 再改名，避免写到一半崩溃留下半截 JSON。
+ * 原子写：先写本进程专属的 tmp 再改名，避免写到一半崩溃留下半截 JSON。
  * 失败抛（NO_NODE / 磁盘错）——不许假装写成功。
  */
 export function saveExportedText(absPath: string, text: string): void {
   const fs = nodeRequire('fs')
   const path = nodeRequire('path')
   fs.mkdirSync(path.dirname(absPath), { recursive: true })
-  const tmp = `${absPath}.tmp`
-  fs.writeFileSync(tmp, text, 'utf8')
-  fs.renameSync(tmp, absPath)
+  atomicReplace(absPath, text)
 }
 
 /**
- * 原子写：先写 .tmp 再改名，避免写到一半崩溃留下半截 JSON。
+ * 原子写：先写本进程专属的 tmp 再改名，避免写到一半崩溃留下半截 JSON。
  * Node 不可用时返回 false，调用方退回普通写。
  */
 export function writeTextFileAtomic(absPath: string, text: string): boolean {
   if (!hasNode()) return false
   try {
-    const fs = nodeRequire('fs')
-    const tmp = `${absPath}.tmp`
-    writeTextFile(tmp, text)
-    fs.renameSync(tmp, absPath)
+    atomicReplace(absPath, text)
     return true
   } catch {
     return false

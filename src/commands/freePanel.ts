@@ -3,18 +3,41 @@ import {
   findBlock,
   normalizeFreePanel,
   walkBlocks,
+  type FreePanelBlock,
   type FreePanelFile,
 } from '@/domain/free-panel'
 import { adaptFreePanelItem } from '@/domain/free-panel-legacy'
 import { applyItemDrop } from '@/domain/reorder'
-import { CepError } from '@/utils/errors'
-import { defineCommand, execute, get } from './registry'
+import { CepError, type CepErrorCode } from '@/utils/errors'
+import { defineCommand, executeInherited, get } from './registry'
 import type { Command } from './types'
 
 function commit(target: FreePanelFile, source: FreePanelFile) {
   target.uid = source.uid
   target.btnId = source.btnId
   target.obj = source.obj
+}
+
+/** 树上最大区域 id（空树 0） */
+function maxBlockId(blocks: FreePanelBlock[]): number {
+  let max = 0
+  walkBlocks(blocks, (block) => {
+    if (typeof block.id === 'number' && block.id > max) max = block.id
+  })
+  return max
+}
+
+/**
+ * 取下一个区域 id 并推进 uid。
+ *
+ * 依据：原版 `uid` 与 max(id) 同步（一手证据见台账 D-38/D-39：实测文件 `uid=12`、最大 `block.id=12`）。
+ * 所以新 id 必须是 `max(uid, max(id)) + 1`，不能 `uid += 1`——uid 一旦落后于 max(id)
+ * （旧数据、清空后复位、别的面板写的文件），新增区域就会拿到已被占用的 id（D-39）。
+ */
+function takeNextBlockId(file: FreePanelFile): number {
+  const id = Math.max(file.uid, maxBlockId(file.obj.list)) + 1
+  file.uid = id
+  return id
 }
 
 /**
@@ -142,7 +165,14 @@ export const freePanelCommands: Command<unknown>[] = [
     kind: 'instant',
     async run(ctx) {
       await ctx.data.freePanel.update((file) => {
-        commit(file, createEmptyFreePanel())
+        // D-38：清空**不**复位 uid。旧 id 一旦被复用，按 id 存的会话态（showText）
+        // 和任何外部引用都会串到新工作区上；原版 uid 是单调计数器，复位不是它的语义。
+        // 新工作区直接拿 preserved+1，连"保留一个 id=1 的 block"这种复用也一并避开。
+        const preserved = Math.max(file.uid, maxBlockId(file.obj.list))
+        const fresh = createEmptyFreePanel()
+        fresh.uid = preserved + 1
+        fresh.obj.list[0].id = fresh.uid
+        commit(file, fresh)
       })
     },
   }),
@@ -156,9 +186,9 @@ export const freePanelCommands: Command<unknown>[] = [
     async run(ctx, { parentId, type }) {
       await ctx.data.freePanel.update((file) => {
         const next = normalizeFreePanel(file)
-        next.uid += 1
         const block = {
-          id: next.uid,
+          // D-39：取 max(id)+1，不是 uid += 1
+          id: takeNextBlockId(next),
           zIndex: 0,
           showIcon: false,
           showNumber: 2,
@@ -206,9 +236,8 @@ export const freePanelCommands: Command<unknown>[] = [
 
         // 至少保留一个区域，避免工作区变成不可编辑状态
         if (!next.obj.list.length) {
-          next.uid += 1
           next.obj.list.push({
-            id: next.uid,
+            id: takeNextBlockId(next),
             zIndex: 0,
             showIcon: false,
             showNumber: 2,
@@ -263,8 +292,12 @@ export const freePanelCommands: Command<unknown>[] = [
         throw new CepError('PARSE', `自由面板 key 未适配：${item.key}`)
       }
 
-      const result = await execute(mapped.id, mapped.payload)
-      if (!result.ok) throw new CepError('JSX', result.reason)
+      // D-33：子命令复用本次执行刚刷过的选区快照，不再 refresh 一次；
+      // 失败时把子命令自己的 `code` 原样抛回去——以前硬编码成 'JSX'，
+      // 把 `FONT_MISSING` 这类"要页面弹确认"的语义冲掉了，useCommand 那条分支因此失效。
+      // CommandResult.code 是 string（注册表只在枚举内产出）；CepError 收 CepErrorCode
+      const result = await executeInherited(mapped.id, mapped.payload, { selection: ctx.selection })
+      if (!result.ok) throw new CepError((result.code ?? 'JSX') as CepErrorCode, result.reason)
     },
   }),
 ]

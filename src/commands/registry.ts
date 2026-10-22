@@ -103,24 +103,18 @@ export function isEnabled(id: string, snapshot: SelectionSnapshot = current()): 
 }
 
 /**
- * 唯一执行入口。
+ * 在给定选区快照下跑一条命令。
  *
- * 固定顺序：刷新选区（一次）→ 检查 requires → run → catch 归一 → 日志 + 耗时。
+ * 顺序固定：检查 requires → run → catch 归一 → 日志 + 耗时。
  * 页面拿不到命令内部异常，只拿 `CommandResult`，所以"忘记处理失败"写不出来。
  */
-export async function execute<K extends CommandId>(
-  id: K,
-  payload?: CommandPayloads[K],
-): Promise<CommandResult>
-/** 宽松重载：测试里用假 id、网格里用 string 时走这条 */
-export async function execute(id: string, payload?: unknown): Promise<CommandResult>
-export async function execute(id: string, payload?: unknown): Promise<CommandResult> {
+async function runWith(
+  id: string,
+  payload: unknown,
+  selection: SelectionSnapshot,
+): Promise<CommandResult> {
   const command = registry.get(id)
   if (!command) return { ok: false, reason: `命令不存在：${id}` }
-
-  // 一次执行只查一次选区，不再让每个命令自己调 getLayerState
-  const selection = await refresh().catch(() => null)
-  if (!selection) return { ok: false, reason: '读取选区失败' }
 
   // requires 检查放在 run 之前：没选区就不该调 jsx，否则只会拿到一句看不懂的 evalScript 错
   if (!canRun(command.requires, selection)) {
@@ -144,4 +138,42 @@ export async function execute(id: string, payload?: unknown): Promise<CommandRes
   } finally {
     progress.end()
   }
+}
+
+/**
+ * 唯一执行入口。一次执行只刷新一次选区。
+ */
+export async function execute<K extends CommandId>(
+  id: K,
+  payload?: CommandPayloads[K],
+): Promise<CommandResult>
+/** 宽松重载：测试里用假 id、网格里用 string 时走这条 */
+export async function execute(id: string, payload?: unknown): Promise<CommandResult>
+export async function execute(id: string, payload?: unknown): Promise<CommandResult> {
+  // 命令不存在就不必去问 PS 要选区（保持"未知 id 不 refresh"的旧行为）
+  if (!registry.get(id)) return { ok: false, reason: `命令不存在：${id}` }
+
+  // 一次执行只查一次选区，不再让每个命令自己调 getLayerState
+  const selection = await refresh().catch(() => null)
+  if (!selection) return { ok: false, reason: '读取选区失败' }
+
+  return runWith(id, payload, selection)
+}
+
+/**
+ * 子命令入口：复用父命令刚刷新过的选区快照，**不再 refresh**（D-33）。
+ *
+ * 为什么要有它：`freePanel.execute` 要在同一次执行里跑一条子命令。走 `execute` 会二次
+ * refresh（多一次 evalScript 往返），而且子命令的失败被外层再包一层 `CepError('JSX')`，
+ * 把子命令原本的 `code`（如 `FONT_MISSING`）冲掉，页面的"弹字体下载确认"分支就失效。
+ *
+ * 调用方负责把子命令的 `code` 原样抛回去：
+ * `throw new CepError(result.code ?? 'JSX', result.reason)`。
+ */
+export async function executeInherited(
+  id: string,
+  payload: unknown,
+  parent: { selection: SelectionSnapshot },
+): Promise<CommandResult> {
+  return runWith(id, payload, parent.selection)
 }
