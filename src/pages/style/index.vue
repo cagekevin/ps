@@ -3,17 +3,21 @@ import { computed, onMounted, ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import BackTop from '@/components/BackTop.vue'
 import BaseGroup from '@/components/BaseGroup.vue'
+import CepModal from '@/components/CepModal.vue'
 import EmptyState from '@/components/EmptyState.vue'
 import GButton from '@/components/GButton.vue'
+import GInput from '@/components/GInput.vue'
 import Icon from '@/components/Icon.vue'
 import MultiTabs from '@/components/MultiTabs.vue'
 import PageBottomBar from '@/components/PageBottomBar.vue'
 import { useCommand } from '@/components/command/useCommand'
 import { usePersistedRef } from '@/composables/usePersisted'
 import { userDir } from '@/cep/fs'
-import { KU_KINDS, KU_TAB_LABELS, type KuFontPreview } from '@/domain/style-library'
+import { KU_KINDS, KU_TAB_LABELS, type KuFontPreview, type KuKind } from '@/domain/style-library'
+import { useConfirmStore } from '@/stores/confirm'
 import { useStyleLibraryStore } from '@/stores/style-library'
 import type { StyleModifier } from '@/commands/payloads'
+import StyleMenu, { type StyleMenuEntry } from './components/StyleMenu.vue'
 
 /**
  * 样式页（`/style`）。
@@ -22,11 +26,21 @@ import type { StyleModifier } from '@/commands/payloads'
  * 仓库条（49650）→ 4 tab（49653）→ 四库列表（49685）→ 底栏（49844）→ 回顶（49828）。
  *
  * 第 1 段：只读骨架 + 三态。第 2 段：应用（6 条 jsx）与添加（3 条 jsx）经 `useCommand` 接上。
- * 本期仍不做：吸色到组、拖图片取色、仓库发送/移动、库文件与 `.kux` 导入导出（见 commands/style.ts 头部）。
+ * 第 3 段：项 / 分组右键菜单（清单 #32-50）——删改走 `style.deleteItem|renameItem|deleteGroup|renameGroup`，
+ * 新建组走 `style.addGroup`，发送到色板走 `style.sendToSwatch`。
+ * 本期仍不做：吸色到组、拖图片取色、仓库发送/移动（菜单项已渲染但置灰，命令未实现）、
+ * 库文件与 `.kux` 导入导出（见 commands/style.ts 头部）。
+ *
+ * 两处**有意偏离原版**：
+ * 1. 删除要二次确认（原版 `:50329-50332` / `:50245-50248` 直接删 + tips）：误删会写坏用户库，
+ *    而写库备份只留一份 `.bak`，没有撤销入口。走 `useConfirmStore`（ConfirmHost 里的 `CepModal`）。
+ * 2. 「发送到仓库…」「移动到仓库…」渲染但置灰：`$emit("sendWarehouse"|"moveWarehouse")` 对应的
+ *    写库命令还没实现，原版菜单项不能凭空可用。置灰项的 `title` 写明未实现，台账编号待登记。
  *
  * 原版没有页面标题栏（标题由左侧导航承担），所以不用 `PageShell`。
  */
 const store = useStyleLibraryStore()
+const confirm = useConfirmStore()
 const { libraries, loading, error, currentName, warehouses, activeIndex } = storeToRefs(store)
 
 /** 原版 `set.ysShowTab`（`app.v4.js:54657` 起 switchFun 读写它）；我们落 `sj_v5_ui.json`，不动 `sj_set.json` */
@@ -50,6 +64,12 @@ const applyStyleCmd = useCommand('style.applyStyle')
 const addColorCmd = useCommand('style.addColor')
 const addGradientCmd = useCommand('style.addGradient')
 const addStyleCmd = useCommand('style.addStyle')
+const deleteItemCmd = useCommand('style.deleteItem')
+const renameItemCmd = useCommand('style.renameItem')
+const sendToSwatchCmd = useCommand('style.sendToSwatch')
+const addGroupCmd = useCommand('style.addGroup')
+const deleteGroupCmd = useCommand('style.deleteGroup')
+const renameGroupCmd = useCommand('style.renameGroup')
 
 const visibleKinds = computed(() => KU_KINDS.filter((_, index) => !!showTabs.value[index]))
 
@@ -173,6 +193,165 @@ async function addItem(kind: string, groupIndex: number) {
   if (ok) await store.load()
 }
 
+// ---------- 右键菜单（原版 showItemMenu / showGroupMenu）----------
+
+/**
+ * 当前右键目标。`itemIndex >= 0` 是项菜单，`-1` 是分组菜单（原版是两个方法，目标不同）。
+ * `x/y` 取 `event.clientX/clientY`：原版 `$menu.show` 用的就是 `pageX/pageY`
+ * （`app.v4.js:452-465`），面板不滚动整页，两者等价。
+ */
+const menu = ref({
+  visible: false,
+  x: 0,
+  y: 0,
+  kind: 'color' as KuKind,
+  groupIndex: 0,
+  itemIndex: -1,
+})
+
+/** 原版 `showItemMenu(t, e, n)`（`:50324-50366`）：`contextmenu` 里 preventDefault + stopPropagation */
+function openItemMenu(event: MouseEvent, kind: KuKind, groupIndex: number, itemIndex: number) {
+  event.preventDefault()
+  event.stopPropagation()
+  menu.value = { visible: true, x: event.clientX, y: event.clientY, kind, groupIndex, itemIndex }
+}
+
+/** 原版 `showGroupMenu(t, e)`（`:50227-50322`）；`BaseGroup` 已经 `.prevent` 过浏览器菜单 */
+function openGroupMenu(event: MouseEvent, kind: KuKind, groupIndex: number) {
+  menu.value = {
+    visible: true,
+    x: event.clientX,
+    y: event.clientY,
+    kind,
+    groupIndex,
+    itemIndex: -1,
+  }
+}
+
+/** 项重命名的提示语按库分派：原版颜色/渐变 `请输入颜色名称`（`:50336`/`:50804`）、字体 `请输入字体名称`（`:51120`）、样式 `请输入样式名称`（`:51567`） */
+const ITEM_NAME_LABEL: Record<KuKind, string> = {
+  color: '颜色',
+  gradient: '颜色',
+  font: '字体',
+  style: '样式',
+}
+
+const menuItems = computed<StyleMenuEntry[]>(() => {
+  const { kind, groupIndex, itemIndex } = menu.value
+
+  if (itemIndex >= 0) {
+    return [
+      { text: '删除', action: () => void requestDeleteItem(kind, groupIndex, itemIndex) },
+      { text: '重命名', action: () => openPrompt('renameItem', kind, groupIndex, itemIndex) },
+      // 原版这一项是 `text:"fg"`（`:50341`），却挂了一个 `addGroup` 回调——原版 bug，这里只当分隔线
+      { text: '', separator: true },
+      { text: '发送到色板', action: () => void sendToSwatch(kind, groupIndex, itemIndex) },
+    ]
+  }
+
+  return [
+    {
+      text: '创建新组',
+      icon: '#iconchuangjian',
+      action: () => openPrompt('createGroup', kind, groupIndex),
+    },
+    { text: '', separator: true },
+    { text: '删除', action: () => void requestDeleteGroup(kind, groupIndex) },
+    { text: '重命名', action: () => openPrompt('renameGroup', kind, groupIndex) },
+    { text: '', separator: true },
+    // 命令未实现（原版 `$emit("sendWarehouse"|"moveWarehouse")`，`:50308-50320`）→ 渲染但置灰。
+    // 台账编号 T-65 是本次建议值（当前台账最大 T-64，尚未登记，所以代码里不写 TODO() 标记）
+    {
+      text: '发送到仓库...',
+      disabled: true,
+      title: '未实现（T-65 待登记）：仓库发送/移动命令还没实现',
+    },
+    {
+      text: '移动到仓库...',
+      disabled: true,
+      title: '未实现（T-65 待登记）：仓库发送/移动命令还没实现',
+    },
+  ]
+})
+
+// ---------- 弹层：新建组 / 改组名 / 改项名（原版 `$inputBox.show`，`:484-681`）----------
+
+type PromptMode = 'createGroup' | 'renameGroup' | 'renameItem'
+
+const prompt = ref({
+  visible: false,
+  mode: 'createGroup' as PromptMode,
+  title: '新建分组',
+  placeholder: '请输入组名',
+  value: '',
+  kind: 'color' as KuKind,
+  groupIndex: 0,
+  itemIndex: -1,
+})
+
+/**
+ * 原版 `$inputBox.show(callback, title, content)`：
+ * 新建组不填默认值（`:50234`）、重命名组回填当前组名（`:50256` `getGroupName`）、
+ * 重命名项不回填（`:50336`）。
+ */
+function openPrompt(mode: PromptMode, kind: KuKind, groupIndex: number, itemIndex = -1) {
+  const group = libraries.value[kind][groupIndex]
+  const config: Record<PromptMode, { title: string; placeholder: string; value: string }> = {
+    createGroup: { title: '新建分组', placeholder: '请输入组名', value: '' },
+    renameGroup: { title: '重命名分组', placeholder: '请输入组名', value: group?.name ?? '' },
+    renameItem: {
+      title: '重命名',
+      placeholder: `请输入${ITEM_NAME_LABEL[kind]}名称`,
+      value: '',
+    },
+  }
+  prompt.value = { visible: true, mode, kind, groupIndex, itemIndex, ...config[mode] }
+}
+
+async function submitPrompt() {
+  // 回车和「确定」都会进来：先关，避免命令跑两遍（CepModal 的 ok 本来也会关）
+  prompt.value.visible = false
+  const { mode, kind, groupIndex, itemIndex, value } = prompt.value
+
+  const ok =
+    mode === 'createGroup'
+      ? // 原版 `addGroup(t, e)`：插在右键的那个组之后（`:50235`）
+        await addGroupCmd.run({ kind, name: value, afterIndex: groupIndex }, '已新建分组')
+      : mode === 'renameGroup'
+        ? await renameGroupCmd.run({ kind, groupIndex, name: value }, '已重命名分组')
+        : await renameItemCmd.run({ kind, groupIndex, itemIndex, name: value }, '已重命名')
+
+  if (ok) await store.load()
+}
+
+// ---------- 删除（有意偏离：二次确认，原版直接删）----------
+
+async function requestDeleteItem(kind: KuKind, groupIndex: number, itemIndex: number) {
+  const name = libraries.value[kind][groupIndex]?.items[itemIndex]?.name ?? ''
+  const ok = await confirm.confirm({
+    title: '确认删除',
+    message: `删除「${name}」？删除后无法恢复。`,
+  })
+  if (!ok) return
+  if (await deleteItemCmd.run({ kind, groupIndex, itemIndex }, '已删除')) await store.load()
+}
+
+async function requestDeleteGroup(kind: KuKind, groupIndex: number) {
+  const group = libraries.value[kind][groupIndex]
+  // `style.deleteGroup` 删空后会自动补一个「<库名>默认分组」（`app.v4.js:52451-52454`），所以没有"第 0 组不可删"
+  const ok = await confirm.confirm({
+    title: '确认删除',
+    message: `删除分组「${group?.name ?? ''}」？组内 ${group?.items.length ?? 0} 项会一起删除。`,
+  })
+  if (!ok) return
+  if (await deleteGroupCmd.run({ kind, groupIndex }, '已删除分组')) await store.load()
+}
+
+/** 原版「发送到色板」（`:50349-50355`）：把这一项写成色板全文，随后 tips「追加成功」 */
+async function sendToSwatch(kind: KuKind, groupIndex: number, itemIndex: number) {
+  await sendToSwatchCmd.run({ kind, groupIndex, itemIndex }, '已发送到色板')
+}
+
 onMounted(() => {
   void store.load()
 })
@@ -236,6 +415,7 @@ onMounted(() => {
             :text="group.name"
             :value="groupOpen(kind, index, group.show)"
             @change="toggleGroup(kind, index)"
+            @menu="openGroupMenu($event, kind, index)"
           >
             <div class="style-items">
               <div
@@ -247,6 +427,7 @@ onMounted(() => {
                 }"
                 :title="item.name"
                 @click="applyItem(kind, index, itemIndex, $event)"
+                @contextmenu.prevent.stop="openItemMenu($event, kind, index, itemIndex)"
               >
                 <!-- 颜色 / 渐变：整块就是色块（原版 .color-block 直接带 backgroundColor / backgroundImage，
                      render `:49960` / `:50564`） -->
@@ -313,6 +494,14 @@ onMounted(() => {
     </div>
 
     <BackTop target="#style-scroll" />
+
+    <!-- 右键菜单浮层（原版 `$menu`，`app.v4.js:278-433`）：项 3 项、分组 5 项，见 menuItems -->
+    <StyleMenu v-model:visible="menu.visible" :x="menu.x" :y="menu.y" :items="menuItems" />
+
+    <!-- 原版 `$inputBox.show` 的重命名输入框；`CepModal` 是项目约定的弹窗外壳 -->
+    <CepModal v-model:visible="prompt.visible" :title="prompt.title" @ok="submitPrompt">
+      <GInput v-model="prompt.value" :placeholder="prompt.placeholder" @enter="submitPrompt" />
+    </CepModal>
 
     <!-- 原版 .button-nav（49844）：添加分组 4 个 + 竖线 + 导入 / 导出。
          添加分组写库、导入导出是文件 IO，都属于第 3 段（T-48），本段保持 disabled。

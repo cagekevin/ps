@@ -1,11 +1,12 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia, type Pinia } from 'pinia'
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { setPref } from '@/cep/data/settings'
 import type { KuGroup, KuKind } from '@/domain/style-library'
 
 /**
- * 三态测试：加载 / 空库 / 读失败（含重试）；第 2 段再加"应用/添加经 useCommand 接线"。
+ * 三态测试：加载 / 空库 / 读失败（含重试）；第 2 段再加"应用/添加经 useCommand 接线"；
+ * 第 3 段是右键菜单（项 3 项 / 分组 5 项，清单 #32-50）。
  *
  * 只 mock 数据入口（`@/cep/data/style-library-repo`）与 jsx，store / 命令 / 页面都走真代码——
  * 这样测到的是"页面点了之后命令怎么跑"，不是替身自己的行为。
@@ -16,6 +17,12 @@ const repo = vi.hoisted(() => ({
   readGroupId: vi.fn(),
   appendItem: vi.fn(),
   replaceItem: vi.fn(),
+  deleteItem: vi.fn(),
+  renameItem: vi.fn(),
+  sendToSwatch: vi.fn(),
+  addGroup: vi.fn(),
+  renameGroup: vi.fn(),
+  deleteGroup: vi.fn(),
   indexRepo: { read: vi.fn() },
 }))
 
@@ -25,6 +32,12 @@ vi.mock('@/cep/data/style-library-repo', () => ({
   readKuGroupId: repo.readGroupId,
   addKuItem: repo.appendItem,
   replaceKuItem: repo.replaceItem,
+  deleteKuItem: repo.deleteItem,
+  renameKuItem: repo.renameItem,
+  sendKuItemToSwatch: repo.sendToSwatch,
+  addKuGroup: repo.addGroup,
+  renameKuGroup: repo.renameGroup,
+  deleteKuGroup: repo.deleteGroup,
   styleIndexRepo: repo.indexRepo,
 }))
 
@@ -61,6 +74,7 @@ vi.mock('@/selection', () => ({
 
 await import('@/commands')
 const StylePage = (await import('@/pages/style/index.vue')).default
+const ConfirmHost = (await import('@/components/ConfirmHost.vue')).default
 
 function libraries(overrides: Partial<Record<KuKind, KuGroup[]>> = {}): Record<KuKind, KuGroup[]> {
   return { color: [], gradient: [], font: [], style: [], ...overrides }
@@ -94,6 +108,12 @@ beforeEach(() => {
   repo.replaceItem.mockReset()
   repo.appendItem.mockResolvedValue(undefined)
   repo.replaceItem.mockResolvedValue(undefined)
+  repo.deleteItem.mockResolvedValue(undefined)
+  repo.renameItem.mockResolvedValue(undefined)
+  repo.sendToSwatch.mockResolvedValue(undefined)
+  repo.addGroup.mockResolvedValue(undefined)
+  repo.renameGroup.mockResolvedValue(undefined)
+  repo.deleteGroup.mockResolvedValue(undefined)
   // 命令层与 store 都会读索引；不返回真索引会走"读失败"分支，渲染不出库
   repo.indexRepo.read.mockResolvedValue({
     value: { index: 0, list: [{ name: '我的样式仓库' }] },
@@ -565,5 +585,251 @@ describe('字体库 / 样式库的项内容（清单 #22 #24 #26）', () => {
 
     expect(wrapper.find('.style-item__thumb').exists()).toBe(false)
     expect(wrapper.find('.style-lib--style .style-item').exists()).toBe(true)
+  })
+})
+
+describe('样式页右键菜单（清单 #32-50：项 3 项 + 分组 5 项）', () => {
+  const mounted: Array<{ unmount(): void }> = []
+
+  afterEach(() => {
+    for (const wrapper of mounted.splice(0)) wrapper.unmount()
+    document.body.innerHTML = ''
+  })
+
+  /** 页面 + ConfirmHost（确认框在真实布局里由 MainLayout 挂，这里照同样组合挂） */
+  function mountPageWithConfirm() {
+    const page = mount(StylePage, { global: { plugins: [pinia] } })
+    const host = mount(ConfirmHost, { global: { plugins: [pinia] } })
+    mounted.push(page, host)
+    return page
+  }
+
+  function seedColorGroup() {
+    repo.read.mockResolvedValue(
+      snapshot({
+        color: [{ name: '灰白', show: true, items: [{ name: '未命名', swatch: '#302F34' }] }],
+      }),
+    )
+  }
+
+  // 菜单与弹窗都 Teleport 到 body，只能从 document 取
+  function menuRoot() {
+    return document.querySelector<HTMLElement>('.style-menu')
+  }
+  function menuLabels() {
+    return Array.from(document.querySelectorAll('.style-menu__item')).map((el) =>
+      el.textContent?.trim(),
+    )
+  }
+  function menuItem(label: string) {
+    return Array.from(document.querySelectorAll<HTMLElement>('.style-menu__item')).find(
+      (el) => el.textContent?.trim() === label,
+    )
+  }
+  function modalEl() {
+    return document.querySelector<HTMLElement>('.modal')
+  }
+  async function clickModalOk() {
+    document.querySelector<HTMLElement>('.modal__btn.is-primary')?.click()
+    await flushPromises()
+  }
+  async function clickModalCancel() {
+    const buttons = Array.from(document.querySelectorAll<HTMLElement>('.modal__btn'))
+    buttons.find((el) => !el.classList.contains('is-primary'))?.click()
+    await flushPromises()
+  }
+  async function typeIntoModal(value: string) {
+    const input = document.querySelector<HTMLInputElement>('.modal input')
+    expect(input).toBeTruthy()
+    input!.value = value
+    input!.dispatchEvent(new Event('input'))
+    await flushPromises()
+  }
+
+  async function rightClickItem(page: ReturnType<typeof mountPageWithConfirm>) {
+    await page.find('.style-item').trigger('contextmenu', { clientX: 120, clientY: 80 })
+    await flushPromises()
+  }
+  async function rightClickGroup(page: ReturnType<typeof mountPageWithConfirm>) {
+    await page.find('.base-group__head').trigger('contextmenu', { clientX: 120, clientY: 80 })
+    await flushPromises()
+  }
+
+  it('项菜单：右键项渲染 删除 / 重命名 / 发送到色板', async () => {
+    seedColorGroup()
+    const page = mountPageWithConfirm()
+    await flushPromises()
+
+    expect(menuRoot()).toBeNull()
+    await rightClickItem(page)
+
+    expect(menuLabels()).toEqual(['删除', '重命名', '发送到色板'])
+  })
+
+  it('项菜单：删除先二次确认，取消不删、确认才调 style.deleteItem', async () => {
+    seedColorGroup()
+    const page = mountPageWithConfirm()
+    await flushPromises()
+    await rightClickItem(page)
+
+    menuItem('删除')!.click()
+    await flushPromises()
+
+    // 有意偏离原版（原版 :50329-50332 直接删）：先弹确认，且此时还没动库
+    expect(modalEl()).toBeTruthy()
+    expect(repo.deleteItem).not.toHaveBeenCalled()
+
+    await clickModalCancel()
+    expect(repo.deleteItem).not.toHaveBeenCalled()
+
+    await rightClickItem(page)
+    menuItem('删除')!.click()
+    await flushPromises()
+    await clickModalOk()
+
+    expect(repo.deleteItem).toHaveBeenCalledWith('color', 0, 0)
+    // 删完重新读库，否则页面上那一项还在
+    expect(repo.read.mock.calls.length).toBeGreaterThan(1)
+  })
+
+  it('项菜单：重命名 → 输入框提交后调 style.renameItem', async () => {
+    seedColorGroup()
+    const page = mountPageWithConfirm()
+    await flushPromises()
+    await rightClickItem(page)
+
+    menuItem('重命名')!.click()
+    await flushPromises()
+    expect(document.querySelector<HTMLInputElement>('.modal input')?.placeholder).toBe(
+      '请输入颜色名称',
+    )
+
+    await typeIntoModal('品牌灰')
+    await clickModalOk()
+
+    expect(repo.renameItem).toHaveBeenCalledWith('color', 0, 0, '品牌灰')
+  })
+
+  it('项菜单：发送到色板 → 调 style.sendToSwatch，不弹确认', async () => {
+    seedColorGroup()
+    const page = mountPageWithConfirm()
+    await flushPromises()
+    await rightClickItem(page)
+
+    menuItem('发送到色板')!.click()
+    await flushPromises()
+
+    expect(repo.sendToSwatch).toHaveBeenCalledWith('color', 0, 0)
+    expect(modalEl()).toBeNull()
+    // 点完菜单自己关掉
+    expect(menuRoot()).toBeNull()
+  })
+
+  it('分组菜单：右键组头渲染 创建新组 / 删除 / 重命名 + 两条分隔线 + 两个置灰仓库项', async () => {
+    seedColorGroup()
+    const page = mountPageWithConfirm()
+    await flushPromises()
+    await rightClickGroup(page)
+
+    expect(menuLabels()).toEqual(['创建新组', '删除', '重命名', '发送到仓库...', '移动到仓库...'])
+    expect(document.querySelectorAll('.style-menu__hr')).toHaveLength(2)
+  })
+
+  it('分组菜单：创建新组 → style.addGroup（插在右键的那个组之后）', async () => {
+    seedColorGroup()
+    const page = mountPageWithConfirm()
+    await flushPromises()
+    await rightClickGroup(page)
+
+    menuItem('创建新组')!.click()
+    await flushPromises()
+    expect(document.querySelector<HTMLInputElement>('.modal input')?.placeholder).toBe('请输入组名')
+
+    await typeIntoModal('新分组')
+    await clickModalOk()
+
+    expect(repo.addGroup).toHaveBeenCalledWith('color', '新分组', 0)
+  })
+
+  it('分组菜单：删除 → 二次确认后调 style.deleteGroup', async () => {
+    seedColorGroup()
+    const page = mountPageWithConfirm()
+    await flushPromises()
+    await rightClickGroup(page)
+
+    menuItem('删除')!.click()
+    await flushPromises()
+    expect(repo.deleteGroup).not.toHaveBeenCalled()
+
+    await clickModalOk()
+    expect(repo.deleteGroup).toHaveBeenCalledWith('color', 0)
+  })
+
+  it('分组菜单：重命名回填当前组名，提交后调 style.renameGroup', async () => {
+    seedColorGroup()
+    const page = mountPageWithConfirm()
+    await flushPromises()
+    await rightClickGroup(page)
+
+    menuItem('重命名')!.click()
+    await flushPromises()
+    // 原版 :50256 传 getGroupName 回填
+    expect(document.querySelector<HTMLInputElement>('.modal input')?.value).toBe('灰白')
+
+    await typeIntoModal('冷灰')
+    await clickModalOk()
+
+    expect(repo.renameGroup).toHaveBeenCalledWith('color', 0, '冷灰')
+  })
+
+  it('分组菜单：发送到仓库 / 移动到仓库 置灰不可点，title 写明未实现', async () => {
+    seedColorGroup()
+    const page = mountPageWithConfirm()
+    await flushPromises()
+    await rightClickGroup(page)
+
+    const send = menuItem('发送到仓库...')!
+    const move = menuItem('移动到仓库...')!
+    for (const entry of [send, move]) {
+      expect(entry.classList.contains('is-disabled')).toBe(true)
+      expect(entry.getAttribute('aria-disabled')).toBe('true')
+      expect(entry.getAttribute('title')).toContain('未实现')
+      entry.click()
+    }
+    await flushPromises()
+
+    // 点了不做事：命令一个都没跑，菜单也没关
+    expect(repo.addGroup).not.toHaveBeenCalled()
+    expect(repo.deleteGroup).not.toHaveBeenCalled()
+    expect(repo.renameGroup).not.toHaveBeenCalled()
+    expect(modalEl()).toBeNull()
+    expect(menuRoot()).not.toBeNull()
+  })
+
+  it('右键位置：菜单落在鼠标点（fixed 定位，左上角对齐 clientX/clientY）', async () => {
+    seedColorGroup()
+    const page = mountPageWithConfirm()
+    await flushPromises()
+
+    await page.find('.style-item').trigger('contextmenu', { clientX: 120, clientY: 80 })
+    await flushPromises()
+
+    const root = menuRoot()!
+    expect(root.style.position).toBe('fixed')
+    expect(root.style.left).toBe('120px')
+    expect(root.style.top).toBe('80px')
+  })
+
+  it('Esc 关闭菜单（useDismiss 统一处理）', async () => {
+    seedColorGroup()
+    const page = mountPageWithConfirm()
+    await flushPromises()
+    await rightClickItem(page)
+    expect(menuRoot()).not.toBeNull()
+
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+    await flushPromises()
+
+    expect(menuRoot()).toBeNull()
   })
 })
