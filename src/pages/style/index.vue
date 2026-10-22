@@ -11,10 +11,12 @@ import Icon from '@/components/Icon.vue'
 import MultiTabs from '@/components/MultiTabs.vue'
 import PageBottomBar from '@/components/PageBottomBar.vue'
 import { useCommand } from '@/components/command/useCommand'
+import { useDismiss } from '@/composables/useDismiss'
 import { usePersistedRef } from '@/composables/usePersisted'
 import { userDir } from '@/cep/fs'
 import { KU_KINDS, KU_TAB_LABELS, type KuFontPreview, type KuKind } from '@/domain/style-library'
 import { useConfirmStore } from '@/stores/confirm'
+import { useFeedbackStore } from '@/stores/feedback'
 import { useStyleLibraryStore } from '@/stores/style-library'
 import type { StyleModifier } from '@/commands/payloads'
 import StyleMenu, { type StyleMenuEntry } from './components/StyleMenu.vue'
@@ -43,16 +45,27 @@ import StyleMenu, { type StyleMenuEntry } from './components/StyleMenu.vue'
  */
 const store = useStyleLibraryStore()
 const confirm = useConfirmStore()
+const feedback = useFeedbackStore()
 const { libraries, loading, error, currentName, warehouses, activeIndex } = storeToRefs(store)
 
 /** 原版 `set.ysShowTab`（`app.v4.js:54657` 起 switchFun 读写它）；我们落 `sj_v5_ui.json`，不动 `sj_set.json` */
 const showTabs = usePersistedRef<boolean[]>('styleShowTab', [true, false, false, false])
 
 /**
- * 仓库下拉是否展开。原版 `f_showDown` 只切本地 `showDown`（`app.v4.js:53754`），
- * 列表内容来自索引 `sj_kuStoreInfo.ini`；点某一项会写索引，属于写能力 → 本段只读展示。
+ * 仓库下拉（原版 warehouse 组件 `app.v4.js:53747-53909`）的交互状态。
+ *
+ * 三个本地态逐个对应原版 data（`:53925-53933`）：
+ * `showDown` → `warehouseOpen`、`showMore` → `hoverIndex`、`showEdit`/`editValue` → `editingIndex`/`editValue`。
+ * 原版靠 `$store.state.showMenu == 1` 做"点空白收起"（`:53785` / `:53960`），我们用 `useDismiss`，
+ * 不新造全局状态。
  */
 const warehouseOpen = ref(false)
+/** hover 到哪一行；-1 = 没有（原版 `showMore`，`mouseenter` 置 i / `mouseleave` 置 -1，`:53794-53799`） */
+const hoverIndex = ref(-1)
+/** 正在改名的那一行；-1 = 没有（原版 `showEdit`） */
+const editingIndex = ref(-1)
+const editValue = ref('')
+const warehouseRoot = ref<HTMLElement | null>(null)
 
 /** 缩略图 `<id>.png` 加载失败的那几项：失败就不再画 `<img>`，只留原版那层 rgba(0,0,0,.3) 底 */
 const brokenThumbs = ref<Set<string>>(new Set())
@@ -75,6 +88,10 @@ const appendGroupToSwatchCmd = useCommand('style.appendGroupToSwatch')
 const addGroupCmd = useCommand('style.addGroup')
 const deleteGroupCmd = useCommand('style.deleteGroup')
 const renameGroupCmd = useCommand('style.renameGroup')
+const selectWarehouseCmd = useCommand('style.selectWarehouse')
+const addWarehouseCmd = useCommand('style.addWarehouse')
+const renameWarehouseCmd = useCommand('style.renameWarehouse')
+const deleteWarehouseCmd = useCommand('style.deleteWarehouse')
 
 const visibleKinds = computed(() => KU_KINDS.filter((_, index) => !!showTabs.value[index]))
 
@@ -454,6 +471,100 @@ async function appendGroupToSwatch(kind: KuKind, groupIndex: number) {
   await appendGroupToSwatchCmd.run({ kind, groupIndex }, '已追加到色板')
 }
 
+// ---------- 仓库下拉：切换 / 改名 / 删除 / 新建 ----------
+
+/** 原版 `initData`（`:53948-53952`）：清 hover 与编辑态 */
+function resetWarehouseEdit() {
+  hoverIndex.value = -1
+  editingIndex.value = -1
+  editValue.value = ''
+}
+
+/** 原版 `f_showDown`（`:53953-53962`）：切 `showDown` 后清 hover/编辑态 */
+function toggleWarehouse() {
+  warehouseOpen.value = !warehouseOpen.value
+  resetWarehouseEdit()
+}
+
+function closeWarehouse() {
+  warehouseOpen.value = false
+  resetWarehouseEdit()
+}
+
+/** 点空白 / Esc 收起（替代原版的全局 `$store.state.showMenu`，见 `useDismiss`） */
+useDismiss(() => warehouseOpen.value, warehouseRoot, closeWarehouse)
+
+/**
+ * 原版 `f_select`（`:53963-53967`）：写 `index` → 通知页面 → 关下拉。
+ * 页面处理器 `selectWarehouse`（`:55008-55011`）写索引后重读四库（`initData`）。
+ */
+async function selectWarehouseRow(index: number) {
+  const ok = await selectWarehouseCmd.run({ index })
+  // 关下拉照原版：无论写成功与否，`f_select` 都会 `showDown = false`
+  closeWarehouse()
+  if (ok) await store.load()
+}
+
+/**
+ * 原版 `f_edit`（`:53989-53992`）：再点同一个图标是取消（`showEdit == -1 ? t : -1`）。
+ * 提交走回车（`f_editEnd`，`:53993-54002`）。
+ */
+function startRenameWarehouse(index: number) {
+  editingIndex.value = editingIndex.value === index ? -1 : index
+  editValue.value = warehouses.value[index]?.name ?? ''
+}
+
+async function submitRenameWarehouse() {
+  const index = editingIndex.value
+  if (index < 0) return
+
+  const name = editValue.value.trim()
+  // 有意偏离：原版 `f_editEnd` 不校验空名，空名会让仓库条整行变空白（命令层也会拒）
+  if (!name) {
+    feedback.warn('仓库名不能为空')
+    return
+  }
+
+  if (await renameWarehouseCmd.run({ index, name }, '已重命名仓库')) {
+    resetWarehouseEdit()
+    await store.load()
+  }
+}
+
+/**
+ * 原版 `f_add`（`:53968-53974`）：追加「未命名分组」后**直接进编辑态**。
+ * 新仓库的下标要等重读完索引才知道，所以先 `load` 再定位末位。
+ */
+async function addWarehouseGroup() {
+  if (!(await addWarehouseCmd.run())) return
+  await store.load()
+  const index = warehouses.value.length - 1
+  editingIndex.value = index
+  editValue.value = warehouses.value[index]?.name ?? ''
+}
+
+/**
+ * 原版 `f_delete`（`:53976-53988`）：只剩一个时 tips「最少保留一个分组哦」，否则确认后删。
+ *
+ * **有意偏离**：原版 `wh.delete` 直接删磁盘上的四个库文件与组图片（`:53329-53356`）；
+ * 这里改成移进 `<用户目录>/.deleted-<时间戳>/`（可恢复），确认文案也照实说明。
+ */
+async function requestDeleteWarehouse(index: number) {
+  if (warehouses.value.length === 1) {
+    feedback.info('最少保留一个分组哦')
+    return
+  }
+
+  const name = warehouses.value[index]?.name ?? ''
+  const ok = await confirm.confirm({
+    title: '确认删除',
+    message: `删除仓库「${name}」？四个库文件与组图片会移到用户目录下的 .deleted-<时间戳> 文件夹，可手动恢复。`,
+  })
+  if (!ok) return
+  // 下拉不关：原版删完仍停在下拉里（`delWarehouseGroup` 只 `initData`，`:54987-54998`）
+  if (await deleteWarehouseCmd.run({ index }, '已删除仓库')) await store.load()
+}
+
 onMounted(() => {
   void store.load()
 })
@@ -461,14 +572,10 @@ onMounted(() => {
 
 <template>
   <div class="style-page">
-    <!-- 原版 warehouse 组件（`app.v4.js:53747-53790`）：行内 16×16 图标 + 蓝色仓库名 + 10×10 箭头，
-         点开是仓库列表（索引 `sj_kuStoreInfo.ini`）。切换仓库要写索引 → 本段只读展示。 -->
-    <div class="style-warehouse">
-      <div
-        class="style-warehouse__row"
-        title="仓库分组，管理样式"
-        @click.stop="warehouseOpen = !warehouseOpen"
-      >
+    <!-- 原版 warehouse 组件（`app.v4.js:53747-53909`）：行内 16×16 图标 + 蓝色仓库名 + 10×10 箭头，
+         点开是仓库列表（索引 `sj_kuStoreInfo.ini`）。整行点击 = 开合下拉（`:53750-53784`）。 -->
+    <div ref="warehouseRoot" class="style-warehouse">
+      <div class="style-warehouse__row" title="仓库分组，管理样式" @click.stop="toggleWarehouse">
         <Icon name="#iconmorencangku" size="md" />
         <p class="style-warehouse__name">{{ currentName }}</p>
         <Icon name="#iconzhankaizhedie" size="xs" class="style-warehouse__arrow" />
@@ -476,15 +583,57 @@ onMounted(() => {
 
       <div v-if="warehouseOpen" class="style-warehouse__down">
         <div class="style-warehouse__down-main">
-          <div v-for="(warehouse, i) in warehouses" :key="i" class="style-warehouse__item">
+          <div
+            v-for="(warehouse, i) in warehouses"
+            :key="i"
+            class="style-warehouse__item"
+            @mouseenter="hoverIndex = i"
+            @mouseleave="hoverIndex = -1"
+            @click.stop="selectWarehouseRow(i)"
+          >
+            <!-- 未选中渲染空 name 占位（原版 `:53808`），这里用 visibility 留出同样的位置 -->
             <Icon
               name="#icongouxuan"
               size="sm"
               class="style-warehouse__check"
               :class="{ 'is-hidden': i !== activeIndex }"
             />
-            <p class="style-warehouse__item-name">{{ warehouse.name }}</p>
+            <!-- 改名：原版 `input.f-space` + `size="3"`，回车提交（`:53823-53854`） -->
+            <input
+              v-if="editingIndex === i"
+              v-model="editValue"
+              class="style-warehouse__input"
+              type="text"
+              size="3"
+              @click.stop
+              @keyup.enter="submitRenameWarehouse"
+            />
+            <p v-else class="style-warehouse__item-name">{{ warehouse.name }}</p>
+            <!-- 右侧操作区：`v-show="i == showMore"`（`:53855-53885`），图标 15px → 用 14px 预设 -->
+            <div v-if="hoverIndex === i" class="style-warehouse__ops">
+              <Icon
+                name="#iconshuru"
+                size="sm"
+                title="重命名"
+                class="style-warehouse__op"
+                @click.stop="startRenameWarehouse(i)"
+              />
+              <Icon
+                name="#iconshanchu"
+                size="sm"
+                title="删除"
+                class="style-warehouse__op"
+                @click.stop="requestDeleteWarehouse(i)"
+              />
+            </div>
           </div>
+        </div>
+
+        <!-- 末尾：`<hr>` + 「创建新分组」（`:53886-53909`） -->
+        <hr class="style-warehouse__hr" />
+        <div class="style-warehouse__item style-warehouse__add" @click.stop="addWarehouseGroup">
+          <Icon name="#iconchuangjian" size="sm" class="style-warehouse__check" />
+          <p class="style-warehouse__item-name">创建新分组</p>
         </div>
       </div>
     </div>

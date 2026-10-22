@@ -167,6 +167,13 @@
   --c-warehouse-panel: #ffffff;
   --c-warehouse-item-text: #000;
   --c-warehouse-item-hover: #ebebeb;
+  /* 行内改名输入框：原版 `.warehouse-downItem input[data-v-47b7c6cb]`
+     `{height:22px;background:#f6f6f6;border:1px solid #c9c9c9;border-radius:2px}` */
+  --c-warehouse-input-bg: #f6f6f6;
+  --c-warehouse-input-border: #c9c9c9;
+  --h-warehouse-input: 22px;
+  /* 下拉末尾分隔线：原版 `hr[data-v-47b7c6cb]{border-top:1px solid #ddd}` */
+  --c-warehouse-divider: #ddd;
 
   /* ---------- 间距阶梯 ---------- */
   --sp-1: 2px;

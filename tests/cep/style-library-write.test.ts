@@ -17,6 +17,7 @@ const fsMock = vi.hoisted(() => ({
 }))
 
 vi.mock('@/cep/fs', () => ({
+  hasNode: () => true,
   userDir: () => 'ROAM/SheJiZhuLi',
   readTextSmart: async (path: string) => fsMock.files.get(path) ?? null,
   writeTextFileAtomic: (path: string, text: string) => {
@@ -27,11 +28,33 @@ vi.mock('@/cep/fs', () => ({
   writeTextFile: (path: string, text: string) => {
     fsMock.files.set(path, text)
   },
+  // 删除仓库把文件移进回收目录：base64 只是"原样搬运"的载体，这里用同一个 Map 存文本即可
+  readBase64File: (path: string) => {
+    const text = fsMock.files.get(path)
+    return text === undefined ? null : Buffer.from(text).toString('base64')
+  },
+  writeBase64File: (path: string, base64: string) => {
+    fsMock.files.set(path, Buffer.from(base64, 'base64').toString('utf8'))
+    return true
+  },
+  removeFile: (path: string) => {
+    fsMock.files.delete(path)
+    return true
+  },
   b64ToUtf8: (b64: string) => Buffer.from(b64, 'base64').toString('utf8'),
 }))
 
-const { styleIndexRepo, addKuGroup, addKuItem, deleteKuItem, sendKuItemToSwatch } =
-  await import('@/cep/data/style-library-repo')
+const {
+  styleIndexRepo,
+  addKuGroup,
+  addKuItem,
+  deleteKuItem,
+  sendKuItemToSwatch,
+  selectWarehouse,
+  addWarehouse,
+  renameWarehouse,
+  deleteWarehouse,
+} = await import('@/cep/data/style-library-repo')
 
 const USER = 'ROAM/SheJiZhuLi'
 const COLOR_LIB = `${USER}/sj_kuColA.ini`
@@ -217,5 +240,183 @@ describe('发送到色板', () => {
     fsMock.failAtomic = true
 
     await expect(sendKuItemToSwatch('color', 0, 0)).rejects.toThrow('色板文件写入失败')
+  })
+})
+
+// ---------- 仓库索引（第 5 段）：原版 `N_` 的 select / add / rename / delete ----------
+
+/** 两个仓库的索引。用工厂：仓库改名是**原地改**，共用一份 fixture 会被前一个用例改脏 */
+function two() {
+  return {
+    index: 1,
+    list: [
+      {
+        name: '默认仓库',
+        color: 'sj_kuColA.json',
+        gradient: 'sj_kuGraA.json',
+        font: 'sj_kuFonA.json',
+        style: 'sj_kuStyA.json',
+      },
+      {
+        name: '客户A',
+        color: 'sj_kuColB.json',
+        gradient: 'sj_kuGraB.json',
+        font: 'sj_kuFonB.json',
+        style: 'sj_kuStyB.json',
+      },
+    ],
+  }
+}
+
+describe('切换仓库（原版 select，app.v4.js:53365-53372）', () => {
+  it('写 index：列表不动，当前项换成点的那一条', async () => {
+    await styleIndexRepo.write(two())
+
+    await selectWarehouse(0)
+
+    const index = await styleIndexRepo.read()
+    expect(index.value.index).toBe(0)
+    expect(index.value.list.map((w) => w.name)).toEqual(['默认仓库', '客户A'])
+  })
+
+  it('越界（负数 / 超过末位 / 正好等于 list.length）一律归 0', async () => {
+    await styleIndexRepo.write(two())
+
+    await selectWarehouse(2) // 原版判 `t > list.length` 会漏过这一条，这里也归 0
+    expect((await styleIndexRepo.read()).value.index).toBe(0)
+
+    await styleIndexRepo.write(two())
+    await selectWarehouse(-1)
+    expect((await styleIndexRepo.read()).value.index).toBe(0)
+  })
+})
+
+describe('新建仓库（原版 add / P_，app.v4.js:53357-53363 / 53284-53293）', () => {
+  it('追加「未命名分组」+ 四个库文件名，四个 guid 互不相同', async () => {
+    await styleIndexRepo.write(INDEX_VALUE)
+
+    await addWarehouse()
+
+    const { list } = (await styleIndexRepo.read()).value
+    expect(list.map((w) => w.name)).toEqual(['默认仓库', '未命名分组'])
+
+    const added = list[1]
+    const prefix = { color: 'Col', gradient: 'Gra', font: 'Fon', style: 'Sty' }
+    for (const kind of ['color', 'gradient', 'font', 'style'] as const) {
+      expect(added[kind]).toMatch(new RegExp(`^sj_ku${prefix[kind]}[0-9A-F]{16}\\.json$`))
+    }
+    // 原版 P_() 里是四次 D_()：四个文件名不是同一个 guid 换前缀
+    const guids = (['color', 'gradient', 'font', 'style'] as const).map((kind) =>
+      String(added[kind]).slice('sj_kuCol'.length, 'sj_kuCol'.length + 16),
+    )
+    expect(new Set(guids).size).toBe(4)
+  })
+})
+
+describe('重命名仓库（原版 rename，:53324-53327）', () => {
+  it('只改 name，其它字段原样保留', async () => {
+    await styleIndexRepo.write(two())
+
+    await renameWarehouse(0, '  我的仓库  ')
+
+    const { list } = (await styleIndexRepo.read()).value
+    expect(list[0].name).toBe('我的仓库')
+    expect(list[0].color).toBe('sj_kuColA.json')
+    expect(list[1].name).toBe('客户A')
+  })
+
+  it('空名 → 抛错，索引一个字节都不动（有意偏离：原版不校验）', async () => {
+    await styleIndexRepo.write(two())
+
+    await expect(renameWarehouse(0, '   ')).rejects.toThrow('仓库名不能为空')
+
+    expect((await styleIndexRepo.read()).value.list[0].name).toBe('默认仓库')
+  })
+})
+
+describe('删除仓库（原版 delete，:53329-53356）', () => {
+  /** 让两个仓库的库文件都在盘上：样式库带组 id + 项 id，渐变库带预览图文件名 */
+  function seedWarehouseFiles() {
+    fsMock.files.set(
+      `${USER}/sj_kuStyA.json`,
+      JSON.stringify([
+        { name: '样式组', show: true, id: 'YSAAA', list: [{ name: '项', id: 'ITEM1' }] },
+      ]),
+    )
+    fsMock.files.set(
+      `${USER}/sj_kuGraA.json`,
+      JSON.stringify([
+        {
+          name: '渐变组',
+          show: true,
+          list: [{ name: '项', gradient: { fileName: 'g1.png' } }],
+        },
+      ]),
+    )
+    fsMock.files.set(`${USER}/sj_kuColA.json`, '[]')
+    fsMock.files.set(`${USER}/sj_kuFonA.json`, '[]')
+    fsMock.files.set(`${USER}/sj_kuColB.json`, '[]')
+    // 组图片 / 组文件 / 渐变预览图（原版 deleteAllGroupFile 会连它们一起删）
+    fsMock.files.set(`${USER}/kuStyle/ITEM1.png`, 'png')
+    fsMock.files.set(`${USER}/kuStyle/YSAAA.psd`, 'psd')
+    fsMock.files.set(`${USER}/Gradient/g1.png`, 'png')
+  }
+
+  it('删索引项 + 修 index（被删项在当前项之前 → -1），磁盘文件移进 .deleted-<时间戳>/', async () => {
+    seedWarehouseFiles()
+    await styleIndexRepo.write(two())
+
+    const result = await deleteWarehouse(0)
+
+    const index = await styleIndexRepo.read()
+    expect(index.value.list.map((w) => w.name)).toEqual(['客户A'])
+    expect(index.value.index).toBe(0) // 原来 1，删掉前面的 0 → -1
+
+    // 四个库文件 + 样式组文件与缩略图 + 渐变预览图都搬到了回收目录（保留原相对路径）
+    expect(result.recycleDir).toMatch(/\/\.deleted-\d+$/)
+    expect(result.moved.sort()).toEqual([
+      'Gradient/g1.png',
+      'kuStyle/ITEM1.png',
+      'kuStyle/YSAAA.psd',
+      'sj_kuColA.json',
+      'sj_kuFonA.json',
+      'sj_kuGraA.json',
+      'sj_kuStyA.json',
+    ])
+    expect(fsMock.files.get(`${result.recycleDir}/sj_kuColA.json`)).toBe('[]')
+    expect(fsMock.files.get(`${result.recycleDir}/kuStyle/YSAAA.psd`)).toBe('psd')
+    // 原件不在了，别的仓库的文件没被碰
+    expect(fsMock.files.has(`${USER}/sj_kuColA.json`)).toBe(false)
+    expect(fsMock.files.has(`${USER}/kuStyle/ITEM1.png`)).toBe(false)
+    expect(fsMock.files.has(`${USER}/sj_kuColB.json`)).toBe(true)
+  })
+
+  it('删当前仓库 → index 归 0', async () => {
+    await styleIndexRepo.write(two())
+
+    await deleteWarehouse(1)
+
+    const index = await styleIndexRepo.read()
+    expect(index.value.list.map((w) => w.name)).toEqual(['默认仓库'])
+    expect(index.value.index).toBe(0)
+  })
+
+  it('只剩一个仓库 → 抛错，索引与文件都不动', async () => {
+    seedWarehouseFiles()
+    await styleIndexRepo.write(INDEX_VALUE)
+
+    await expect(deleteWarehouse(0)).rejects.toThrow('最少保留一个分组哦')
+
+    expect((await styleIndexRepo.read()).value.list).toHaveLength(1)
+    expect(fsMock.files.has(`${USER}/sj_kuColA.json`)).toBe(true)
+    expect([...fsMock.files.keys()].some((path) => path.includes('.deleted-'))).toBe(false)
+  })
+
+  it('下标不存在 → 抛错，不写索引', async () => {
+    await styleIndexRepo.write(two())
+
+    await expect(deleteWarehouse(9)).rejects.toThrow('仓库 9 不存在')
+
+    expect((await styleIndexRepo.read()).value.list).toHaveLength(2)
   })
 })

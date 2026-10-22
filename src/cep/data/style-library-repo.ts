@@ -1,11 +1,21 @@
 // 是什么：样式库的磁盘读写 —— 仓库索引 `sj_kuStoreInfo.ini` + 当前仓库的四个库文件（读 + 写）
-// 唯一入口：四类库文件的读与写只能经过这里；每次写都带 `<文件>.bak` 备份 + 单队列串行
+// 唯一入口：仓库索引 `sj_kuStoreInfo.ini` 与四类库文件的读和写只能经过这里；每次写都带 `<文件>.bak` 备份 + 单队列串行
 // 替代了什么：原版 `N_`（索引，`app.v4.js:53303-53740`）+ `X_/I_/K_/E_`（四库）的 `readToArray` / `updata`
 // 谁在用：`stores/style-library.ts`（读投影）、`commands/style.ts`（写）
 // 禁止：页面/组件不许 import 这里（走 store / 命令）
 
 import { DATA_FILES, USER_DIR } from '@/cep/env'
-import { b64ToUtf8, readTextSmart, userDir, writeTextFile, writeTextFileAtomic } from '@/cep/fs'
+import {
+  b64ToUtf8,
+  hasNode,
+  readBase64File,
+  readTextSmart,
+  removeFile,
+  userDir,
+  writeBase64File,
+  writeTextFile,
+  writeTextFileAtomic,
+} from '@/cep/fs'
 import {
   defaultStyleIndex,
   readKuGroups,
@@ -239,6 +249,21 @@ function itemAt(groups: KuRawGroup[], groupIndex: number, itemIndex: number): Ku
   return item as KuRawGroup
 }
 
+/**
+ * 写索引前的可用性检查（所有索引写操作的唯一入口）。
+ *
+ * 索引**不存在**是首次使用（正常，`read` 给默认值）；索引**存在但读不懂**是损坏 ——
+ * 这时 `fileRepo.update` 会把默认值写回去，用户的仓库列表就被默认值顶掉了
+ * （原件虽在 `.bak`，但用户不该承担这个）。所以这类一律抛。
+ */
+async function usableIndex(): Promise<StyleWarehouseIndex> {
+  const stored = await styleIndexRepo.read()
+  const parsed = readStyleWarehouseIndex(stored.value)
+  const broken = [stored.degraded ?? '', parsed.degraded].filter(Boolean).join('；')
+  if (broken) throw new CepError('PARSE', `仓库索引不可用，已中止写入：${broken}`)
+  return parsed.value
+}
+
 interface KuFileTarget {
   fileName: string
   path: string
@@ -254,12 +279,9 @@ interface KuFileTarget {
  * 这时写下去会把用户的仓库列表换成默认值（原件虽留在 `.bak`，但用户不该承担这个）。
  */
 async function resolveKuFile(kind: KuKind): Promise<KuFileTarget> {
-  const stored = await styleIndexRepo.read()
-  const parsed = readStyleWarehouseIndex(stored.value)
-  const broken = [stored.degraded ?? '', parsed.degraded].filter(Boolean).join('；')
-  if (broken) throw new CepError('PARSE', `仓库索引不可用，已中止写入：${broken}`)
+  const index = await usableIndex()
 
-  const warehouse = parsed.value.list[parsed.value.index]
+  const warehouse = index.list[index.index]
   if (!warehouse) throw new CepError('PARSE', '仓库索引里没有当前仓库')
 
   const existing = fileNameOf(warehouse, kind)
@@ -321,6 +343,213 @@ async function updateKuGroups(kind: KuKind, mutate: (groups: KuRawGroup[]) => vo
       return { index: current.index, list: current.list }
     })
   }
+}
+
+// ---------- 仓库索引：切换 / 新建 / 改名 / 删除 ----------
+//
+// 原版是 `N_` 这个类上的四个方法（`app.v4.js:53323-53372`）：`rename` `:53324-53327`、
+// `delete` `:53329-53356`、`add` `:53357-53363`、`select` `:53365-53372`，每个都以 `updata()` 落盘；
+// 页面处理器在 `:54987-55011`。写索引一律走 `styleIndexRepo`（`fileRepo`：串行队列 + `.bak`）。
+
+/**
+ * 新建仓库条目。原版 `P_(t)`（`app.v4.js:53284-53293`）：
+ * ```js
+ * { name: t, color: "sj_kuCol" + D_() + ".json", gradient: "sj_kuGra" + D_() + ".json",
+ *   font: "sj_kuFon" + D_() + ".json", style: "sj_kuSty" + D_() + ".json" }
+ * ```
+ * 四次 `D_()` 是四个**互不相同**的 16 位大写 hex —— 照抄，不是同一个 guid 拼四种前缀。
+ * 只写索引不建文件：原版也不建，四个库文件在第一次写库时才落盘（`updateKuGroups`）。
+ */
+function createWarehouse(name: string): StyleWarehouse {
+  const warehouse: StyleWarehouse = { name }
+  for (const kind of KU_KINDS) warehouse[kind] = `sj_ku${KU_FILE_PREFIX[kind]}${kuGuid()}.json`
+  return warehouse
+}
+
+/**
+ * 切换当前仓库。原版 `select(t)`（`app.v4.js:53365-53372`）：越界归 0，然后写索引。
+ *
+ * 原版判的是 `t < 0 || t > list.length`，`t == list.length` 会漏过去、指向一个不存在的仓库；
+ * 这里按 `[0, list.length - 1]` 判（**有意偏离**，只是把那个漏判补上）。
+ */
+export async function selectWarehouse(index: number): Promise<void> {
+  await usableIndex()
+  await enqueue(() =>
+    styleIndexRepo.update((value) => {
+      const current = readStyleWarehouseIndex(value).value
+      const valid = Number.isInteger(index) && index >= 0 && index < current.list.length
+      return { ...value, index: valid ? index : 0, list: current.list }
+    }),
+  )
+}
+
+/** 新建仓库。原版 `add()`（`:53357-53363`）：`list.push(P_("未命名分组"))`，名字就是「未命名分组」 */
+export async function addWarehouse(): Promise<void> {
+  await usableIndex()
+  await enqueue(() =>
+    styleIndexRepo.update((value) => {
+      const current = readStyleWarehouseIndex(value).value
+      const list = [...current.list, createWarehouse('未命名分组')]
+      return { ...value, index: current.index, list }
+    }),
+  )
+}
+
+/**
+ * 重命名仓库。原版 `rename(t, e)`（`:53324-53327`）：只改 `name`。
+ *
+ * **有意偏离**：原版不校验空名，空名会让仓库条整行变成空白（名字没了、下拉里也认不出是哪条），
+ * 所以空名直接抛，不写入。
+ */
+export async function renameWarehouse(index: number, name: string): Promise<void> {
+  const warehouseName = name.trim()
+  if (!warehouseName) throw new CepError('PARSE', '仓库名不能为空')
+
+  await usableIndex()
+  await enqueue(() =>
+    styleIndexRepo.update((value) => {
+      const current = readStyleWarehouseIndex(value).value
+      const warehouse = current.list[index]
+      if (!warehouse) throw new CepError('PARSE', `仓库 ${index} 不存在`)
+      warehouse.name = warehouseName
+      return { ...value, index: current.index, list: current.list }
+    }),
+  )
+}
+
+export interface WarehouseDeleteResult {
+  /** 回收目录绝对路径：库文件与组图片按原相对路径放在这里，整个目录拷回用户目录即可恢复 */
+  recycleDir: string
+  /** 已移走的文件（相对用户目录） */
+  moved: string[]
+  /** 没能删掉原件的（副本已在回收目录，原件仍在原位，需人工处理） */
+  failed: string[]
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === 'object' && !Array.isArray(value)
+}
+
+/**
+ * 读某个库文件里的原始组数组。
+ * 读不到 / 不是数组 = 这个库没有可枚举的图片，**不抛**：枚举失败只会留下孤儿文件，不会丢数据，
+ * 而删仓库这件事本身不该被一个读不动的库文件卡住。
+ */
+async function groupsOfFile(fileName: string | undefined): Promise<Record<string, unknown>[]> {
+  if (!fileName) return []
+  const text = await readTextSmart(`${userDir()}/${fileName}`)
+  if (!text) return []
+
+  try {
+    const parsed: unknown = JSON.parse(text)
+    return Array.isArray(parsed) ? parsed.filter(isRecord) : []
+  } catch (e) {
+    log.warn('style', `删除仓库：${fileName} 不是合法 JSON，跳过它的图片文件`, e)
+    return []
+  }
+}
+
+/**
+ * 一个仓库在磁盘上占用的文件（相对用户目录）。清单照原版 `delete`（`:53329-53356`）：
+ * 1. 四个库文件本身 —— `getIndexFullPath(t, kind)`；
+ * 2. 样式库：每组 `<kuStyle>/<组 id>.psd` + 每项 `<kuStyle>/<项 id>.png`
+ *    （`deleteAllGroupFile` → `deleteItemFile`，`:53030-53047` / `:53131-53148`）；
+ * 3. 渐变库：每项的 `<Gradient>/<gradient.fileName>`（`deleteGroupFile`，`:52634-52661`）。
+ *
+ * 原版还会清 `kuStyleTempInfo` 里该组的待删样式清单（`clearDeleteStyleId`，`:53061-53069`）；
+ * 那个临时文件本项目不写（库文件格式契约 §4.4），所以这里没有这一步。
+ */
+async function warehouseFiles(warehouse: StyleWarehouse): Promise<string[]> {
+  const files: string[] = []
+
+  for (const kind of KU_KINDS) {
+    const fileName = fileNameOf(warehouse, kind)
+    if (fileName) files.push(fileName)
+  }
+
+  for (const group of await groupsOfFile(fileNameOf(warehouse, 'style'))) {
+    // 组的 `.psd` 与项的 `.png` 是两条独立清单（原版先 `deleteItemFile(list)` 再删组的 psd），
+    // 组没有 id 时项的缩略图照样要算进来
+    if (typeof group.id === 'string' && group.id) files.push(`kuStyle/${group.id}.psd`)
+
+    const list = Array.isArray(group.list) ? group.list : []
+    for (const item of list) {
+      if (!isRecord(item)) continue
+      if (typeof item.id === 'string' && item.id) files.push(`kuStyle/${item.id}.png`)
+    }
+  }
+
+  for (const group of await groupsOfFile(fileNameOf(warehouse, 'gradient'))) {
+    const list = Array.isArray(group.list) ? group.list : []
+    for (const item of list) {
+      if (!isRecord(item)) continue
+      const gradient = item.gradient
+      if (isRecord(gradient) && typeof gradient.fileName === 'string' && gradient.fileName) {
+        files.push(`Gradient/${gradient.fileName}`)
+      }
+    }
+  }
+
+  return files
+}
+
+/**
+ * 把一个文件**复制**进回收目录。不存在 = 没东西可移（原版 `delete` 对不存在的路径也是静默返回）。
+ * 复制失败抛：这一步在写索引之前，抛出去时索引与原件都还没动。
+ */
+async function copyToRecycle(relative: string, recycleDir: string): Promise<boolean> {
+  const base64 = readBase64File(`${userDir()}/${relative}`)
+  if (base64 === null) return false
+  if (!writeBase64File(`${recycleDir}/${relative}`, base64)) {
+    throw new CepError('IO', `复制到回收目录失败：${recycleDir}/${relative}`)
+  }
+  return true
+}
+
+/**
+ * 删除仓库。原版 `delete(t)`（`:53329-53356`）删索引项 + 修 `index` + **直接删磁盘文件**。
+ *
+ * **有意偏离（安全）**：原版把四个库文件和该仓库下所有组的图片直接 `delete` 掉，误删不可恢复；
+ * 这里改成**移进 `<用户目录>/.deleted-<时间戳>/`**（保留原相对路径），整个目录拷回用户目录即可恢复。
+ * 顺序也是刻意安排的：先复制 → 再写索引 → 最后删原件，任何一步失败都不会两头落空。
+ *
+ * `index` 修正照抄 `:53348-53353`：被删项在当前项之前则 `-1`，等于当前项则归 `0`。
+ */
+export async function deleteWarehouse(index: number): Promise<WarehouseDeleteResult> {
+  // 没有 Node 就移不了文件（索引写本身也会抛 NO_NODE），先拦在门口，别只删索引不搬文件
+  if (!hasNode()) throw new CepError('NO_NODE', 'Node 不可用，无法把仓库文件移到回收目录')
+
+  const current = await usableIndex()
+  const warehouse = current.list[index]
+  if (!warehouse) throw new CepError('PARSE', `仓库 ${index} 不存在`)
+  // 原版只在页面层拦「最少保留一个分组哦」（`f_delete`，`:53978-53987`），这里再拦一道：
+  // 索引里一个仓库都不剩，整个页面读到的就是空列表
+  if (current.list.length === 1) throw new CepError('PARSE', '最少保留一个分组哦')
+
+  const recycleDir = `${userDir()}/.deleted-${Date.now()}`
+  const moved: string[] = []
+  for (const relative of await warehouseFiles(warehouse)) {
+    if (await copyToRecycle(relative, recycleDir)) moved.push(relative)
+  }
+
+  await enqueue(() =>
+    styleIndexRepo.update((value) => {
+      const next = readStyleWarehouseIndex(value).value
+      next.list.splice(index, 1)
+      if (index < next.index) next.index -= 1
+      else if (index === next.index) next.index = 0
+      return { ...value, index: next.index, list: next.list }
+    }),
+  )
+
+  // 索引已经不再引用这些文件，删不掉只会留下孤儿文件 —— 记下来报给调用方，不抛
+  const failed: string[] = []
+  for (const relative of moved) {
+    if (!removeFile(`${userDir()}/${relative}`)) failed.push(relative)
+  }
+  log.info('style', `仓库 ${warehouse.name} 已移入回收目录`, { recycleDir, moved, failed })
+
+  return { recycleDir, moved, failed }
 }
 
 /**

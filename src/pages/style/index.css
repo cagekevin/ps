@@ -102,6 +102,49 @@
   visibility: hidden;
 }
 
+/* 行内改名输入框：原版 `.warehouse-downItem input[data-v-47b7c6cb]`
+   `{height:22px;padding-left:4px;margin-right:4px;background:#f6f6f6;border:1px solid #c9c9c9;
+     border-radius:2px;color:#000}`（render `:53823-53854`）。
+   用原生 input 而不是 GInput：GInput 是带内边距的整块输入框，行内只有 28px 高，套进去会撑高整行。 */
+.style-warehouse__input {
+  flex: 1;
+  min-width: 0;
+  height: var(--h-warehouse-input);
+  margin-right: var(--sp-2);
+  padding-left: var(--sp-2);
+  border: 1px solid var(--c-warehouse-input-border);
+  border-radius: var(--r-sm);
+  background: var(--c-warehouse-input-bg);
+  color: var(--c-warehouse-item-text);
+  font-size: var(--fs-md);
+  box-sizing: border-box;
+  outline: none;
+}
+
+/* 右侧操作区：原版 `.f-baseX.svg-wrap.f-full`，两个 `svg-15` 之间是 `.mr8`（render `:53862-53884`）。
+   `.f-full` = `flex-shrink:0`：名字那一列吃掉剩余宽度，操作区不跟着缩 */
+.style-warehouse__ops {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: var(--sp-4);
+}
+
+/* 原版 `.col-black.cursor` */
+.style-warehouse__op {
+  color: var(--c-warehouse-item-text);
+  cursor: pointer;
+}
+
+/* 末尾分隔线：原版 `hr[data-v-47b7c6cb]{width:calc(100% - 30px);border:0;border-top:1px solid #ddd;
+   margin:6px 15px}` */
+.style-warehouse__hr {
+  width: calc(100% - 30px);
+  margin: var(--sp-3) var(--sp-exact-15);
+  border: 0;
+  border-top: 1px solid var(--c-warehouse-divider);
+}
+
 /* 原版 .switch.f-alignNone.mt10（app.v4.js:49654） */
 .style-tabs {
   flex: 0 0 auto;

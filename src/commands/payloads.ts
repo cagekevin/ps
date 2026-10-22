@@ -431,6 +431,22 @@ export interface StyleReorderItemPayload extends StyleItemRefPayload {
   direction: 'up' | 'down'
 }
 
+// ---------- 样式（/style 第 5 段：仓库切换 / 新建 / 改名 / 删除）----------
+
+/**
+ * 仓库索引 `sj_kuStoreInfo.ini` 上的四个写操作（原版 `N_` 的
+ * `select` / `add` / `rename` / `delete`，`app.v4.js:53324-53372`）。
+ * 只动索引，不动当前仓库的四个库文件。
+ */
+export interface StyleWarehouseIndexPayload {
+  /** 仓库在索引 `list` 里的下标；越界归 0（原版 `select` 同语义，`:53365-53372`） */
+  index: number
+}
+
+export interface StyleRenameWarehousePayload extends StyleWarehouseIndexPayload {
+  name: string
+}
+
 export interface CommandPayloads {
   'font.apply': ApplyFontPayload
   'font.rate': RatePayload
@@ -530,6 +546,14 @@ export interface CommandPayloads {
   'style.sendGroupToSwatch': StyleGroupIndexPayload
   /** 整组追加到色板（原版 `:50269-50290`）：读回 seBan → 逐项 push → 写回 */
   'style.appendGroupToSwatch': StyleGroupIndexPayload
+  /** 切换当前仓库（原版 `N_.select`，`:53365-53372`）：写索引 `index`，越界归 0 */
+  'style.selectWarehouse': StyleWarehouseIndexPayload
+  /** 新建仓库（原版 `N_.add`，`:53357-53363`）：追加一条「未命名分组」，四库文件名各自生成 */
+  'style.addWarehouse': void
+  /** 重命名仓库（原版 `N_.rename`，`:53324-53327`）：只改索引里的 `name` */
+  'style.renameWarehouse': StyleRenameWarehousePayload
+  /** 删除仓库（原版 `N_.delete`，`:53329-53356`）：删索引项 + 修 `index`，磁盘文件移进回收目录 */
+  'style.deleteWarehouse': StyleWarehouseIndexPayload
 
   'legacy.call': LegacyCallPayload
   'cloud.setUrl': CloudSetUrlPayload

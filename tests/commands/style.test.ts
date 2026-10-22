@@ -56,6 +56,7 @@ const store = vi.hoisted(() => {
  * `%APPDATA%` 根（原版 `path.seBan` = `getUserDataPath() + "/FengZiSeBan/userColor.ini"`）。
  */
 vi.mock('@/cep/fs', () => ({
+  hasNode: () => true,
   userDir: () => 'ROAM/SheJiZhuLi',
   readTextSmart: async (path: string) => store.files.get(path) ?? null,
   writeTextFileAtomic: (path: string, text: string) => {
@@ -65,6 +66,19 @@ vi.mock('@/cep/fs', () => ({
   // 备份走普通写（和 fileRepo 一致）
   writeTextFile: (path: string, text: string) => {
     store.files.set(path, text)
+  },
+  // 删除仓库把文件搬进回收目录：base64 只是原样搬运的载体
+  readBase64File: (path: string) => {
+    const text = store.files.get(path)
+    return text === undefined ? null : Buffer.from(text).toString('base64')
+  },
+  writeBase64File: (path: string, base64: string) => {
+    store.files.set(path, Buffer.from(base64, 'base64').toString('utf8'))
+    return true
+  },
+  removeFile: (path: string) => {
+    store.files.delete(path)
+    return true
   },
   b64ToUtf8: (b64: string) => Buffer.from(b64, 'base64').toString('utf8'),
 }))
@@ -712,5 +726,81 @@ describe('style.appendGroupToSwatch（原版 :50269-50290）', () => {
       { name: 'a', color: { hex: '111111' } },
       { name: 'b', color: { hex: '222222' } },
     ])
+  })
+})
+
+// ---------- 第 5 段：仓库（只动索引 sj_kuStoreInfo.ini）----------
+
+/** 两条仓库的索引（beforeEach 只写了一条） */
+async function seedTwoWarehouses() {
+  await styleIndexRepo.write({
+    index: 0,
+    list: [
+      { name: '默认仓库', color: 'sj_kuColA.ini', gradient: 'sj_kuGraA.ini' },
+      { name: '客户A', color: 'sj_kuColB.ini', gradient: 'sj_kuGraB.ini' },
+    ],
+  })
+}
+
+describe('style.selectWarehouse（原版 select，:53365-53372）', () => {
+  it('写索引 index；越界归 0（含 == list.length 这条原版漏判）', async () => {
+    await seedTwoWarehouses()
+
+    await expect(execute('style.selectWarehouse', { index: 1 })).resolves.toEqual({ ok: true })
+    expect((await styleIndexRepo.read()).value.index).toBe(1)
+
+    await expect(execute('style.selectWarehouse', { index: 2 })).resolves.toEqual({ ok: true })
+    expect((await styleIndexRepo.read()).value.index).toBe(0)
+  })
+})
+
+describe('style.addWarehouse（原版 add / P_，:53357-53363）', () => {
+  it('追加一条「未命名分组」，四个库文件名各自生成', async () => {
+    await expect(execute('style.addWarehouse')).resolves.toEqual({ ok: true })
+
+    const { list } = (await styleIndexRepo.read()).value
+    expect(list).toHaveLength(2)
+    expect(list[1].name).toBe('未命名分组')
+    expect(list[1].color).toMatch(/^sj_kuCol[0-9A-F]{16}\.json$/)
+    expect(list[1].style).toMatch(/^sj_kuSty[0-9A-F]{16}\.json$/)
+  })
+})
+
+describe('style.renameWarehouse（原版 rename，:53324-53327）', () => {
+  it('空名 → ok:false，索引不变（有意偏离：原版不校验）', async () => {
+    const result = await execute('style.renameWarehouse', { index: 0, name: '  ' })
+
+    expect(result.ok).toBe(false)
+    expect(result.ok === false && result.reason).toContain('仓库名不能为空')
+    expect((await styleIndexRepo.read()).value.list[0].name).toBe('默认仓库')
+  })
+
+  it('正常改名写进索引', async () => {
+    await expect(execute('style.renameWarehouse', { index: 0, name: '客户B' })).resolves.toEqual({
+      ok: true,
+    })
+    expect((await styleIndexRepo.read()).value.list[0].name).toBe('客户B')
+  })
+})
+
+describe('style.deleteWarehouse（原版 delete，:53329-53356）', () => {
+  it('只剩一个仓库 → ok:false「最少保留一个分组哦」，索引不变', async () => {
+    const result = await execute('style.deleteWarehouse', { index: 0 })
+
+    expect(result.ok).toBe(false)
+    expect(result.ok === false && result.reason).toBe('最少保留一个分组哦')
+    expect((await styleIndexRepo.read()).value.list).toHaveLength(1)
+  })
+
+  it('两个仓库时删掉一个：索引少一条，库文件移进 .deleted- 目录（不硬删）', async () => {
+    await seedTwoWarehouses()
+    store.files.set(`${USER}/sj_kuColA.ini`, '[]')
+
+    await expect(execute('style.deleteWarehouse', { index: 0 })).resolves.toEqual({ ok: true })
+
+    expect((await styleIndexRepo.read()).value.list.map((w) => w.name)).toEqual(['客户A'])
+    expect(store.files.has(`${USER}/sj_kuColA.ini`)).toBe(false)
+    const recycled = [...store.files.keys()].filter((path) => path.includes('/.deleted-'))
+    expect(recycled).toContainEqual(expect.stringMatching(/\/\.deleted-\d+\/sj_kuColA\.ini$/))
   })
 })

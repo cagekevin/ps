@@ -1,16 +1,20 @@
 import {
   addKuGroup,
   addKuItem,
+  addWarehouse,
   appendKuGroupToSwatch,
   appendKuItemToSwatch,
   deleteKuGroup,
   deleteKuItem,
+  deleteWarehouse,
   moveKuItem,
   readKuGroupId,
   readKuItem,
   renameKuGroup,
   renameKuItem,
+  renameWarehouse,
   replaceKuItem,
+  selectWarehouse,
   sendKuGroupToSwatch,
   sendKuItemToSwatch,
   setKuGroupShow,
@@ -22,20 +26,21 @@ import { defineCommand } from './registry'
 import type { Command } from './types'
 
 /**
- * 样式域命令（`/style` 第 2 段 + 第 3 段）。
+ * 样式域命令（`/style` 第 2 段 + 第 3 段 + 第 5 段）。
  *
- * 分三类：
+ * 分四类：
  * - **应用**（改 PS 文档）：颜色 / 渐变 / 字体 / 图层样式 → `ctx.jsx.style`（字体走 `ctx.jsx.font`）
  * - **添加**（从 PS 读回本地库）：前景色 / 渐变 / 字体属性 / 图层样式 → 读 jsx + 追加到库文件
  * - **编辑**（只动本地库文件）：分组 / 项的增删改、排序、发送到色板 → `cep/data/style-library-repo`
+ * - **仓库**（只动仓库索引 `sj_kuStoreInfo.ini`）：切换 / 新建 / 改名 / 删除 → 同上，命令层只转参数
  *
- * 编辑类不需要选区（`requires: 'none'`）：它们不碰 PS，改的是磁盘上的库文件。
+ * 编辑类与仓库类不需要选区（`requires: 'none'`）：它们不碰 PS，改的是磁盘上的库文件与索引。
  * 写库的备份、串行队列、索引补登记全在 repo 里，命令层只做参数校验与调用。
  *
  * 本期仍不做：吸色到组（`Tool_set("eyedropperTool")` + PS 事件 `1936028772`，`app.v4.js:50299-50302`，
  * 台账 T-66；菜单项已渲染但置灰）、
- * 拖图片取色（`exportCurrentLayerToImage`，`:54639`）、仓库发送/移动、四类库与 `.kux` 的导入导出、
- * 项拖拽排序（右键菜单只做上移/下移）。
+ * 拖图片取色（`exportCurrentLayerToImage`，`:54639`）、仓库发送/移动（T-65）、
+ * 四类库与 `.kux` 的导入导出、项拖拽排序（右键菜单只做上移/下移）。
  *
  * **jsx 返回结构全部未实测**（jsxbin 是字节码，符号不可读）。每条命令的返回值语义标了 UNVERIFIED，
  * 因此：只判空、判 `err`，绝不读 `data` 里的具体字段。
@@ -366,6 +371,59 @@ export const styleCommands: Command<unknown>[] = [
     async run(_ctx, { kind, groupIndex }) {
       // 原版 `:50269-50290`：读回 → 逐项 push 该组 `list` → 写回
       await appendKuGroupToSwatch(kind, groupIndex)
+    },
+  }),
+
+  // ---------- 第 5 段：仓库（只动索引 `sj_kuStoreInfo.ini`）----------
+  // 页面处理器对照原版 `:54987-55011`。切仓库后要重读四库，那是页面/store 的事
+  // （`readStyleLibrary` 只读当前仓库），命令只管写索引。
+
+  defineCommand({
+    id: 'style.selectWarehouse',
+    title: '切换仓库',
+    group: 'style',
+    requires: 'none',
+    kind: 'instant',
+    async run(_ctx, { index }) {
+      // 原版 `select(t)`（`:53365-53372`）：越界归 0，然后 `updata()` 落盘
+      await selectWarehouse(index)
+    },
+  }),
+
+  defineCommand({
+    id: 'style.addWarehouse',
+    title: '新建仓库',
+    group: 'style',
+    requires: 'none',
+    kind: 'instant',
+    async run() {
+      // 原版 `add()`（`:53357-53363`）：追加一条「未命名分组」+ 四个库文件名
+      await addWarehouse()
+    },
+  }),
+
+  defineCommand({
+    id: 'style.renameWarehouse',
+    title: '重命名仓库',
+    group: 'style',
+    requires: 'none',
+    kind: 'instant',
+    async run(_ctx, { index, name }) {
+      // 原版 `rename(t, e)`（`:53324-53327`）；空名在 repo 层被拒（有意偏离，见那里的注释）
+      await renameWarehouse(index, name)
+    },
+  }),
+
+  defineCommand({
+    id: 'style.deleteWarehouse',
+    title: '删除仓库',
+    group: 'style',
+    requires: 'none',
+    kind: 'instant',
+    async run(_ctx, { index }) {
+      // 原版 `delete(t)`（`:53329-53356`）直接删磁盘文件；这里移进 `<用户目录>/.deleted-<时间戳>/`
+      // （有意偏离，可恢复），回收目录由 repo 写进日志
+      await deleteWarehouse(index)
     },
   }),
 ]

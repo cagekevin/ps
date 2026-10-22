@@ -6,6 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { setPref } from '@/cep/data/settings'
 import { decodeText } from '@/domain/translate'
 import type { KuGroup, KuKind } from '@/domain/style-library'
+import { useFeedbackStore } from '@/stores/feedback'
 
 /**
  * 三态测试：加载 / 空库 / 读失败（含重试）；第 2 段再加"应用/添加经 useCommand 接线"；
@@ -30,6 +31,10 @@ const repo = vi.hoisted(() => ({
   renameGroup: vi.fn(),
   deleteGroup: vi.fn(),
   setKuGroupShow: vi.fn(),
+  selectWarehouse: vi.fn(),
+  addWarehouse: vi.fn(),
+  renameWarehouse: vi.fn(),
+  deleteWarehouse: vi.fn(),
   indexRepo: { read: vi.fn() },
 }))
 
@@ -49,6 +54,10 @@ vi.mock('@/cep/data/style-library-repo', () => ({
   renameKuGroup: repo.renameGroup,
   deleteKuGroup: repo.deleteGroup,
   setKuGroupShow: repo.setKuGroupShow,
+  selectWarehouse: repo.selectWarehouse,
+  addWarehouse: repo.addWarehouse,
+  renameWarehouse: repo.renameWarehouse,
+  deleteWarehouse: repo.deleteWarehouse,
   styleIndexRepo: repo.indexRepo,
 }))
 
@@ -135,6 +144,10 @@ beforeEach(() => {
   repo.renameGroup.mockResolvedValue(undefined)
   repo.deleteGroup.mockResolvedValue(undefined)
   repo.setKuGroupShow.mockResolvedValue(undefined)
+  repo.selectWarehouse.mockResolvedValue(undefined)
+  repo.addWarehouse.mockResolvedValue(undefined)
+  repo.renameWarehouse.mockResolvedValue(undefined)
+  repo.deleteWarehouse.mockResolvedValue(undefined)
   // 命令层与 store 都会读索引；不返回真索引会走"读失败"分支，渲染不出库
   repo.indexRepo.read.mockResolvedValue({
     value: { index: 0, list: [{ name: '我的样式仓库' }] },
@@ -685,14 +698,17 @@ describe('仓库条（原版 warehouse 组件 data-v-47b7c6cb，清单 #71 #72 #
     await wrapper.find('.style-warehouse__row').trigger('click')
     await flushPromises()
 
-    expect(wrapper.findAll('.style-warehouse__item-name').map((n) => n.text())).toEqual([
+    // 末尾那行是「创建新分组」（原版 `:53886-53909`），不是仓库
+    const rows = wrapper.findAll('.style-warehouse__item')
+    expect(rows.map((row) => row.find('.style-warehouse__item-name').text())).toEqual([
       '默认仓库',
       '客户A',
+      '创建新分组',
     ])
 
-    // 原版每行都渲染一个 svg-14：选中是勾，其余留空位对齐
+    // 原版每行都渲染一个 svg-14：选中是勾，其余留空位对齐（末尾那行也有一个创建图标）
     const checks = wrapper.findAll('.style-warehouse__check')
-    expect(checks).toHaveLength(2)
+    expect(checks).toHaveLength(3)
     expect(checks[0].classes()).toContain('is-hidden')
     expect(checks[1].classes()).not.toContain('is-hidden')
   })
@@ -1390,5 +1406,176 @@ describe('添加按钮不被项的 hover 边框规则连带（原版 .add-svg:ho
     const add = rule('.style-item__add:hover')
     expect(add).toContain('background: var(--c-font-btn-hover)')
     expect(add).not.toContain('border')
+  })
+})
+
+// ---------- 第 5 段：仓库下拉真正可用（切 / 改名 / 删 / 新建 / 点空白收起）----------
+
+describe('样式页第 5 段：仓库下拉', () => {
+  const mounted: Array<ReturnType<typeof mount>> = []
+
+  afterEach(() => {
+    for (const wrapper of mounted.splice(0)) wrapper.unmount()
+    document.body.innerHTML = ''
+  })
+
+  /** 两个仓库的快照：切换 / 删除都要有多条才有意义 */
+  function twoWarehouses(names = ['默认仓库', '客户A']) {
+    return {
+      index: { index: 0, list: names.map((name) => ({ name })) },
+      libraries: libraries(),
+      degraded: '',
+    }
+  }
+
+  /** 页面 + ConfirmHost（删除仓库走 `useConfirmStore` → `ConfirmHost` 里的 CepModal） */
+  function mountWithConfirm() {
+    const page = mount(StylePage, { global: { plugins: [pinia] } })
+    const host = mount(ConfirmHost, { global: { plugins: [pinia] } })
+    mounted.push(page, host)
+    return page
+  }
+
+  async function openDrop(page: ReturnType<typeof mountWithConfirm>) {
+    await page.find('.style-warehouse__row').trigger('click')
+    await flushPromises()
+  }
+
+  /** hover 第 i 行 → 操作区出现（原版 `mouseenter` 置 `showMore`，`:53794-53799`） */
+  async function hoverRow(page: ReturnType<typeof mountWithConfirm>, i: number) {
+    await page.findAll('.style-warehouse__item')[i].trigger('mouseenter')
+    await flushPromises()
+  }
+
+  it('点下拉行 → 写索引（切仓库）+ 重读四库 + 关下拉', async () => {
+    repo.read.mockResolvedValue(twoWarehouses())
+    const page = mountWithConfirm()
+    await flushPromises()
+    await openDrop(page)
+    const readsBefore = repo.read.mock.calls.length
+
+    await page.findAll('.style-warehouse__item')[1].trigger('click')
+    await flushPromises()
+
+    expect(repo.selectWarehouse).toHaveBeenCalledWith(1)
+    // 切完仓库要重读四个库（原版 `selectWarehouse` → `initData`，`:55008-55011`）
+    expect(repo.read.mock.calls.length).toBeGreaterThan(readsBefore)
+    expect(page.find('.style-warehouse__down').exists()).toBe(false)
+  })
+
+  it('hover 出「重命名」→ 变输入框 → 回车提交写索引 name', async () => {
+    repo.read.mockResolvedValue(twoWarehouses())
+    const page = mountWithConfirm()
+    await flushPromises()
+    await openDrop(page)
+
+    // 没 hover 时操作区不渲染（原版 v-show="i == showMore"）
+    expect(page.find('.style-warehouse__ops').exists()).toBe(false)
+
+    await hoverRow(page, 1)
+    const ops = page.findAll('.style-warehouse__ops')
+    expect(ops).toHaveLength(1)
+    expect(ops[0].findAll('.style-warehouse__op')).toHaveLength(2)
+
+    await ops[0].findAll('.style-warehouse__op')[0].trigger('click')
+    await flushPromises()
+
+    const input = page.find('.style-warehouse__input')
+    expect(input.exists()).toBe(true)
+    expect((input.element as HTMLInputElement).value).toBe('客户A')
+
+    await input.setValue('客户B')
+    await input.trigger('keyup.enter')
+    await flushPromises()
+
+    expect(repo.renameWarehouse).toHaveBeenCalledWith(1, '客户B')
+    expect(page.find('.style-warehouse__input').exists()).toBe(false)
+  })
+
+  it('空名回车 → 不写索引，提示「仓库名不能为空」（有意偏离：原版不校验）', async () => {
+    repo.read.mockResolvedValue(twoWarehouses())
+    const page = mountWithConfirm()
+    await flushPromises()
+    await openDrop(page)
+    await hoverRow(page, 0)
+    await page.find('.style-warehouse__op').trigger('click')
+    await flushPromises()
+
+    await page.find('.style-warehouse__input').setValue('   ')
+    await page.find('.style-warehouse__input').trigger('keyup.enter')
+    await flushPromises()
+
+    expect(repo.renameWarehouse).not.toHaveBeenCalled()
+    const feedback = useFeedbackStore()
+    expect(feedback.toasts.map((t) => t.text)).toContain('仓库名不能为空')
+    // 输入框还在，用户可以接着改
+    expect(page.find('.style-warehouse__input').exists()).toBe(true)
+  })
+
+  it('只剩一个仓库 → 不删、不弹确认，tips「最少保留一个分组哦」（原版 f_delete :53978-53987）', async () => {
+    repo.read.mockResolvedValue(twoWarehouses(['唯一仓库']))
+    const page = mountWithConfirm()
+    await flushPromises()
+    await openDrop(page)
+    await hoverRow(page, 0)
+
+    const ops = page.findAll('.style-warehouse__op')
+    await ops[1].trigger('click')
+    await flushPromises()
+
+    expect(repo.deleteWarehouse).not.toHaveBeenCalled()
+    expect(document.querySelector('.modal')).toBeNull()
+    const feedback = useFeedbackStore()
+    expect(feedback.toasts.map((t) => t.text)).toContain('最少保留一个分组哦')
+  })
+
+  it('两个仓库时删：二次确认后才写索引（确认文案写明文件进回收目录）', async () => {
+    repo.read.mockResolvedValue(twoWarehouses())
+    const page = mountWithConfirm()
+    await flushPromises()
+    await openDrop(page)
+    await hoverRow(page, 0)
+
+    await page.findAll('.style-warehouse__op')[1].trigger('click')
+    await flushPromises()
+
+    const modal = document.querySelector<HTMLElement>('.modal')
+    expect(modal).not.toBeNull()
+    expect(modal?.textContent).toContain('.deleted-')
+    expect(repo.deleteWarehouse).not.toHaveBeenCalled()
+
+    document.querySelector<HTMLElement>('.modal__btn.is-primary')?.click()
+    await flushPromises()
+
+    expect(repo.deleteWarehouse).toHaveBeenCalledWith(0)
+  })
+
+  it('「创建新分组」→ 新建仓库后直接进入编辑态（原版 f_add :53968-53974）', async () => {
+    repo.read.mockResolvedValueOnce(twoWarehouses())
+    repo.read.mockResolvedValue(twoWarehouses(['默认仓库', '客户A', '未命名分组']))
+    const page = mountWithConfirm()
+    await flushPromises()
+    await openDrop(page)
+
+    await page.find('.style-warehouse__add').trigger('click')
+    await flushPromises()
+
+    expect(repo.addWarehouse).toHaveBeenCalled()
+    const input = page.find('.style-warehouse__input')
+    expect(input.exists()).toBe(true)
+    expect((input.element as HTMLInputElement).value).toBe('未命名分组')
+  })
+
+  it('点空白收起（用 useDismiss，不新造全局状态）', async () => {
+    repo.read.mockResolvedValue(twoWarehouses())
+    const page = mountWithConfirm()
+    await flushPromises()
+    await openDrop(page)
+    expect(page.find('.style-warehouse__down').exists()).toBe(true)
+
+    document.body.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+    await flushPromises()
+
+    expect(page.find('.style-warehouse__down').exists()).toBe(false)
   })
 })
