@@ -146,6 +146,25 @@ export function removeFile(absPath: string): boolean {
  * 这样即使 manifest 少配了 --enable-nodejs，读数据文件也不会全废。
  */
 /**
+ * 写「用户自己选的路径」的导出文件。
+ *
+ * 为什么不用通用的 `writeTextFile`：AGENTS.md §17 的判据是
+ * `grep -rn "readTextFile\|writeTextFile" src/pages src/commands` 必须为 0——
+ * 通用写只给 data 层用；命令层要往用户选的路径写导出文件，走这个窄入口。
+ *
+ * 原子写：先写 `.tmp` 再改名，避免写到一半崩溃留下半截 JSON。
+ * 失败抛（NO_NODE / 磁盘错）——不许假装写成功。
+ */
+export function saveExportedText(absPath: string, text: string): void {
+  const fs = nodeRequire('fs')
+  const path = nodeRequire('path')
+  fs.mkdirSync(path.dirname(absPath), { recursive: true })
+  const tmp = `${absPath}.tmp`
+  fs.writeFileSync(tmp, text, 'utf8')
+  fs.renameSync(tmp, absPath)
+}
+
+/**
  * 原子写：先写 .tmp 再改名，避免写到一半崩溃留下半截 JSON。
  * Node 不可用时返回 false，调用方退回普通写。
  */
@@ -172,6 +191,31 @@ export async function readTextViaJsx(absPath: string): Promise<string | null> {
     const raw = await evalScriptRaw(script, 15000)
     if (raw.startsWith(ERR_PREFIX)) return null
     return raw
+  } catch {
+    return null
+  }
+}
+
+/**
+ * PS 的 `Presets/Scripts` 目录（写 jsx 脚本用）。
+ *
+ * UNVERIFIED: 路径解析策略未在真机确认。原版走 `copyToScripts`（`docs/页面/08-设置.md:372-386`），
+ * 我们复刻同一路径：`app.version` 拼 `~/Documents/Adobe/Adobe Photoshop <版本>/Presets/Scripts`，
+ * 找不到就返回 null——调用方必须报错，**不许静默跳过**。
+ */
+export async function psScriptsDir(): Promise<string | null> {
+  if (!hasCep()) return null
+  const script =
+    `(function(){try{` +
+    `var __v = app.version;` +
+    `var __base = Folder.desktop.parent;` +
+    `var __s = new Folder(__base.fsName + "/Adobe/Adobe Photoshop " + __v + "/Presets/Scripts");` +
+    `return __s.fsName;}` +
+    `catch(e){return '${ERR_PREFIX}' + ((e && e.message) ? e.message : String(e));}})()`
+  try {
+    const raw = await evalScriptRaw(script, 15000)
+    if (raw.startsWith(ERR_PREFIX)) return null
+    return toPosix(raw)
   } catch {
     return null
   }

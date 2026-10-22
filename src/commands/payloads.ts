@@ -41,6 +41,24 @@ export interface ToggleTagPayload {
   family: string
 }
 
+/**
+ * 导入标签（原版 `vg()` 的 Import 模式）。
+ *
+ * `onConfirm` 在**校验通过之后、落盘之前**调用；返回 false = 取消，一个字都不写。
+ */
+export interface FontImportTagsPayload {
+  onConfirm?: (summary: { tags: number; stars: number; starsReplaced: boolean }) => Promise<boolean>
+}
+
+/**
+ * 导出标签（原版 `vg()` 的 Export 模式）。
+ *
+ * `onConfirm` 在**弹保存对话框之前**调用（原文案提醒「不包含字体文件」）。
+ */
+export interface FontExportTagsPayload {
+  onConfirm?: () => Promise<boolean>
+}
+
 export interface CallActionPayload {
   group: string
   name: string
@@ -177,6 +195,13 @@ export interface FreePanelSetBlockPayload {
   height?: string
 }
 
+export type ShortcutScriptGroup = '左侧栏' | '框架模板' | '常用功能' | '字体面板' | '批量套版'
+
+export interface ShortcutScriptsPayload {
+  /** 要生成 jsx 的快捷键分组；文件名 `SJZL-<组名>.jsx`（原版命名规则，`08-设置.md:349`） */
+  groups: ShortcutScriptGroup[]
+}
+
 export interface LegacyCallPayload {
   key: string
   args: unknown[]
@@ -199,6 +224,23 @@ export interface CloudUploadPayload {
 
 export interface CloudDownloadPayload {
   onConfirm?: (diff: import('@/domain/cloud').SyncDiff) => Promise<boolean>
+}
+
+// ---------- 自定义（/custom）----------
+
+/**
+ * 一次生成请求。
+ *
+ * UNVERIFIED: 原版 jsx 的参数形状未实测（`docs/页面/04-自定义.md:60-62`），
+ * 这里按"页面全部状态打成一个对象"推断。字段定义见 `cep/jsx/types.ts` 的 `CustomRequest`。
+ */
+export interface CustomGeneratePayload {
+  request: import('@/cep/jsx/types').CustomRequest
+}
+
+/** 合并矩形：与生成共用一份请求 */
+export interface CustomMergeRectanglesPayload {
+  request: import('@/cep/jsx/types').CustomRequest
 }
 
 // ---------- 字体面板（/fontSet）----------
@@ -278,6 +320,92 @@ export interface FontSetHierarchyPresetPayload {
   index?: number
   /** save / create 时的 6 级字号；页面当前值由页面传入，命令不猜 */
   levels?: number[]
+}
+
+// ---------- 常用页（/commonUse）----------
+
+/**
+ * 缩放。`scale` 是倍数（>100 放大，<100 缩小）。
+ * 预设倍率见 `commands/commonUse.ts` 的 `ENLARGE_PRESETS` 等常量。
+ */
+export interface CommonUseZoomPayload {
+  scale: number
+}
+
+/** 翻转 6 向：左右 / 上下 / 左 / 右 / 下 / 上 */
+export interface CommonUseFlipPayload {
+  direction: '左右' | '上下' | '左' | '右' | '下' | '上'
+}
+
+/**
+ * 嵌入图片的开关集合（原版 comembed 的 4 个勾选 + 3 选 1 单选）。
+ * 字段名沿用原版语义；UNVERIFIED：jsx 侧的实际参数形状未实测。
+ */
+export interface CommonUseEmbedOptions {
+  /** 拖入图片自动嵌入图片 */
+  autoEmbedOnDrop?: boolean
+  /** 粘贴图片自动嵌入图片 */
+  autoEmbedOnPaste?: boolean
+  /** 使用剪贴蒙版时自动嵌入图片 */
+  autoEmbedOnClipboardMask?: boolean
+  /** 嵌入时是否存链接对象：none / original / sameFolder */
+  linkMode?: 'none' | 'original' | 'sameFolder'
+  /** 嵌入时删除下一图层 */
+  deleteNextLayer?: boolean
+  /** 拖入图片转成链接智能对象 */
+  linkSmartObject?: boolean
+}
+
+/** 嵌入图片命令的 payload */
+export interface CommonUseEmbedPayload {
+  options: CommonUseEmbedOptions
+}
+
+/** 导入多图片 */
+export interface CommonUseImportPayload {
+  paths: string[]
+}
+
+/** 批量优化文档的三个开关（原版 comoptimization） */
+export interface CommonUseOptimizeOptions {
+  /** 优化所有智能对象图层 */
+  optimizeAll?: boolean
+  /** 删除所有空图层 */
+  deleteAllEmpty?: boolean
+  /** 删除所有隐藏图层 */
+  deleteAllHide?: boolean
+}
+
+export interface CommonUseOptimizePayload {
+  options: CommonUseOptimizeOptions
+  /** 参与优化的图层数，用于进度文案「正在优化文档：i/n」 */
+  total?: number
+}
+
+/**
+ * 自定义变换的 7 个参数。
+ * 顺序与原版一致（`docs/页面/05-常用.md:57`）：
+ * `[number, angle, leftRigth, topBottom, pointIndex, scale, opacity]`。
+ */
+export interface CommonUseTransformPayload {
+  params: [number, number, string, string, number, number, number]
+}
+
+/** 参考线动作：开关 / 清除 / 切片 / 安全区 */
+export interface CommonUseReferencePayload {
+  action: 'toggle' | 'clear' | 'slice' | 'safeArea'
+  options?: unknown
+}
+
+/** 按间距分布：`[t, width, mode]`（`docs/页面/05-常用.md:63`） */
+export interface CommonUseDistributePayload {
+  params: [number, number, number]
+}
+
+/** 导出图片：first = 一级图层，second = 二级图层，image = 单张导出 */
+export interface CommonUseExportPayload {
+  mode: 'image' | 'first' | 'second'
+  options?: unknown
 }
 
 // ---------- 重命名（/rename）----------
@@ -481,6 +609,13 @@ export interface CommandPayloads {
   'font.toggleTag': ToggleTagPayload
   /** 无参数 */
   'font.refreshList': void
+  /**
+   * 导入标签（原版 `vg()` 的 Import 模式）：覆盖写 `sj_ztglTags.ini`，
+   * 文件里带评分时一并覆盖 `sj_ztglStar.ini`。
+   */
+  'font.importTags': FontImportTagsPayload
+  /** 导出标签（原版 `vg()` 的 Export 模式）：只导出标签与评分，不含字体文件 */
+  'font.exportTags': FontExportTagsPayload
 
   'fontSet.align': FontSetAlignPayload
   'fontSet.alignHorizontal': void
@@ -597,11 +732,33 @@ export interface CommandPayloads {
   /** 导出当前仓库（`.kux`，`store.index = 0`） */
   'style.exportKuCurrent': void
 
+  /** 写快捷键脚本到用户目录 `快捷键脚本/`（原版 manualCopy，`08-设置.md:336`） */
+  'system.manualCopyShortcut': ShortcutScriptsPayload
+  /** 同一批脚本写到 PS 的 `Presets/Scripts`（原版 copyToScripts，`08-设置.md:372-386`） */
+  'system.copyToScripts': ShortcutScriptsPayload
+  /** 重新生成配置文件（原版 resetQuickKey，`08-设置.md:368-370`） */
+  'system.resetQuickKeys': ShortcutScriptsPayload
+
+  'commonUse.zoom': CommonUseZoomPayload
+  'commonUse.flip': CommonUseFlipPayload
+  'commonUse.embedImage': CommonUseEmbedPayload
+  'commonUse.importMultipleImages': CommonUseImportPayload
+  'commonUse.optimizeDoc': CommonUseOptimizePayload
+  'commonUse.transform': CommonUseTransformPayload
+  'commonUse.referenceLines': CommonUseReferencePayload
+  'commonUse.distribute': CommonUseDistributePayload
+  'commonUse.exportImages': CommonUseExportPayload
+  'commonUse.openExportFolder': void
+  'commonUse.swapWireframeFill': void
+
   'legacy.call': LegacyCallPayload
   'cloud.setUrl': CloudSetUrlPayload
   'cloud.setAutoSync': CloudSetAutoSyncPayload
   'cloud.upload': CloudUploadPayload
   'cloud.download': CloudDownloadPayload
+
+  'custom.generate': CustomGeneratePayload
+  'custom.mergeRectangles': CustomMergeRectanglesPayload
 }
 
 export type CommandId = keyof CommandPayloads

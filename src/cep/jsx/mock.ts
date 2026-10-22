@@ -177,5 +177,64 @@ export function createMockJsx(): JsxPort {
         return { err: 0, data: null }
       },
     },
+
+    custom: {
+      checkStatus: async (request) => {
+        log.info('mock', 'zdy_checkStatus', request)
+        return { err: 0, data: null }
+      },
+      checkMergeRectangles: async (request) => {
+        log.info('mock', 'zdy_checkMergeRectangles', request)
+        return { err: 0, data: null }
+      },
+      mergeRectangles: async (request) => {
+        log.info('mock', 'zdy_mergeRectangles', request)
+        return { err: 0, data: null }
+      },
+      generate: async (request) => {
+        log.info('mock', 'zdy_generate', request)
+        return { err: 0, data: null }
+      },
+    },
+
+    // 常用页域：参数形状与返回结构都未实测，mock 只保证"调用不炸、能看出走到哪一步"
+    commonUse: {
+      zoom: async (scale) => {
+        log.info('mock', 'cy_zoom', scale)
+        return null
+      },
+      flip: async (direction) => {
+        log.info('mock', 'cy_flipLayer', direction)
+        return null
+      },
+      embedImage: async (options) => {
+        log.info('mock', 'cy_embedImage', options)
+        return null
+      },
+      importMultipleImages: async (paths) => {
+        log.info('mock', 'cy_importMultipleImage', paths)
+        return null
+      },
+      optimizeDoc: async (options) => {
+        log.info('mock', 'cy_batchOptimizeDoc', options)
+        return null
+      },
+      transform: async (params) => {
+        log.info('mock', 'cy_customTransform', params)
+        return null
+      },
+      referenceLines: async (action, options) => {
+        log.info('mock', 'cy_referenceLine', { action, options })
+        return null
+      },
+      distribute: async (params) => {
+        log.info('mock', 'cy_distribute', params)
+        return null
+      },
+      getPsdList: async (folder) => {
+        log.info('mock', 'cy_getPsdForFolder', folder)
+        return []
+      },
+    },
   }
 }

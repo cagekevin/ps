@@ -1,5 +1,7 @@
 import { actionCommands } from './action'
 import { cloudCommands } from './cloud'
+import { commonUseCommands } from './commonUse'
+import { customCommands } from './custom'
 import { fontCommands } from './font'
 import { fontSetCommands } from './fontSet'
 import { freePanelCommands } from './freePanel'
@@ -7,6 +9,7 @@ import { legacyCommands } from './legacy'
 import { renameCommands } from './rename'
 import { register } from './registry'
 import { styleCommands } from './style'
+import { systemCommands } from './system'
 
 /**
  * 聚合注册。全项目唯一的注册点。
@@ -23,6 +26,9 @@ for (const command of [
   ...cloudCommands,
   ...renameCommands,
   ...styleCommands,
+  ...systemCommands,
+  ...customCommands,
+  ...commonUseCommands,
 ])
   register(command)
 

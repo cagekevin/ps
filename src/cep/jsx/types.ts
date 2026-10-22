@@ -148,6 +148,70 @@ export interface StyleJsx {
   setTool(tool: string): Promise<unknown>
 }
 
+/**
+ * 自定义域（`/custom`）。
+ *
+ * UNVERIFIED: 四个函数的参数形状与返回结构**全部未实测**。
+ * jsxbin 是字节码，符号不可读；`docs/页面/04-自定义.md:60-62` 明确记
+ * 「四个签名与返回结构都未提取」。依据只到"调用侧存在这四个名字"这一级：
+ * `zdy_checkStatus` / `zdy_checkMergeRectangles`（`04-自定义.md:16-17`）、
+ * `zdy_mergeRectangles`（`:113`）、`zdy_generate`（`:195`）。
+ *
+ * 按 C-7 定案：签名按调用侧推断并全部标 UNVERIFIED，返回按最宽松联合兜（`unknown`），
+ * 命令层只经 `utils/jsx-result` 判成败，不读任何字段。
+ */
+
+/** 一次生成请求的结构定义在 `domain/custom.ts`（页面不能 import cep/*，所以类型放公共层） */
+export type { CustomLine, CustomRequest } from '@/domain/custom'
+
+import type { CustomRequest } from '@/domain/custom'
+
+export interface CustomJsx {
+  /** zdy_checkStatus：生成前的状态检查 */
+  checkStatus(request: CustomRequest): Promise<unknown>
+  /** zdy_checkMergeRectangles：合并矩形前的检查 */
+  checkMergeRectangles(request: CustomRequest): Promise<unknown>
+  /** zdy_mergeRectangles：合并矩形 */
+  mergeRectangles(request: CustomRequest): Promise<unknown>
+  /** zdy_generate：生成框架 */
+  generate(request: CustomRequest): Promise<unknown>
+}
+
+/**
+ * 常用页域（`/commonUse`）。
+ *
+ * UNVERIFIED: 本域函数的**参数形状与返回结构基本未实测**。
+ * 分三档（依据见 `src/cep/jsx/commonUse.ts` 头部注释）：
+ * - 有锚点：`cy_zoom` / `cy_batchOptimizeDoc` / `cy_getPsdForFolder`
+ *   （`docs/生成/jsx返回结构复原.md:608,610`）
+ * - 名字推断（依据事件前缀与参数顺序表）：`cy_flipLayer` / `cy_embedImage` /
+ *   `cy_importMultipleImage` / `cy_customTransform` / `cy_referenceLine` / `cy_distribute`
+ * - 参数顺序有据：`cy_customTransform` = `[number, angle, leftRigth, topBottom, pointIndex, scale, opacity]`
+ *   （`docs/页面/05-常用.md:57`）；`cy_distribute` = `[t, width, mode]`（`:63`）
+ *
+ * 返回一律 `unknown`，命令层只判成败。
+ */
+export interface CommonUseJsx {
+  /** cy_zoom([倍数])：放大 / 缩小 */
+  zoom(scale: number): Promise<unknown>
+  /** cy_flipLayer([方向])：左右 / 上下 / 左 / 右 / 下 / 上（名字推断） */
+  flip(direction: string): Promise<unknown>
+  /** cy_embedImage([选项])：嵌入图片（名字推断） */
+  embedImage(options: unknown): Promise<unknown>
+  /** cy_importMultipleImage([路径数组])：导入多图片（名字推断） */
+  importMultipleImages(paths: string[]): Promise<unknown>
+  /** cy_batchOptimizeDoc([选项])：批量优化文档 */
+  optimizeDoc(options: unknown): Promise<unknown>
+  /** cy_customTransform([参数数组])：自定义变换（名字推断） */
+  transform(params: unknown[]): Promise<unknown>
+  /** cy_referenceLine([动作, 选项])：参考线（名字推断） */
+  referenceLines(action: string, options: unknown): Promise<unknown>
+  /** cy_distribute([t, width, mode])：按间距分布（名字推断） */
+  distribute(params: unknown[]): Promise<unknown>
+  /** cy_getPsdForFolder([目录])：文件夹里的 PSD 列表（返回有数据） */
+  getPsdList(folder: string): Promise<unknown>
+}
+
 export interface JsxPort {
   font: FontJsx
   layer: LayerJsx
@@ -156,4 +220,6 @@ export interface JsxPort {
   legacy: LegacyJsx
   rename: RenameJsx
   style: StyleJsx
+  custom: CustomJsx
+  commonUse: CommonUseJsx
 }

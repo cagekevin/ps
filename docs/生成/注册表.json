@@ -103,15 +103,6 @@
       "since": "2026-10-20"
     },
     {
-      "id": "element-width",
-      "name": "容器宽度监听",
-      "entry": "src/composables/useElementWidth.ts",
-      "api": "useElementWidth(elRef) → Ref<number>",
-      "when": "按面板宽度切单列/双列（原版阈值 420px）",
-      "status": "stable",
-      "since": "2026-10-20"
-    },
-    {
       "id": "infinite-scroll",
       "name": "滚到底自动加载",
       "entry": "src/composables/useInfiniteScroll.ts",
@@ -133,7 +124,7 @@
       "id": "cep-ps",
       "name": "PS 领域封装（只读 + 初始化）",
       "entry": "src/cep/ps.ts",
-      "api": "initJsx / getFontList / getFontTags / getRawActionList / getLayerState / runtimeInfo",
+      "api": "initJsx / getFontList / getFontTags / getRawActionList / getLayerState",
       "when": "写能力的入口在 commands/*；页面读走 store，不直接 import 这里（ADR-16）",
       "status": "stable",
       "since": "2026-10-20"
@@ -855,6 +846,24 @@
       "entry": "src/domain/ku-io.ts",
       "api": "decode/encode 三种顶层形态；`rewriteKuIds` 导入时重写组/项 id；`data: false` 旁路不解码",
       "when": "任何样式库文件的导入导出编解码都经过这里，不要在页面或 repo 里另写一份。读侧形态识别仍走 `domain/ku-format.ts`。依据 `docs/生成/库文件格式契约.md` §2.3/§2.4/§2.6",
+      "status": "stable",
+      "since": "2026-10-22"
+    },
+    {
+      "id": "cep-jsx-commonuse-ts",
+      "name": "（待补：中文名）",
+      "entry": "src/cep/jsx/commonUse.ts",
+      "api": "（待补：怎么调）",
+      "when": "（待补：什么时候用）",
+      "status": "todo",
+      "since": "2026-10-22"
+    },
+    {
+      "id": "cep-jsx-custom-ts",
+      "name": "自定义域 jsx",
+      "entry": "src/cep/jsx/custom.ts",
+      "api": "createCustomJsx() → checkStatus / checkMergeRectangles / mergeRectangles / generate",
+      "when": "只在 commands/custom.ts 用",
       "status": "stable",
       "since": "2026-10-22"
     }

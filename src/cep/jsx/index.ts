@@ -1,5 +1,7 @@
 import { hasCep } from '@/cep/transport'
 import { createActionJsx } from './action'
+import { createCommonUseJsx } from './commonUse'
+import { createCustomJsx } from './custom'
 import { createEnvJsx } from './env'
 import { createFontJsx } from './font'
 import { createLayerJsx } from './layer'
@@ -24,6 +26,8 @@ export function createJsxPort(inCep: boolean): JsxPort {
     legacy: createLegacyJsx(),
     rename: createRenameJsx(),
     style: createStyleJsx(),
+    custom: createCustomJsx(),
+    commonUse: createCommonUseJsx(),
   }
 }
 
