@@ -20,11 +20,11 @@ UI 和数据流全部重写；PS 能力层继续调原厂 jsxbin（`public/lib/a
   2. 只断言可观察结果（返回值 / emit / 语义类 / 依赖调用），不测布局与坐标（jsdom 没有）
   3. 不追覆盖率；P0（白屏 / 丢数据 / 静默失败）必须有，P2 细节可以没有
 
-| 层 | 手段 | 能证明 |
-|---|---|---|
-| 静态 | `vue-tsc` / `npm run check` / `npm run ledger` | 类型、样式、台账 |
-| 组件 | `npm test`（jsdom） | 逻辑、事件、DOM 输出、条件分支 |
-| 运行 | 只能在 PS 里 | 真实数据、点击、视觉 —— **不做，标未验** |
+| 层   | 手段                                           | 能证明                                   |
+| ---- | ---------------------------------------------- | ---------------------------------------- |
+| 静态 | `vue-tsc` / `npm run check` / `npm run ledger` | 类型、样式、台账                         |
+| 组件 | `npm test`（jsdom）                            | 逻辑、事件、DOM 输出、条件分支           |
+| 运行 | 只能在 PS 里                                   | 真实数据、点击、视觉 —— **不做，标未验** |
 
 - 前两层查不到的，一律写 `UNVERIFIED`，并在该页清单里留一行。**不写"已完成""正常""应该没问题"。**
 
@@ -108,11 +108,11 @@ grep -rn "export .*<概念词>" src  # 有哪些导出叫这个名字
 
 同一概念分属不同层时，**名字必须不同**，让搜一次就能得到"该用哪个"的答案：
 
-| 现在 | 改成 | 理由 |
-|---|---|---|
-| `domain/filter.ts` | `domain/font-filter.ts` | 带域，避免第二页再建一个 `filter.ts` |
-| `cep/data/classification.ts` | `cep/data/classification-repo.ts` | 读实现 |
-| `stores/classification.ts` | `stores/classification-view.ts` | 只读投影 |
+| 现在                         | 改成                              | 理由                                 |
+| ---------------------------- | --------------------------------- | ------------------------------------ |
+| `domain/filter.ts`           | `domain/font-filter.ts`           | 带域，避免第二页再建一个 `filter.ts` |
+| `cep/data/classification.ts` | `cep/data/classification-repo.ts` | 读实现                               |
+| `stores/classification.ts`   | `stores/classification-view.ts`   | 只读投影                             |
 
 **判定**：搜一个概念词命中多个文件时，每个文件名都能看出它属于哪一层。
 
@@ -135,52 +135,52 @@ grep -rn "export .*<概念词>" src  # 有哪些导出叫这个名字
 
 ### 1. 文档与生成物
 
-| 想知道 | 去哪 | 本机? | 能重新生成? |
-|---|---|---|---|
-| 每页做到哪、下一步怎么定 | `docs/状态/进度.md` | ✅ | 散文手写；带 `stats` 注入块的部分由脚本生成 |
-| **所有待办 / 债务 / 依赖（唯一待办源）** | `docs/状态/台账.md` | ✅ | 手写，`npm run ledger` 校验 |
-| 单页验收记录（原版 vs 我方逐项） | `docs/页面/0N-*.md`（10 份，约 4200 行） | ✅ | 手写 |
-| **单页 render 结构树 + 全量 class + CSS 实测值** | **`docs/生成/页面规格/0N-*.md`（9 份，约 3700 行）** | ✅ | ❌ 依赖 `../tools/15-page-spec.cjs`，**本机没有** |
-| 某页某个 class 有没有绑事件 | `docs/生成/交互清单.md`（1665 行） | ✅ | ✅ `npm run interactions` |
-| 已有哪些公共能力、谁在用 | `docs/生成/横切能力.md`（约 356 行） | ✅ | ✅ `npm run registry` |
-| 库文件格式 `.kux/.kuc/.kug/.kuf/.kus` | `docs/生成/库文件格式契约.md`（745 行） | ✅ | ❌ **手写**（放错目录，见 §4） |
-| jsx 返回结构复原（20 个函数） | `docs/生成/jsx返回结构复原.md`（899 行） | ✅ | ❌ **手写**（同上） |
-| 为什么这么设计（ADR-01…ADR-20） | `docs/架构/决策记录.md` | ✅ | 手写，**追加不拆** |
-| 数据流（启动/命令链/存储地图/跨页机制） | `docs/架构/dataflow.md`（354 行） | ✅ | 手写；含 6 条复核命令 |
-| 云同步端点、载荷、鉴权 | `docs/架构/云同步契约.md`、`云同步底层设施.md` | ✅ | 手写 |
-| 分层原则与四层结论 | `docs/架构/目标架构.md` | ✅ | 手写 |
-| 测什么/不测什么/优先级 | `docs/规范/测试规范.md` | ✅ | 手写 |
-| 视觉规范（字号/图标/图标+文字） | `docs/规范/视觉规范.md` | ✅ | 手写 |
-| 原版哪些地方本身就是坏的 | `docs/规范/原版缺陷.md` | ✅ | 手写 |
-| 控件库现状与准入 | `docs/组件库/README.md`、`现有控件.md`、`映射与缺口.md`、`页面契约.md`、`组件宪法.md` | ✅ | 手写 |
-| 规模数字（命令 / 用例 / 组件 / 图标 / 页面） | `docs/生成/规模.md` | ✅ | ✅ `npm run stats` |
-| 最近踩过什么坑、做过什么决策 | `docs/日志/`（13 篇）+ `docs/日志/index.md` | ✅ | ✅ `npm run log:index` |
+| 想知道                                           | 去哪                                                                                  | 本机? | 能重新生成?                                                       |
+| ------------------------------------------------ | ------------------------------------------------------------------------------------- | ----- | ----------------------------------------------------------------- |
+| 每页做到哪、下一步怎么定                         | `docs/状态/进度.md`                                                                   | ✅    | 散文手写；带 `stats` 注入块的部分由脚本生成                       |
+| **所有待办 / 债务 / 依赖（唯一待办源）**         | `docs/状态/台账.md`                                                                   | ✅    | 手写，`npm run ledger` 校验                                       |
+| 单页验收记录（原版 vs 我方逐项）                 | `docs/页面/0N-*.md`（10 份，约 4200 行）                                              | ✅    | 手写                                                              |
+| **单页 render 结构树 + 全量 class + CSS 实测值** | **`docs/生成/页面规格/0N-*.md`（9 份，约 3700 行）**                                  | ✅    | ❌ 依赖 `../tools/15-page-spec.cjs`，**本机没有**                 |
+| 某页某个 class 有没有绑事件                      | `docs/生成/交互清单.md`（1665 行）                                                    | ✅    | ✅ `npm run interactions`                                         |
+| 已有哪些公共能力、谁在用                         | `docs/生成/横切能力.md`（约 356 行）                                                  | ✅    | ✅ `npm run registry`                                             |
+| 库文件格式 `.kux/.kuc/.kug/.kuf/.kus`            | `docs/生成/库文件格式契约.md`（745 行）                                               | ✅    | ❌ **手写**（放错目录，见 §4）                                    |
+| jsx 返回结构复原（20 个函数）                    | `docs/生成/jsx返回结构复原.md`（899 行）                                              | ✅    | ❌ **手写**（同上）                                               |
+| 为什么这么设计（ADR-01…ADR-21）                  | `docs/架构/决策记录.md`                                                               | ✅    | 手写，**追加不拆**；顶部有状态索引，过期/被取代只加状态行不删正文 |
+| 数据流（启动/命令链/存储地图/跨页机制）          | `docs/架构/dataflow.md`（354 行）                                                     | ✅    | 手写；含 6 条复核命令                                             |
+| 云同步端点、载荷、鉴权                           | `docs/架构/云同步契约.md`、`云同步底层设施.md`                                        | ✅    | 手写                                                              |
+| 分层原则与四层结论                               | `docs/架构/目标架构.md`                                                               | ✅    | 手写                                                              |
+| 测什么/不测什么/优先级                           | `docs/规范/测试规范.md`                                                               | ✅    | 手写                                                              |
+| 视觉规范（字号/图标/图标+文字）                  | `docs/规范/视觉规范.md`                                                               | ✅    | 手写                                                              |
+| 原版哪些地方本身就是坏的                         | `docs/规范/原版缺陷.md`                                                               | ✅    | 手写                                                              |
+| 控件库现状与准入                                 | `docs/组件库/README.md`、`现有控件.md`、`映射与缺口.md`、`页面契约.md`、`组件宪法.md` | ✅    | 手写                                                              |
+| 规模数字（命令 / 用例 / 组件 / 图标 / 页面）     | `docs/生成/规模.md`                                                                   | ✅    | ✅ `npm run stats`                                                |
+| 最近踩过什么坑、做过什么决策                     | `docs/日志/`（13 篇）+ `docs/日志/index.md`                                           | ✅    | ✅ `npm run log:index`                                            |
 
 ### 2. 代码结构（2026-10-23 实测）
 
-| 层 | 文件数 | 行数 | 放什么 |
-|---|---|---|---|
-| `src/pages/` | 57 | 11683 | 11 个页面（含 `_atoms` `_probe` `_placeholder` 三个内部页） |
-| `src/cep/` | 52 | 5204 | PS 出口：`transport` / `jsx/<域>` / `data/`（仓库层）/ `cloud` / `dialog` / `events` |
-| `src/components/` | 35 | 3163 | 跨页组件；`G` 前缀 = UI 基础件 |
-| `src/domain/` | 21 | 2841 | 纯函数与类型，零 IO、零 Vue |
-| `src/commands/` | 16 | 3997 | 命令注册表 + 分域命令（122 条） |
-| `src/composables/` | 10 | 918 | 组合式（`useCommand` 在 `components/command/`） |
-| `src/stores/` | 13 | 786 | 只读投影 + 少量 UI 状态 |
-| `src/utils/` | 10 | 505 | 无依赖工具 |
-| `src/cloud/` | 4 | 666 | 同步引擎与台账 |
-| `src/selection/` | 2 | 292 | 选区 / 当前文字快照 |
+| 层                 | 文件数 | 行数  | 放什么                                                                               |
+| ------------------ | ------ | ----- | ------------------------------------------------------------------------------------ |
+| `src/pages/`       | 57     | 11683 | 11 个页面（含 `_atoms` `_probe` `_placeholder` 三个内部页）                          |
+| `src/cep/`         | 52     | 5204  | PS 出口：`transport` / `jsx/<域>` / `data/`（仓库层）/ `cloud` / `dialog` / `events` |
+| `src/components/`  | 35     | 3163  | 跨页组件；`G` 前缀 = UI 基础件                                                       |
+| `src/domain/`      | 21     | 2841  | 纯函数与类型，零 IO、零 Vue                                                          |
+| `src/commands/`    | 16     | 3997  | 命令注册表 + 分域命令（122 条）                                                      |
+| `src/composables/` | 10     | 918   | 组合式（`useCommand` 在 `components/command/`）                                      |
+| `src/stores/`      | 13     | 786   | 只读投影 + 少量 UI 状态                                                              |
+| `src/utils/`       | 10     | 505   | 无依赖工具                                                                           |
+| `src/cloud/`       | 4      | 666   | 同步引擎与台账                                                                       |
+| `src/selection/`   | 2      | 292   | 选区 / 当前文字快照                                                                  |
 
 **测试**：91 个文件 / 777 条（`tests/{cep,cloud,commands,components,composables,data,domain,pages,selection,stores,utils}`）。
 
 ### 3. 本机**没有**的东西（别再去找）
 
-| 路径 | 是什么 | 影响 |
-|---|---|---|
-| `../reference/01-原版源码/panel/js/app.v4.js` | 原版未压缩源码（2.5 MB / 73946 行） | **行号锚点无法当场复核**，只能靠 `docs/` 里的二手记录 |
-| `../reference/02-组件文档/` | 原版组件文档、`08-模板/tpl_*.md` | 组件细节只能查 `docs/生成/页面规格/` |
-| `../reference/03-原版安装包/.../app.bf68b505.css` | 原版 CSS 实测值来源 | CSS 值只能查 `docs/生成/页面规格/0N-*.md` 里的「实测样式」列 |
-| `../tools/15-page-spec.cjs` | 生成 `页面规格/` 的脚本 | 该产物**无法重新生成**，只能手改（且已过期风险） |
+| 路径                                              | 是什么                              | 影响                                                         |
+| ------------------------------------------------- | ----------------------------------- | ------------------------------------------------------------ |
+| `../reference/01-原版源码/panel/js/app.v4.js`     | 原版未压缩源码（2.5 MB / 73946 行） | **行号锚点无法当场复核**，只能靠 `docs/` 里的二手记录        |
+| `../reference/02-组件文档/`                       | 原版组件文档、`08-模板/tpl_*.md`    | 组件细节只能查 `docs/生成/页面规格/`                         |
+| `../reference/03-原版安装包/.../app.bf68b505.css` | 原版 CSS 实测值来源                 | CSS 值只能查 `docs/生成/页面规格/0N-*.md` 里的「实测样式」列 |
+| `../tools/15-page-spec.cjs`                       | 生成 `页面规格/` 的脚本             | 该产物**无法重新生成**，只能手改（且已过期风险）             |
 
 **注意**：曾经在本机 `~/Library/Application Support/fz.FengZi1Hao/` 找到过一份原版压缩包，但那是 **2022 年旧版**，与文档调查的版本不一致（文档引用的 `56d7.js` / `0425.js` 该副本里没有），**不得作为核对依据**。已按用户要求删除，避免误导。
 
@@ -210,7 +210,7 @@ grep -rn "export .*<概念词>" src  # 有哪些导出叫这个名字
 6. `docs/生成/交互清单.md` —— 自动生成的 class 串索引，**只能用来查"某个元素有没有事件"，不能当页面清单**
    （没有页面归属、没有状态）。页面级交互以组件表 + render 源码里的 `on:` 为准
 7. `docs/架构/jsx契约.md` —— jsx 函数真实返回结构，**别猜**
-8. `docs/架构/决策记录.md` —— 为什么这么设计，别轻易推翻
+8. `docs/架构/决策记录.md` —— 为什么这么设计，别轻易推翻。**先看顶部状态索引**：标了「过期」「被取代」的正文只作历史，不再是指南
 9. `docs/架构/目标架构.md` —— **只放结论**（四层 / 命令 / 契约 / 护栏），改结构前必读；
    为什么这么设计看 `docs/架构/决策记录.md`，重构前的诊断看 `docs/架构/重构复盘.md`（一次性）
 10. `docs/日志/index.md` —— 最近踩过什么坑、做过什么决策
@@ -223,15 +223,15 @@ grep -rn "export .*<概念词>" src  # 有哪些导出叫这个名字
 
 ## 文档分工（谁写什么，别写重）
 
-| 文件 | 只放什么 | 不放什么 |
-|---|---|---|
-| `AGENTS.md` | 规范、约束、查证路径 | 进度、待办 |
-| `docs/状态/进度.md` | 每页状态快照（占位 / 部分实现 / 静态通过） | 待办、债务 |
-| `docs/状态/台账.md` | **所有**待办、债务、依赖、归档 | 现状描述 |
-| `docs/页面/0N-<页面>.md` | 单页验收记录（逐项 原版 vs 当前） | 待办（只能指向台账 id） |
-| `docs/规范/测试规范.md` | 测什么 / 不测什么 / 优先级 / 流程 | 具体用例（在 `tests/`） |
-| `docs/生成/横切能力.md` | 已有能力清单（`npm run registry` 生成） | 计划中的能力 |
-| `docs/日志/` | 决策、踩坑、机制变更 | 日常改动流水账 |
+| 文件                     | 只放什么                                   | 不放什么                |
+| ------------------------ | ------------------------------------------ | ----------------------- |
+| `AGENTS.md`              | 规范、约束、查证路径                       | 进度、待办              |
+| `docs/状态/进度.md`      | 每页状态快照（占位 / 部分实现 / 静态通过） | 待办、债务              |
+| `docs/状态/台账.md`      | **所有**待办、债务、依赖、归档             | 现状描述                |
+| `docs/页面/0N-<页面>.md` | 单页验收记录（逐项 原版 vs 当前）          | 待办（只能指向台账 id） |
+| `docs/规范/测试规范.md`  | 测什么 / 不测什么 / 优先级 / 流程          | 具体用例（在 `tests/`） |
+| `docs/生成/横切能力.md`  | 已有能力清单（`npm run registry` 生成）    | 计划中的能力            |
+| `docs/日志/`             | 决策、踩坑、机制变更                       | 日常改动流水账          |
 
 **状态只写一处。** 同一个事实出现两遍，早晚会不一致——上一轮就是这么乱起来的。
 
@@ -346,8 +346,11 @@ PS 能力走 `src/cep/jsx/<域>.ts`（transport → jsx → 命令），**不是
 ```ts
 const listRef = ref<HTMLElement>()
 const sentinelRef = ref<HTMLElement>()
-const { items, visible, loading, error, load, bind } = usePagedList(fetcher, { listRef, sentinelRef })
-bind(computed(() => items.value.filter(/* ... */)))   // 有筛选才需要
+const { items, visible, loading, error, load, bind } = usePagedList(fetcher, {
+  listRef,
+  sentinelRef,
+})
+bind(computed(() => items.value.filter(/* ... */))) // 有筛选才需要
 ```
 
 ### 6. 样式只用 token，不许硬编码
@@ -369,11 +372,11 @@ bind(computed(() => items.value.filter(/* ... */)))   // 有筛选才需要
 
 **命名规则**（三种前缀，别混）：
 
-| 前缀 | 用途 | 例 |
-|---|---|---|
-| `g-` | 通用组件 | `.g-btn` `.g-btn__spin` |
-| `page-` / 页面名 | 页面私有 | `.font-item` `.shell__header` |
-| `u-` | 布局 utility | `.u-stack` `.u-fill` |
+| 前缀             | 用途         | 例                            |
+| ---------------- | ------------ | ----------------------------- |
+| `g-`             | 通用组件     | `.g-btn` `.g-btn__spin`       |
+| `page-` / 页面名 | 页面私有     | `.font-item` `.shell__header` |
+| `u-`             | 布局 utility | `.u-stack` `.u-fill`          |
 
 - 元素用 `__`（`.modal__body`），状态用 `.is-*`（`.is-active` `.is-disabled`）
 - **禁止无前缀通用名**：`.content` `.info` `.glyph` 这种最容易撞，已经有过
@@ -382,10 +385,14 @@ bind(computed(() => items.value.filter(/* ... */)))   // 有筛选才需要
 
 ```css
 /* 组件内部：留出口 */
-.modal__body { padding: var(--modal-body-padding, var(--sp-5)); }
+.modal__body {
+  padding: var(--modal-body-padding, var(--sp-5));
+}
 
 /* 外部：只改变量，不碰选择器 */
-:root { --modal-body-padding: var(--sp-4); }
+:root {
+  --modal-body-padding: var(--sp-4);
+}
 ```
 
 因为 scoped 样式特异性是 `0,2,0`，全局 `0,1,0` 覆盖不了——这是**唯一**的覆盖方式。
@@ -412,12 +419,12 @@ bind(computed(() => items.value.filter(/* ... */)))   // 有筛选才需要
 
 ### 9. 组件放在哪
 
-| 目录 | 放什么 | 判断 |
-|---|---|---|
-| `src/components/` | **跨页复用**的组件 | 被 2 个以上页面用 |
-| `src/pages/<页>/components/` | 该页私有 | 只在这一页出现 |
-| `src/components/` 且 `G` 前缀 | UI 基础件（GButton/GMenu…） | 对应原版 G-UI 库 |
-| `src/components/command/` | 命令消费（`useCommand` / `CommandGrid`） | 横切，所有页面共用；**不要按"2 页才提"的规则挪走** |
+| 目录                          | 放什么                                   | 判断                                               |
+| ----------------------------- | ---------------------------------------- | -------------------------------------------------- |
+| `src/components/`             | **跨页复用**的组件                       | 被 2 个以上页面用                                  |
+| `src/pages/<页>/components/`  | 该页私有                                 | 只在这一页出现                                     |
+| `src/components/` 且 `G` 前缀 | UI 基础件（GButton/GMenu…）              | 对应原版 G-UI 库                                   |
+| `src/components/command/`     | 命令消费（`useCommand` / `CommandGrid`） | 横切，所有页面共用；**不要按"2 页才提"的规则挪走** |
 
 拿不准就先放页面私有目录，等第二个页面要用时再往上提。**不要因为"以后可能复用"就提前放公共目录。**
 
@@ -473,24 +480,24 @@ bind(computed(() => items.value.filter(/* ... */)))   // 有筛选才需要
 
 **能自己查到的，不要问用户。** 用户不是你的调试工具。
 
-| 想知道 | 去哪查（不要问人） |
-|---|---|
-| 颜色 / 尺寸 / 圆角 | ⚠️ 本机无原版 CSS。查 `docs/生成/页面规格/0N-*.md` 的「实测样式」列 + `src/styles/tokens.css` |
-| **原版源码（未压缩、可读）** | ⚠️ **本机没有**（`../reference/01-原版源码/panel/js/app.v4.js`，2.5MB / 73946 行）。改查 `docs/生成/页面规格/0N-*.md` 与台账里的行号记录 |
-| 原版组件有哪些 props / computed / methods / 文案 | ⚠️ **本机没有**（`../reference/02-组件文档/`）。改查 `docs/页面/0N-*.md` 组件表与 `docs/生成/页面规格/` |
-| 原版的 DOM 结构和嵌套 | ⚠️ **本机没有**。改查 `docs/生成/页面规格/0N-*.md` 的「结构树」段 |
-| 原版样式 | ⚠️ **本机没有**。改查 `docs/生成/页面规格/0N-*.md` 的「实测样式」列（已带选择器与实测值） |
+| 想知道                                           | 去哪查（不要问人）                                                                                                                       |
+| ------------------------------------------------ | ---------------------------------------------------------------------------------------------------------------------------------------- |
+| 颜色 / 尺寸 / 圆角                               | ⚠️ 本机无原版 CSS。查 `docs/生成/页面规格/0N-*.md` 的「实测样式」列 + `src/styles/tokens.css`                                            |
+| **原版源码（未压缩、可读）**                     | ⚠️ **本机没有**（`../reference/01-原版源码/panel/js/app.v4.js`，2.5MB / 73946 行）。改查 `docs/生成/页面规格/0N-*.md` 与台账里的行号记录 |
+| 原版组件有哪些 props / computed / methods / 文案 | ⚠️ **本机没有**（`../reference/02-组件文档/`）。改查 `docs/页面/0N-*.md` 组件表与 `docs/生成/页面规格/`                                  |
+| 原版的 DOM 结构和嵌套                            | ⚠️ **本机没有**。改查 `docs/生成/页面规格/0N-*.md` 的「结构树」段                                                                        |
+| 原版样式                                         | ⚠️ **本机没有**。改查 `docs/生成/页面规格/0N-*.md` 的「实测样式」列（已带选择器与实测值）                                                |
 
 > ⚠️ **不要直接拿压缩 CSS 里的选择器当结论。** 那份 CSS 里新旧两套组件混在一起
 > （`.nav-item` 40×40 是左侧导航，`.sub-nav-item` 26×26 是另一个组件；
 > `.nav-item-act` 是旧版、`.nav-item-active` 是新版）。只看 CSS 会选错。
 > 正确顺序：**app.v4.js 找 render → 拿到真实类名 → 再去 CSS 查那条类名**。
-| 组件有哪些 props / 方法 | ⚠️ 本机无原版组件文档。查 `docs/页面/0N-*.md` 组件表、`docs/组件库/现有控件.md` |
-| jsx 返回结构 | 先查 `docs/架构/jsx契约.md`；没有再实测（`#/__probe`） |
-| CEP 版本 / 环境能力 | 原版 `CSXS/manifest.xml` 的 `RequiredRuntime` + 本机注册表 |
-| 数据文件长什么样 | 直接读 `%APPDATA%\SheJiZhuLi\*.json` |
-| **页面 DOM 结构 / 每个 class 的实测样式** | **`docs/生成/页面规格/0N-*.md`**（9 份，带 `app.v4.js` 行号）。**这是本机唯一可用的原版结构与样式来源**；生成脚本 `../tools/15-page-spec.cjs` 本机没有，产物不可重新生成，只能手改 |
-| 界面渲染结果 | 无头 Chrome `--dump-dom` 统计 DOM |
+> | 组件有哪些 props / 方法 | ⚠️ 本机无原版组件文档。查 `docs/页面/0N-*.md` 组件表、`docs/组件库/现有控件.md` |
+> | jsx 返回结构 | 先查 `docs/架构/jsx契约.md`；没有再实测（`#/__probe`） |
+> | CEP 版本 / 环境能力 | 原版 `CSXS/manifest.xml` 的 `RequiredRuntime` + 本机注册表 |
+> | 数据文件长什么样 | 直接读 `%APPDATA%\SheJiZhuLi\*.json` |
+> | **页面 DOM 结构 / 每个 class 的实测样式** | **`docs/生成/页面规格/0N-*.md`**（9 份，带 `app.v4.js` 行号）。**这是本机唯一可用的原版结构与样式来源**；生成脚本 `../tools/15-page-spec.cjs` 本机没有，产物不可重新生成，只能手改 |
+> | 界面渲染结果 | 无头 Chrome `--dump-dom` 统计 DOM |
 
 这一轮有 3 个"待用户确认"的问题（CEP 版本、内容区底色、图标实现），全部在代码里查到了，
 其中一个还发现**原版自己就是坏的**（gdaicon 字体从未加载）。问人只会浪费对方时间。
@@ -535,12 +542,12 @@ npm run log:index         # 重建索引
 
 注释回答两个问题：**这段代码对应原版哪里**、**为什么不是最直接的写法**。除此之外不写。
 
-| 该写 | 不该写 |
-|---|---|
-| `原版 __preview{padding:6px 8px}，左右已由项给` | `原来是 8px，后来改成 0` |
-| `这里用文本 ★：sprite 没有星形` | `之前试过图标，不行` |
-| `--input-height: var(--h-field)` 的依据 | `调了很多次终于对了` |
-| `TODO(T-18): 现在有标签就显示，应超过 94px 才显示` | `暂时这样，以后再改` |
+| 该写                                               | 不该写                   |
+| -------------------------------------------------- | ------------------------ |
+| `原版 __preview{padding:6px 8px}，左右已由项给`    | `原来是 8px，后来改成 0` |
+| `这里用文本 ★：sprite 没有星形`                    | `之前试过图标，不行`     |
+| `--input-height: var(--h-field)` 的依据            | `调了很多次终于对了`     |
+| `TODO(T-18): 现在有标签就显示，应超过 94px 才显示` | `暂时这样，以后再改`     |
 
 - **引原版必须能被检索到**：带选择器或文件名，值要和代码里实际用的变量对得上。
   注释写"原版 #ccc"、代码用 `#f5f5f5`，比没有注释更坏——下一个人会照着错的改。
@@ -564,16 +571,16 @@ npm run log:index         # 重建索引
 绕过判据：`grep -rn "cep/jsx\|cep/data\|cep/events" src/pages` 必须为 0；
 `grep -rn "readTextFile\|writeTextFile" src/pages src/commands` 必须为 0。
 
-| 事实 | 唯一入口 | 谁能用 | 判据 |
-|---|---|---|---|
-| PS 文档写 | `commands/<域>.ts` | 页面经 `useCommand` | 页面不 import `cep/jsx` |
-| 命令执行 | `commands/registry.ts` | 页面经 `useCommand` | 页面不裸调 `execute` |
-| 数据文件读写 | `cep/data/<域>.ts` | 命令 / store 只读投影 | 页面不 import `cep/data` |
-| 宿主事件 | `cep/events.ts` | `selection/` 等适配层 | 页面不 import `cep/events` |
-| 当前文字属性 | `selection/current-text.ts` | 页面只读投影 | 只有这里调 `zt_getFontSimpleInfo` |
-| jsx 返回结构 | `utils/jsx-result.ts` | 只在 `commands/**` | 别处不写 `res.err === 1` |
-| 外部网络 | `cep/http.ts` | 只在 `commands/**` | 页面不插 `<script>`、不 `fetch` |
-| 翻译签名与编解码 | `domain/translate.ts` | `commands/fontSet.ts` | 纯函数，可单测 |
+| 事实             | 唯一入口                    | 谁能用                | 判据                              |
+| ---------------- | --------------------------- | --------------------- | --------------------------------- |
+| PS 文档写        | `commands/<域>.ts`          | 页面经 `useCommand`   | 页面不 import `cep/jsx`           |
+| 命令执行         | `commands/registry.ts`      | 页面经 `useCommand`   | 页面不裸调 `execute`              |
+| 数据文件读写     | `cep/data/<域>.ts`          | 命令 / store 只读投影 | 页面不 import `cep/data`          |
+| 宿主事件         | `cep/events.ts`             | `selection/` 等适配层 | 页面不 import `cep/events`        |
+| 当前文字属性     | `selection/current-text.ts` | 页面只读投影          | 只有这里调 `zt_getFontSimpleInfo` |
+| jsx 返回结构     | `utils/jsx-result.ts`       | 只在 `commands/**`    | 别处不写 `res.err === 1`          |
+| 外部网络         | `cep/http.ts`               | 只在 `commands/**`    | 页面不插 `<script>`、不 `fetch`   |
+| 翻译签名与编解码 | `domain/translate.ts`       | `commands/fontSet.ts` | 纯函数，可单测                    |
 
 ### 18. 跨页机制先落 ADR，再写代码
 
@@ -603,15 +610,15 @@ npm run deploy     # check + 类型检查 + 构建 + 产物校验，唯一强制
 
 构建产物会直接写进 CEP 扩展目录，改完要在 PS 里关掉面板重开才能看到。
 
-| 命令 | 什么时候用 |
-|---|---|
-| `npm run lint` | 只跑 ESLint（也已含在 `check` 里） |
-| `npm run format` | 格式化（Prettier，只覆盖 `src` / `tests` / `scripts` / 根配置） |
-| `npm run format:check` | 只检查格式（已含在 `check` 里） |
-| `npm run check` | 收工前顺手跑，秒级 |
-| `npm test` | 改了组件/逻辑就跑（jsdom，不启浏览器） |
-| `npm run deploy` | 要进 PS 里验收之前，必须通过 |
-| `npm run ledger` | 只改了台账 |
-| `npm run registry` | 新增了 `src/{cep,composables,stores,utils,styles}` 下的文件 |
-| `npm run style:fix` / `style:baseline` | 修样式违规 / 清理完一个文件后收紧基线 |
-| `npm run log:new` / `log:index` | 写日志（只在三种情况下写，见第 15 条） |
+| 命令                                   | 什么时候用                                                      |
+| -------------------------------------- | --------------------------------------------------------------- |
+| `npm run lint`                         | 只跑 ESLint（也已含在 `check` 里）                              |
+| `npm run format`                       | 格式化（Prettier，只覆盖 `src` / `tests` / `scripts` / 根配置） |
+| `npm run format:check`                 | 只检查格式（已含在 `check` 里）                                 |
+| `npm run check`                        | 收工前顺手跑，秒级                                              |
+| `npm test`                             | 改了组件/逻辑就跑（jsdom，不启浏览器）                          |
+| `npm run deploy`                       | 要进 PS 里验收之前，必须通过                                    |
+| `npm run ledger`                       | 只改了台账                                                      |
+| `npm run registry`                     | 新增了 `src/{cep,composables,stores,utils,styles}` 下的文件     |
+| `npm run style:fix` / `style:baseline` | 修样式违规 / 清理完一个文件后收紧基线                           |
+| `npm run log:new` / `log:index`        | 写日志（只在三种情况下写，见第 15 条）                          |
