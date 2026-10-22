@@ -108,34 +108,49 @@
   padding: var(--sp-exact-10) 0;
 }
 
+/* 原版滚动区 `.Style-vueScroll`（render `:49637`）没有左右内边距：横向 10px 由每个组容器给，
+   见下面 `.style-group`。这里再加一层会让四库整体内缩 20px */
 .style-body {
   flex: 1;
   min-height: 0;
-  padding: 0 var(--sp-exact-10);
   overflow-y: auto;
 }
 
-/* 原版组容器的 `.mb4`（render `:49930`）：组间距 4px */
-.style-lib {
+/* 原版组容器 `.app-padding.app-padding-wrap.mb4`（render `:49930`）：`.mb4{margin-bottom:4px}`，
+   左内边距 10px 来自 `.app-padding-wrap[data-v-7f48e128]{padding:0 0 0 10px}`（颜色库）
+   与 `.app-padding[data-v-1f103d3b]{padding:0 0 0 10px;font-weight:400}`（字体库）。
+   四库的组间距都是 4px，所以挂在这一层，不挂在 `.style-lib` 上（挂错了就是同一库里两组贴死） */
+.style-group {
   margin-bottom: var(--sp-2);
+  padding: 0 0 0 var(--sp-exact-10);
 }
 
-/* 原版 `.f-baseX.f-br` 的色块行：flex-wrap + 每块 margin-right 5 / margin-top 逐库不同
-   （颜色 `.mt6`、渐变/字体 `.mt5`、样式 `.mt7`，render `:49960` / `:50559` / `:50928` / `:51350`）。
-   这里用 gap 表达横向 5px，纵向按库覆盖（见下面的 row-gap / padding-top）。 */
+/* 渐变 `:50513` / 样式 `:51314` 的组容器只有 `app-padding`，没有 `app-padding-wrap`，
+   两个 scoped 段里也没有 `.app-padding` 覆盖 → 取全局 `.app-padding{padding:0 10px}`（左右各 10px） */
+.style-lib--gradient .style-group,
+.style-lib--style .style-group {
+  padding: 0 var(--sp-exact-10);
+}
+
+/* 原版 `.f-baseX.f-br` 自己没有 gap / padding，间距全在项上：`margin-right` 逐库 5px
+   （样式库是 `mr6` = 6px，`:51350`）+ `margin-top` 逐库不同（颜色 `.mt6`、渐变/字体 `.mt5`、样式 `.mt7`）。
+   这里用 gap 表达横向、row-gap 表达行距，首行上距用 padding-top 补同一个值。 */
 .style-items {
   display: flex;
   flex-wrap: wrap;
   gap: var(--sp-exact-5);
-  padding: var(--sp-exact-5) 0 var(--sp-1);
+  padding-top: var(--sp-exact-5);
 }
 
+/* 颜色：`.color-block.mt6`（`:49960`）→ 行距 6px / 首行上距 6px */
 .style-lib--color .style-items {
   row-gap: var(--sp-3);
   padding-top: var(--sp-3);
 }
 
+/* 样式：`.mt7 … mr6`（`:51350`）→ 行距 7px / 首行上距 7px / 横向 6px */
 .style-lib--style .style-items {
+  column-gap: var(--sp-3);
   row-gap: var(--sp-exact-7);
   padding-top: var(--sp-exact-7);
 }

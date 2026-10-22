@@ -574,3 +574,70 @@ describe('style.sendToSwatch（原版 :50349-50355）', () => {
     expect(store.files.get(SWATCH_FILE)).toBe(previous)
   })
 })
+
+describe('style.appendItemToSwatch（原版 :50356-50364）', () => {
+  it('读回 seBan 数组后 push 该项，旧内容保留', async () => {
+    store.files.set(SWATCH_FILE, JSON.stringify([{ name: '旧色', color: { hex: '000000' } }]))
+
+    await expect(
+      execute('style.appendItemToSwatch', { kind: 'color', groupIndex: 0, itemIndex: 0 }),
+    ).resolves.toEqual({ ok: true })
+
+    expect(JSON.parse(store.files.get(SWATCH_FILE) ?? 'null')).toEqual([
+      { name: '旧色', color: { hex: '000000' } },
+      { name: '未命名', color: { hex: '302F34', c: 81, m: 77, y: 69, k: 46 } },
+    ])
+  })
+})
+
+describe('style.sendGroupToSwatch（原版 :50260-50268）', () => {
+  it('整组 list 写进 seBan：整份替换，不是追加', async () => {
+    seed(COLOR_LIB, [
+      {
+        name: '灰白',
+        show: true,
+        list: [
+          { name: 'a', color: { hex: '111111' } },
+          { name: 'b', color: { hex: '222222' } },
+        ],
+      },
+    ])
+    store.files.set(SWATCH_FILE, JSON.stringify([{ name: '旧色', color: { hex: '000000' } }]))
+
+    await expect(
+      execute('style.sendGroupToSwatch', { kind: 'color', groupIndex: 0 }),
+    ).resolves.toEqual({ ok: true })
+
+    // 旧色被整份替换掉
+    expect(JSON.parse(store.files.get(SWATCH_FILE) ?? 'null')).toEqual([
+      { name: 'a', color: { hex: '111111' } },
+      { name: 'b', color: { hex: '222222' } },
+    ])
+  })
+})
+
+describe('style.appendGroupToSwatch（原版 :50269-50290）', () => {
+  it('读回 seBan 后逐项 push 该组 list', async () => {
+    seed(COLOR_LIB, [
+      {
+        name: '灰白',
+        show: true,
+        list: [
+          { name: 'a', color: { hex: '111111' } },
+          { name: 'b', color: { hex: '222222' } },
+        ],
+      },
+    ])
+    store.files.set(SWATCH_FILE, JSON.stringify([{ name: '旧色', color: { hex: '000000' } }]))
+
+    await expect(
+      execute('style.appendGroupToSwatch', { kind: 'color', groupIndex: 0 }),
+    ).resolves.toEqual({ ok: true })
+
+    expect(JSON.parse(store.files.get(SWATCH_FILE) ?? 'null')).toEqual([
+      { name: '旧色', color: { hex: '000000' } },
+      { name: 'a', color: { hex: '111111' } },
+      { name: 'b', color: { hex: '222222' } },
+    ])
+  })
+})

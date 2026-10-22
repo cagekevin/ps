@@ -67,6 +67,9 @@ const addStyleCmd = useCommand('style.addStyle')
 const deleteItemCmd = useCommand('style.deleteItem')
 const renameItemCmd = useCommand('style.renameItem')
 const sendToSwatchCmd = useCommand('style.sendToSwatch')
+const appendItemToSwatchCmd = useCommand('style.appendItemToSwatch')
+const sendGroupToSwatchCmd = useCommand('style.sendGroupToSwatch')
+const appendGroupToSwatchCmd = useCommand('style.appendGroupToSwatch')
 const addGroupCmd = useCommand('style.addGroup')
 const deleteGroupCmd = useCommand('style.deleteGroup')
 const renameGroupCmd = useCommand('style.renameGroup')
@@ -236,20 +239,52 @@ const ITEM_NAME_LABEL: Record<KuKind, string> = {
   style: '样式',
 }
 
+/**
+ * 分组菜单里两条仓库项：命令未实现（原版 `$emit("sendWarehouse"|"moveWarehouse")`，`:50308-50320` 等）
+ * → 渲染但置灰。台账 T-65。
+ */
+const WAREHOUSE_TITLE = '未实现（T-65）：仓库发送/移动命令还没实现'
+
+/**
+ * 「快速吸色到组」：原版 `:50293-50304` 要 `Tool_set("eyedropperTool")` + PS 事件 `1936028772` /
+ * 取消 `1936483188`（`:50222-50226`），命令层没有 → 渲染但置灰。台账 T-66。
+ */
+const EYEDROPPER_TITLE = '未实现（T-66）：快速吸色到组依赖 PS 事件 1936028772'
+
+/**
+ * 右键菜单内容：**四库各不相同**，逐库照抄原版顺序与分隔线位置。
+ *
+ * | 库 | 项菜单 | 分组菜单 |
+ * |---|---|---|
+ * | 颜色 | 删除 / 重命名 / fg / 发送到色板 / 追加到色板（`:50324-50366`） | 创建新组 / fg / 删除 / 重命名 / fg / 发送到色板 / 追加到色板 / fg / 快速吸色到组 / fg / 发送到仓库… / 移动到仓库…（`:50227-50322`） |
+ * | 渐变 | 删除 / 重命名（`:50800-50819`） | 创建新组 / fg / 删除 / 重命名 / fg / 发送到仓库… / 移动到仓库…（`:50821-50871`） |
+ * | 字体 | 删除 / 重命名（`:51116-51135`） | 同上 7 行（`:51137-51185`） |
+ * | 样式 | 删除 / 重命名（`:51563-51579`） | 同上 7 行（`:51581-51626`） |
+ *
+ * 只有「创建新组」带图标 `#iconchuangjian`（`:50231` / `:50825` / `:51141` / `:51585`）；
+ * `fg` 是分隔线（原版渲染成 `<hr class="menu-hr">`，`:319-320`）。
+ */
 const menuItems = computed<StyleMenuEntry[]>(() => {
   const { kind, groupIndex, itemIndex } = menu.value
 
   if (itemIndex >= 0) {
-    return [
+    const shared: StyleMenuEntry[] = [
       { text: '删除', action: () => void requestDeleteItem(kind, groupIndex, itemIndex) },
       { text: '重命名', action: () => openPrompt('renameItem', kind, groupIndex, itemIndex) },
+    ]
+    // 色板两项只有颜色库有：渐变 / 字体 / 样式三库的项菜单就两行
+    if (kind !== 'color') return shared
+
+    return [
+      ...shared,
       // 原版这一项是 `text:"fg"`（`:50341`），却挂了一个 `addGroup` 回调——原版 bug，这里只当分隔线
       { text: '', separator: true },
       { text: '发送到色板', action: () => void sendToSwatch(kind, groupIndex, itemIndex) },
+      { text: '追加到色板', action: () => void appendItemToSwatch(kind, groupIndex, itemIndex) },
     ]
   }
 
-  return [
+  const groupHead: StyleMenuEntry[] = [
     {
       text: '创建新组',
       icon: '#iconchuangjian',
@@ -259,18 +294,24 @@ const menuItems = computed<StyleMenuEntry[]>(() => {
     { text: '删除', action: () => void requestDeleteGroup(kind, groupIndex) },
     { text: '重命名', action: () => openPrompt('renameGroup', kind, groupIndex) },
     { text: '', separator: true },
-    // 命令未实现（原版 `$emit("sendWarehouse"|"moveWarehouse")`，`:50308-50320`）→ 渲染但置灰。
-    // 台账编号 T-65 是本次建议值（当前台账最大 T-64，尚未登记，所以代码里不写 TODO() 标记）
-    {
-      text: '发送到仓库...',
-      disabled: true,
-      title: '未实现（T-65 待登记）：仓库发送/移动命令还没实现',
-    },
-    {
-      text: '移动到仓库...',
-      disabled: true,
-      title: '未实现（T-65 待登记）：仓库发送/移动命令还没实现',
-    },
+  ]
+  const warehouseEntries: StyleMenuEntry[] = [
+    { text: '发送到仓库...', disabled: true, title: WAREHOUSE_TITLE },
+    { text: '移动到仓库...', disabled: true, title: WAREHOUSE_TITLE },
+  ]
+
+  // 渐变 / 字体 / 样式三库的分组菜单到「移动到仓库…」为止，共 7 行
+  if (kind !== 'color') return [...groupHead, ...warehouseEntries]
+
+  // 颜色库多出「色板两项 + 快速吸色」一段，夹在重命名与仓库项之间（`:50258-50306`）
+  return [
+    ...groupHead,
+    { text: '发送到色板', action: () => void sendGroupToSwatch(kind, groupIndex) },
+    { text: '追加到色板', action: () => void appendGroupToSwatch(kind, groupIndex) },
+    { text: '', separator: true },
+    { text: '快速吸色到组', disabled: true, title: EYEDROPPER_TITLE },
+    { text: '', separator: true },
+    ...warehouseEntries,
   ]
 })
 
@@ -352,6 +393,21 @@ async function sendToSwatch(kind: KuKind, groupIndex: number, itemIndex: number)
   await sendToSwatchCmd.run({ kind, groupIndex, itemIndex }, '已发送到色板')
 }
 
+/** 原版「追加到色板」（`:50356-50364`）：读回 seBan → push 该项 → 写回 */
+async function appendItemToSwatch(kind: KuKind, groupIndex: number, itemIndex: number) {
+  await appendItemToSwatchCmd.run({ kind, groupIndex, itemIndex }, '已追加到色板')
+}
+
+/** 原版分组「发送到色板」（`:50260-50268`）：该组 `list` 整份替换 seBan（不是追加） */
+async function sendGroupToSwatch(kind: KuKind, groupIndex: number) {
+  await sendGroupToSwatchCmd.run({ kind, groupIndex }, '已发送到色板')
+}
+
+/** 原版分组「追加到色板」（`:50269-50290`）：读回 → 逐项 push 该组 `list` → 写回 */
+async function appendGroupToSwatch(kind: KuKind, groupIndex: number) {
+  await appendGroupToSwatchCmd.run({ kind, groupIndex }, '已追加到色板')
+}
+
 onMounted(() => {
   void store.load()
 })
@@ -409,86 +465,92 @@ onMounted(() => {
         <section v-for="kind in visibleKinds" :key="kind" class="style-lib" :class="libClass(kind)">
           <EmptyState v-if="!libraries[kind].length" compact text="该库还没有分组" />
 
-          <BaseGroup
+          <!-- 组容器：原版 `.app-padding…mb4`（render `:49930` / `:50513` / `:50899` / `:51314`），
+               组间距 4px + 左内边距 10px 都挂在这一层，不在 `.style-lib` 上 -->
+          <div
             v-for="(group, index) in libraries[kind]"
             :key="`${kind}-${index}`"
-            :text="group.name"
-            :value="groupOpen(kind, index, group.show)"
-            @change="toggleGroup(kind, index)"
-            @menu="openGroupMenu($event, kind, index)"
+            class="style-group"
           >
-            <div class="style-items">
-              <div
-                v-for="(item, itemIndex) in group.items"
-                :key="itemIndex"
-                class="style-item"
-                :class="{
-                  'style-item--image': kind === 'gradient' && !!gradientImageSrc(item.image),
-                }"
-                :title="item.name"
-                @click="applyItem(kind, index, itemIndex, $event)"
-                @contextmenu.prevent.stop="openItemMenu($event, kind, index, itemIndex)"
-              >
-                <!-- 颜色 / 渐变：整块就是色块（原版 .color-block 直接带 backgroundColor / backgroundImage，
+            <BaseGroup
+              :text="group.name"
+              :value="groupOpen(kind, index, group.show)"
+              @change="toggleGroup(kind, index)"
+              @menu="openGroupMenu($event, kind, index)"
+            >
+              <div class="style-items">
+                <div
+                  v-for="(item, itemIndex) in group.items"
+                  :key="itemIndex"
+                  class="style-item"
+                  :class="{
+                    'style-item--image': kind === 'gradient' && !!gradientImageSrc(item.image),
+                  }"
+                  :title="item.name"
+                  @click="applyItem(kind, index, itemIndex, $event)"
+                  @contextmenu.prevent.stop="openItemMenu($event, kind, index, itemIndex)"
+                >
+                  <!-- 颜色 / 渐变：整块就是色块（原版 .color-block 直接带 backgroundColor / backgroundImage，
                      render `:49960` / `:50564`） -->
-                <template v-if="kind === 'color' || kind === 'gradient'">
-                  <img
-                    v-if="item.image && gradientImageSrc(item.image)"
-                    class="style-item__img"
-                    :src="gradientImageSrc(item.image)"
-                    :alt="item.name"
-                  />
-                  <span
-                    v-else-if="item.swatch"
-                    class="style-item__swatch"
-                    :style="{ background: item.swatch }"
-                  />
-                </template>
-
-                <!-- 字体：70×44 卡片 = 字体数 + N点 + 5×5 色点 + 「中文字」（render `:50956-50971`） -->
-                <template v-else-if="kind === 'font' && item.fontPreview">
-                  <div class="style-item__font-head">
-                    <p class="style-item__font-count">{{ item.fontPreview.count }}</p>
-                    <p class="style-item__font-size">{{ item.fontPreview.size }}</p>
-                    <span
-                      v-if="item.fontPreview.color"
-                      class="style-item__font-dot"
-                      :style="{ backgroundColor: item.fontPreview.color }"
+                  <template v-if="kind === 'color' || kind === 'gradient'">
+                    <img
+                      v-if="item.image && gradientImageSrc(item.image)"
+                      class="style-item__img"
+                      :src="gradientImageSrc(item.image)"
+                      :alt="item.name"
                     />
-                  </div>
-                  <p
-                    class="style-item__font-sample"
-                    :style="{ fontFamily: fontFamilyOf(item.fontPreview) }"
-                  >
-                    中文字
-                  </p>
-                </template>
+                    <span
+                      v-else-if="item.swatch"
+                      class="style-item__swatch"
+                      :style="{ background: item.swatch }"
+                    />
+                  </template>
 
-                <!-- 样式：26×26 缩略图 `kuStyle/<id>.png`（render `:51348-51353`）。
+                  <!-- 字体：70×44 卡片 = 字体数 + N点 + 5×5 色点 + 「中文字」（render `:50956-50971`） -->
+                  <template v-else-if="kind === 'font' && item.fontPreview">
+                    <div class="style-item__font-head">
+                      <p class="style-item__font-count">{{ item.fontPreview.count }}</p>
+                      <p class="style-item__font-size">{{ item.fontPreview.size }}</p>
+                      <span
+                        v-if="item.fontPreview.color"
+                        class="style-item__font-dot"
+                        :style="{ backgroundColor: item.fontPreview.color }"
+                      />
+                    </div>
+                    <p
+                      class="style-item__font-sample"
+                      :style="{ fontFamily: fontFamilyOf(item.fontPreview) }"
+                    >
+                      中文字
+                    </p>
+                  </template>
+
+                  <!-- 样式：26×26 缩略图 `kuStyle/<id>.png`（render `:51348-51353`）。
                      图挂了（文件不存在 / 没有 id）就不再画 <img>，留 .style-item 那层 rgba(0,0,0,.3) 底。 -->
-                <template v-else-if="kind === 'style'">
-                  <img
-                    v-if="styleThumbSrc(item.thumb) && !brokenThumbs.has(item.thumb ?? '')"
-                    class="style-item__thumb"
-                    :src="styleThumbSrc(item.thumb)"
-                    :alt="item.name"
-                    @error="onThumbError(item.thumb ?? '')"
-                  />
-                </template>
-              </div>
+                  <template v-else-if="kind === 'style'">
+                    <img
+                      v-if="styleThumbSrc(item.thumb) && !brokenThumbs.has(item.thumb ?? '')"
+                      class="style-item__thumb"
+                      :src="styleThumbSrc(item.thumb)"
+                      :alt="item.name"
+                      @error="onThumbError(item.thumb ?? '')"
+                    />
+                  </template>
+                </div>
 
-              <!-- 原版各组末尾的添加入口（如 `app.v4.js:49988-50000`）：底色 #535353、hover #444，
+                <!-- 原版各组末尾的添加入口（如 `app.v4.js:49988-50000`）：底色 #535353、hover #444，
                    图标是 `.icon` 跟 1em（12px）。 -->
-              <button
-                class="style-item style-item__add"
-                type="button"
-                title="添加当前前景色（ctrl+点击取边框色，alt+点击取文字色）"
-                @click="addItem(kind, index)"
-              >
-                <Icon name="#iconchuangjian" />
-              </button>
-            </div>
-          </BaseGroup>
+                <button
+                  class="style-item style-item__add"
+                  type="button"
+                  title="添加当前前景色（ctrl+点击取边框色，alt+点击取文字色）"
+                  @click="addItem(kind, index)"
+                >
+                  <Icon name="#iconchuangjian" />
+                </button>
+              </div>
+            </BaseGroup>
+          </div>
         </section>
       </template>
     </div>

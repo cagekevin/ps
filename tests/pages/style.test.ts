@@ -1,12 +1,14 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia, type Pinia } from 'pinia'
+import { readFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { setPref } from '@/cep/data/settings'
 import type { KuGroup, KuKind } from '@/domain/style-library'
 
 /**
  * 三态测试：加载 / 空库 / 读失败（含重试）；第 2 段再加"应用/添加经 useCommand 接线"；
- * 第 3 段是右键菜单（项 3 项 / 分组 5 项，清单 #32-50）。
+ * 第 3 段是右键菜单（四库各不一样，清单 #31-51）与组间距（#28 #29）。
  *
  * 只 mock 数据入口（`@/cep/data/style-library-repo`）与 jsx，store / 命令 / 页面都走真代码——
  * 这样测到的是"页面点了之后命令怎么跑"，不是替身自己的行为。
@@ -20,6 +22,9 @@ const repo = vi.hoisted(() => ({
   deleteItem: vi.fn(),
   renameItem: vi.fn(),
   sendToSwatch: vi.fn(),
+  appendItemToSwatch: vi.fn(),
+  sendGroupToSwatch: vi.fn(),
+  appendGroupToSwatch: vi.fn(),
   addGroup: vi.fn(),
   renameGroup: vi.fn(),
   deleteGroup: vi.fn(),
@@ -35,6 +40,9 @@ vi.mock('@/cep/data/style-library-repo', () => ({
   deleteKuItem: repo.deleteItem,
   renameKuItem: repo.renameItem,
   sendKuItemToSwatch: repo.sendToSwatch,
+  appendKuItemToSwatch: repo.appendItemToSwatch,
+  sendKuGroupToSwatch: repo.sendGroupToSwatch,
+  appendKuGroupToSwatch: repo.appendGroupToSwatch,
   addKuGroup: repo.addGroup,
   renameKuGroup: repo.renameGroup,
   deleteKuGroup: repo.deleteGroup,
@@ -111,6 +119,9 @@ beforeEach(() => {
   repo.deleteItem.mockResolvedValue(undefined)
   repo.renameItem.mockResolvedValue(undefined)
   repo.sendToSwatch.mockResolvedValue(undefined)
+  repo.appendItemToSwatch.mockResolvedValue(undefined)
+  repo.sendGroupToSwatch.mockResolvedValue(undefined)
+  repo.appendGroupToSwatch.mockResolvedValue(undefined)
   repo.addGroup.mockResolvedValue(undefined)
   repo.renameGroup.mockResolvedValue(undefined)
   repo.deleteGroup.mockResolvedValue(undefined)
@@ -588,7 +599,7 @@ describe('字体库 / 样式库的项内容（清单 #22 #24 #26）', () => {
   })
 })
 
-describe('样式页右键菜单（清单 #32-50：项 3 项 + 分组 5 项）', () => {
+describe('样式页右键菜单（清单 #31-51：四库各不一样）', () => {
   const mounted: Array<{ unmount(): void }> = []
 
   afterEach(() => {
@@ -612,13 +623,56 @@ describe('样式页右键菜单（清单 #32-50：项 3 项 + 分组 5 项）', 
     )
   }
 
+  /** 四库各一组一项：菜单内容与项的形状无关，只要能渲染出组头与项 */
+  function seedAllLibs() {
+    repo.read.mockResolvedValue(
+      snapshot({
+        color: [{ name: '灰白', show: true, items: [{ name: '未命名', swatch: '#302F34' }] }],
+        gradient: [
+          {
+            name: '渐变默认分组',
+            show: true,
+            items: [{ name: '未命名', swatch: 'linear-gradient(180deg, #fff 0%, #000 100%)' }],
+          },
+        ],
+        font: [
+          {
+            name: '等线字组',
+            show: true,
+            items: [
+              {
+                name: '未命名',
+                fontPreview: {
+                  count: 1,
+                  size: '12点',
+                  color: '',
+                  family: '等线',
+                  weight: '',
+                  scriptFamily: '',
+                },
+              },
+            ],
+          },
+        ],
+        style: [{ name: '样式默认分组', show: true, items: [{ name: '描边', thumb: 'X1.png' }] }],
+      }),
+    )
+  }
+
   // 菜单与弹窗都 Teleport 到 body，只能从 document 取
   function menuRoot() {
     return document.querySelector<HTMLElement>('.style-menu')
   }
-  function menuLabels() {
-    return Array.from(document.querySelectorAll('.style-menu__item')).map((el) =>
-      el.textContent?.trim(),
+  /**
+   * 菜单条目的完整序列，分隔线记作 `—`。
+   * 原版 `fg` 渲染成 `<hr class="menu-hr">`（`app.v4.js:319-320`），所以断言必须带位置，
+   * 只断言"有哪些文字"会漏掉分隔线错位。
+   */
+  function menuSequence(): string[] {
+    const root = menuRoot()
+    if (!root) return []
+    return Array.from(root.children).map((el) =>
+      el.tagName === 'HR' ? '—' : (el.textContent ?? '').trim(),
     )
   }
   function menuItem(label: string) {
@@ -646,6 +700,13 @@ describe('样式页右键菜单（清单 #32-50：项 3 项 + 分组 5 项）', 
     await flushPromises()
   }
 
+  /** 默认只显示颜色库；点第 n 个 tab 只留该库（原版 `switchFun` 非 ctrl 时只留自己） */
+  async function showLib(page: ReturnType<typeof mountPageWithConfirm>, index: number) {
+    if (index === 0) return
+    await page.findAll('.g-tabs__label')[index].trigger('click')
+    await flushPromises()
+  }
+
   async function rightClickItem(page: ReturnType<typeof mountPageWithConfirm>) {
     await page.find('.style-item').trigger('contextmenu', { clientX: 120, clientY: 80 })
     await flushPromises()
@@ -655,16 +716,139 @@ describe('样式页右键菜单（清单 #32-50：项 3 项 + 分组 5 项）', 
     await flushPromises()
   }
 
-  it('项菜单：右键项渲染 删除 / 重命名 / 发送到色板', async () => {
-    seedColorGroup()
+  // ---------- 四库项菜单：颜色 5 行，其余三库 2 行 ----------
+
+  it('颜色库项菜单：删除 / 重命名 / — / 发送到色板 / 追加到色板（:50324-50366）', async () => {
+    seedAllLibs()
     const page = mountPageWithConfirm()
     await flushPromises()
 
     expect(menuRoot()).toBeNull()
     await rightClickItem(page)
 
-    expect(menuLabels()).toEqual(['删除', '重命名', '发送到色板'])
+    expect(menuSequence()).toEqual(['删除', '重命名', '—', '发送到色板', '追加到色板'])
   })
+
+  it('渐变库项菜单：只有 删除 / 重命名（:50800-50819，无色板项、无分隔线）', async () => {
+    seedAllLibs()
+    const page = mountPageWithConfirm()
+    await flushPromises()
+    await showLib(page, 1)
+    await rightClickItem(page)
+
+    expect(menuSequence()).toEqual(['删除', '重命名'])
+  })
+
+  it('字体库项菜单：只有 删除 / 重命名（:51116-51135）', async () => {
+    seedAllLibs()
+    const page = mountPageWithConfirm()
+    await flushPromises()
+    await showLib(page, 2)
+    await rightClickItem(page)
+
+    expect(menuSequence()).toEqual(['删除', '重命名'])
+  })
+
+  it('样式库项菜单：只有 删除 / 重命名（:51563-51579）', async () => {
+    seedAllLibs()
+    const page = mountPageWithConfirm()
+    await flushPromises()
+    await showLib(page, 3)
+    await rightClickItem(page)
+
+    expect(menuSequence()).toEqual(['删除', '重命名'])
+  })
+
+  // ---------- 四库分组菜单：颜色 12 行（4 条分隔线），其余三库 7 行（2 条）----------
+
+  it('颜色库分组菜单：12 行，含色板两项与置灰的快速吸色（:50227-50322）', async () => {
+    seedAllLibs()
+    const page = mountPageWithConfirm()
+    await flushPromises()
+    await rightClickGroup(page)
+
+    expect(menuSequence()).toEqual([
+      '创建新组',
+      '—',
+      '删除',
+      '重命名',
+      '—',
+      '发送到色板',
+      '追加到色板',
+      '—',
+      '快速吸色到组',
+      '—',
+      '发送到仓库...',
+      '移动到仓库...',
+    ])
+  })
+
+  it('渐变库分组菜单：7 行，比颜色库少色板两项与吸色（:50821-50871）', async () => {
+    seedAllLibs()
+    const page = mountPageWithConfirm()
+    await flushPromises()
+    await showLib(page, 1)
+    await rightClickGroup(page)
+
+    expect(menuSequence()).toEqual([
+      '创建新组',
+      '—',
+      '删除',
+      '重命名',
+      '—',
+      '发送到仓库...',
+      '移动到仓库...',
+    ])
+  })
+
+  it('字体库分组菜单：7 行（:51137-51185）', async () => {
+    seedAllLibs()
+    const page = mountPageWithConfirm()
+    await flushPromises()
+    await showLib(page, 2)
+    await rightClickGroup(page)
+
+    expect(menuSequence()).toEqual([
+      '创建新组',
+      '—',
+      '删除',
+      '重命名',
+      '—',
+      '发送到仓库...',
+      '移动到仓库...',
+    ])
+  })
+
+  it('样式库分组菜单：7 行（:51581-51626）', async () => {
+    seedAllLibs()
+    const page = mountPageWithConfirm()
+    await flushPromises()
+    await showLib(page, 3)
+    await rightClickGroup(page)
+
+    expect(menuSequence()).toEqual([
+      '创建新组',
+      '—',
+      '删除',
+      '重命名',
+      '—',
+      '发送到仓库...',
+      '移动到仓库...',
+    ])
+  })
+
+  it('只有「创建新组」带图标 #iconchuangjian（:50231 / :50825 / :51141 / :51585）', async () => {
+    seedAllLibs()
+    const page = mountPageWithConfirm()
+    await flushPromises()
+    await rightClickGroup(page)
+
+    const icons = Array.from(document.querySelectorAll('.style-menu__icon'))
+    expect(icons).toHaveLength(1)
+    expect(menuItem('创建新组')!.contains(icons[0])).toBe(true)
+  })
+
+  // ---------- 菜单行为 ----------
 
   it('项菜单：删除先二次确认，取消不删、确认才调 style.deleteItem', async () => {
     seedColorGroup()
@@ -710,7 +894,7 @@ describe('样式页右键菜单（清单 #32-50：项 3 项 + 分组 5 项）', 
     expect(repo.renameItem).toHaveBeenCalledWith('color', 0, 0, '品牌灰')
   })
 
-  it('项菜单：发送到色板 → 调 style.sendToSwatch，不弹确认', async () => {
+  it('项菜单：发送到色板 → style.sendToSwatch（整份替换），不弹确认', async () => {
     seedColorGroup()
     const page = mountPageWithConfirm()
     await flushPromises()
@@ -725,14 +909,17 @@ describe('样式页右键菜单（清单 #32-50：项 3 项 + 分组 5 项）', 
     expect(menuRoot()).toBeNull()
   })
 
-  it('分组菜单：右键组头渲染 创建新组 / 删除 / 重命名 + 两条分隔线 + 两个置灰仓库项', async () => {
+  it('项菜单：追加到色板 → style.appendItemToSwatch（读回后 push，不是替换）', async () => {
     seedColorGroup()
     const page = mountPageWithConfirm()
     await flushPromises()
-    await rightClickGroup(page)
+    await rightClickItem(page)
 
-    expect(menuLabels()).toEqual(['创建新组', '删除', '重命名', '发送到仓库...', '移动到仓库...'])
-    expect(document.querySelectorAll('.style-menu__hr')).toHaveLength(2)
+    menuItem('追加到色板')!.click()
+    await flushPromises()
+
+    expect(repo.appendItemToSwatch).toHaveBeenCalledWith('color', 0, 0)
+    expect(repo.sendToSwatch).not.toHaveBeenCalled()
   })
 
   it('分组菜单：创建新组 → style.addGroup（插在右键的那个组之后）', async () => {
@@ -782,18 +969,49 @@ describe('样式页右键菜单（清单 #32-50：项 3 项 + 分组 5 项）', 
     expect(repo.renameGroup).toHaveBeenCalledWith('color', 0, '冷灰')
   })
 
-  it('分组菜单：发送到仓库 / 移动到仓库 置灰不可点，title 写明未实现', async () => {
+  it('分组菜单：发送到色板 → style.sendGroupToSwatch（整组替换）', async () => {
     seedColorGroup()
     const page = mountPageWithConfirm()
     await flushPromises()
     await rightClickGroup(page)
 
-    const send = menuItem('发送到仓库...')!
-    const move = menuItem('移动到仓库...')!
-    for (const entry of [send, move]) {
+    menuItem('发送到色板')!.click()
+    await flushPromises()
+
+    expect(repo.sendGroupToSwatch).toHaveBeenCalledWith('color', 0)
+  })
+
+  it('分组菜单：追加到色板 → style.appendGroupToSwatch（逐项 push）', async () => {
+    seedColorGroup()
+    const page = mountPageWithConfirm()
+    await flushPromises()
+    await rightClickGroup(page)
+
+    menuItem('追加到色板')!.click()
+    await flushPromises()
+
+    expect(repo.appendGroupToSwatch).toHaveBeenCalledWith('color', 0)
+    expect(repo.sendGroupToSwatch).not.toHaveBeenCalled()
+  })
+
+  it('三项未实现的菜单项置灰不可点，title 写明台账编号', async () => {
+    seedColorGroup()
+    const page = mountPageWithConfirm()
+    await flushPromises()
+    await rightClickGroup(page)
+
+    // 快速吸色到组 = T-66（依赖 PS 事件 1936028772）；仓库两项 = T-65
+    const entries: Array<[string, string]> = [
+      ['快速吸色到组', 'T-66'],
+      ['发送到仓库...', 'T-65'],
+      ['移动到仓库...', 'T-65'],
+    ]
+    for (const [label, id] of entries) {
+      const entry = menuItem(label)!
       expect(entry.classList.contains('is-disabled')).toBe(true)
       expect(entry.getAttribute('aria-disabled')).toBe('true')
       expect(entry.getAttribute('title')).toContain('未实现')
+      expect(entry.getAttribute('title')).toContain(id)
       entry.click()
     }
     await flushPromises()
@@ -802,6 +1020,8 @@ describe('样式页右键菜单（清单 #32-50：项 3 项 + 分组 5 项）', 
     expect(repo.addGroup).not.toHaveBeenCalled()
     expect(repo.deleteGroup).not.toHaveBeenCalled()
     expect(repo.renameGroup).not.toHaveBeenCalled()
+    expect(repo.sendGroupToSwatch).not.toHaveBeenCalled()
+    expect(repo.appendGroupToSwatch).not.toHaveBeenCalled()
     expect(modalEl()).toBeNull()
     expect(menuRoot()).not.toBeNull()
   })
@@ -831,5 +1051,55 @@ describe('样式页右键菜单（清单 #32-50：项 3 项 + 分组 5 项）', 
     await flushPromises()
 
     expect(menuRoot()).toBeNull()
+  })
+})
+
+describe('组与组之间的间距（清单 #29 #28）', () => {
+  const ROOT = process.cwd()
+  const CSS = readFileSync(join(ROOT, 'src/pages/style/index.css'), 'utf8')
+  const TOKENS = readFileSync(join(ROOT, 'src/styles/tokens.css'), 'utf8')
+
+  /** 取一条规则的花括号内容（选择器按字面匹配，只用于本文件里已知的写法） */
+  function rule(selector: string): string {
+    const escaped = selector.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+    const match = CSS.match(new RegExp(`(?:^|\\n)${escaped}\\s*\\{([^}]*)\\}`))
+    expect(match, `index.css 里找不到 ${selector} 规则`).toBeTruthy()
+    return (match?.[1] ?? '').replace(/\s+/g, ' ').trim()
+  }
+
+  function token(name: string): string {
+    const match = TOKENS.match(new RegExp(`--${name}:\\s*([^;]+);`))
+    expect(match, `tokens.css 里找不到 --${name}`).toBeTruthy()
+    return (match?.[1] ?? '').trim()
+  }
+
+  it('组间距挂在组容器上：margin-bottom 4px + 左内边距 10px（原版 .mb4 + .app-padding-wrap）', () => {
+    // 先确认 token 值，避免"断言的是变量名、实际值是别的"
+    expect(token('sp-2')).toBe('4px')
+    expect(token('sp-exact-10')).toBe('10px')
+
+    const group = rule('.style-group')
+    expect(group).toContain('margin-bottom: var(--sp-2)')
+    expect(group).toContain('padding: 0 0 0 var(--sp-exact-10)')
+  })
+
+  it('滚动区不再自己加左右 10px（否则与组容器叠加成 20px）', () => {
+    expect(rule('.style-body')).not.toContain('padding')
+  })
+
+  it('项间距：横向 5px，样式库 6px（原版 mr6，:51350）；行距逐库 6/5/5/7', () => {
+    expect(token('sp-exact-5')).toBe('5px')
+    expect(token('sp-3')).toBe('6px')
+    expect(token('sp-exact-7')).toBe('7px')
+
+    expect(rule('.style-items')).toContain('gap: var(--sp-exact-5)')
+    // 颜色 .mt6
+    expect(rule('.style-lib--color .style-items')).toContain('row-gap: var(--sp-3)')
+    expect(rule('.style-lib--color .style-items')).toContain('padding-top: var(--sp-3)')
+    // 样式 .mt7 / .mr6
+    const styleRow = rule('.style-lib--style .style-items')
+    expect(styleRow).toContain('column-gap: var(--sp-3)')
+    expect(styleRow).toContain('row-gap: var(--sp-exact-7)')
+    expect(styleRow).toContain('padding-top: var(--sp-exact-7)')
   })
 })

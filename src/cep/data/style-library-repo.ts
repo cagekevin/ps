@@ -514,7 +514,38 @@ function swatchFilePath(): string {
 }
 
 /**
- * 发送到色板：把这一项写成色板文件的**全部内容**。
+ * 读色板数组。文件不存在 / 空文件 = 空数组（原版 `readToArray` 同语义，`app.v4.js:72714-72727`）。
+ *
+ * **有意偏离**：原版 `readToArray` 连 JSON 坏掉也吞成 `[]`，然后 `write` 覆盖回去 ——
+ * 用户的色板会被一次追加抹平。这里坏文件直接抛，宁可这次追加失败。
+ */
+async function readSwatchItems(path: string): Promise<unknown[]> {
+  const text = await readTextSmart(path)
+  if (text === null || text === '') return []
+
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(text)
+  } catch (e) {
+    log.error('style', '色板文件不是合法 JSON', e)
+    throw new CepError('PARSE', `色板文件不是合法 JSON，已中止写入：${path}`)
+  }
+  if (!Array.isArray(parsed))
+    throw new CepError('PARSE', `色板文件顶层不是数组，已中止写入：${path}`)
+  return parsed
+}
+
+/** 写色板全文：旧内容先进 `.bak`，再原子写；写不进去抛（不让用户以为发送成功） */
+async function writeSwatchItems(path: string, items: unknown[]): Promise<void> {
+  const previous = await readTextSmart(path)
+  if (previous) writeTextFile(`${path}.bak`, previous)
+  if (!writeTextFileAtomic(path, JSON.stringify(items))) {
+    throw new CepError('IO', `色板文件写入失败：${path}`)
+  }
+}
+
+/**
+ * 发送到色板（项）：把这一项写成色板文件的**全部内容**。
  *
  * 原版 `showItemMenu` 的「发送到色板」（`app.v4.js:50349-50355`）：
  * `D.a.write(path.seBan, JSON.stringify([item]))` → 整份替换，不是追加
@@ -525,6 +556,7 @@ function swatchFilePath(): string {
  * （`com.adobe.PhotoshopRegisterEvent`），本项目没有通用 app event 发送器，本次边界也不许改它。
  * 后果：文件写对了，但色板面板会不会自己刷新、还是必须重开面板才看得见，**未验**。
  * 另外色板面板读这个文件时会不会挑剔项字段（非颜色项塞进去会怎样），也**未验**。
+ * 下面三条色板命令同一缺口，不再重复标注。
  */
 export function sendKuItemToSwatch(
   kind: KuKind,
@@ -534,12 +566,50 @@ export function sendKuItemToSwatch(
   return enqueue(async () => {
     const { groups } = await readRawGroups(kind)
     const item = itemAt(groups, groupIndex, itemIndex)
+    await writeSwatchItems(swatchFilePath(), [item])
+  })
+}
+
+/**
+ * 追加到色板（项）。原版 `:50356-50364`：`readToArray(seBan)` → `push(该项)` → `write` → tips「追加成功」。
+ */
+export function appendKuItemToSwatch(
+  kind: KuKind,
+  groupIndex: number,
+  itemIndex: number,
+): Promise<void> {
+  return enqueue(async () => {
+    const { groups } = await readRawGroups(kind)
+    const item = itemAt(groups, groupIndex, itemIndex)
     const path = swatchFilePath()
 
-    const previous = await readTextSmart(path)
-    if (previous) writeTextFile(`${path}.bak`, previous)
-    if (!writeTextFileAtomic(path, JSON.stringify([item]))) {
-      throw new CepError('IO', `色板文件写入失败：${path}`)
-    }
+    const items = await readSwatchItems(path)
+    items.push(item)
+    await writeSwatchItems(path, items)
+  })
+}
+
+/**
+ * 发送到色板（整组）。原版 `:50260-50268`：
+ * `write(path.seBan, JSON.stringify(data.info[index].list))` —— **整份替换**，不是逐项追加。
+ */
+export function sendKuGroupToSwatch(kind: KuKind, groupIndex: number): Promise<void> {
+  return enqueue(async () => {
+    const { groups } = await readRawGroups(kind)
+    const list = itemList(groupAt(groups, groupIndex), groupIndex)
+    await writeSwatchItems(swatchFilePath(), list)
+  })
+}
+
+/** 追加到色板（整组）。原版 `:50269-50290`：读回 → 逐项 push 该组 `list` → 写回 */
+export function appendKuGroupToSwatch(kind: KuKind, groupIndex: number): Promise<void> {
+  return enqueue(async () => {
+    const { groups } = await readRawGroups(kind)
+    const list = itemList(groupAt(groups, groupIndex), groupIndex)
+    const path = swatchFilePath()
+
+    const items = await readSwatchItems(path)
+    for (const item of list) items.push(item)
+    await writeSwatchItems(path, items)
   })
 }

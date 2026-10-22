@@ -511,6 +511,12 @@ export interface CommandPayloads {
   'style.deleteItem': StyleItemRefPayload
   'style.reorderItem': StyleReorderItemPayload
   'style.sendToSwatch': StyleItemRefPayload
+  /** 追加到色板（原版 `app.v4.js:50356-50364`）：读回 seBan → push 该项 → 写回 */
+  'style.appendItemToSwatch': StyleItemRefPayload
+  /** 整组发送到色板（原版 `:50260-50268`）：该组 list 整份替换 seBan */
+  'style.sendGroupToSwatch': StyleGroupIndexPayload
+  /** 整组追加到色板（原版 `:50269-50290`）：读回 seBan → 逐项 push → 写回 */
+  'style.appendGroupToSwatch': StyleGroupIndexPayload
 
   'legacy.call': LegacyCallPayload
   'cloud.setUrl': CloudSetUrlPayload

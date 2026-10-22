@@ -1,6 +1,8 @@
 import {
   addKuGroup,
   addKuItem,
+  appendKuGroupToSwatch,
+  appendKuItemToSwatch,
   deleteKuGroup,
   deleteKuItem,
   moveKuItem,
@@ -9,6 +11,7 @@ import {
   renameKuGroup,
   renameKuItem,
   replaceKuItem,
+  sendKuGroupToSwatch,
   sendKuItemToSwatch,
   setKuGroupShow,
 } from '@/cep/data/style-library-repo'
@@ -28,7 +31,8 @@ import type { Command } from './types'
  * 编辑类不需要选区（`requires: 'none'`）：它们不碰 PS，改的是磁盘上的库文件。
  * 写库的备份、串行队列、索引补登记全在 repo 里，命令层只做参数校验与调用。
  *
- * 本期仍不做：吸色到组（`Tool_set("eyedropperTool")` + PS 事件 `1936028772`，`app.v4.js:50299-50302`）、
+ * 本期仍不做：吸色到组（`Tool_set("eyedropperTool")` + PS 事件 `1936028772`，`app.v4.js:50299-50302`，
+ * 台账 T-66；菜单项已渲染但置灰）、
  * 拖图片取色（`exportCurrentLayerToImage`，`:54639`）、仓库发送/移动、四类库与 `.kux` 的导入导出、
  * 项拖拽排序（右键菜单只做上移/下移）。
  *
@@ -283,6 +287,42 @@ export const styleCommands: Command<unknown>[] = [
       // UNVERIFIED: 那条 `com.fengzi.event.seban` 通知没有发（本项目没有通用 app event 发送器），
       // 色板面板会不会自己刷新未验；详见 `sendKuItemToSwatch` 的注释。
       await sendKuItemToSwatch(kind, groupIndex, itemIndex)
+    },
+  }),
+
+  defineCommand({
+    id: 'style.appendItemToSwatch',
+    title: '追加到色板',
+    group: 'style',
+    requires: 'none',
+    kind: 'instant',
+    async run(_ctx, { kind, groupIndex, itemIndex }) {
+      // 原版 `:50356-50364`：读回 seBan 数组 → push 该项 → 写回（与上一条的"整份替换"相反）
+      await appendKuItemToSwatch(kind, groupIndex, itemIndex)
+    },
+  }),
+
+  defineCommand({
+    id: 'style.sendGroupToSwatch',
+    title: '整组发送到色板',
+    group: 'style',
+    requires: 'none',
+    kind: 'instant',
+    async run(_ctx, { kind, groupIndex }) {
+      // 原版 `:50260-50268`：`write(seBan, JSON.stringify(list))`——整组**替换**色板，不是追加
+      await sendKuGroupToSwatch(kind, groupIndex)
+    },
+  }),
+
+  defineCommand({
+    id: 'style.appendGroupToSwatch',
+    title: '整组追加到色板',
+    group: 'style',
+    requires: 'none',
+    kind: 'instant',
+    async run(_ctx, { kind, groupIndex }) {
+      // 原版 `:50269-50290`：读回 → 逐项 push 该组 `list` → 写回
+      await appendKuGroupToSwatch(kind, groupIndex)
     },
   }),
 ]
