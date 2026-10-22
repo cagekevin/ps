@@ -25,9 +25,11 @@ import StyleMenu, { type StyleMenuEntry } from './components/StyleMenu.vue'
  * 结构对照原版 `EC()`（`app.v4.js:49616-49885`）：
  * 仓库条（49650）→ 4 tab（49653）→ 四库列表（49685）→ 底栏（49844）→ 回顶（49828）。
  *
- * 第 1 段：只读骨架 + 三态。第 2 段：应用（6 条 jsx）与添加（3 条 jsx）经 `useCommand` 接上。
+ * 第 1 段：只读骨架 + 三态。第 2 段：应用（7 条 jsx）与添加（4 条 jsx）经 `useCommand` 接上。
  * 第 3 段：项 / 分组右键菜单（清单 #32-50）——删改走 `style.deleteItem|renameItem|deleteGroup|renameGroup`，
  * 新建组走 `style.addGroup`，发送到色板走 `style.sendToSwatch`。
+ * 第 4 段：组头 `ctrl+点击` → `style.toggleGroupShow`（`only`），普通点击折叠/展开也走同一条命令写库；
+ * 底栏四个「添加×分组」→ `style.addGroup`。
  * 本期仍不做：吸色到组、拖图片取色、仓库发送/移动（菜单项已渲染但置灰，命令未实现）、
  * 库文件与 `.kux` 导入导出（见 commands/style.ts 头部）。
  *
@@ -46,9 +48,6 @@ const { libraries, loading, error, currentName, warehouses, activeIndex } = stor
 /** 原版 `set.ysShowTab`（`app.v4.js:54657` 起 switchFun 读写它）；我们落 `sj_v5_ui.json`，不动 `sj_set.json` */
 const showTabs = usePersistedRef<boolean[]>('styleShowTab', [true, false, false, false])
 
-/** 组折叠：原版写库（`setShowStatus` → `updata`，`:50177-50179` 等），第 3 段接；本段只存页面内 */
-const collapsed = ref<Record<string, boolean>>({})
-
 /**
  * 仓库下拉是否展开。原版 `f_showDown` 只切本地 `showDown`（`app.v4.js:53754`），
  * 列表内容来自索引 `sj_kuStoreInfo.ini`；点某一项会写索引，属于写能力 → 本段只读展示。
@@ -60,10 +59,13 @@ const brokenThumbs = ref<Set<string>>(new Set())
 
 const applyColorCmd = useCommand('style.applyColor')
 const applyGradientCmd = useCommand('style.applyGradient')
+const applyFontCmd = useCommand('style.applyFont')
 const applyStyleCmd = useCommand('style.applyStyle')
 const addColorCmd = useCommand('style.addColor')
 const addGradientCmd = useCommand('style.addGradient')
+const addFontCmd = useCommand('style.addFont')
 const addStyleCmd = useCommand('style.addStyle')
+const toggleGroupShowCmd = useCommand('style.toggleGroupShow')
 const deleteItemCmd = useCommand('style.deleteItem')
 const renameItemCmd = useCommand('style.renameItem')
 const sendToSwatchCmd = useCommand('style.sendToSwatch')
@@ -81,19 +83,35 @@ const isEmpty = computed(() =>
   visibleKinds.value.every((kind) => libraries.value[kind].length === 0),
 )
 
-function groupOpen(kind: string, index: number, show: boolean): boolean {
-  const key = `${kind}-${index}`
-  return collapsed.value[key] === undefined ? show : !collapsed.value[key]
-}
-
-function toggleGroup(kind: string, index: number) {
-  const key = `${kind}-${index}`
-  collapsed.value[key] = !collapsed.value[key]
+/**
+ * 组的展开/折叠与"仅显示该组"都写库：原版组头的 `change` 一律走 `changeGroupShowStatus(index, event.ctrl)`
+ * （颜色 `setGroupShowStatus` `:50177-50179`、渐变 `setGroupShow` `:50797-50799`、
+ * 字体 `changGroupStatus` `:51113-51115`、样式 `setShowStatus` `:51560-51562`），
+ * `ctrl` 为真时是 `showOnlyGroup`（`:52420-52435`），否则取反并 `updata()`（`:52417`）。
+ * 所以折叠状态在库文件的 `show` 字段里，页面不再自己存一份（页面 ref 刷新即丢）。
+ */
+async function setGroupShow(kind: KuKind, groupIndex: number, only: boolean) {
+  const ok = only
+    ? await toggleGroupShowCmd.run({ kind, groupIndex, only: true })
+    : await toggleGroupShowCmd.run({ kind, groupIndex })
+  if (ok) await store.load()
 }
 
 /** 四类库的项尺寸各不同（CSS 按这个类分派，见 index.css 的实测依据） */
 function libClass(kind: string): string {
   return `style-lib--${kind}`
+}
+
+/**
+ * 各组末尾「+」的 title：原版四库各写各的
+ * （颜色 `:49991`、渐变 `:50572`、字体 `:50985`、样式 `:51378`）。
+ * 写错库名等于告诉用户点了会发生另一件事——字体那个「+」现在加的是字体，不是前景色。
+ */
+const ADD_TITLE: Record<KuKind, string> = {
+  color: '添加当前前景色',
+  gradient: '添加渐变色，仅支持形状图层',
+  font: '添加字体，支持多图层',
+  style: '添加样式',
 }
 
 /**
@@ -161,39 +179,61 @@ function modifierOf(event: MouseEvent): StyleModifier {
   return 'none'
 }
 
-async function applyItem(kind: string, groupIndex: number, itemIndex: number, event: MouseEvent) {
+async function applyItem(kind: KuKind, groupIndex: number, itemIndex: number, event: MouseEvent) {
   // alt 应用颜色后 PS 侧可能改写这一项，成功后要重新读库
   const replaced = await applyKind(kind, groupIndex, itemIndex, modifierOf(event))
   if (replaced) await store.load()
 }
 
+/**
+ * 点项 → 按库分派。四库各一条命令，**没有兜底分支**。
+ *
+ * 原版四个库的项是四个组件（`DC` / `qC` / `e_` / `o_`），点击处理互不通用：
+ * 字体项走 `useFont`（`app.v4.js:51187-51228`），图层样式项走 `:51509-51511`。
+ * 落到"最后一个 else"就会把字体项当图层样式应用——这是本页修掉的数据级 bug。
+ */
 async function applyKind(
-  kind: string,
+  kind: KuKind,
   groupIndex: number,
   itemIndex: number,
   modifier: StyleModifier,
 ): Promise<boolean> {
-  if (kind === 'color') {
-    await applyColorCmd.run({ groupIndex, itemIndex, modifier })
-    return modifier === 'alt'
+  switch (kind) {
+    case 'color':
+      await applyColorCmd.run({ groupIndex, itemIndex, modifier })
+      return modifier === 'alt'
+    case 'gradient':
+      await applyGradientCmd.run({ groupIndex, itemIndex })
+      return false
+    case 'font':
+      // 原版 `useFont`（`:51200-51215`）：先 check 再 use，不改库文件
+      await applyFontCmd.run({ groupIndex, itemIndex })
+      return false
+    case 'style':
+      await applyStyleCmd.run({ groupIndex, itemIndex })
+      return false
   }
-  if (kind === 'gradient') {
-    await applyGradientCmd.run({ groupIndex, itemIndex })
-    return false
-  }
-  await applyStyleCmd.run({ groupIndex, itemIndex })
-  return false
 }
 
-async function addItem(kind: string, groupIndex: number) {
-  const ok =
-    kind === 'color'
-      ? await addColorCmd.run({ groupIndex }, '已添加前景色')
-      : kind === 'gradient'
-        ? await addGradientCmd.run({ groupIndex }, '已添加当前渐变')
-        : await addStyleCmd.run({ groupIndex }, '已保存图层样式')
+/**
+ * 组末「+」→ 按库分派。同样没有兜底分支：原版四库各一个 `addColor` / `addGradient` /
+ * `addFont`（`:51230-51277`）/ `addStyle`，把字体项写进样式库就是污染用户库文件。
+ */
+async function addKind(kind: KuKind, groupIndex: number): Promise<boolean> {
+  switch (kind) {
+    case 'color':
+      return addColorCmd.run({ groupIndex }, '已添加前景色')
+    case 'gradient':
+      return addGradientCmd.run({ groupIndex }, '已添加当前渐变')
+    case 'font':
+      return addFontCmd.run({ groupIndex }, '已添加当前字体')
+    case 'style':
+      return addStyleCmd.run({ groupIndex }, '已保存图层样式')
+  }
+}
 
-  if (ok) await store.load()
+async function addItem(kind: KuKind, groupIndex: number) {
+  if (await addKind(kind, groupIndex)) await store.load()
 }
 
 // ---------- 右键菜单（原版 showItemMenu / showGroupMenu）----------
@@ -334,8 +374,11 @@ const prompt = ref({
  * 原版 `$inputBox.show(callback, title, content)`：
  * 新建组不填默认值（`:50234`）、重命名组回填当前组名（`:50256` `getGroupName`）、
  * 重命名项不回填（`:50336`）。
+ *
+ * `groupIndex = -1` 表示"不是从某一组右键来的"（底栏四个「添加×分组」按钮，
+ * 原版 `addGroup(t)` `:54873-54879` 只传库名 → 追加到末尾）。
  */
-function openPrompt(mode: PromptMode, kind: KuKind, groupIndex: number, itemIndex = -1) {
+function openPrompt(mode: PromptMode, kind: KuKind, groupIndex = -1, itemIndex = -1) {
   const group = libraries.value[kind][groupIndex]
   const config: Record<PromptMode, { title: string; placeholder: string; value: string }> = {
     createGroup: { title: '新建分组', placeholder: '请输入组名', value: '' },
@@ -356,8 +399,11 @@ async function submitPrompt() {
 
   const ok =
     mode === 'createGroup'
-      ? // 原版 `addGroup(t, e)`：插在右键的那个组之后（`:50235`）
-        await addGroupCmd.run({ kind, name: value, afterIndex: groupIndex }, '已新建分组')
+      ? // 原版 `addGroup(t, e)`：插在右键的那个组之后（`:50235`）；底栏按钮没有"那个组"，追加到末尾
+        await addGroupCmd.run(
+          { kind, name: value, afterIndex: groupIndex >= 0 ? groupIndex : undefined },
+          '已新建分组',
+        )
       : mode === 'renameGroup'
         ? await renameGroupCmd.run({ kind, groupIndex, name: value }, '已重命名分组')
         : await renameItemCmd.run({ kind, groupIndex, itemIndex, name: value }, '已重命名')
@@ -474,8 +520,9 @@ onMounted(() => {
           >
             <BaseGroup
               :text="group.name"
-              :value="groupOpen(kind, index, group.show)"
-              @change="toggleGroup(kind, index)"
+              :value="group.show"
+              @change="setGroupShow(kind, index, false)"
+              @ctrl="setGroupShow(kind, index, true)"
               @menu="openGroupMenu($event, kind, index)"
             >
               <div class="style-items">
@@ -539,11 +586,11 @@ onMounted(() => {
                 </div>
 
                 <!-- 原版各组末尾的添加入口（如 `app.v4.js:49988-50000`）：底色 #535353、hover #444，
-                   图标是 `.icon` 跟 1em（12px）。 -->
+                   图标是 `.icon` 跟 1em（12px）。title 四库原文不同，见 ADD_TITLE -->
                 <button
                   class="style-item style-item__add"
                   type="button"
-                  title="添加当前前景色（ctrl+点击取边框色，alt+点击取文字色）"
+                  :title="ADD_TITLE[kind]"
                   @click="addItem(kind, index)"
                 >
                   <Icon name="#iconchuangjian" />
@@ -565,21 +612,42 @@ onMounted(() => {
       <GInput v-model="prompt.value" :placeholder="prompt.placeholder" @enter="submitPrompt" />
     </CepModal>
 
-    <!-- 原版 .button-nav（49844）：添加分组 4 个 + 竖线 + 导入 / 导出。
-         添加分组写库、导入导出是文件 IO，都属于第 3 段（T-48），本段保持 disabled。
+    <!-- 原版 .button-nav（`app.v4.js:49773-49832`）：添加分组 4 个 + 竖线 + 导入 / 导出。
+         四个「添加×分组」= `addGroup("col"|"gradient"|"font"|"style")`（`:54873-54879`，弹输入框、追加到末尾）；
+         导入导出是文件 IO，本段仍 disabled（T-48）。
          图标不带 size：原版本页是 `.svg-18`（清单 #93），但底排图标守卫要求全项目 1em
          （`tests/components/page-bottom-bar.test.ts:155`），本页跟着守卫走，18px 待统一决定。 -->
     <PageBottomBar>
-      <button class="g-bottom-bar__icon" type="button" title="添加颜色分组" disabled>
+      <button
+        class="g-bottom-bar__icon"
+        type="button"
+        title="添加颜色分组"
+        @click="openPrompt('createGroup', 'color')"
+      >
         <Icon name="#iconchuangjian" />
       </button>
-      <button class="g-bottom-bar__icon" type="button" title="添加渐变分组" disabled>
+      <button
+        class="g-bottom-bar__icon"
+        type="button"
+        title="添加渐变分组"
+        @click="openPrompt('createGroup', 'gradient')"
+      >
         <Icon name="#iconchuangjian" />
       </button>
-      <button class="g-bottom-bar__icon" type="button" title="添加字体分组" disabled>
+      <button
+        class="g-bottom-bar__icon"
+        type="button"
+        title="添加字体分组"
+        @click="openPrompt('createGroup', 'font')"
+      >
         <Icon name="#iconzitimianban" />
       </button>
-      <button class="g-bottom-bar__icon" type="button" title="添加样式分组" disabled>
+      <button
+        class="g-bottom-bar__icon"
+        type="button"
+        title="添加样式分组"
+        @click="openPrompt('createGroup', 'style')"
+      >
         <Icon name="#iconxinjianyangshifenzu" />
       </button>
       <span class="g-bottom-bar__divider" />

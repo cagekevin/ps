@@ -358,7 +358,13 @@ export interface StyleApplyStylePayload {
   itemIndex: number
 }
 
-/** 添加：从 PS 读当前前景色 / 渐变 / 图层样式，写进当前仓库的第 groupIndex 组 */
+/** 应用字体：原版 `useFont`（`app.v4.js:51187-51228`）先 `ys_checkUseFont` 再 `ys_useFont` */
+export interface StyleApplyFontPayload {
+  groupIndex: number
+  itemIndex: number
+}
+
+/** 添加：从 PS 读当前前景色 / 渐变 / 字体属性 / 图层样式，写进当前仓库的第 groupIndex 组 */
 export interface StyleAddColorPayload {
   groupIndex: number
 }
@@ -368,6 +374,11 @@ export interface StyleAddGradientPayload {
 }
 
 export interface StyleAddStylePayload {
+  groupIndex: number
+}
+
+/** 添加字体：原版 `addFont`（`app.v4.js:51230-51277`）读 `ys_getFontInfo` 的 `data` 整份入库 */
+export interface StyleAddFontPayload {
   groupIndex: number
 }
 
@@ -498,9 +509,11 @@ export interface CommandPayloads {
 
   'style.applyColor': StyleApplyColorPayload
   'style.applyGradient': StyleApplyGradientPayload
+  'style.applyFont': StyleApplyFontPayload
   'style.applyStyle': StyleApplyStylePayload
   'style.addColor': StyleAddColorPayload
   'style.addGradient': StyleAddGradientPayload
+  'style.addFont': StyleAddFontPayload
   'style.addStyle': StyleAddStylePayload
   'style.addGroup': StyleAddGroupPayload
   'style.renameGroup': StyleRenameGroupPayload

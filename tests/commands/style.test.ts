@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
+import { encodeText } from '@/domain/translate'
 
 /**
  * 样式域命令（第 2 段）。
@@ -14,7 +15,13 @@ const selection = vi.hoisted(() => ({ hasSelection: true, typeNumber: 2 }))
 
 const jsx = vi.hoisted(() => ({
   action: { callAction: vi.fn(), getActionList: vi.fn() },
-  font: { setFont: vi.fn(), initSystemList: vi.fn() },
+  font: {
+    setFont: vi.fn(),
+    initSystemList: vi.fn(),
+    checkUseFont: vi.fn(),
+    useFont: vi.fn(),
+    getFontInfo: vi.fn(),
+  },
   layer: { isSelectLayer: vi.fn(), getTypeNumber: vi.fn() },
   env: { setEnv: vi.fn() },
   rename: { batchName: vi.fn(), setLayerColor: vi.fn() },
@@ -69,6 +76,7 @@ const { styleIndexRepo } = await import('@/cep/data/style-library-repo')
 const USER = 'ROAM/SheJiZhuLi'
 const COLOR_LIB = `${USER}/sj_kuColA.ini`
 const GRADIENT_LIB = `${USER}/sj_kuGraA.ini`
+const FONT_LIB = `${USER}/sj_kuFonA.json`
 const STYLE_LIB = `${USER}/sj_kuStyA.ini`
 const SWATCH_FILE = 'ROAM/FengZiSeBan/userColor.ini'
 
@@ -111,8 +119,17 @@ beforeEach(async () => {
   seed(GRADIENT_LIB, [
     { name: '渐变默认分组', show: true, list: [{ name: '未命名', gradient: { angle: 90 } }] },
   ])
+  seed(FONT_LIB, [
+    {
+      name: '等线字组',
+      show: true,
+      list: [{ name: '未命名', fonts: [{ family: '等线', weight: 'Regular' }] }],
+    },
+  ])
   seed(STYLE_LIB, [{ name: '样式默认分组', show: true, id: 'YS5B2C4C06B1029543', list: [] }])
 
+  jsx.font.checkUseFont.mockResolvedValue(null)
+  jsx.font.useFont.mockResolvedValue(null)
   jsx.style.useShapeFill.mockResolvedValue(null)
   jsx.style.setBorderColor.mockResolvedValue(null)
   jsx.style.changeStyleColor.mockResolvedValue(null)
@@ -281,8 +298,64 @@ describe('三条"添加"命令', () => {
   })
 })
 
-// ---------- 第 3 段：分组 / 项的增删改 + 写库 ----------
+// ---------- 字体库：应用 / 添加（原版 useFont :51187-51228、addFont :51230-51277）----------
 
+describe('style.applyFont（原版 useFont：先 ys_checkUseFont 再 ys_useFont）', () => {
+  it('发的是整项 JSON 经 Xv 编码后的文本，两步用同一个载荷', async () => {
+    const item = { name: '未命名', fonts: [{ family: '等线', weight: 'Regular' }] }
+
+    await expect(
+      execute('style.applyFont', { groupIndex: 0, itemIndex: 0 }),
+    ).resolves.toMatchObject({ ok: true })
+
+    const payload = encodeText(JSON.stringify(item))
+    expect(jsx.font.checkUseFont).toHaveBeenCalledWith(payload)
+    expect(jsx.font.useFont).toHaveBeenCalledWith(payload)
+    // 不许落到图层样式命令（这就是本轮修的 bug）
+    expect(jsx.style.useStyle).not.toHaveBeenCalled()
+  })
+
+  it('check 返回 err=1 → 报错，且不调 ys_useFont（原版 :51205-51209 直接中止）', async () => {
+    jsx.font.checkUseFont.mockResolvedValue({ err: 1, msg: '缺少字体：等线' })
+
+    await expect(
+      execute('style.applyFont', { groupIndex: 0, itemIndex: 0 }),
+    ).resolves.toMatchObject({ ok: false, reason: expect.stringContaining('缺少字体') })
+    expect(jsx.font.useFont).not.toHaveBeenCalled()
+  })
+})
+
+describe('style.addFont（原版 addFont：ys_getFontInfo 的 data 整份入库）', () => {
+  it('data 原样写进字体库，不改键不补字段', async () => {
+    const data = { name: '未命名', fonts: [{ family: '等线', weight: 'Regular' }] }
+    jsx.font.getFontInfo.mockResolvedValue({ err: 0, data })
+
+    await expect(execute('style.addFont', { groupIndex: 0 })).resolves.toEqual({ ok: true })
+
+    const g = (await read(FONT_LIB)) as Array<{ list: unknown[] }>
+    expect(g[0].list).toHaveLength(2)
+    expect(g[0].list[1]).toEqual(data)
+    // 绝不许写进样式库
+    const styleLib = (await read(STYLE_LIB)) as Array<{ list: unknown[] }>
+    expect(styleLib[0].list).toHaveLength(0)
+  })
+
+  it('false / err=1 / fonts 为空都不入库（原版 :51246-51262 三个分支）', async () => {
+    jsx.font.getFontInfo.mockResolvedValue(false)
+    await expect(execute('style.addFont', { groupIndex: 0 })).resolves.toMatchObject({ ok: false })
+
+    jsx.font.getFontInfo.mockResolvedValue({ err: 1, msg: '没有文字层' })
+    await expect(execute('style.addFont', { groupIndex: 0 })).resolves.toMatchObject({ ok: false })
+
+    jsx.font.getFontInfo.mockResolvedValue({ err: 0, data: { fonts: [] } })
+    await expect(execute('style.addFont', { groupIndex: 0 })).resolves.toMatchObject({ ok: false })
+
+    const g = (await read(FONT_LIB)) as Array<{ list: unknown[] }>
+    expect(g[0].list).toHaveLength(1)
+  })
+})
+
+// ---------- 第 3 段：分组 / 项的增删改 + 写库 ----------
 type RawGroup = { name?: string; show?: boolean; id?: string; list?: unknown[] }
 
 async function groups(path: string): Promise<RawGroup[]> {

@@ -15,7 +15,8 @@ import {
   sendKuItemToSwatch,
   setKuGroupShow,
 } from '@/cep/data/style-library-repo'
-import { asJsxResult } from '@/utils/jsx-result'
+import { asJsxResult, assertJsxOk } from '@/utils/jsx-result'
+import { encodeText } from '@/domain/translate'
 import { CepError } from '@/utils/errors'
 import { defineCommand } from './registry'
 import type { Command } from './types'
@@ -24,8 +25,8 @@ import type { Command } from './types'
  * 样式域命令（`/style` 第 2 段 + 第 3 段）。
  *
  * 分三类：
- * - **应用**（改 PS 文档）：颜色 / 渐变 / 图层样式 → `ctx.jsx.style`
- * - **添加**（从 PS 读回本地库）：前景色 / 渐变 / 图层样式 → 读 jsx + 追加到库文件
+ * - **应用**（改 PS 文档）：颜色 / 渐变 / 字体 / 图层样式 → `ctx.jsx.style`（字体走 `ctx.jsx.font`）
+ * - **添加**（从 PS 读回本地库）：前景色 / 渐变 / 字体属性 / 图层样式 → 读 jsx + 追加到库文件
  * - **编辑**（只动本地库文件）：分组 / 项的增删改、排序、发送到色板 → `cep/data/style-library-repo`
  *
  * 编辑类不需要选区（`requires: 'none'`）：它们不碰 PS，改的是磁盘上的库文件。
@@ -94,6 +95,23 @@ export const styleCommands: Command<unknown>[] = [
       const gradient = item.gradient
       if (!gradient) throw new CepError('PARSE', '这一项没有 gradient 载荷')
       await ctx.jsx.style.useGradient(gradient)
+    },
+  }),
+
+  defineCommand({
+    id: 'style.applyFont',
+    title: '应用字体',
+    group: 'style',
+    requires: 'layer',
+    kind: 'instant',
+    async run(ctx, { groupIndex, itemIndex }) {
+      // 原版 `useFont`（`app.v4.js:51200-51215`）：整项 `JSON.stringify` → `Xv` 编码 →
+      // `ys_checkUseFont`，`err == 1` 就 `$msg.showErr` 中止，否则 `ys_useFont`。
+      // 编码与两步顺序照 `commands/fontSet.ts` 的 `fontSet.pasteFont`，不另造形状。
+      const item = await readKuItem('font', groupIndex, itemIndex)
+      const payload = encodeText(JSON.stringify(item))
+      assertJsxOk(await ctx.jsx.font.checkUseFont(payload), '检查字体可用性失败')
+      assertJsxOk(await ctx.jsx.font.useFont(payload), '应用字体设置失败')
     },
   }),
 
@@ -179,6 +197,31 @@ export const styleCommands: Command<unknown>[] = [
         throw new CepError('JSX', '保存图层样式失败：没有内容')
       }
       await addKuItem('style', groupIndex, result.data)
+    },
+  }),
+
+  defineCommand({
+    id: 'style.addFont',
+    title: '添加字体',
+    group: 'style',
+    requires: 'layer',
+    kind: 'instant',
+    async run(ctx, { groupIndex }) {
+      // 原版 `addFont`（`app.v4.js:51243-51264`）：`ys_getFontInfo` → `false` 直接返回 /
+      // `err == 1` 报错 / `err == 0` 且 `data.fonts` 为空报错「读取字体属性失败」/ 否则 `addItem(data)`。
+      // jsx 用的是字体域已有的 `getFontInfo`（`cep/jsx/font.ts:53` = `ys_getFontInfo`），不新造函数名。
+      const raw = await ctx.jsx.font.getFontInfo()
+      if (raw === false) throw new CepError('JSX', '读取字体属性失败')
+      const result = check(raw, '读取字体属性失败')
+      if (!result.ok) throw new CepError('JSX', result.msg)
+
+      // UNVERIFIED: `data` 的形状按原版调用侧是 `{ fonts: [...] }`（`:51258` 读 `data.fonts.length`），
+      // 其余字段未实测 → 只判 fonts 非空，然后整份原样入库（不补键、不改写）。
+      const data = result.data as { fonts?: unknown } | null | undefined
+      if (!data || !Array.isArray(data.fonts) || data.fonts.length === 0) {
+        throw new CepError('PARSE', '读取字体属性失败：没有可添加的字体')
+      }
+      await addKuItem('font', groupIndex, data)
     },
   }),
 

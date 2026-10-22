@@ -61,9 +61,11 @@ function onHeadClick(event: MouseEvent) {
   cursor: pointer;
 }
 
+/* 原版箭头是 `.icon`，取全局 `.icon{color:#c3c3c3}`（`app.bf68b505.css` 字节 4069 区），
+   hover 时 `.base-group-mian:hover p,.base-group-mian:hover svg{color:#fff}`（字节 27361 区） */
 .base-group__chevron {
   flex: 0 0 auto;
-  color: var(--text-faint);
+  color: var(--text);
   transition: transform var(--dur-fast) var(--ease);
 }
 
@@ -73,11 +75,12 @@ function onHeadClick(event: MouseEvent) {
 
 .base-group__head:hover .base-group__text,
 .base-group__head:hover .base-group__chevron {
-  color: var(--text-strong);
+  color: var(--c-text-inverse);
 }
 
+/* 原版 `<p class="ml8">`（render `:2607-2608`），`.ml8{margin-left:8px}` → --sp-4 = 8px */
 .base-group__text {
-  margin: 0 0 0 var(--sp-2);
+  margin: 0 0 0 var(--sp-4);
   color: var(--text);
   font-size: var(--fs-md);
 }

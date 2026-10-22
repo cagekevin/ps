@@ -210,16 +210,20 @@
   background: var(--c-style-thumb);
 }
 
-.style-lib--color .style-item:hover,
-.style-lib--gradient .style-item:hover {
+/* 项的 hover 只改边框（原版 .color-block / .block / .style-img 的 :hover）。
+   **必须排除 .style-item__add**：添加按钮为了复用尺寸也带 .style-item，而原版它的 hover
+   只改背景（`.add-svg[data-v-7f48e128]:hover{background-color:#444}` 等四个 scoped 段），
+   被项规则套上就多出一圈 #d5d5d5 / #fff 边框。 */
+.style-lib--color .style-item:not(.style-item__add):hover,
+.style-lib--gradient .style-item:not(.style-item__add):hover {
   border-color: var(--c-swatch-border-hover);
 }
 
-.style-lib--font .style-item:hover {
+.style-lib--font .style-item:not(.style-item__add):hover {
   border-color: var(--c-text-inverse);
 }
 
-.style-lib--style .style-item:hover {
+.style-lib--style .style-item:not(.style-item__add):hover {
   border-color: var(--c-swatch-border-hover-dim);
 }
 

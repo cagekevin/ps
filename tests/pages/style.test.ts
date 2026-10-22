@@ -4,6 +4,7 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { setPref } from '@/cep/data/settings'
+import { decodeText } from '@/domain/translate'
 import type { KuGroup, KuKind } from '@/domain/style-library'
 
 /**
@@ -28,6 +29,7 @@ const repo = vi.hoisted(() => ({
   addGroup: vi.fn(),
   renameGroup: vi.fn(),
   deleteGroup: vi.fn(),
+  setKuGroupShow: vi.fn(),
   indexRepo: { read: vi.fn() },
 }))
 
@@ -46,6 +48,7 @@ vi.mock('@/cep/data/style-library-repo', () => ({
   addKuGroup: repo.addGroup,
   renameKuGroup: repo.renameGroup,
   deleteKuGroup: repo.deleteGroup,
+  setKuGroupShow: repo.setKuGroupShow,
   styleIndexRepo: repo.indexRepo,
 }))
 
@@ -55,7 +58,13 @@ vi.mock('@/cep/fs', () => ({ userDir: fsMock.userDir }))
 
 const jsx = vi.hoisted(() => ({
   action: { callAction: vi.fn(), getActionList: vi.fn() },
-  font: { setFont: vi.fn(), initSystemList: vi.fn() },
+  font: {
+    setFont: vi.fn(),
+    initSystemList: vi.fn(),
+    checkUseFont: vi.fn(),
+    useFont: vi.fn(),
+    getFontInfo: vi.fn(),
+  },
   layer: { isSelectLayer: vi.fn(), getTypeNumber: vi.fn() },
   env: { setEnv: vi.fn() },
   rename: { batchName: vi.fn(), setLayerColor: vi.fn() },
@@ -125,6 +134,7 @@ beforeEach(() => {
   repo.addGroup.mockResolvedValue(undefined)
   repo.renameGroup.mockResolvedValue(undefined)
   repo.deleteGroup.mockResolvedValue(undefined)
+  repo.setKuGroupShow.mockResolvedValue(undefined)
   // 命令层与 store 都会读索引；不返回真索引会走"读失败"分支，渲染不出库
   repo.indexRepo.read.mockResolvedValue({
     value: { index: 0, list: [{ name: '我的样式仓库' }] },
@@ -302,6 +312,248 @@ describe('样式页第 2 段：应用 / 添加经 useCommand 接线', () => {
       color: { hex: 'FF0000', c: 0, m: 100, y: 100, k: 0 },
     })
     expect(repo.read.mock.calls.length).toBeGreaterThan(1)
+  })
+})
+
+describe('四库分派：点字体项 / 点字体组"+" 不能落到样式库', () => {
+  /** 字体库一组一项 + 磁盘上的原始项（命令层从磁盘取原件） */
+  function seedFont() {
+    repo.read.mockResolvedValue(
+      snapshot({
+        font: [
+          {
+            name: '等线字组',
+            show: true,
+            items: [
+              {
+                name: '未命名',
+                fontPreview: {
+                  count: 2,
+                  size: '20点',
+                  color: 'rgb(255, 0, 0)',
+                  family: '等线',
+                  weight: 'Regular',
+                  scriptFamily: 'DengXian',
+                },
+              },
+            ],
+          },
+        ],
+      }),
+    )
+    repo.readItem.mockResolvedValue({
+      name: '未命名',
+      fonts: [{ family: '等线', weight: 'Regular' }],
+    })
+  }
+
+  async function showFontLib(wrapper: ReturnType<typeof mountPage>) {
+    await wrapper.findAll('.g-tabs__label')[2].trigger('click')
+    await flushPromises()
+  }
+
+  beforeEach(() => {
+    jsx.font.checkUseFont.mockResolvedValue(null)
+    jsx.font.useFont.mockResolvedValue(null)
+  })
+
+  it('点字体项 → style.applyFont（ys_checkUseFont 再 ys_useFont），**不是** style.applyStyle', async () => {
+    seedFont()
+
+    const wrapper = mountPage()
+    await flushPromises()
+    await showFontLib(wrapper)
+    await wrapper.find('.style-item').trigger('click')
+    await flushPromises()
+
+    // 最重要的断言：字体项走字体命令，图层样式命令一次都不能跑
+    expect(jsx.font.checkUseFont).toHaveBeenCalledTimes(1)
+    expect(jsx.font.useFont).toHaveBeenCalledTimes(1)
+    expect(jsx.style.useStyle).not.toHaveBeenCalled()
+
+    // 载荷形状照 fontSet.pasteFont：整项 JSON → Xv 编码（原版 `:51200`）
+    const payload = jsx.font.useFont.mock.calls[0][0] as string
+    expect(JSON.parse(decodeText(payload))).toEqual({
+      name: '未命名',
+      fonts: [{ family: '等线', weight: 'Regular' }],
+    })
+    expect(jsx.font.checkUseFont).toHaveBeenCalledWith(payload)
+  })
+
+  it('字体不可用（check 返回 err=1）→ 不调 ys_useFont', async () => {
+    seedFont()
+    jsx.font.checkUseFont.mockResolvedValue({ err: 1, msg: '缺少字体' })
+
+    const wrapper = mountPage()
+    await flushPromises()
+    await showFontLib(wrapper)
+    await wrapper.find('.style-item').trigger('click')
+    await flushPromises()
+
+    expect(jsx.font.checkUseFont).toHaveBeenCalled()
+    expect(jsx.font.useFont).not.toHaveBeenCalled()
+  })
+
+  it('点字体组"+"→ style.addFont（ys_getFontInfo 的 data 入库），**不是** style.addStyle', async () => {
+    seedFont()
+    jsx.font.getFontInfo.mockResolvedValue({
+      err: 0,
+      data: { name: '未命名', fonts: [{ family: '等线' }] },
+    })
+
+    const wrapper = mountPage()
+    await flushPromises()
+    await showFontLib(wrapper)
+    // title 也要说清是加字体（原版 `:50985`「添加字体，支持多图层」）
+    expect(wrapper.find('.style-item__add').attributes('title')).toContain('字体')
+    await wrapper.find('.style-item__add').trigger('click')
+    await flushPromises()
+
+    expect(jsx.font.getFontInfo).toHaveBeenCalled()
+    expect(repo.appendItem).toHaveBeenCalledWith('font', 0, {
+      name: '未命名',
+      fonts: [{ family: '等线' }],
+    })
+    // 绝不许把图层样式写进字体库（污染用户库文件）
+    expect(jsx.style.addStyle).not.toHaveBeenCalled()
+    expect(repo.read.mock.calls.length).toBeGreaterThan(1)
+  })
+
+  it('字体读取失败（fonts 为空）→ 报错且不入库', async () => {
+    seedFont()
+    jsx.font.getFontInfo.mockResolvedValue({ err: 0, data: { fonts: [] } })
+
+    const wrapper = mountPage()
+    await flushPromises()
+    await showFontLib(wrapper)
+    await wrapper.find('.style-item__add').trigger('click')
+    await flushPromises()
+
+    expect(repo.appendItem).not.toHaveBeenCalled()
+  })
+
+  it('样式库项仍走 style.applyStyle（分派没改错库）', async () => {
+    repo.read.mockResolvedValue(
+      snapshot({
+        style: [{ name: '样式默认分组', show: true, items: [{ name: '描边', thumb: 'X1.png' }] }],
+      }),
+    )
+    repo.readItem.mockResolvedValue({ name: '描边', id: 'X1' })
+    repo.readGroupId.mockResolvedValue('YS5B2C4C06B1029543')
+
+    const wrapper = mountPage()
+    await flushPromises()
+    await wrapper.findAll('.g-tabs__label')[3].trigger('click')
+    await flushPromises()
+    await wrapper.find('.style-item').trigger('click')
+    await flushPromises()
+
+    expect(jsx.style.useStyle).toHaveBeenCalled()
+    expect(jsx.font.useFont).not.toHaveBeenCalled()
+  })
+})
+
+describe('组头：ctrl+点击「仅显示该组」与折叠都写库（原版 changeGroupShowStatus :52415-52435）', () => {
+  function seedTwoGroups() {
+    repo.read.mockResolvedValue(
+      snapshot({
+        color: [
+          { name: '灰白', show: true, items: [{ name: '未命名', swatch: '#302F34' }] },
+          { name: '深色', show: true, items: [{ name: '未命名', swatch: '#111111' }] },
+        ],
+      }),
+    )
+  }
+
+  it('ctrl+点击组头 → style.toggleGroupShow({only:true})，写库后重新读', async () => {
+    seedTwoGroups()
+
+    const wrapper = mountPage()
+    await flushPromises()
+    await wrapper.findAll('.base-group__head')[1].trigger('click', { ctrlKey: true })
+    await flushPromises()
+
+    expect(repo.setKuGroupShow).toHaveBeenCalledWith('color', 1, true)
+    expect(repo.read.mock.calls.length).toBeGreaterThan(1)
+  })
+
+  it('普通点击组头 → style.toggleGroupShow（不带 only = 取反），不是页面本地折叠', async () => {
+    seedTwoGroups()
+
+    const wrapper = mountPage()
+    await flushPromises()
+    await wrapper.find('.base-group__head').trigger('click')
+    await flushPromises()
+
+    expect(repo.setKuGroupShow).toHaveBeenCalledWith('color', 0, false)
+    expect(repo.read.mock.calls.length).toBeGreaterThan(1)
+  })
+
+  it('展开态直接取库里的 show：show=false 的组只渲染组头，不渲染项', async () => {
+    repo.read.mockResolvedValue(
+      snapshot({
+        color: [{ name: '灰白', show: false, items: [{ name: '未命名', swatch: '#302F34' }] }],
+      }),
+    )
+
+    const wrapper = mountPage()
+    await flushPromises()
+
+    expect(wrapper.find('.base-group__head').exists()).toBe(true)
+    expect(wrapper.find('.style-item').exists()).toBe(false)
+  })
+})
+
+describe('底栏四个「添加×分组」（原版 :49776-49832 → addGroup :54873-54879）', () => {
+  const mounted: Array<{ unmount(): void }> = []
+
+  afterEach(() => {
+    for (const wrapper of mounted.splice(0)) wrapper.unmount()
+    document.body.innerHTML = ''
+  })
+
+  function mountPageInBody() {
+    const page = mount(StylePage, { global: { plugins: [pinia] } })
+    mounted.push(page)
+    return page
+  }
+
+  it('四个按钮不再禁用，导入/导出仍是禁用态', async () => {
+    repo.read.mockResolvedValue(snapshot())
+
+    const page = mountPageInBody()
+    await flushPromises()
+
+    const buttons = page.findAll('.g-bottom-bar__icon')
+    expect(buttons).toHaveLength(6)
+    for (const index of [0, 1, 2, 3]) {
+      expect(buttons[index].attributes('disabled')).toBeUndefined()
+    }
+    for (const index of [4, 5]) {
+      expect(buttons[index].attributes('disabled')).toBeDefined()
+    }
+  })
+
+  it('点「添加字体分组」→ 弹输入框 → 提交后 style.addGroup 追加到末尾（不带 afterIndex）', async () => {
+    repo.read.mockResolvedValue(snapshot({ font: [{ name: '等线字组', show: true, items: [] }] }))
+
+    const page = mountPageInBody()
+    await flushPromises()
+
+    await page.findAll('.g-bottom-bar__icon')[2].trigger('click')
+    await flushPromises()
+
+    const input = document.querySelector<HTMLInputElement>('.modal input')
+    expect(input).toBeTruthy()
+    expect(input!.placeholder).toBe('请输入组名')
+
+    input!.value = '新字组'
+    input!.dispatchEvent(new Event('input'))
+    await flushPromises()
+    document.querySelector<HTMLElement>('.modal__btn.is-primary')?.click()
+    await flushPromises()
+
+    expect(repo.addGroup).toHaveBeenCalledWith('font', '新字组', undefined)
   })
 })
 
@@ -1101,5 +1353,42 @@ describe('组与组之间的间距（清单 #29 #28）', () => {
     expect(styleRow).toContain('column-gap: var(--sp-3)')
     expect(styleRow).toContain('row-gap: var(--sp-exact-7)')
     expect(styleRow).toContain('padding-top: var(--sp-exact-7)')
+  })
+})
+
+describe('添加按钮不被项的 hover 边框规则连带（原版 .add-svg:hover 只变背景）', () => {
+  const ROOT = process.cwd()
+  const CSS = readFileSync(join(ROOT, 'src/pages/style/index.css'), 'utf8')
+
+  /** 按「选择器列表 → 声明块」解析，支持逗号分组与换行（Prettier 会把长选择器拆行） */
+  function rule(selector: string): string {
+    const blocks = CSS.replace(/\/\*[\s\S]*?\*\//g, '').match(/[^{}]+\{[^}]*\}/g) ?? []
+    for (const block of blocks) {
+      const [selectors, body] = block.split('{')
+      if (selectors.split(',').some((part) => part.trim() === selector)) {
+        return body.replace(/\s+/g, ' ').trim()
+      }
+    }
+    throw new Error(`index.css 里找不到 ${selector} 规则`)
+  }
+
+  it('四库的项 hover 规则都排除 .style-item__add', () => {
+    expect(rule('.style-lib--color .style-item:not(.style-item__add):hover')).toContain(
+      'border-color: var(--c-swatch-border-hover)',
+    )
+    expect(rule('.style-lib--font .style-item:not(.style-item__add):hover')).toContain(
+      'border-color: var(--c-text-inverse)',
+    )
+    expect(rule('.style-lib--style .style-item:not(.style-item__add):hover')).toContain(
+      'border-color: var(--c-swatch-border-hover-dim)',
+    )
+    // 不允许再有"不带 :not 的项 hover"——那会把添加按钮一起套上
+    expect(CSS).not.toMatch(/\.style-item:hover/)
+  })
+
+  it('添加按钮自己的 hover 只改背景（原版四个 scoped 段都是 background-color:#444）', () => {
+    const add = rule('.style-item__add:hover')
+    expect(add).toContain('background: var(--c-font-btn-hover)')
+    expect(add).not.toContain('border')
   })
 })
