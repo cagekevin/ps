@@ -23,13 +23,11 @@ withDefaults(
     name: string
     title?: string
     svgSize?: IconSize | string
-    width?: string
-    height?: string
     selected?: boolean
     badge?: boolean
     disabled?: boolean
   }>(),
-  { svgSize: '1em', width: '26px', height: '26px' },
+  { svgSize: 'lg' },
 )
 
 const emit = defineEmits<{
@@ -49,7 +47,6 @@ function onClick(event: MouseEvent) {
   <button
     class="fontset-icon"
     :class="{ 'is-active': selected }"
-    :style="{ width, height }"
     :title="title"
     :disabled="disabled"
     type="button"
@@ -69,9 +66,12 @@ function onClick(event: MouseEvent) {
   flex: 0 0 auto;
   align-items: center;
   justify-content: center;
-  /* 原版 .base-icon{height:26px;width:26px;border:1px solid transparent}：
+  /* 尺寸写进 CSS（不用内联 :style）：首帧就有尺寸，不会先塌成浏览器默认 130×30 再缩。
+     默认 26×26 对齐原版 .base-icon{height:26px;width:26px;border:1px solid transparent}：
      无 padding、无圆角、无过渡。padding/圆角必须显式写 0——
      不写会落回浏览器 button 默认内边距，和 PageBottomBar 的 26px 盒子对不上 */
+  width: 26px;
+  height: 26px;
   padding: 0;
   border: 1px solid transparent;
   border-radius: 0;

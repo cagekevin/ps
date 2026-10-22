@@ -150,6 +150,23 @@
   /* 图层样式块 hover 描边：原版 .style-img:hover{border:1px solid #444}
      （scoped 段 data-v-216ff8d1，对应 render app.v4.js:51300） */
   --c-swatch-border-hover-dim: #444;
+  /* 字体库卡片底：原版 .block[data-v-1f103d3b]{background:#535353}
+     （scoped 段 data-v-1f103d3b，对应 render app.v4.js:50947） */
+  --c-font-card: #535353;
+  /* 图层样式缩略图底：原版 .style-img[data-v-216ff8d1]{background:rgba(0,0,0,.3)}
+     （同上的 data-v-216ff8d1，对应 render app.v4.js:51348） */
+  --c-style-thumb: rgba(0, 0, 0, 0.3);
+  /* 回顶按钮底：原版 .returnTop[data-v-7f4f5fe0]{background:#535353}
+     （Style 页 scoped 段 data-v-7f4f5fe0，对应 render app.v4.js:49755） */
+  --c-return-top: #535353;
+
+  /* ---------- 颜色：仓库下拉（原版 warehouse 组件 scoped 段 data-v-47b7c6cb）----------
+     render app.v4.js:53747-53900；底色不是 rgba(0,0,0,.4)（那是另一个仓库组件
+     data-v-0f09db18 的 :hover，见 docs/页面/06-样式-对照清单.md 附录 A-1） */
+  --c-warehouse: #282828;
+  --c-warehouse-panel: #ffffff;
+  --c-warehouse-item-text: #000;
+  --c-warehouse-item-hover: #ebebeb;
 
   /* ---------- 间距阶梯 ---------- */
   --sp-1: 2px;
@@ -166,6 +183,7 @@
   --sp-exact-7: 7px; /* 原版 .tag__content>div padding:4px 7px */
   --sp-exact-10: 10px;
   --sp-exact-12: 12px; /* 原版 .tabs__nav padding:0 10px */
+  --sp-exact-14: 14px; /* 原版 .warehouse-downItem padding:0 14px（data-v-47b7c6cb，app.v4.js:53792） */
   --sp-exact-15: 15px; /* 原版字体面板各子面板 padding:15px 10px */
   /* 原版 .btn-small-6：6 列 + 5×6px gap 正好 100%；字体面板两处共用 */
   --fontset-six-col: calc(16.66667% - 5px);

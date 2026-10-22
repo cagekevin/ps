@@ -1,8 +1,16 @@
 import {
-  appendStyleLibraryItem,
-  readStyleGroupId,
-  readStyleLibraryItem,
-  replaceStyleLibraryItem,
+  addKuGroup,
+  addKuItem,
+  deleteKuGroup,
+  deleteKuItem,
+  moveKuItem,
+  readKuGroupId,
+  readKuItem,
+  renameKuGroup,
+  renameKuItem,
+  replaceKuItem,
+  sendKuItemToSwatch,
+  setKuGroupShow,
 } from '@/cep/data/style-library-repo'
 import { asJsxResult } from '@/utils/jsx-result'
 import { CepError } from '@/utils/errors'
@@ -10,16 +18,21 @@ import { defineCommand } from './registry'
 import type { Command } from './types'
 
 /**
- * 样式域命令（`/style` 第 2 段）。
+ * 样式域命令（`/style` 第 2 段 + 第 3 段）。
  *
- * 分两类：
+ * 分三类：
  * - **应用**（改 PS 文档）：颜色 / 渐变 / 图层样式 → `ctx.jsx.style`
  * - **添加**（从 PS 读回本地库）：前景色 / 渐变 / 图层样式 → 读 jsx + 追加到库文件
+ * - **编辑**（只动本地库文件）：分组 / 项的增删改、排序、发送到色板 → `cep/data/style-library-repo`
  *
- * 本期不做：吸色到组（`Tool_set("eyedropperTool")` + PS 事件 `1936028772`，`app.v4.js:50299-50302`）、
- * 拖图片取色（`exportCurrentLayerToImage`，`:54639`）、仓库发送/移动、四类库与 `.kux` 的导入导出。
+ * 编辑类不需要选区（`requires: 'none'`）：它们不碰 PS，改的是磁盘上的库文件。
+ * 写库的备份、串行队列、索引补登记全在 repo 里，命令层只做参数校验与调用。
  *
- * **返回结构全部未实测**（jsxbin 是字节码，符号不可读）。每条命令的返回值语义标了 UNVERIFIED，
+ * 本期仍不做：吸色到组（`Tool_set("eyedropperTool")` + PS 事件 `1936028772`，`app.v4.js:50299-50302`）、
+ * 拖图片取色（`exportCurrentLayerToImage`，`:54639`）、仓库发送/移动、四类库与 `.kux` 的导入导出、
+ * 项拖拽排序（右键菜单只做上移/下移）。
+ *
+ * **jsx 返回结构全部未实测**（jsxbin 是字节码，符号不可读）。每条命令的返回值语义标了 UNVERIFIED，
  * 因此：只判空、判 `err`，绝不读 `data` 里的具体字段。
  */
 
@@ -38,7 +51,7 @@ export const styleCommands: Command<unknown>[] = [
     kind: 'instant',
     async run(ctx, { groupIndex, itemIndex, modifier }) {
       // 发的是**磁盘上的原始项**：视图模型 KuItem 丢了未知键
-      const item = await readStyleLibraryItem('color', groupIndex, itemIndex)
+      const item = await readKuItem('color', groupIndex, itemIndex)
 
       switch (modifier) {
         case 'ctrl':
@@ -56,7 +69,7 @@ export const styleCommands: Command<unknown>[] = [
           // 返回的项字段是否与入参同构（name/color/未知键）源码看不出来，
           // 所以只在拿到对象时回写，其它一律报错而不是猜。
           if (raw === -1) return
-          await replaceStyleLibraryItem('color', groupIndex, itemIndex, raw)
+          await replaceKuItem('color', groupIndex, itemIndex, raw)
           return
         }
         default:
@@ -72,9 +85,9 @@ export const styleCommands: Command<unknown>[] = [
     requires: 'layer',
     kind: 'instant',
     async run(ctx, { groupIndex, itemIndex }) {
-      const item = await readStyleLibraryItem('gradient', groupIndex, itemIndex)
+      const item = await readKuItem('gradient', groupIndex, itemIndex)
       // 原版 `:50791` 发的是 `t.gradient`，不是整个项
-      const gradient = (item as { gradient?: unknown }).gradient
+      const gradient = item.gradient
       if (!gradient) throw new CepError('PARSE', '这一项没有 gradient 载荷')
       await ctx.jsx.style.useGradient(gradient)
     },
@@ -88,8 +101,8 @@ export const styleCommands: Command<unknown>[] = [
     kind: 'instant',
     async run(ctx, { groupIndex, itemIndex }) {
       // 原版 `:51509-51511`：深拷贝项 + groupId 后整条发给 jsxbin
-      const item = await readStyleLibraryItem('style', groupIndex, itemIndex)
-      const groupId = await readStyleGroupId('style', groupIndex)
+      const item = await readKuItem('style', groupIndex, itemIndex)
+      const groupId = await readKuGroupId('style', groupIndex)
       await ctx.jsx.style.useStyle(item, groupId)
     },
   }),
@@ -104,7 +117,7 @@ export const styleCommands: Command<unknown>[] = [
       // UNVERIFIED: 原版 `:50196` 只判 `a != null`；返回结构未实测
       const raw = await ctx.jsx.style.getForegroundColor()
       if (raw === null || raw === undefined) throw new CepError('JSX', '读取前景色失败')
-      await appendStyleLibraryItem('color', groupIndex, raw)
+      await addKuItem('color', groupIndex, raw)
     },
   }),
 
@@ -128,7 +141,7 @@ export const styleCommands: Command<unknown>[] = [
       if (result.data === null || result.data === undefined) {
         throw new CepError('JSX', '读取渐变失败：没有内容')
       }
-      await appendStyleLibraryItem('gradient', groupIndex, {
+      await addKuItem('gradient', groupIndex, {
         name: '未命名',
         gradient: result.data,
       })
@@ -142,7 +155,7 @@ export const styleCommands: Command<unknown>[] = [
     requires: 'layer',
     kind: 'instant',
     async run(ctx, { groupIndex }) {
-      const groupId = await readStyleGroupId('style', groupIndex)
+      const groupId = await readKuGroupId('style', groupIndex)
 
       // 原版 `:51532-51536` 发 { delArr, groupId, envDir: "/SheJiZhuLi" }。
       // `delArr` 来自 `kuStyle/ls_ysDelete.json`（`getDeleteStyleId`，`:53071-53093`）——
@@ -161,7 +174,115 @@ export const styleCommands: Command<unknown>[] = [
       if (result.data === null || result.data === undefined) {
         throw new CepError('JSX', '保存图层样式失败：没有内容')
       }
-      await appendStyleLibraryItem('style', groupIndex, result.data)
+      await addKuItem('style', groupIndex, result.data)
+    },
+  }),
+
+  // ---------- 第 3 段：分组 / 项的增删改（只动本地库文件，不碰 PS）----------
+
+  defineCommand({
+    id: 'style.addGroup',
+    title: '新建分组',
+    group: 'style',
+    requires: 'none',
+    kind: 'instant',
+    async run(_ctx, { kind, name, afterIndex }) {
+      await addKuGroup(kind, name, afterIndex)
+    },
+  }),
+
+  defineCommand({
+    id: 'style.renameGroup',
+    title: '重命名分组',
+    group: 'style',
+    requires: 'none',
+    kind: 'instant',
+    async run(_ctx, { kind, groupIndex, name }) {
+      await renameKuGroup(kind, groupIndex, name)
+    },
+  }),
+
+  defineCommand({
+    id: 'style.deleteGroup',
+    title: '删除分组',
+    group: 'style',
+    requires: 'none',
+    kind: 'instant',
+    async run(_ctx, { kind, groupIndex }) {
+      // 原版 `:52451-52454`：删空后补一个「<库名>默认分组」，所以删完永远还有一组
+      await deleteKuGroup(kind, groupIndex)
+    },
+  }),
+
+  defineCommand({
+    id: 'style.toggleGroupShow',
+    title: '显示/隐藏分组',
+    group: 'style',
+    requires: 'none',
+    kind: 'instant',
+    async run(_ctx, { kind, groupIndex, only }) {
+      // `only` 是"只显示这一组"（原版 showOnlyGroup），不是"设成显示"——别当布尔值用
+      await setKuGroupShow(kind, groupIndex, only === true)
+    },
+  }),
+
+  defineCommand({
+    id: 'style.addItem',
+    title: '添加项',
+    group: 'style',
+    requires: 'none',
+    kind: 'instant',
+    async run(_ctx, { kind, groupIndex, item }) {
+      // 项由调用方给（复制粘贴 / 色板回收 / 从别组搬）；命令不造项、不补字段
+      await addKuItem(kind, groupIndex, item)
+    },
+  }),
+
+  defineCommand({
+    id: 'style.renameItem',
+    title: '重命名项',
+    group: 'style',
+    requires: 'none',
+    kind: 'instant',
+    async run(_ctx, { kind, groupIndex, itemIndex, name }) {
+      await renameKuItem(kind, groupIndex, itemIndex, name)
+    },
+  }),
+
+  defineCommand({
+    id: 'style.deleteItem',
+    title: '删除项',
+    group: 'style',
+    requires: 'none',
+    kind: 'instant',
+    async run(_ctx, { kind, groupIndex, itemIndex }) {
+      await deleteKuItem(kind, groupIndex, itemIndex)
+    },
+  }),
+
+  defineCommand({
+    id: 'style.reorderItem',
+    title: '上移/下移项',
+    group: 'style',
+    requires: 'none',
+    kind: 'instant',
+    async run(_ctx, { kind, groupIndex, itemIndex, direction }) {
+      // 原版只有拖拽（`app.v4.js:50040-50070`），没有上下移菜单；这里按同一 splice 语义挪一格
+      await moveKuItem(kind, groupIndex, itemIndex, direction)
+    },
+  }),
+
+  defineCommand({
+    id: 'style.sendToSwatch',
+    title: '发送到色板',
+    group: 'style',
+    requires: 'none',
+    kind: 'instant',
+    async run(_ctx, { kind, groupIndex, itemIndex }) {
+      // 原版 `:50349-50355`：把 `[item]` 写成色板文件全文（整份替换，不是追加），再发 app event 通知色板面板。
+      // UNVERIFIED: 那条 `com.fengzi.event.seban` 通知没有发（本项目没有通用 app event 发送器），
+      // 色板面板会不会自己刷新未验；详见 `sendKuItemToSwatch` 的注释。
+      await sendKuItemToSwatch(kind, groupIndex, itemIndex)
     },
   }),
 ]

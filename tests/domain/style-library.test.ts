@@ -156,19 +156,52 @@ describe('四类库的项归一化', () => {
     expect(read.groups[0].items[0].swatch).toBe('linear-gradient(180deg, #000000 0%, #FFFFFF 100%)')
   })
 
-  it('字体项：fonts[0] 的 family + size（数字与字符串两种都收）', () => {
+  it('字体项：fonts[0] 的四件套（数量 / N点 / 色点 / 家族），数字与字符串两种 size 都收', () => {
     const text = JSON.stringify([
       {
         name: '等线字组',
         show: true,
-        list: [{ name: '未命名', fonts: [{ family: '等线', size: '20' }] }],
+        list: [
+          {
+            name: '未命名',
+            fonts: [
+              {
+                family: '等线',
+                size: '20',
+                weight: 'Regular',
+                scriptFamily: 'DengXian',
+                color: { rgb: { r: 255, g: 0, b: 0 } },
+              },
+              { family: '等线', size: 20 },
+            ],
+          },
+        ],
       },
     ])
     const read = readKuGroups('font', text, decode)
-    expect(read.groups[0].items[0].meta).toBe('等线 · 20点')
+    expect(read.groups[0].items[0].fontPreview).toEqual({
+      count: 2,
+      size: '20点',
+      color: 'rgb(255, 0, 0)',
+      family: '等线',
+      weight: 'Regular',
+      scriptFamily: 'DengXian',
+    })
   })
 
-  it('样式项：只认 {name,id,layerId}，多出来的键不猜', () => {
+  it('字体项：color 为 null（实测样本就是 null）时色点给空串，不补默认色', () => {
+    const text = JSON.stringify([
+      {
+        name: '等线字组',
+        show: true,
+        list: [{ name: '未命名', fonts: [{ family: '等线', size: '20', color: null }] }],
+      },
+    ])
+    const read = readKuGroups('font', text, decode)
+    expect(read.groups[0].items[0].fontPreview?.color).toBe('')
+  })
+
+  it('样式项：只认 {name,id,layerId}，多出来的键不猜；id 拼成缩略图文件名', () => {
     const text = JSON.stringify([
       {
         name: '样式默认分组',
@@ -176,6 +209,14 @@ describe('四类库的项归一化', () => {
         id: 'YS1',
         list: [{ name: '描边', id: 'X1', layerId: 3, 未知: 1 }],
       },
+    ])
+    const read = readKuGroups('style', text, decode)
+    expect(read.groups[0].items[0]).toEqual({ name: '描边', thumb: 'X1.png' })
+  })
+
+  it('样式项：没有 id 就不给 thumb（页面留深色底，不猜文件名）', () => {
+    const text = JSON.stringify([
+      { name: '样式默认分组', show: true, id: 'YS1', list: [{ name: '描边' }] },
     ])
     const read = readKuGroups('style', text, decode)
     expect(read.groups[0].items[0]).toEqual({ name: '描边' })

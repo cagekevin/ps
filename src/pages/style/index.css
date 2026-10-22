@@ -3,7 +3,8 @@
  *
  * 原版本页 scoped 只有 9 条（`app.bf68b505.css` 的 `data-v-7f4f5fe0` 段）：
  * tab 25% / 选中色 / 竖线 / 回顶 / 底栏 / 滚动高度 / hover。
- * tab 与底栏已提成 `MultiTabs` / `PageBottomBar`，所以这里只剩页面骨架与库格子。
+ * tab、底栏、回顶已提成 `MultiTabs` / `PageBottomBar` / `BackTop`，
+ * 所以这里只剩页面骨架、仓库条（原版 warehouse 组件 `data-v-47b7c6cb`）与四库格子。
  */
 
 .style-page {
@@ -14,17 +15,91 @@
   background: var(--c-surface);
 }
 
-/* 原版 .wrap-search{height:36px;line-height:28px;background:rgba(0,0,0,.4)}（app.v4.js:53750）。
-   底色用 --c-surface-active：token 里没有 rgba(0,0,0,.4)，且要与动作页仓库条同色（有意偏离） */
+/* ---------- 仓库条 ----------
+   原版 warehouse 组件（scoped `data-v-47b7c6cb`，render `app.v4.js:53747-53900`）：
+   `.mian{width:100%;position:relative}` + `.wrap-search{height:36px;line-height:28px;background:#282828}`。
+   底色就是 #282828；`rgba(0,0,0,.4)` 是另一个仓库组件 `data-v-0f09db18` 的 :hover（清单附录 A-1）。 */
 .style-warehouse {
-  display: flex;
+  position: relative;
   height: 36px;
   flex: 0 0 36px;
+  background: var(--c-warehouse);
+}
+
+/* 行内结构照 render `:53750-53784`：`.app-padding{padding:0 10px}` + 图标 `svg-16 mr6`
+   + 蓝色仓库名 `f-space overflow-text` + 箭头 `svg-10 mr4` */
+.style-warehouse__row {
+  display: flex;
   align-items: center;
+  height: 100%;
   padding: 0 var(--sp-exact-10);
-  background: var(--c-surface-active);
-  color: var(--text);
+  gap: var(--sp-3);
+  line-height: var(--h-control);
+  cursor: pointer;
+}
+
+.style-warehouse__name {
+  flex: 1;
+  margin: 0;
+  overflow: hidden;
+  color: var(--c-accent);
   font-size: var(--fs-md);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 原版箭头上的 `.mr4`：让箭头离右边 10px 留白再多 4px */
+.style-warehouse__arrow {
+  margin-right: var(--sp-2);
+}
+
+/* 原版 `.warehouse-down{padding:6px 0;width:100%;position:absolute;z-index:101;border-radius:4px;background:#fff}`：
+   absolute 没写 top/left，靠静态位置落在行下方 → 这里显式写 top:100% */
+.style-warehouse__down {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  z-index: var(--z-dropdown);
+  width: 100%;
+  padding: var(--sp-3) 0;
+  border-radius: var(--r-md);
+  background: var(--c-warehouse-panel);
+}
+
+.style-warehouse__down-main {
+  max-height: 60vh;
+  overflow-y: auto;
+}
+
+/* 原版 `.warehouse-downItem{height:28px;font-size:12px;color:#000;border-radius:2px;padding:0 14px;cursor:default}`
+   + `:hover{background:#ebebeb}`（render `:53792`，尺寸见清单附录 A-3） */
+.style-warehouse__item {
+  display: flex;
+  align-items: center;
+  height: var(--h-control);
+  padding: 0 var(--sp-exact-14);
+  border-radius: var(--r-sm);
+  color: var(--c-warehouse-item-text);
+  font-size: var(--fs-md);
+  cursor: default;
+  gap: var(--sp-3);
+}
+
+.style-warehouse__item:hover {
+  background: var(--c-warehouse-item-hover);
+}
+
+.style-warehouse__item-name {
+  flex: 1;
+  margin: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* 原版每行都渲染一个 `svg-14`（选中是勾、其余是空格），所以未选中行要留出勾的位置才对得齐 */
+.style-warehouse__check.is-hidden {
+  visibility: hidden;
 }
 
 /* 原版 .switch.f-alignNone.mt10（app.v4.js:49654） */
@@ -40,11 +115,14 @@
   overflow-y: auto;
 }
 
+/* 原版组容器的 `.mb4`（render `:49930`）：组间距 4px */
 .style-lib {
-  margin-bottom: var(--sp-1);
+  margin-bottom: var(--sp-2);
 }
 
-/* 原版 .f-baseX.f-br 的色块行：flex-wrap + 每块 margin-right 5 / margin-top 5（app.v4.js:49953 等） */
+/* 原版 `.f-baseX.f-br` 的色块行：flex-wrap + 每块 margin-right 5 / margin-top 逐库不同
+   （颜色 `.mt6`、渐变/字体 `.mt5`、样式 `.mt7`，render `:49960` / `:50559` / `:50928` / `:51350`）。
+   这里用 gap 表达横向 5px，纵向按库覆盖（见下面的 row-gap / padding-top）。 */
 .style-items {
   display: flex;
   flex-wrap: wrap;
@@ -52,14 +130,24 @@
   padding: var(--sp-exact-5) 0 var(--sp-1);
 }
 
+.style-lib--color .style-items {
+  row-gap: var(--sp-3);
+  padding-top: var(--sp-3);
+}
+
+.style-lib--style .style-items {
+  row-gap: var(--sp-exact-7);
+  padding-top: var(--sp-exact-7);
+}
+
 /* ---------- 四类库的项尺寸：逐个 scoped 段实测，不共用一套 ----------
    颜色 .color-block 25×25 无圆角，默认 border:1px transparent，hover #d5d5d5
      （app.bf68b505.css data-v-7f48e128，render DC() app.v4.js:49887）
-   渐变 .color-block 50×26 圆角 5，默认无边框，hover #d5d5d5
+   渐变 .color-block 50×26 圆角 5，默认无边框，hover #d5d5d5（.color-block-img 例外，见下）
      （data-v-31a8890a，render qC() :50495）
-   字体 .block 70×44 圆角 5，默认 border:1px transparent，hover #fff
+   字体 .block 70×44 圆角 5、底 #535353、内边距 3px 5px，默认 border:1px transparent，hover #fff
      （data-v-1f103d3b，render e_() :50881）
-   样式 .style-img 26×26 无圆角，默认 border:1px transparent，hover #444
+   样式 .style-img 26×26 无圆角、底 rgba(0,0,0,.3)，默认 border:1px transparent，hover #444
      （data-v-216ff8d1，render o_() :51300） */
 .style-item {
   display: flex;
@@ -69,7 +157,8 @@
   padding: 0;
   border: 1px solid transparent;
   background: transparent;
-  color: var(--text-faint);
+  /* 原版 `.icon{color:#c3c3c3}`：加号图标靠 currentColor 取色 */
+  color: var(--text);
   cursor: pointer;
 }
 
@@ -78,21 +167,32 @@
   height: 25px;
 }
 
+/* 渐变块原版没有默认边框（hover 才加，会跳 2px）；只有图片型 .color-block-img 带 1px 透明边 */
 .style-lib--gradient .style-item {
   width: 50px;
   height: 26px;
+  border: none;
   border-radius: var(--r-input);
+}
+
+.style-lib--gradient .style-item--image {
+  border: 1px solid transparent;
 }
 
 .style-lib--font .style-item {
   width: 70px;
   height: 44px;
+  flex-direction: column;
+  justify-content: flex-start;
+  padding: var(--sp-exact-3) var(--sp-exact-5);
   border-radius: var(--r-input);
+  background: var(--c-font-card);
 }
 
 .style-lib--style .style-item {
   width: 26px;
   height: 26px;
+  background: var(--c-style-thumb);
 }
 
 .style-lib--color .style-item:hover,
@@ -108,7 +208,78 @@
   border-color: var(--c-swatch-border-hover-dim);
 }
 
-/* 各组末尾的添加入口：原版四类分别是 .add-svg(25×25) / .add(50×26) / .add(70×44) / .img-add(26×26)，
+/* ---------- 字体卡片四件套（render `:50956-50971`）---------- */
+
+/* 原版 `.f-alignNone.w100`：数量 / N点 / 色点三件 space-between 一行 */
+.style-item__font-head {
+  display: flex;
+  width: 100%;
+  justify-content: space-between;
+}
+
+/* 原版 `p{color:#c3c3c3;font-size:12px}` + `.f-size12`；`.block-size` 只多一个 margin-top:1px */
+.style-item__font-count,
+.style-item__font-size {
+  margin: 0;
+  color: var(--text);
+  font-size: var(--fs-md);
+}
+
+.style-item__font-size {
+  margin-top: var(--sp-exact-1);
+}
+
+/* 原版 `.block-color{width:5px;height:5px;border-radius:50%;margin-top:1px}` */
+.style-item__font-dot {
+  flex: 0 0 auto;
+  width: var(--sp-exact-5);
+  height: var(--sp-exact-5);
+  margin-top: var(--sp-exact-1);
+  border-radius: 50%;
+}
+
+/* 原版 `.block-context{font-weight:700;font-size:14px;text-align:center;color:#fff;margin-top:2px}` */
+.style-item__font-sample {
+  width: 100%;
+  margin: var(--sp-1) 0 0;
+  overflow: hidden;
+  color: var(--c-text-inverse);
+  font-size: var(--fs-base);
+  font-weight: 700;
+  text-align: center;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+/* ---------- 色块与缩略图 ---------- */
+
+.style-item__swatch {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+/* 图片型渐变：原版直接 `<img class="color-block color-block-img">`（`app.v4.js:50558-50562`），
+   宽高由父级给；`.color-block-img` 自带 1px 透明边，所以父级那层 border 换成它 */
+.style-item__img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+}
+
+/* 图层样式缩略图：原版 `.style-img{background-size:100% 100%;image-rendering:pixelated}`
+   （`data-v-216ff8d1`，render `:51348`） */
+.style-item__thumb {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: fill;
+  image-rendering: pixelated;
+}
+
+/* ---------- 各组末尾的添加入口 ----------
+   原版四类分别是 .add-svg(25×25) / .add(50×26) / .add(70×44) / .img-add(26×26)，
    底色都是 #535353、hover #444（同上的四个 scoped 段） */
 .style-item__add {
   border: 1px solid transparent;
@@ -136,33 +307,9 @@
   height: 26px;
 }
 
+/* 原版只有 `:hover{background-color:#444}`，图标颜色不变 */
 .style-item__add:hover {
   background: var(--c-font-btn-hover);
-  color: var(--text-strong);
-}
-
-.style-item__swatch {
-  display: block;
-  width: 100%;
-  height: 100%;
-}
-
-/* 图片型渐变：原版直接 <img>，宽高由父级 .color-block 给（app.v4.js:50558-50562） */
-.style-item__img {
-  display: block;
-  width: 100%;
-  height: 100%;
-  object-fit: cover;
-}
-
-.style-item__text {
-  padding: 0 var(--sp-1);
-  overflow: hidden;
-  color: var(--text-strong);
-  font-size: var(--fs-sm);
-  text-align: center;
-  text-overflow: ellipsis;
-  white-space: nowrap;
 }
 
 .style-hint {

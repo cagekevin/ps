@@ -5,6 +5,7 @@ import type {
 } from '@/cep/data/legacy-settings'
 import type { QuickFont } from '@/cep/data/font-extra'
 import type { FontItem } from '@/cep/types'
+import type { KuKind } from '@/domain/style-library'
 
 /**
  * 命令 id → payload 类型的**唯一映射**。
@@ -370,6 +371,55 @@ export interface StyleAddStylePayload {
   groupIndex: number
 }
 
+// ---------- 样式（/style 第 3 段：分组 / 项的增删改 + 写库）----------
+
+/**
+ * 改哪个库。四类库的组结构不同（只有样式库的组带 `id`，契约 §2.3），
+ * 所以每条写命令都必须带上 `kind`，命令层不猜"当前 tab 是哪个库"。
+ */
+export interface StyleKuKindPayload {
+  kind: KuKind
+}
+
+export interface StyleAddGroupPayload extends StyleKuKindPayload {
+  name: string
+  /** 原版 `addGroup(name, afterIndex)`：插到该组之后；不传则追加（`app.v4.js:52437-52449`） */
+  afterIndex?: number
+}
+
+export interface StyleRenameGroupPayload extends StyleKuKindPayload {
+  groupIndex: number
+  name: string
+}
+
+export interface StyleGroupIndexPayload extends StyleKuKindPayload {
+  groupIndex: number
+}
+
+export interface StyleToggleGroupShowPayload extends StyleGroupIndexPayload {
+  /** `true` = 只显示这一组（原版 `showOnlyGroup`）；不传 = 取反（`app.v4.js:52415-52418`） */
+  only?: boolean
+}
+
+export interface StyleAddItemPayload extends StyleKuKindPayload {
+  groupIndex: number
+  /** 项按开放结构传：命令不认字段、不补键（契约 §7 第 8 条） */
+  item: Record<string, unknown>
+}
+
+export interface StyleRenameItemPayload extends StyleGroupIndexPayload {
+  itemIndex: number
+  name: string
+}
+
+export interface StyleItemRefPayload extends StyleGroupIndexPayload {
+  itemIndex: number
+}
+
+export interface StyleReorderItemPayload extends StyleItemRefPayload {
+  direction: 'up' | 'down'
+}
+
 export interface CommandPayloads {
   'font.apply': ApplyFontPayload
   'font.rate': RatePayload
@@ -452,6 +502,15 @@ export interface CommandPayloads {
   'style.addColor': StyleAddColorPayload
   'style.addGradient': StyleAddGradientPayload
   'style.addStyle': StyleAddStylePayload
+  'style.addGroup': StyleAddGroupPayload
+  'style.renameGroup': StyleRenameGroupPayload
+  'style.deleteGroup': StyleGroupIndexPayload
+  'style.toggleGroupShow': StyleToggleGroupShowPayload
+  'style.addItem': StyleAddItemPayload
+  'style.renameItem': StyleRenameItemPayload
+  'style.deleteItem': StyleItemRefPayload
+  'style.reorderItem': StyleReorderItemPayload
+  'style.sendToSwatch': StyleItemRefPayload
 
   'legacy.call': LegacyCallPayload
   'cloud.setUrl': CloudSetUrlPayload

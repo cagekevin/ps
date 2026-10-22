@@ -21,10 +21,10 @@ const repo = vi.hoisted(() => ({
 
 vi.mock('@/cep/data/style-library-repo', () => ({
   readStyleLibrary: repo.read,
-  readStyleLibraryItem: repo.readItem,
-  readStyleGroupId: repo.readGroupId,
-  appendStyleLibraryItem: repo.appendItem,
-  replaceStyleLibraryItem: repo.replaceItem,
+  readKuItem: repo.readItem,
+  readKuGroupId: repo.readGroupId,
+  addKuItem: repo.appendItem,
+  replaceKuItem: repo.replaceItem,
   styleIndexRepo: repo.indexRepo,
 }))
 
@@ -293,8 +293,26 @@ describe('四类库的项尺寸互不相同（原版四个 scoped 段，不是�
             ],
           },
         ],
-        font: [{ name: '等线字组', show: true, items: [{ name: '未命名', meta: '等线 · 20点' }] }],
-        style: [{ name: '样式默认分组', show: true, items: [{ name: '描边' }] }],
+        font: [
+          {
+            name: '等线字组',
+            show: true,
+            items: [
+              {
+                name: '未命名',
+                fontPreview: {
+                  count: 2,
+                  size: '20点',
+                  color: 'rgb(255, 0, 0)',
+                  family: '等线',
+                  weight: 'Regular',
+                  scriptFamily: 'DengXian',
+                },
+              },
+            ],
+          },
+        ],
+        style: [{ name: '样式默认分组', show: true, items: [{ name: '描边', thumb: 'X1.png' }] }],
       },
       degraded: '',
     })
@@ -366,5 +384,186 @@ describe('四类库的项尺寸互不相同（原版四个 scoped 段，不是�
     const img = wrapper.find('.style-item__img')
     expect(img.exists()).toBe(true)
     expect(img.attributes('src')).toMatch(/\/Gradient\/abc\.png$/)
+  })
+})
+
+describe('仓库条（原版 warehouse 组件 data-v-47b7c6cb，清单 #71 #72 #73）', () => {
+  it('点行展开下拉，列出索引里的全部仓库，当前仓库带勾', async () => {
+    repo.read.mockResolvedValue({
+      index: { index: 1, list: [{ name: '默认仓库' }, { name: '客户A' }] },
+      libraries: libraries(),
+      degraded: '',
+    })
+
+    const wrapper = mountPage()
+    await flushPromises()
+    expect(wrapper.find('.style-warehouse__down').exists()).toBe(false)
+
+    await wrapper.find('.style-warehouse__row').trigger('click')
+    await flushPromises()
+
+    expect(wrapper.findAll('.style-warehouse__item-name').map((n) => n.text())).toEqual([
+      '默认仓库',
+      '客户A',
+    ])
+
+    // 原版每行都渲染一个 svg-14：选中是勾，其余留空位对齐
+    const checks = wrapper.findAll('.style-warehouse__check')
+    expect(checks).toHaveLength(2)
+    expect(checks[0].classes()).toContain('is-hidden')
+    expect(checks[1].classes()).not.toContain('is-hidden')
+  })
+
+  it('再点一次收起', async () => {
+    repo.read.mockResolvedValue(snapshot())
+
+    const wrapper = mountPage()
+    await flushPromises()
+
+    await wrapper.find('.style-warehouse__row').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('.style-warehouse__down').exists()).toBe(true)
+
+    await wrapper.find('.style-warehouse__row').trigger('click')
+    await flushPromises()
+    expect(wrapper.find('.style-warehouse__down').exists()).toBe(false)
+  })
+})
+
+describe('字体库 / 样式库的项内容（清单 #22 #24 #26）', () => {
+  it('字体项：渲染 字体数 / N点 / 中文字 / 色点，预览字体取 fonts[0].family', async () => {
+    repo.read.mockResolvedValue({
+      index: { index: 0, list: [{ name: 'W' }] },
+      libraries: libraries({
+        font: [
+          {
+            name: '等线字组',
+            show: true,
+            items: [
+              {
+                name: '未命名',
+                fontPreview: {
+                  count: 2,
+                  size: '20点',
+                  color: 'rgb(255, 0, 0)',
+                  family: '等线',
+                  weight: 'Regular',
+                  scriptFamily: 'DengXian',
+                },
+              },
+            ],
+          },
+        ],
+      }),
+      degraded: '',
+    })
+
+    const wrapper = mountPage()
+    await flushPromises()
+    await wrapper.findAll('.g-tabs__label')[2].trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('.style-item__font-count').text()).toBe('2')
+    expect(wrapper.find('.style-item__font-size').text()).toBe('20点')
+    expect(wrapper.find('.style-item__font-sample').text()).toBe('中文字')
+    expect(wrapper.find('.style-item__font-dot').attributes('style')).toContain('rgb(255, 0, 0)')
+    // 原版 :50970 的拼接顺序：family,'family','family weight',scriptFamily
+    // （jsdom 把单引号归一成双引号，所以只断言「家族名 + 字重」这一段在）
+    expect(wrapper.find('.style-item__font-sample').attributes('style')).toContain('等线 Regular')
+  })
+
+  it('字体项：color 为 null 时没有色点（不补默认色）', async () => {
+    repo.read.mockResolvedValue({
+      index: { index: 0, list: [{ name: 'W' }] },
+      libraries: libraries({
+        font: [
+          {
+            name: '等线字组',
+            show: true,
+            items: [
+              {
+                name: '未命名',
+                fontPreview: {
+                  count: 1,
+                  size: '20点',
+                  color: '',
+                  family: '等线',
+                  weight: '',
+                  scriptFamily: '',
+                },
+              },
+            ],
+          },
+        ],
+      }),
+      degraded: '',
+    })
+
+    const wrapper = mountPage()
+    await flushPromises()
+    await wrapper.findAll('.g-tabs__label')[2].trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('.style-item__font-dot').exists()).toBe(false)
+    expect(wrapper.find('.style-item__font-sample').exists()).toBe(true)
+  })
+
+  it('样式项：缩略图 src 指向 <userDir>/kuStyle/<id>.png', async () => {
+    repo.read.mockResolvedValue({
+      index: { index: 0, list: [{ name: 'W' }] },
+      libraries: libraries({
+        style: [{ name: '样式默认分组', show: true, items: [{ name: '描边', thumb: 'X1.png' }] }],
+      }),
+      degraded: '',
+    })
+
+    const wrapper = mountPage()
+    await flushPromises()
+    await wrapper.findAll('.g-tabs__label')[3].trigger('click')
+    await flushPromises()
+
+    const img = wrapper.find('.style-item__thumb')
+    expect(img.exists()).toBe(true)
+    expect(img.attributes('src')).toMatch(/\/kuStyle\/X1\.png$/)
+  })
+
+  it('样式项：缩略图加载失败就不再画 <img>，只留深色底（不显示碎图标）', async () => {
+    repo.read.mockResolvedValue({
+      index: { index: 0, list: [{ name: 'W' }] },
+      libraries: libraries({
+        style: [{ name: '样式默认分组', show: true, items: [{ name: '描边', thumb: 'X1.png' }] }],
+      }),
+      degraded: '',
+    })
+
+    const wrapper = mountPage()
+    await flushPromises()
+    await wrapper.findAll('.g-tabs__label')[3].trigger('click')
+    await flushPromises()
+
+    await wrapper.find('.style-item__thumb').trigger('error')
+    await flushPromises()
+
+    expect(wrapper.find('.style-item__thumb').exists()).toBe(false)
+    // 卡片本身还在（26×26 深色块），只是没有图
+    expect(wrapper.find('.style-lib--style .style-item').exists()).toBe(true)
+  })
+
+  it('样式项：没有 id 就不渲染 <img>（不猜文件名）', async () => {
+    repo.read.mockResolvedValue({
+      index: { index: 0, list: [{ name: 'W' }] },
+      libraries: libraries({
+        style: [{ name: '样式默认分组', show: true, items: [{ name: '描边' }] }],
+      }),
+      degraded: '',
+    })
+
+    const wrapper = mountPage()
+    await flushPromises()
+    await wrapper.findAll('.g-tabs__label')[3].trigger('click')
+    await flushPromises()
+
+    expect(wrapper.find('.style-item__thumb').exists()).toBe(false)
+    expect(wrapper.find('.style-lib--style .style-item').exists()).toBe(true)
   })
 })

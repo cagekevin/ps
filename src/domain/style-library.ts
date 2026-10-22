@@ -69,7 +69,6 @@ export function readStyleWarehouseIndex(raw: unknown): KuIndexRead {
 export interface KuItem {
   name: string
   swatch?: string
-  meta?: string
   /**
    * 图片型渐变的文件名（`gradient.fileName`）。
    *
@@ -79,6 +78,35 @@ export interface KuItem {
    * 渲染在页面做（要拼 OS 前缀），这里只把文件名透出来。
    */
   image?: string
+  /** 字体项在 70×44 卡片里显示的四件套；只有 `fontItem` 产出 */
+  fontPreview?: KuFontPreview
+  /**
+   * 样式项缩略图文件名（`<item.id>.png`）。
+   *
+   * 原版 `src = isMac + urlData + "/kuStyle/" + item.id + ".png"`（`app.v4.js:51352`；
+   * `urlData` = 用户目录 `:51422`，`kuStyle` = `<userDir>/kuStyle` `:5223`）。
+   * 同样在页面拼路径，这里只透出文件名。
+   */
+  thumb?: string
+}
+
+/**
+ * 字体项卡片的四件套（原版 render `app.v4.js:50956-50971`）：
+ * `fonts.length` + `parseInt(size)+"点"` + 5×5 色点 + 「中文字」预览（字体本身用 `fonts[0].family`）。
+ *
+ * 原版直接取 `fonts[0].color.rgb`，而契约 §2.3 的实测样本里 `color` 是 `null` ——
+ * 照抄会让整块渲染抛错。这里拿不到 rgb 就给空串，页面不画色点，**不补默认颜色**。
+ */
+export interface KuFontPreview {
+  /** `fonts.length` */
+  count: number
+  /** `parseInt(size) + "点"`；size 不是数字时为空串 */
+  size: string
+  /** `rgb(r,g,b)`；`color` 缺失 / 为 null / 通道不是数字时为空串 */
+  color: string
+  family: string
+  weight: string
+  scriptFamily: string
 }
 
 export interface KuGroup {
@@ -156,26 +184,54 @@ function gradientItem(raw: Record<string, unknown>): KuItem {
   return item
 }
 
-/** 字体项：`{ name, fonts: [{ family, size, ... }] }`；原版块里显示「字号 + 中文字」 */
+function text(value: unknown): string {
+  return typeof value === 'string' ? value : ''
+}
+
+/** `color.rgb` → `rgb(r,g,b)`；缺通道就给空串（原版这里直接取 `.r`，样本里 `color` 为 null 会抛） */
+function fontColor(value: unknown): string {
+  if (!isRecord(value) || !isRecord(value.rgb)) return ''
+  const { r, g, b } = value.rgb
+  if (![r, g, b].every((channel) => typeof channel === 'number' && Number.isFinite(channel))) {
+    return ''
+  }
+  return `rgb(${r as number}, ${g as number}, ${b as number})`
+}
+
+/**
+ * 字体项：`{ name, fonts: [{ family, size, weight, scriptFamily, color }] }`（契约 §2.3）。
+ * 卡片显示「字体数 + N点 + 5×5 色点 + 中文字」（原版 render `app.v4.js:50956-50971`）。
+ */
 function fontItem(raw: Record<string, unknown>): KuItem {
+  const item: KuItem = { name: itemName(raw) }
   const fonts = raw.fonts
-  if (!Array.isArray(fonts) || !fonts.length || !isRecord(fonts[0])) return { name: itemName(raw) }
+  if (!Array.isArray(fonts) || !fonts.length || !isRecord(fonts[0])) return item
+
   const first = fonts[0]
-  const family = typeof first.family === 'string' ? first.family : ''
-  // size 在默认模板里是数字、实测样本里是字符串（契约 §2.3），两种都收
-  const size = typeof first.size === 'number' ? String(first.size) : first.size
-  const meta = [family, typeof size === 'string' && size ? `${size}点` : '']
-    .filter(Boolean)
-    .join(' · ')
-  return meta ? { name: itemName(raw), meta } : { name: itemName(raw) }
+  // 原版 `parseInt(e.fonts[0].size) + "点"`；size 在默认模板里是数字、样本里是字符串，两种都收
+  const size = parseInt(String(first.size), 10)
+
+  item.fontPreview = {
+    count: fonts.length,
+    size: Number.isFinite(size) ? `${size}点` : '',
+    color: fontColor(first.color),
+    family: text(first.family),
+    weight: text(first.weight),
+    scriptFamily: text(first.scriptFamily),
+  }
+  return item
 }
 
 /**
  * 样式项：客户端契约只保证 `{ name, id, layerId }`（`checkError` `app.v4.js:52997`），
  * 其余是 jsxbin `ys_AddStyle` 返回的"PS 效果载荷"，字段名未定（契约 §6.1 #1a）→ 不猜、不展示。
+ * `id` 只用来拼缩略图文件名（原版 `:51352`）；没有 `id` 就不给 `thumb`，页面留深色底。
  */
 function styleItem(raw: Record<string, unknown>): KuItem {
-  return { name: itemName(raw) }
+  const item: KuItem = { name: itemName(raw) }
+  const id = raw.id
+  if (typeof id === 'string' && id) item.thumb = `${id}.png`
+  return item
 }
 
 const ITEM_READERS: Record<KuKind, (raw: Record<string, unknown>) => KuItem> = {

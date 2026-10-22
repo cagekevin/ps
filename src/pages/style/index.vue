@@ -11,7 +11,7 @@ import PageBottomBar from '@/components/PageBottomBar.vue'
 import { useCommand } from '@/components/command/useCommand'
 import { usePersistedRef } from '@/composables/usePersisted'
 import { userDir } from '@/cep/fs'
-import { KU_KINDS, KU_TAB_LABELS } from '@/domain/style-library'
+import { KU_KINDS, KU_TAB_LABELS, type KuFontPreview } from '@/domain/style-library'
 import { useStyleLibraryStore } from '@/stores/style-library'
 import type { StyleModifier } from '@/commands/payloads'
 
@@ -27,13 +27,22 @@ import type { StyleModifier } from '@/commands/payloads'
  * 原版没有页面标题栏（标题由左侧导航承担），所以不用 `PageShell`。
  */
 const store = useStyleLibraryStore()
-const { libraries, loading, error, currentName } = storeToRefs(store)
+const { libraries, loading, error, currentName, warehouses, activeIndex } = storeToRefs(store)
 
 /** 原版 `set.ysShowTab`（`app.v4.js:54657` 起 switchFun 读写它）；我们落 `sj_v5_ui.json`，不动 `sj_set.json` */
 const showTabs = usePersistedRef<boolean[]>('styleShowTab', [true, false, false, false])
 
 /** 组折叠：原版写库（`setShowStatus` → `updata`，`:50177-50179` 等），第 3 段接；本段只存页面内 */
 const collapsed = ref<Record<string, boolean>>({})
+
+/**
+ * 仓库下拉是否展开。原版 `f_showDown` 只切本地 `showDown`（`app.v4.js:53754`），
+ * 列表内容来自索引 `sj_kuStoreInfo.ini`；点某一项会写索引，属于写能力 → 本段只读展示。
+ */
+const warehouseOpen = ref(false)
+
+/** 缩略图 `<id>.png` 加载失败的那几项：失败就不再画 `<img>`，只留原版那层 rgba(0,0,0,.3) 底 */
+const brokenThumbs = ref<Set<string>>(new Set())
 
 const applyColorCmd = useCommand('style.applyColor')
 const applyGradientCmd = useCommand('style.applyGradient')
@@ -65,24 +74,56 @@ function libClass(kind: string): string {
 }
 
 /**
- * 图片型渐变的 `<img>` src。
- *
- * 原版 `isMac + imgPath + fileName`（`app.v4.js:50561`、`imgPath = path.kuGradient + "/"` `:50617`），
- * `isMac = getOsPrefix()`：Mac 返回 `"file://"`，Windows 返回 `""`（`:72855-72862`）。
- * 我们这里拼 `<userDir>/Gradient/<fileName>`（`path.kuGradient = s + "/Gradient"`，`:5225`）。
- *
- * `userDir()` 在没有 Node 的环境（浏览器 dev / 测试）会抛 `NO_NODE`；预览图拿不到路径就
- * 退回 CSS 渐变（模板里 `item.swatch` 兜底），**不能让它把整页渲染打断**。
+ * 用户目录只取一次：`userDir()` 每次都要过 CEP 的 Node 桥（`cep/fs.ts` 的 `nodeRequire`），
+ * 而一屏几百个缩略图每帧要拼一次路径，逐项现取会把渲染拖成同步桥调用风暴。
  */
-function gradientImageSrc(fileName: string): string {
-  if (!fileName) return ''
-  let dir: string
-  try {
-    dir = userDir()
-  } catch {
-    return ''
+let cachedUserDir: string | null = null
+function userDirOnce(): string {
+  if (cachedUserDir === null) {
+    try {
+      cachedUserDir = userDir()
+    } catch {
+      cachedUserDir = ''
+    }
   }
-  return dir ? `${dir}/Gradient/${fileName}` : ''
+  return cachedUserDir
+}
+
+/**
+ * 用户目录下某个资源的绝对路径。
+ *
+ * 原版 `src = isMac + <目录> + "/" + <文件名>`（渐变 `:50561`、样式缩略图 `:51352`），
+ * `isMac = getOsPrefix()`（Mac `"file://"`、Windows `""`，`:72855-72862`）。
+ * 没有 Node 的环境（浏览器 dev / 测试）拿不到目录就返回空串，由模板退化成"不画图"，
+ * **不能让它把整页渲染打断**。
+ */
+function userFileSrc(relative: string): string {
+  const dir = userDirOnce()
+  return dir ? `${dir}/${relative}` : ''
+}
+
+/** 图片型渐变：`<userDir>/Gradient/<fileName>`（`path.kuGradient`，`:5225`） */
+function gradientImageSrc(fileName = ''): string {
+  return fileName ? userFileSrc(`Gradient/${fileName}`) : ''
+}
+
+/** 图层样式缩略图：`<userDir>/kuStyle/<id>.png`（`path.kuStyle`，`:5223`） */
+function styleThumbSrc(thumb = ''): string {
+  return thumb ? userFileSrc(`kuStyle/${thumb}`) : ''
+}
+
+function onThumbError(thumb: string) {
+  brokenThumbs.value = new Set(brokenThumbs.value).add(thumb)
+}
+
+/**
+ * 字体卡片的 `font-family`：原版 `family + ",'" + family + "','" + family + " " + weight + "'," + scriptFamily`
+ * （`app.v4.js:50970`，逐个照抄，包括那个未加引号的首项）。
+ */
+function fontFamilyOf(preview: KuFontPreview): string {
+  if (!preview.family) return ''
+  const { family, weight, scriptFamily } = preview
+  return `${family},'${family}','${family} ${weight}',${scriptFamily}`
 }
 
 /**
@@ -139,8 +180,33 @@ onMounted(() => {
 
 <template>
   <div class="style-page">
-    <!-- 原版 warehouse 组件（49645）：下拉里的选择/改名/删除都会写索引，第 3 段接 -->
-    <div class="style-warehouse" title="仓库分组，管理样式">{{ currentName }}</div>
+    <!-- 原版 warehouse 组件（`app.v4.js:53747-53790`）：行内 16×16 图标 + 蓝色仓库名 + 10×10 箭头，
+         点开是仓库列表（索引 `sj_kuStoreInfo.ini`）。切换仓库要写索引 → 本段只读展示。 -->
+    <div class="style-warehouse">
+      <div
+        class="style-warehouse__row"
+        title="仓库分组，管理样式"
+        @click.stop="warehouseOpen = !warehouseOpen"
+      >
+        <Icon name="#iconmorencangku" size="md" />
+        <p class="style-warehouse__name">{{ currentName }}</p>
+        <Icon name="#iconzhankaizhedie" size="xs" class="style-warehouse__arrow" />
+      </div>
+
+      <div v-if="warehouseOpen" class="style-warehouse__down">
+        <div class="style-warehouse__down-main">
+          <div v-for="(warehouse, i) in warehouses" :key="i" class="style-warehouse__item">
+            <Icon
+              name="#icongouxuan"
+              size="sm"
+              class="style-warehouse__check"
+              :class="{ 'is-hidden': i !== activeIndex }"
+            />
+            <p class="style-warehouse__item-name">{{ warehouse.name }}</p>
+          </div>
+        </div>
+      </div>
+    </div>
 
     <div class="style-tabs">
       <MultiTabs v-model="showTabs" :labels="KU_TAB_LABELS" />
@@ -176,33 +242,69 @@ onMounted(() => {
                 v-for="(item, itemIndex) in group.items"
                 :key="itemIndex"
                 class="style-item"
-                :title="item.meta ? `${item.name} · ${item.meta}` : item.name"
+                :class="{
+                  'style-item--image': kind === 'gradient' && !!gradientImageSrc(item.image),
+                }"
+                :title="item.name"
                 @click="applyItem(kind, index, itemIndex, $event)"
               >
-                <!-- 图片型渐变走 <img>（原版 :50558-50562）；路径拼不出来就退回 CSS 渐变 -->
-                <img
-                  v-if="item.image && gradientImageSrc(item.image)"
-                  class="style-item__img"
-                  :src="gradientImageSrc(item.image)"
-                  :alt="item.name"
-                />
-                <span
-                  v-else-if="item.swatch"
-                  class="style-item__swatch"
-                  :style="{ background: item.swatch }"
-                />
-                <span v-else class="style-item__text">{{ item.meta ?? item.name }}</span>
+                <!-- 颜色 / 渐变：整块就是色块（原版 .color-block 直接带 backgroundColor / backgroundImage，
+                     render `:49960` / `:50564`） -->
+                <template v-if="kind === 'color' || kind === 'gradient'">
+                  <img
+                    v-if="item.image && gradientImageSrc(item.image)"
+                    class="style-item__img"
+                    :src="gradientImageSrc(item.image)"
+                    :alt="item.name"
+                  />
+                  <span
+                    v-else-if="item.swatch"
+                    class="style-item__swatch"
+                    :style="{ background: item.swatch }"
+                  />
+                </template>
+
+                <!-- 字体：70×44 卡片 = 字体数 + N点 + 5×5 色点 + 「中文字」（render `:50956-50971`） -->
+                <template v-else-if="kind === 'font' && item.fontPreview">
+                  <div class="style-item__font-head">
+                    <p class="style-item__font-count">{{ item.fontPreview.count }}</p>
+                    <p class="style-item__font-size">{{ item.fontPreview.size }}</p>
+                    <span
+                      v-if="item.fontPreview.color"
+                      class="style-item__font-dot"
+                      :style="{ backgroundColor: item.fontPreview.color }"
+                    />
+                  </div>
+                  <p
+                    class="style-item__font-sample"
+                    :style="{ fontFamily: fontFamilyOf(item.fontPreview) }"
+                  >
+                    中文字
+                  </p>
+                </template>
+
+                <!-- 样式：26×26 缩略图 `kuStyle/<id>.png`（render `:51348-51353`）。
+                     图挂了（文件不存在 / 没有 id）就不再画 <img>，留 .style-item 那层 rgba(0,0,0,.3) 底。 -->
+                <template v-else-if="kind === 'style'">
+                  <img
+                    v-if="styleThumbSrc(item.thumb) && !brokenThumbs.has(item.thumb ?? '')"
+                    class="style-item__thumb"
+                    :src="styleThumbSrc(item.thumb)"
+                    :alt="item.name"
+                    @error="onThumbError(item.thumb ?? '')"
+                  />
+                </template>
               </div>
 
-              <!-- 原版各组末尾的添加入口（如 `app.v4.js:49988-50000`）：
-                   ctrl+点击=取前景色、shift=取边框色、alt=取文字色、普通=吸色（本期不做） -->
+              <!-- 原版各组末尾的添加入口（如 `app.v4.js:49988-50000`）：底色 #535353、hover #444，
+                   图标是 `.icon` 跟 1em（12px）。 -->
               <button
                 class="style-item style-item__add"
                 type="button"
                 title="添加当前前景色（ctrl+点击取边框色，alt+点击取文字色）"
                 @click="addItem(kind, index)"
               >
-                <Icon name="#iconchuangjian" size="sm" />
+                <Icon name="#iconchuangjian" />
               </button>
             </div>
           </BaseGroup>
@@ -214,7 +316,8 @@ onMounted(() => {
 
     <!-- 原版 .button-nav（49844）：添加分组 4 个 + 竖线 + 导入 / 导出。
          添加分组写库、导入导出是文件 IO，都属于第 3 段（T-48），本段保持 disabled。
-         图标不带 size：原版底排统一是 baseIcon，图标跟 1em（12px），与动作页一致。 -->
+         图标不带 size：原版本页是 `.svg-18`（清单 #93），但底排图标守卫要求全项目 1em
+         （`tests/components/page-bottom-bar.test.ts:155`），本页跟着守卫走，18px 待统一决定。 -->
     <PageBottomBar>
       <button class="g-bottom-bar__icon" type="button" title="添加颜色分组" disabled>
         <Icon name="#iconchuangjian" />

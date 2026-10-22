@@ -44,12 +44,20 @@ const store = vi.hoisted(() => {
   return { files }
 })
 
+/**
+ * `userDir()` 必须真的以 `USER_DIR`（`/SheJiZhuLi`）结尾——发送到色板要把它剥掉还原成
+ * `%APPDATA%` 根（原版 `path.seBan` = `getUserDataPath() + "/FengZiSeBan/userColor.ini"`）。
+ */
 vi.mock('@/cep/fs', () => ({
-  userDir: () => 'USER',
+  userDir: () => 'ROAM/SheJiZhuLi',
   readTextSmart: async (path: string) => store.files.get(path) ?? null,
   writeTextFileAtomic: (path: string, text: string) => {
     store.files.set(path, text)
     return true
+  },
+  // 备份走普通写（和 fileRepo 一致）
+  writeTextFile: (path: string, text: string) => {
+    store.files.set(path, text)
   },
   b64ToUtf8: (b64: string) => Buffer.from(b64, 'base64').toString('utf8'),
 }))
@@ -58,9 +66,11 @@ await import('@/commands')
 const { execute } = await import('@/commands/registry')
 const { styleIndexRepo } = await import('@/cep/data/style-library-repo')
 
-const COLOR_LIB = 'USER/sj_kuColA.ini'
-const GRADIENT_LIB = 'USER/sj_kuGraA.ini'
-const STYLE_LIB = 'USER/sj_kuStyA.ini'
+const USER = 'ROAM/SheJiZhuLi'
+const COLOR_LIB = `${USER}/sj_kuColA.ini`
+const GRADIENT_LIB = `${USER}/sj_kuGraA.ini`
+const STYLE_LIB = `${USER}/sj_kuStyA.ini`
+const SWATCH_FILE = 'ROAM/FengZiSeBan/userColor.ini'
 
 function seed(
   path: string,
@@ -268,5 +278,299 @@ describe('三条"添加"命令', () => {
     })
     const groups = (await read(STYLE_LIB)) as Array<{ list: unknown[] }>
     expect(groups[0].list).toHaveLength(0)
+  })
+})
+
+// ---------- 第 3 段：分组 / 项的增删改 + 写库 ----------
+
+type RawGroup = { name?: string; show?: boolean; id?: string; list?: unknown[] }
+
+async function groups(path: string): Promise<RawGroup[]> {
+  return (await read(path)) as RawGroup[]
+}
+
+describe('style.addGroup（原版 addGroup，app.v4.js:52437-52449）', () => {
+  it('追加到末尾：{name, show, list:[]}（createGroupObject :52513-52521）', async () => {
+    await expect(execute('style.addGroup', { kind: 'color', name: '  新组  ' })).resolves.toEqual({
+      ok: true,
+    })
+
+    const g = await groups(COLOR_LIB)
+    expect(g).toHaveLength(2)
+    expect(g[1]).toEqual({ name: '新组', show: true, list: [] })
+  })
+
+  it('样式库的组带 id：YS + 16 位大写 hex（:53270-53278）', async () => {
+    await execute('style.addGroup', { kind: 'style', name: '描边组' })
+
+    const g = await groups(STYLE_LIB)
+    expect(g[1].name).toBe('描边组')
+    expect(g[1].id).toMatch(/^YS[0-9A-F]{16}$/)
+  })
+
+  it('afterIndex 有效时插到它后面（:52443-52447）', async () => {
+    seed(COLOR_LIB, [
+      { name: 'A', show: true, list: [] },
+      { name: 'B', show: true, list: [] },
+    ])
+
+    await execute('style.addGroup', { kind: 'color', name: 'C', afterIndex: 0 })
+
+    expect((await groups(COLOR_LIB)).map((g) => g.name)).toEqual(['A', 'C', 'B'])
+  })
+
+  it('空名报错且不动文件', async () => {
+    const before = store.files.get(COLOR_LIB)
+
+    await expect(execute('style.addGroup', { kind: 'color', name: '   ' })).resolves.toMatchObject({
+      ok: false,
+    })
+    expect(store.files.get(COLOR_LIB)).toBe(before)
+  })
+
+  it('库文件损坏（不是 JSON）→ 报错，不覆盖原文件', async () => {
+    store.files.set(COLOR_LIB, '{坏掉的')
+
+    const result = await execute('style.addGroup', { kind: 'color', name: 'X' })
+
+    expect(result.ok).toBe(false)
+    expect(store.files.get(COLOR_LIB)).toBe('{坏掉的')
+  })
+})
+
+describe('style.renameGroup（原版 renameGroup :52456-52459）', () => {
+  it('只改 name，id 与 list 原样保留', async () => {
+    seed(STYLE_LIB, [
+      { name: '旧名', show: true, id: 'YSAAAAAAAAAAAAAAAA', list: [{ name: 'x', id: 'i' }] },
+    ])
+
+    await expect(
+      execute('style.renameGroup', { kind: 'style', groupIndex: 0, name: '新名' }),
+    ).resolves.toEqual({ ok: true })
+
+    expect(await groups(STYLE_LIB)).toEqual([
+      { name: '新名', show: true, id: 'YSAAAAAAAAAAAAAAAA', list: [{ name: 'x', id: 'i' }] },
+    ])
+  })
+
+  it('分组不存在 → 报错，文件不变', async () => {
+    const before = store.files.get(COLOR_LIB)
+
+    await expect(
+      execute('style.renameGroup', { kind: 'color', groupIndex: 5, name: 'X' }),
+    ).resolves.toMatchObject({ ok: false })
+    expect(store.files.get(COLOR_LIB)).toBe(before)
+  })
+})
+
+describe('style.deleteGroup（原版 deleteGroup :52451-52454）', () => {
+  it('删掉指定组', async () => {
+    seed(COLOR_LIB, [
+      { name: 'A', show: true, list: [] },
+      { name: 'B', show: true, list: [] },
+    ])
+
+    await execute('style.deleteGroup', { kind: 'color', groupIndex: 0 })
+
+    expect((await groups(COLOR_LIB)).map((g) => g.name)).toEqual(['B'])
+  })
+
+  it('删空后补「颜色默认分组」（this.text + "默认分组"）', async () => {
+    await execute('style.deleteGroup', { kind: 'color', groupIndex: 0 })
+
+    expect(await groups(COLOR_LIB)).toEqual([{ name: '颜色默认分组', show: true, list: [] }])
+  })
+
+  it('索引里没有当前仓库 → 报错（不静默写到别处）', async () => {
+    await styleIndexRepo.write({ index: 0, list: [] })
+
+    await expect(
+      execute('style.deleteGroup', { kind: 'color', groupIndex: 0 }),
+    ).resolves.toMatchObject({ ok: false })
+  })
+})
+
+describe('style.toggleGroupShow（原版 changeGroupShowStatus :52415-52435）', () => {
+  it('不传 only → 取反', async () => {
+    seed(COLOR_LIB, [{ name: 'A', show: true, list: [] }])
+
+    await execute('style.toggleGroupShow', { kind: 'color', groupIndex: 0 })
+
+    expect((await groups(COLOR_LIB))[0].show).toBe(false)
+  })
+
+  it('only=true → 只显示这一组', async () => {
+    seed(COLOR_LIB, [
+      { name: 'A', show: true, list: [] },
+      { name: 'B', show: true, list: [] },
+    ])
+
+    await execute('style.toggleGroupShow', { kind: 'color', groupIndex: 1, only: true })
+
+    expect((await groups(COLOR_LIB)).map((g) => g.show)).toEqual([false, true])
+  })
+
+  it('only=true 且本来只显示这一组 → 关掉它（showOnlyGroup 的边界，:52431）', async () => {
+    seed(COLOR_LIB, [
+      { name: 'A', show: false, list: [] },
+      { name: 'B', show: true, list: [] },
+    ])
+
+    await execute('style.toggleGroupShow', { kind: 'color', groupIndex: 1, only: true })
+
+    expect((await groups(COLOR_LIB)).map((g) => g.show)).toEqual([false, false])
+  })
+
+  it('分组不存在 → 报错', async () => {
+    await expect(
+      execute('style.toggleGroupShow', { kind: 'color', groupIndex: 3 }),
+    ).resolves.toMatchObject({ ok: false })
+  })
+})
+
+describe('style.addItem（原版 addItem :52482-52489）', () => {
+  it('原样 push 进 list，不补键', async () => {
+    await expect(
+      execute('style.addItem', {
+        kind: 'color',
+        groupIndex: 0,
+        item: { name: '红', color: { hex: 'FF0000' } },
+      }),
+    ).resolves.toEqual({ ok: true })
+
+    const g = await groups(COLOR_LIB)
+    expect(g[0].list).toHaveLength(2)
+    expect(g[0].list?.[1]).toEqual({ name: '红', color: { hex: 'FF0000' } })
+  })
+
+  it('分组不存在 → 报错，文件不变', async () => {
+    const before = store.files.get(COLOR_LIB)
+
+    await expect(
+      execute('style.addItem', { kind: 'color', groupIndex: 9, item: { name: '红' } }),
+    ).resolves.toMatchObject({ ok: false })
+    expect(store.files.get(COLOR_LIB)).toBe(before)
+  })
+})
+
+describe('style.renameItem（原版 renameItem :52496-52499）', () => {
+  it('只改 name，其余键原样带走', async () => {
+    seed(COLOR_LIB, [
+      { name: '灰白', show: true, list: [{ name: '未命名', color: { hex: '302F34' } }] },
+    ])
+
+    await execute('style.renameItem', {
+      kind: 'color',
+      groupIndex: 0,
+      itemIndex: 0,
+      name: ' 主色 ',
+    })
+
+    expect((await groups(COLOR_LIB))[0].list?.[0]).toEqual({
+      name: '主色',
+      color: { hex: '302F34' },
+    })
+  })
+
+  it('空名 → 报错，文件不变', async () => {
+    const before = store.files.get(COLOR_LIB)
+
+    await expect(
+      execute('style.renameItem', { kind: 'color', groupIndex: 0, itemIndex: 0, name: ' ' }),
+    ).resolves.toMatchObject({ ok: false })
+    expect(store.files.get(COLOR_LIB)).toBe(before)
+  })
+})
+
+describe('style.deleteItem（原版 deleteItem :52477-52480）', () => {
+  it('删掉指定项', async () => {
+    seed(COLOR_LIB, [
+      {
+        name: '灰白',
+        show: true,
+        list: [
+          { name: 'a', color: { hex: '111111' } },
+          { name: 'b', color: { hex: '222222' } },
+        ],
+      },
+    ])
+
+    await execute('style.deleteItem', { kind: 'color', groupIndex: 0, itemIndex: 0 })
+
+    expect((await groups(COLOR_LIB))[0].list).toEqual([{ name: 'b', color: { hex: '222222' } }])
+  })
+
+  it('项不存在 → 报错，文件不变', async () => {
+    const before = store.files.get(COLOR_LIB)
+
+    await expect(
+      execute('style.deleteItem', { kind: 'color', groupIndex: 0, itemIndex: 9 }),
+    ).resolves.toMatchObject({ ok: false })
+    expect(store.files.get(COLOR_LIB)).toBe(before)
+  })
+})
+
+describe('style.reorderItem（原版只有拖拽 :50040-50070，这里挪一格）', () => {
+  it('上移一格', async () => {
+    seed(COLOR_LIB, [
+      {
+        name: '灰白',
+        show: true,
+        list: [
+          { name: 'a', color: { hex: '111111' } },
+          { name: 'b', color: { hex: '222222' } },
+        ],
+      },
+    ])
+
+    await execute('style.reorderItem', {
+      kind: 'color',
+      groupIndex: 0,
+      itemIndex: 1,
+      direction: 'up',
+    })
+
+    const list = (await groups(COLOR_LIB))[0].list as Array<{ name: string }>
+    expect(list.map((item) => item.name)).toEqual(['b', 'a'])
+  })
+
+  it('已在第一项还上移 → 报错，文件不变', async () => {
+    const before = store.files.get(COLOR_LIB)
+
+    await expect(
+      execute('style.reorderItem', {
+        kind: 'color',
+        groupIndex: 0,
+        itemIndex: 0,
+        direction: 'up',
+      }),
+    ).resolves.toMatchObject({ ok: false })
+    expect(store.files.get(COLOR_LIB)).toBe(before)
+  })
+})
+
+describe('style.sendToSwatch（原版 :50349-50355）', () => {
+  it('把 [item] 写成色板文件全文（整份替换，不是追加），旧内容进 .bak', async () => {
+    const previous = JSON.stringify([{ name: '旧色', color: { hex: '000000' } }])
+    store.files.set(SWATCH_FILE, previous)
+
+    await expect(
+      execute('style.sendToSwatch', { kind: 'color', groupIndex: 0, itemIndex: 0 }),
+    ).resolves.toEqual({ ok: true })
+
+    expect(JSON.parse(store.files.get(SWATCH_FILE) ?? 'null')).toEqual([
+      { name: '未命名', color: { hex: '302F34', c: 81, m: 77, y: 69, k: 46 } },
+    ])
+    expect(store.files.get(`${SWATCH_FILE}.bak`)).toBe(previous)
+  })
+
+  it('项不存在 → 报错，色板文件不动', async () => {
+    const previous = JSON.stringify([{ name: '旧色', color: { hex: '000000' } }])
+    store.files.set(SWATCH_FILE, previous)
+
+    await expect(
+      execute('style.sendToSwatch', { kind: 'color', groupIndex: 0, itemIndex: 7 }),
+    ).resolves.toMatchObject({ ok: false })
+    expect(store.files.get(SWATCH_FILE)).toBe(previous)
   })
 })
