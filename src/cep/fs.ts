@@ -141,6 +141,56 @@ export function removeFile(absPath: string): boolean {
   }
 }
 
+/** 目录占用（递归求和）；`bytes` 只算普通文件，不跟符号链接 */
+export interface DirUsage {
+  bytes: number
+  files: number
+}
+
+/**
+ * 递归统计一个目录的占用。**只读**，不删不改（清缓存命令没有证据，见 T-68）。
+ *
+ * 为什么不用 shell / jsx：CEP 里没有稳定的 `du`；Node 的 `readdirSync({withFileTypes})`
+ * 在 CEP 12 的 Node 上够用。Node 不可用或目录不存在返回 `null`——调用方要显示「无法读取」，
+ * 不许把 0 当成「空缓存」（那会把读失败说成"没缓存"）。
+ */
+export function dirUsage(absPath: string): DirUsage | null {
+  if (!hasNode()) return null
+  try {
+    const fs = nodeRequire('fs')
+    const path = nodeRequire('path')
+    if (!fs.existsSync(absPath)) return null
+    let bytes = 0
+    let files = 0
+    const walk = (dir: string): void => {
+      const entries = fs.readdirSync(dir, { withFileTypes: true }) as {
+        name: string
+        isDirectory(): boolean
+        isFile(): boolean
+      }[]
+      for (const entry of entries) {
+        const full = path.join(dir, entry.name)
+        if (entry.isDirectory()) {
+          walk(full)
+          continue
+        }
+        if (!entry.isFile()) continue
+        try {
+          // 单个文件读不到大小就跳过：宁少算，不整次失败
+          bytes += fs.statSync(full).size as number
+          files += 1
+        } catch {
+          // 权限/占用中的文件
+        }
+      }
+    }
+    walk(absPath)
+    return { bytes, files }
+  } catch {
+    return null
+  }
+}
+
 /**
  * 用 ExtendScript 的 File 读文件——Node 不可用时的兜底。
  * 这样即使 manifest 少配了 --enable-nodejs，读数据文件也不会全废。

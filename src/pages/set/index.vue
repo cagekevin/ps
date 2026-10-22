@@ -1,10 +1,9 @@
 <script setup lang="ts">
-import { computed, onMounted, ref, watch } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import CheckBox from '@/components/CheckBox.vue'
 import EmptyState from '@/components/EmptyState.vue'
 import GButton from '@/components/GButton.vue'
-import GInput from '@/components/GInput.vue'
 import PageShell from '@/components/PageShell.vue'
 import SelectBox from '@/components/SelectBox.vue'
 import SettingsRow from '@/components/SettingsRow.vue'
@@ -13,8 +12,11 @@ import { useCommand } from '@/components/command/useCommand'
 import { usePersistedRef } from '@/composables/usePersisted'
 import { useCloudStore } from '@/stores/cloud'
 import { UNITS } from '@/domain/units'
+import { formatPresetText } from '@/domain/font-preset-text'
 import { useFontSetStore } from '@/stores/font-set'
 import { useNavStore } from '@/stores/nav'
+import AddcomDialog from './components/AddcomDialog.vue'
+import ClearCacheDialog from './components/ClearCacheDialog.vue'
 
 const cloud = useCloudStore()
 const nav = useNavStore()
@@ -56,62 +58,52 @@ const showQuick = fontSetting('ztShowQuick')
 const showCustom = fontSetting('ztShowCustom')
 const expandMultiple = fontSetting('ztExpandMultiple')
 
-const defaultSizes = ref('')
-const defaultLeadings = ref('')
-const defaultTrackings = ref('')
+/**
+ * 字体面板三组预设。原版是三个按钮「配置字号 / 配置行间距 / 配置字间距」开 `addcom`
+ * （`docs/生成/页面规格/08-设置.md:69-76`），值本身是数组（`domain/font-set-config.ts:67-69`），
+ * 原来这里的三个单行输入框只能存一个数，是能力缺失。
+ *
+ * UNVERIFIED: 原版 `dropOpen` 只写了 `addDataVal` / `addText` 两个 prop（`docs/页面/08-设置.md:81`），
+ * 确定后落哪个设置字段未提取；本版按字段名落到 `ztDefaultSize` / `ztDefaultLeading` / `ztDefaultTracking`
+ * （字体面板读的同一份数组）。
+ */
+const PRESET_FIELDS = [
+  { key: 'ztDefaultSize', label: '配置字号' },
+  { key: 'ztDefaultLeading', label: '配置行间距' },
+  { key: 'ztDefaultTracking', label: '配置字间距' },
+] as const
 
-watch(
-  () => fontSet.settings.ztDefaultSize,
-  (value) => {
-    defaultSizes.value = value.join(',')
+type PresetKey = (typeof PRESET_FIELDS)[number]['key']
+
+const editingPreset = ref<PresetKey | null>(null)
+
+const presetVisible = computed({
+  get: () => editingPreset.value !== null,
+  set: (visible: boolean) => {
+    if (!visible) editingPreset.value = null
   },
-  { immediate: true },
-)
-watch(
-  () => fontSet.settings.ztDefaultLeading,
-  (value) => {
-    defaultLeadings.value = value.join(',')
-  },
-  { immediate: true },
-)
-watch(
-  () => fontSet.settings.ztDefaultTracking,
-  (value) => {
-    defaultTrackings.value = value.join(',')
-  },
-  { immediate: true },
+})
+
+const presetTitle = computed(
+  () => PRESET_FIELDS.find((field) => field.key === editingPreset.value)?.label ?? '',
 )
 
-function parseNumbers(text: string): number[] {
-  return text
-    .split(/[,，\s]+/)
-    .map((item) => Number(item.trim()))
-    .filter((value) => Number.isFinite(value))
-}
+const presetText = computed(() =>
+  editingPreset.value ? formatPresetText(fontSet.settings[editingPreset.value]) : '',
+)
 
-async function commitFontDefaults(
-  key: 'ztDefaultSize' | 'ztDefaultLeading' | 'ztDefaultTracking',
-  text: string,
-) {
-  const values = parseNumbers(text)
-  if (!values.length) return
+async function submitPreset(values: number[]) {
+  const key = editingPreset.value
+  if (!key) return
   const previous = [...fontSet.settings[key]]
   fontSet.settings[key] = values
+  editingPreset.value = null
   const ok = await saveFontSettings.run({ patch: { [key]: values } })
   if (!ok) fontSet.settings[key] = previous
 }
 
-function commitSizes() {
-  void commitFontDefaults('ztDefaultSize', defaultSizes.value)
-}
-
-function commitLeadings() {
-  void commitFontDefaults('ztDefaultLeading', defaultLeadings.value)
-}
-
-function commitTrackings() {
-  void commitFontDefaults('ztDefaultTracking', defaultTrackings.value)
-}
+/** 原版「清理缓存」是设置页底部一条 bar（`生成/页面规格/08-设置.md:91-98`） */
+const cacheVisible = ref(false)
 
 const unitIndex = computed({
   get: () => {
@@ -195,31 +187,46 @@ onMounted(async () => {
     </SettingsSection>
 
     <SettingsSection title="字体面板">
-      <GInput
-        v-model="defaultSizes"
-        placeholder="请输入默认字体大小"
-        @blur="commitSizes"
-        @enter="commitSizes"
-      />
-      <GInput
-        v-model="defaultLeadings"
-        placeholder="请输入默认行间距"
-        @blur="commitLeadings"
-        @enter="commitLeadings"
-      />
-      <GInput
-        v-model="defaultTrackings"
-        placeholder="请输入默认字间距"
-        @blur="commitTrackings"
-        @enter="commitTrackings"
-      />
+      <!-- 原版是三个按钮开 addcom（`生成/页面规格/08-设置.md:69-76`）：`.btn-small-2` 半宽 -->
+      <div class="set-presets">
+        <GButton
+          v-for="field in PRESET_FIELDS"
+          :key="field.key"
+          width="half"
+          @click="editingPreset = field.key"
+        >
+          {{ field.label }}
+        </GButton>
+      </div>
     </SettingsSection>
 
     <SettingsSection title="云同步设置">
       <p>最新更新：{{ buildTime }}</p>
       <CheckBox v-model="autoSync">开启云同步预设</CheckBox>
     </SettingsSection>
+
+    <!-- 原版是设置页底部一条 `.clear_cache_bar`（`生成/页面规格/08-设置.md:91-98`） -->
+    <GButton class="set-clear-cache" block @click="cacheVisible = true">清理缓存</GButton>
+
+    <AddcomDialog
+      v-model:visible="presetVisible"
+      :title="presetTitle"
+      :text="presetText"
+      @submit="submitPreset"
+    />
+    <ClearCacheDialog v-model:visible="cacheVisible" />
   </PageShell>
 </template>
 
-<style scoped></style>
+<style scoped>
+/* 三个「配置字号 / 配置行间距 / 配置字间距」按原版半宽两列排（`.btn-small-2` 宽 calc(50% - 3px)） */
+.set-presets {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--sp-3);
+}
+
+.set-clear-cache {
+  margin-top: var(--sp-2);
+}
+</style>
