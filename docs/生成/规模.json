@@ -1,0 +1,68 @@
+{
+  "说明": "规模真值，由 scripts/stats.mjs 生成；口径见 docs/生成/规模.md 抬头",
+  "口径": {
+    "命令数": "src/commands/<域>.ts 里 id 字面量条数，按 id 前缀分域，含 legacy",
+    "用例数": "tests 下的 .test.ts 里 it()/test() 的调用点数（静态计数，it.each 按 1 处计；非通过数）",
+    "组件数": "src/components/*.vue 顶层文件数",
+    "图标数": "src/assets/icons-sprite.svg 的 <symbol> 个数",
+    "页面数": "src/pages 下页面目录（各含 index.vue）数，排除 _ 前缀内部目录",
+    "宿主事件数": "src/cep/events.ts 的 EVENT_IDS 条目数",
+    "组件表行数": "docs/页面/<页>.md「一、组件展开」小节表格的数据行数"
+  },
+  "commands": {
+    "total": 122,
+    "byDomain": {
+      "action": 19,
+      "cloud": 4,
+      "commonUse": 11,
+      "custom": 2,
+      "font": 9,
+      "fontSet": 20,
+      "freePanel": 9,
+      "legacy": 1,
+      "rename": 13,
+      "style": 31,
+      "system": 3
+    }
+  },
+  "tests": {
+    "files": 88,
+    "cases": 748,
+    "eachSites": 0
+  },
+  "components": 30,
+  "icons": 189,
+  "pages": 9,
+  "hostEvents": 4,
+  "componentTableRows": {
+    "fontManage": 33,
+    "fontSet": 9,
+    "custom": 1,
+    "commonUse": 8,
+    "style": 10,
+    "rename": 2,
+    "set": 8
+  },
+  "pendingCells": {
+    "fontManage": 6,
+    "fontSet": 3,
+    "action": 5,
+    "custom": 36,
+    "commonUse": 112,
+    "style": 5,
+    "rename": 40,
+    "set": 10
+  },
+  "unconfirmed": {
+    "fontManage": 0,
+    "fontSet": 112,
+    "action": 0,
+    "custom": 0,
+    "commonUse": 0,
+    "style": 0,
+    "rename": 0,
+    "set": 111
+  },
+  "fontSetFreePanelIcons": 5,
+  "stylePageCases": 73
+}
