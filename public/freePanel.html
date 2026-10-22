@@ -6,8 +6,10 @@
   </head>
   <body>
     <script>
-      // 独立 CEP 面板入口：复用同一份前端产物，用 hash 进入 standalone 路由
-      window.location.replace('./index.html#/freePanel')
+      // 独立 CEP 面板入口：复用同一份前端产物。
+      // 用显式参数 ?panel=freePanel 声明"这是独立面板"，main.ts 只认这个参数（D-34）。
+      // 不再用 hash 猜入口：换入口方式（改了路由或用别的方式打开）时 hash 判断会静默失效。
+      window.location.replace('./index.html?panel=freePanel#/freePanel')
     </script>
   </body>
 </html>

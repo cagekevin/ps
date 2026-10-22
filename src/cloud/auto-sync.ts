@@ -36,10 +36,3 @@ export function startCloudAutoSync(): void {
   started = true
   scheduleNext(FIRST_DELAY_MS)
 }
-
-export function stopCloudAutoSync(): void {
-  if (timer) clearTimeout(timer)
-  timer = null
-  started = false
-  running = false
-}

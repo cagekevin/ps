@@ -15,6 +15,7 @@ import BackTop from '@/components/BackTop.vue'
 import BaseGroup from '@/components/BaseGroup.vue'
 import CepModal from '@/components/CepModal.vue'
 import CheckBox from '@/components/CheckBox.vue'
+import CommandGrid from '@/components/command/CommandGrid.vue'
 import EmptyState from '@/components/EmptyState.vue'
 import GButton from '@/components/GButton.vue'
 import GDropdown from '@/components/GDropdown.vue'
@@ -188,6 +189,25 @@ function toast(message: string) {
     </section>
 
     <!--
+      CommandGrid：命令注册表的第二个消费入口（ADR-16）。
+      页面不写具体命令 id，全部由注册表驱动；这里只按 group 过滤演示。
+      它的存在证明"同一批命令可被多个入口复用"，不要因为没页面用就删。
+    -->
+    <section class="demo-section">
+      <h2>命令网格 CommandGrid</h2>
+      <p>
+        按注册表渲染命令，页面不写任何命令 id。这里只演示 font / system 两组；
+        真实页面（字体页等）经 useCommand 单条调用，不经网格。
+      </p>
+      <div class="demo-stack">
+        <h3>font 组</h3>
+        <CommandGrid group="font" />
+        <h3>system 组</h3>
+        <CommandGrid group="system" />
+      </div>
+    </section>
+
+    <!--
       CepModal：唯一弹窗外壳。
       页面不写遮罩、标题栏、footer。
     -->
@@ -283,6 +303,19 @@ h2 {
   color: var(--text-dim);
   font-size: var(--fs-xs);
   text-align: center;
+}
+
+.demo-stack {
+  display: flex;
+  flex-direction: column;
+  gap: var(--sp-2);
+}
+
+.demo-stack h3 {
+  margin: var(--sp-2) 0 0;
+  color: var(--text-dim);
+  font-size: var(--fs-sm);
+  font-weight: 500;
 }
 
 p {

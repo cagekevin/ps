@@ -211,8 +211,3 @@ export async function startTextInfoWatch(): Promise<() => void> {
     for (const stop of stops) stop()
   }
 }
-
-/** 仅测试用 */
-export function __pushTextInfoForTest(info: TextInfo | null) {
-  textInfoRef.value = info
-}

@@ -2,8 +2,7 @@ import { CepError, ERR_PREFIX } from '@/utils/errors'
 import { normalizeFontList } from '@/domain/font-normalize'
 import { evalScriptRaw, hasCep } from './transport'
 import { PS_ENV } from './env'
-import { extensionDir, hasNode, userDir } from './fs'
-import { hasCepEvents } from './events'
+import { extensionDir } from './fs'
 import { mergeFontStars, readSysFontFile } from './data/sys-font'
 import { jsx } from './jsx'
 import type { FontItem, LayerState } from './types'
@@ -124,26 +123,5 @@ export async function getLayerState(): Promise<LayerState> {
   return {
     hasSelection: selected === true || String(selected) === 'true',
     typeNumber: Number(typeNumber) || 0,
-  }
-}
-
-/** 运行时信息，面板底部和排查问题时用 */
-export function runtimeInfo() {
-  const inCep = hasCep()
-  let dir = ''
-  if (inCep && hasNode()) {
-    try {
-      dir = userDir()
-    } catch {
-      dir = ''
-    }
-  }
-  return {
-    inCep,
-    hasNode: hasNode(),
-    /** 宿主事件通道是否可用；不可用时禁用态不实时（降级为执行前查询） */
-    events: hasCepEvents(),
-    extensionDir: inCep ? extensionDir() : '',
-    userDir: dir,
   }
 }

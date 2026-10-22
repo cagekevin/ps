@@ -30,10 +30,6 @@ export function selectActionFile(fileName: string) {
   currentFile = fileName || DEFAULT_FILE
 }
 
-export function currentActionFile(): string {
-  return currentFile
-}
-
 const clone = deepClone
 
 const DEFAULT_INDEX: ActionWarehouseIndex = {

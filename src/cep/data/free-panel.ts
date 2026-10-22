@@ -1,19 +1,150 @@
+// 是什么：自由面板数据仓库（读写 `<userDir>/sj_appFreePanel.json`）
+// 唯一入口：自由面板文件的读写只经过这里；命令层与 store 都不自己拼路径
+// 替代了什么：原版 `$freePanelBox` 直接读写同一个文件（app.v4.js:2162-2194）
+// 谁在用：`commands/freePanel.ts`、`stores/free-panel.ts`
+// 禁止：把只属于本面板的 UI 字段（showText）写回原版文件——原版没有这个键（D-35）
+
 import { DATA_FILES } from '@/cep/env'
 import { userDir } from '@/cep/fs'
-import { createEmptyFreePanel, type FreePanelFile } from '@/domain/free-panel'
+import { createEmptyFreePanel, type FreePanelBlock, type FreePanelFile } from '@/domain/free-panel'
+import { deepClone } from '@/utils/clone'
 import { pick } from './pick'
-import type { Repo } from './types'
+import type { Repo, RepoRead } from './types'
 
 /**
- * 自由面板数据仓库。
+ * showText 是我方新增的 UI 字段，原版没有这个键（D-35）。
  *
- * 文件：`<userDir>/sj_appFreePanel.json`
- * 真实结构：`{ uid, btnId, obj:{version,type,list:Block[]} }`
+ * 一手证据：实测 `%APPDATA%\SheJiZhuLi\sj_appFreePanel.json` 与原版备份
+ * `back/freePanel/20221005/20221005-18-0.json`，block 的键只有
+ * id / zIndex / showIcon / showNumber / type / width / height / children / data。
  *
- * 不扁平化，不重排 block；页面只消费 store 投影。
+ * 处理：写盘前剥掉这个键，读回时按缺省 true 处理（normalizeBlock 就是这么归一的）。
+ * 会话内仍保留（overlay），否则「显示文字」开关点了立刻弹回原状；
+ * 面板重开后回到 true —— 与原版一致，原版根本没有这个状态。
  */
-export const freePanelRepo: Repo<FreePanelFile> = pick(
+
+/** 深度优先遍历 block（含 children） */
+function eachBlock(blocks: FreePanelBlock[], visit: (block: FreePanelBlock) => void): void {
+  for (const block of blocks) {
+    visit(block)
+    if (Array.isArray(block.children)) eachBlock(block.children, visit)
+  }
+}
+
+/** 会话内的 showText（按 block id）；不落盘 */
+const sessionShowText = new Map<number, boolean>()
+
+/** 删掉 block 上的 showText 键，不动会话态 */
+function stripShowText(blocks: FreePanelBlock[]): void {
+  eachBlock(blocks, (block) => {
+    delete block.showText
+  })
+}
+
+/**
+ * 记下 block 上的 showText（进会话态），并把键删掉。
+ * 用于「调用方刚改过的值」——这是权威值，直接覆盖会话态。
+ */
+function captureShowText(blocks: FreePanelBlock[]): void {
+  eachBlock(blocks, (block) => {
+    if (typeof block.showText === 'boolean') sessionShowText.set(block.id, block.showText)
+    delete block.showText
+  })
+}
+
+/**
+ * 从磁盘读到的值只作种子：会话里已经有值时不覆盖
+ * （磁盘上没有这个键，normalizeBlock 会补成 true；覆盖会把用户刚点的开关弹回去）。
+ */
+function seedShowText(blocks: FreePanelBlock[]): void {
+  eachBlock(blocks, (block) => {
+    if (typeof block.showText === 'boolean' && !sessionShowText.has(block.id)) {
+      sessionShowText.set(block.id, block.showText)
+    }
+  })
+}
+
+/**
+ * 把会话态写回 block（缺省 true，与 normalizeBlock 一致）；
+ * 同时清掉已经没有对应 block 的旧条目（block 被删后 id 可能被复用）。
+ */
+function applySessionShowText(blocks: FreePanelBlock[]): void {
+  const seen = new Set<number>()
+  eachBlock(blocks, (block) => {
+    seen.add(block.id)
+    if (typeof block.showText !== 'boolean') {
+      block.showText = sessionShowText.get(block.id) ?? true
+    }
+  })
+  for (const id of [...sessionShowText.keys()]) {
+    if (!seen.has(id)) sessionShowText.delete(id)
+  }
+}
+
+const base: Repo<FreePanelFile> = pick(
   () => `${userDir()}/${DATA_FILES.appFreePanel}`,
   createEmptyFreePanel,
   createEmptyFreePanel,
 )
+
+const listeners = new Set<(value: FreePanelFile) => void>()
+
+function emit(value: FreePanelFile): void {
+  for (const listener of listeners) listener(value)
+}
+
+/**
+ * 仓库外面套一层：磁盘上没有 showText，会话里有。
+ *
+ * 读：磁盘值作种子（不覆盖会话态），再把会话态写回返回值。
+ * 写：入参的 showText 是权威值，收进会话态；剥掉键的副本落盘。
+ * 改：mutator 看到的是带 showText 的值（命令层照常读写），落盘时剥键。
+ */
+export const freePanelRepo: Repo<FreePanelFile> = {
+  async read(): Promise<RepoRead<FreePanelFile>> {
+    const result = await base.read()
+    const blocks = result.value.obj?.list ?? []
+    seedShowText(blocks)
+    stripShowText(blocks)
+    applySessionShowText(blocks)
+    return result
+  },
+
+  async write(value: FreePanelFile): Promise<void> {
+    const onDisk = deepClone(value)
+    captureShowText(onDisk.obj?.list ?? [])
+    await base.write(onDisk)
+    applySessionShowText(value.obj?.list ?? [])
+    emit(value)
+  },
+
+  async update(mutator: (value: FreePanelFile) => FreePanelFile | void): Promise<FreePanelFile> {
+    const persisted = await base.update((file) => {
+      const blocks = file.obj?.list ?? []
+      // mutator 要看到 showText（命令层按 block.showText 写）：磁盘值只作种子，会话态优先
+      seedShowText(blocks)
+      stripShowText(blocks)
+      applySessionShowText(blocks)
+
+      const next = mutator(file) ?? file
+      // mutator 改过的 showText 是权威值，更新会话态
+      captureShowText(next.obj?.list ?? [])
+
+      // 落盘的是剥掉 showText 的副本
+      const onDisk = deepClone(next)
+      stripShowText(onDisk.obj?.list ?? [])
+      return onDisk
+    })
+
+    applySessionShowText(persisted.obj?.list ?? [])
+    emit(persisted)
+    return persisted
+  },
+
+  onChange(listener: (value: FreePanelFile) => void): () => void {
+    listeners.add(listener)
+    return () => {
+      listeners.delete(listener)
+    }
+  },
+}
