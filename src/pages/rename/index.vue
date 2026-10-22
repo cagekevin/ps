@@ -9,6 +9,7 @@ import GButton from '@/components/GButton.vue'
 import GDropdown from '@/components/GDropdown.vue'
 import GInput from '@/components/GInput.vue'
 import Icon from '@/components/Icon.vue'
+import PageBottomBar from '@/components/PageBottomBar.vue'
 import PageShell from '@/components/PageShell.vue'
 import { useCommand } from '@/components/command/useCommand'
 import { useDismiss } from '@/composables/useDismiss'
@@ -326,25 +327,6 @@ onMounted(() => {
 <template>
   <!-- 原版这一页没有 header（.Rename 直接从 37px 顶条开始，app.v4.js:56478-56482），所以不传 title -->
   <PageShell class="rename-page">
-    <template #footer>
-      <!-- 原版是 baseIcon + .base-icon（26×26，无尺寸类）→ 图标 1em，盒 26×26（:56762-56796） -->
-      <button
-        class="rename-bottom__icon"
-        type="button"
-        title="添加分组"
-        @click="openModal('createGroup')"
-      >
-        <Icon name="#iconxinjiandongzuofenzu" />
-      </button>
-      <span class="rename-bottom__divider" />
-      <button class="rename-bottom__icon" type="button" title="导入预设" @click="importPreset">
-        <Icon name="#icondaoru" />
-      </button>
-      <button class="rename-bottom__icon" type="button" title="导出预设" @click="exportPreset">
-        <Icon name="#icondaochu" />
-      </button>
-    </template>
-
     <RenameModeTabs v-model="switchIndex" :modes="MODES">
       <template #extra>
         <GDropdown v-model:visible="filterOpen" placement="bottom-end">
@@ -473,6 +455,26 @@ onMounted(() => {
       </BaseGroup>
     </div>
 
+    <!-- 底栏走公共 PageBottomBar（原版 .reanme-bottom 26px + #535353，:56761）；
+         按钮皮肤由 PageBottomBar 的全局类提供，本页不再写一份 -->
+    <PageBottomBar>
+      <button
+        class="g-bottom-bar__icon"
+        type="button"
+        title="添加分组"
+        @click="openModal('createGroup')"
+      >
+        <Icon name="#iconxinjiandongzuofenzu" />
+      </button>
+      <span class="g-bottom-bar__divider" />
+      <button class="g-bottom-bar__icon" type="button" title="导入预设" @click="importPreset">
+        <Icon name="#icondaoru" />
+      </button>
+      <button class="g-bottom-bar__icon" type="button" title="导出预设" @click="exportPreset">
+        <Icon name="#icondaochu" />
+      </button>
+    </PageBottomBar>
+
     <!-- 表达式菜单（原版 $menu.show，:57094-57112） -->
     <ul v-if="exprMenu.visible" ref="exprRef" class="rename-menu" :style="exprStyle">
       <li v-for="option in RENAME_MARKS" :key="option.mark">
@@ -542,16 +544,9 @@ onMounted(() => {
 </template>
 
 <style scoped>
-/* 底条沿用 PageShell footer：26px + 原版底色 #535353（.reanme-bottom，:56761）；
-   底条在原版是 `.reanme-bottom app-padding`（:56761），所以左右也是 10px */
-.rename-page {
-  --shell-footer-height: var(--h-row);
-  --shell-footer-bg: var(--c-footbar);
-  --shell-footer-padding: 0 var(--sp-exact-10);
-}
-
 /* 原版每段都用全局 `.app-padding,.more-content{padding:0 10px}`（输入区 :56533、分组 :56647、
-   色块区 :56708）。这里只在本页给 10px，不动全局 --page-pad-x（那是给别的页的）。 */
+   色块区 :56708）。这里只在本页给 10px，不动全局 --page-pad-x（那是给别的页的）。
+   底栏的 26px / #535353 / 左右 10px 都在 PageBottomBar 里，本页不再写。 */
 .rename-body {
   gap: var(--sp-3);
   padding: 0 var(--sp-exact-10) var(--sp-4);
@@ -712,36 +707,5 @@ onMounted(() => {
 
 .rename-menu__item:hover {
   background: var(--c-hover-2);
-}
-
-/* 原版底条用 baseIcon → 全局 `.base-icon{width:26px;height:26px;border:1px solid transparent}`
-   + `:hover{background-color:rgba(0,0,0,.2);border-color:#444}`（data-v-63c7852d）。
-   图标本身无尺寸类 → 1em（按钮 font:inherit，跟随 12px）。 */
-.rename-bottom__icon {
-  display: inline-flex;
-  width: 26px;
-  height: 26px;
-  align-items: center;
-  justify-content: center;
-  padding: 0;
-  border: 1px solid transparent;
-  background: transparent;
-  color: var(--text);
-  cursor: pointer;
-}
-
-.rename-bottom__icon:hover {
-  border-color: var(--c-icon-hover-border);
-  background: var(--c-btn-muted);
-}
-
-/* 原版全局 .verline{width:1px;height:13px;background-color:#333;border:none} —— 可见的竖线。
-   早前按生成物写成"border-left 2px #006fff + opacity:0"是错的：那条属于别的 data-v 块，
-   本页没有 `.verline[data-v-2d612e86]` 规则。 */
-.rename-bottom__divider {
-  width: 1px;
-  height: var(--h-verline);
-  border: none;
-  background: var(--c-verline);
 }
 </style>

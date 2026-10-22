@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import Icon from '@/components/Icon.vue'
 import type { IconSize } from '@/components/icon/size'
 
@@ -25,7 +25,7 @@ withDefaults(
     badge?: boolean
     disabled?: boolean
   }>(),
-  { svgSize: 'lg', width: '26px', height: '26px' },
+  { svgSize: '1em', width: '26px', height: '26px' },
 )
 
 const emit = defineEmits<{

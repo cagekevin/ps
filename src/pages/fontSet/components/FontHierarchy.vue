@@ -110,7 +110,6 @@ function confirmName() {
         <FontSetIcon
           name="#iconchangguicengjiyushe"
           title="设置层级预设"
-          svg-size="md"
           :selected="settingsOpen"
           @handle="settingsOpen = !settingsOpen"
         />

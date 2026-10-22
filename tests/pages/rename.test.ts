@@ -158,6 +158,18 @@ describe('重命名页 · 正常态', () => {
     expect(wrapper.find('.rename-menu').text()).toContain('创建新组')
     expect(wrapper.find('.rename-menu').text()).toContain('删除')
   })
+
+  it('底栏用公共 PageBottomBar，不再有本页私有皮肤', async () => {
+    const wrapper = await mountPage()
+
+    expect(wrapper.find('.g-bottom-bar').exists()).toBe(true)
+    // 3 个按钮：添加分组 / 导入 / 导出（皮肤由 PageBottomBar 的全局类提供）
+    expect(wrapper.findAll('.g-bottom-bar__icon')).toHaveLength(3)
+    expect(wrapper.findAll('.g-bottom-bar .g-bottom-bar__divider')).toHaveLength(1)
+    // 迁移后不该再出现私有类
+    expect(wrapper.find('.rename-bottom__icon').exists()).toBe(false)
+    expect(wrapper.find('.rename-bottom__divider').exists()).toBe(false)
+  })
 })
 
 describe('重命名页 · 空态 / 加载态 / 错误态', () => {

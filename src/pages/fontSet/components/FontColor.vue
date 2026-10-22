@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import CheckBox from '@/components/CheckBox.vue'
 import FontSetIcon from './FontSetIcon.vue'
@@ -230,27 +230,18 @@ function applyLegacyLeading(factor: number) {
       <FontSetIcon
         name="#iconzihaodaxiao7"
         title="加粗"
-        svg-size="xl"
-        width="26px"
-        height="26px"
         :selected="text?.fauxBold"
         @handle="emit('style', { kind: 'bold', value: !text?.fauxBold })"
       />
       <FontSetIcon
         name="#iconqingxie"
         title="倾斜"
-        svg-size="xl"
-        width="26px"
-        height="26px"
         :selected="text?.fauxItalic"
         @handle="emit('style', { kind: 'italic', value: !text?.fauxItalic })"
       />
       <FontSetIcon
         name="#iconquanbudaxie"
         title="全部大写"
-        svg-size="xl"
-        width="26px"
-        height="26px"
         :selected="text?.capitalization === 'allCaps'"
         @handle="emit('style', { kind: 'caps', value: text?.capitalization !== 'allCaps' })"
       />
@@ -262,9 +253,6 @@ function applyLegacyLeading(factor: number) {
         :key="title"
         :name="`#iconwenbenduiqi${index + 1}`"
         :title="`${title}${ALIGN_TIP}`"
-        svg-size="xl"
-        width="26px"
-        height="26px"
         :selected="
           (text?.justification === 'left' && index === 0) ||
           (text?.justification === 'center' && index === 1) ||

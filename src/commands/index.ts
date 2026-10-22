@@ -6,6 +6,7 @@ import { freePanelCommands } from './freePanel'
 import { legacyCommands } from './legacy'
 import { renameCommands } from './rename'
 import { register } from './registry'
+import { styleCommands } from './style'
 
 /**
  * 聚合注册。全项目唯一的注册点。
@@ -21,6 +22,7 @@ for (const command of [
   ...legacyCommands,
   ...cloudCommands,
   ...renameCommands,
+  ...styleCommands,
 ])
   register(command)
 

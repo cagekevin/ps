@@ -44,7 +44,7 @@
   margin-bottom: var(--sp-1);
 }
 
-/* 原版 .f-baseX.f-br 的色块行：flex-wrap + 每块 50×26 / 圆角 5 / margin-top 6（app.v4.js:49953） */
+/* 原版 .f-baseX.f-br 的色块行：flex-wrap + 每块 margin-right 5 / margin-top 5（app.v4.js:49953 等） */
 .style-items {
   display: flex;
   flex-wrap: wrap;
@@ -52,24 +52,107 @@
   padding: var(--sp-exact-5) 0 var(--sp-1);
 }
 
-/* 原版 .color-block{width:50px;height:26px;border:1px solid #d5d5d5;border-radius:5px}（app.v4.js:49960）。
-   token 里没有 #d5d5d5（浅色面板遗留），用 --c-swatch-border 同族深色描边（有意偏离） */
+/* ---------- 四类库的项尺寸：逐个 scoped 段实测，不共用一套 ----------
+   颜色 .color-block 25×25 无圆角，默认 border:1px transparent，hover #d5d5d5
+     （app.bf68b505.css data-v-7f48e128，render DC() app.v4.js:49887）
+   渐变 .color-block 50×26 圆角 5，默认无边框，hover #d5d5d5
+     （data-v-31a8890a，render qC() :50495）
+   字体 .block 70×44 圆角 5，默认 border:1px transparent，hover #fff
+     （data-v-1f103d3b，render e_() :50881）
+   样式 .style-img 26×26 无圆角，默认 border:1px transparent，hover #444
+     （data-v-216ff8d1，render o_() :51300） */
 .style-item {
   display: flex;
-  width: 50px;
-  height: 26px;
   align-items: center;
   justify-content: center;
   overflow: hidden;
-  border: 1px solid var(--c-swatch-border);
-  border-radius: var(--r-input);
+  padding: 0;
+  border: 1px solid transparent;
+  background: transparent;
+  color: var(--text-faint);
   cursor: pointer;
+}
+
+.style-lib--color .style-item {
+  width: 25px;
+  height: 25px;
+}
+
+.style-lib--gradient .style-item {
+  width: 50px;
+  height: 26px;
+  border-radius: var(--r-input);
+}
+
+.style-lib--font .style-item {
+  width: 70px;
+  height: 44px;
+  border-radius: var(--r-input);
+}
+
+.style-lib--style .style-item {
+  width: 26px;
+  height: 26px;
+}
+
+.style-lib--color .style-item:hover,
+.style-lib--gradient .style-item:hover {
+  border-color: var(--c-swatch-border-hover);
+}
+
+.style-lib--font .style-item:hover {
+  border-color: var(--c-text-inverse);
+}
+
+.style-lib--style .style-item:hover {
+  border-color: var(--c-swatch-border-hover-dim);
+}
+
+/* 各组末尾的添加入口：原版四类分别是 .add-svg(25×25) / .add(50×26) / .add(70×44) / .img-add(26×26)，
+   底色都是 #535353、hover #444（同上的四个 scoped 段） */
+.style-item__add {
+  border: 1px solid transparent;
+  border-radius: var(--r-input);
+  background: var(--c-font-btn);
+}
+
+.style-lib--color .style-item__add {
+  width: 25px;
+  height: 25px;
+}
+
+.style-lib--gradient .style-item__add {
+  width: 50px;
+  height: 26px;
+}
+
+.style-lib--font .style-item__add {
+  width: 70px;
+  height: 44px;
+}
+
+.style-lib--style .style-item__add {
+  width: 26px;
+  height: 26px;
+}
+
+.style-item__add:hover {
+  background: var(--c-font-btn-hover);
+  color: var(--text-strong);
 }
 
 .style-item__swatch {
   display: block;
   width: 100%;
   height: 100%;
+}
+
+/* 图片型渐变：原版直接 <img>，宽高由父级 .color-block 给（app.v4.js:50558-50562） */
+.style-item__img {
+  display: block;
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
 }
 
 .style-item__text {

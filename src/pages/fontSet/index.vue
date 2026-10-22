@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import CepModal from '@/components/CepModal.vue'
 import { useCommand } from '@/components/command/useCommand'
@@ -341,9 +341,7 @@ function onRenamePreset(index: number, name: string) {
             :key="icon"
             :name="icon"
             :title="TOP_TITLES_ONE[index]"
-            svg-size="xl"
             width="32px"
-            height="28px"
             :selected="panel === `one${index}`"
             :badge="badgeOne.includes(index)"
             @handle="topClickOne(index, $event)"
@@ -356,9 +354,7 @@ function onRenamePreset(index: number, name: string) {
             :key="icon"
             :name="icon"
             :title="TOP_TITLES_TWO[index]"
-            svg-size="xl"
             width="32px"
-            height="28px"
             :selected="panel === `two${index}`"
             :badge="badgeTwo.includes(index)"
             @handle="topClickTwo(index, $event)"
@@ -413,9 +409,6 @@ function onRenamePreset(index: number, name: string) {
             :key="icon"
             :name="icon"
             :title="BOTTOM_TITLES_ONE[index]"
-            svg-size="lg"
-            width="28px"
-            height="28px"
             @handle="bottomClickOne(index)"
           />
           <span class="fontset__divider" />
@@ -424,9 +417,6 @@ function onRenamePreset(index: number, name: string) {
             :key="icon"
             :name="icon"
             :title="BOTTOM_TITLES_TWO[index]"
-            svg-size="lg"
-            width="28px"
-            height="28px"
             @handle="bottomClickTwo(index)"
           />
         </div>
@@ -436,9 +426,6 @@ function onRenamePreset(index: number, name: string) {
             :key="icon"
             :name="icon"
             :title="BOTTOM_TITLES_THREE[index]"
-            svg-size="lg"
-            width="28px"
-            height="28px"
             @handle="bottomClickThree(index)"
           />
           <span class="fontset__divider" />
@@ -447,9 +434,6 @@ function onRenamePreset(index: number, name: string) {
             :key="icon"
             :name="icon"
             :title="BOTTOM_TITLES_FOUR[index]"
-            svg-size="lg"
-            width="28px"
-            height="28px"
             @handle="bottomClickFour(index)"
           />
         </div>

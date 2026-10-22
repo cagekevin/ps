@@ -135,15 +135,17 @@
      （scoped 块 data-v-2d612e86，对应 render app.v4.js:56483） */
   --c-tabsbar: #282828;
   --h-tabs: 37px;
-  /* 底部图标条：原版 .reanme-bottom{height:26px;background:#535353}（app.v4.js:56761） */
-  --c-footbar: #535353;
   /* 清除色块描边：原版 .colorButton-lastOne{border:1px solid #535353}（app.v4.js:56741） */
   --c-swatch-border: #535353;
-  /* 分组竖线：原版 .verline{height:13px;border-left:2px solid #006fff}（app.v4.js:56774） */
-  --h-verline: 13px;
   /* Tab 之间的分隔竖线：原版 .vertical-line{width:1px;height:20px;background-color:#222}
      （app.bf68b505.css 的 Style 页 scoped 段 data-v-7f4f5fe0，对应 render app.v4.js:49679） */
   --h-vline: 20px;
+  /* 四类库色块 hover 描边：原版 .color-block:hover{border:1px solid #d5d5d5}
+     （颜色库 scoped 段 data-v-7f48e128，对应 render app.v4.js:49887） */
+  --c-swatch-border-hover: #d5d5d5;
+  /* 图层样式块 hover 描边：原版 .style-img:hover{border:1px solid #444}
+     （scoped 段 data-v-216ff8d1，对应 render app.v4.js:51300） */
+  --c-swatch-border-hover-dim: #444;
 
   /* ---------- 间距阶梯 ---------- */
   --sp-1: 2px;

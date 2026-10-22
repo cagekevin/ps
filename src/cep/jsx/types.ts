@@ -114,6 +114,38 @@ export interface RenameJsx {
   setLayerColor(colorIndex: number): Promise<unknown>
 }
 
+/**
+ * 样式域（`/style` 第 2 段）。
+ *
+ * 依据全部是**调用侧**（`reference/01-原版源码/panel/js/app.v4.js` 行号见每个方法）；
+ * jsxbin 是字节码，符号名不可读也不可搜，所以返回结构一律按最宽松联合写，标 UNVERIFIED。
+ *
+ * 原版 `useColor` 不是"能力降级链"，而是**修饰键路由**（原版用户已核实）：
+ * `ft.f` = ctrl/meta（`:70622`）、`ft.g` = shift（`:70629`）、`ft.e` = alt（`:70636`），
+ * 即 ctrl→`ys_useShapeFill`、shift→`ys_setBorderColor`、alt→`cy_changeStyleColor`、
+ * 无修饰键→`ys_useStyleColor`（`:50128-50163`）。
+ */
+export interface StyleJsx {
+  /** ys_useShapeFill([颜色项], "智能填充形状颜色")（:50133）；ctrl+点击 */
+  useShapeFill(color: unknown): Promise<unknown>
+  /** ys_setBorderColor([颜色项], "智能填充边框颜色")（:50141）；shift+点击 */
+  setBorderColor(color: unknown): Promise<unknown>
+  /** cy_changeStyleColor([颜色项], "更改颜色")（:50150）；alt+点击 */
+  changeStyleColor(color: unknown): Promise<unknown>
+  /** ys_useStyleColor([颜色项], "智能填充颜色")（:50163）；无修饰键 */
+  useStyleColor(color: unknown): Promise<unknown>
+  /** ys_useGradient([渐变项], "填充渐变色")（:50791） */
+  useGradient(gradient: unknown): Promise<unknown>
+  /** ps_ysBtnUseStyle([项+groupId], "应用样式")（:51511） */
+  useStyle(item: unknown, groupId: string): Promise<unknown>
+  /** ys_getForegroundColor()（:50193）：读当前前景色，null = 失败 */
+  getForegroundColor(): Promise<unknown>
+  /** ys_getGradientInfo()（:50752）：读当前渐变，false / { err, msg?, data } */
+  getGradientInfo(): Promise<unknown>
+  /** ys_AddStyle([{delArr, groupId, envDir}])（:51538）：保存图层样式 */
+  addStyle(payload: { delArr: unknown; groupId: string; envDir: string }): Promise<unknown>
+}
+
 export interface JsxPort {
   font: FontJsx
   layer: LayerJsx
@@ -121,4 +153,5 @@ export interface JsxPort {
   action: ActionJsx
   legacy: LegacyJsx
   rename: RenameJsx
+  style: StyleJsx
 }

@@ -6,6 +6,7 @@ import { createLayerJsx } from './layer'
 import { createLegacyJsx } from './legacy'
 import { createMockJsx } from './mock'
 import { createRenameJsx } from './rename'
+import { createStyleJsx } from './style'
 import type { JsxPort } from './types'
 
 /**
@@ -22,6 +23,7 @@ export function createJsxPort(inCep: boolean): JsxPort {
     action: createActionJsx(),
     legacy: createLegacyJsx(),
     rename: createRenameJsx(),
+    style: createStyleJsx(),
   }
 }
 

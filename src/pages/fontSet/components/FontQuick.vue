@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { computed } from 'vue'
 import FontSetIcon from './FontSetIcon.vue'
 import FontSetSelect from './FontSetSelect.vue'
@@ -54,9 +54,6 @@ const weights = computed(() => (current.value ? visibleWeights(current.value) : 
         :key="weight"
         :name="`#iconzihaodaxiao${weightIndex + 1}`"
         :title="weight"
-        svg-size="xl"
-        width="26px"
-        height="26px"
         :selected="false"
         @handle="emit('apply', weightIndex)"
       />

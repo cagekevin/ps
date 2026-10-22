@@ -331,6 +331,45 @@ export interface RenameReorderItemPayload {
   toIndex: number
 }
 
+// ---------- 样式（/style 第 2 段）----------
+
+/**
+ * 原版 `useColor` 的修饰键路由（不是降级链）：
+ * `ft.f` = ctrl/meta、`ft.g` = shift、`ft.e` = alt（`app.v4.js:70622-70638`），
+ * ctrl→`ys_useShapeFill`、shift→`ys_setBorderColor`、alt→`cy_changeStyleColor`、
+ * 无修饰键→`ys_useStyleColor`（`:50128-50163`）。
+ */
+export type StyleModifier = 'ctrl' | 'shift' | 'alt' | 'none'
+
+export interface StyleApplyColorPayload {
+  groupIndex: number
+  itemIndex: number
+  modifier: StyleModifier
+}
+
+export interface StyleApplyGradientPayload {
+  groupIndex: number
+  itemIndex: number
+}
+
+export interface StyleApplyStylePayload {
+  groupIndex: number
+  itemIndex: number
+}
+
+/** 添加：从 PS 读当前前景色 / 渐变 / 图层样式，写进当前仓库的第 groupIndex 组 */
+export interface StyleAddColorPayload {
+  groupIndex: number
+}
+
+export interface StyleAddGradientPayload {
+  groupIndex: number
+}
+
+export interface StyleAddStylePayload {
+  groupIndex: number
+}
+
 export interface CommandPayloads {
   'font.apply': ApplyFontPayload
   'font.rate': RatePayload
@@ -406,6 +445,13 @@ export interface CommandPayloads {
   /** 导出/导入走文件对话框，无参数 */
   'rename.exportPreset': void
   'rename.importPreset': void
+
+  'style.applyColor': StyleApplyColorPayload
+  'style.applyGradient': StyleApplyGradientPayload
+  'style.applyStyle': StyleApplyStylePayload
+  'style.addColor': StyleAddColorPayload
+  'style.addGradient': StyleAddGradientPayload
+  'style.addStyle': StyleAddStylePayload
 
   'legacy.call': LegacyCallPayload
   'cloud.setUrl': CloudSetUrlPayload

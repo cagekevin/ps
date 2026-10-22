@@ -490,7 +490,7 @@ onMounted(async () => {
 
     <PageBottomBar ref="bottomBar">
       <button class="g-bottom-bar__icon" type="button" title="添加分组" @click="openGroupCreate()">
-        <Icon name="#iconxinjiandongzuofenzu" size="md" />
+        <Icon name="#iconxinjiandongzuofenzu" />
       </button>
       <button
         class="g-bottom-bar__icon"
@@ -498,13 +498,13 @@ onMounted(async () => {
         title="显示方式"
         @click="layoutMenu = !layoutMenu"
       >
-        <Icon name="#iconliebiao" size="md" />
+        <Icon name="#iconliebiao" />
       </button>
       <span class="g-bottom-bar__divider" />
       <GDropdown v-model:visible="importMenu" placement="top-start">
         <template #trigger>
           <button class="g-bottom-bar__icon" type="button" title="导入预设">
-            <Icon name="#icondaoru" size="md" />
+            <Icon name="#icondaoru" />
           </button>
         </template>
         <ul class="action-io-menu">
@@ -516,7 +516,7 @@ onMounted(async () => {
       <GDropdown v-model:visible="exportMenu" placement="top-start">
         <template #trigger>
           <button class="g-bottom-bar__icon" type="button" title="导出预设">
-            <Icon name="#icondaochu" size="md" />
+            <Icon name="#icondaochu" />
           </button>
         </template>
         <ul class="action-io-menu">

@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { computed } from 'vue'
 import CheckBox from '@/components/CheckBox.vue'
 import FontSetIcon from './FontSetIcon.vue'
@@ -49,12 +49,7 @@ function pick(side: 'from' | 'to', index: number) {
         :display="fromLabel"
         @select="pick('from', $event)"
       />
-      <FontSetIcon
-        name="#iconzhuanhuan"
-        title="切换翻译语言"
-        svg-size="md"
-        @handle="emit('swap')"
-      />
+      <FontSetIcon name="#iconzhuanhuan" title="切换翻译语言" @handle="emit('swap')" />
       <FontSetSelect
         class="fontset-translate__lang"
         :items="labels"

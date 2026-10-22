@@ -70,6 +70,15 @@ export interface KuItem {
   name: string
   swatch?: string
   meta?: string
+  /**
+   * 图片型渐变的文件名（`gradient.fileName`）。
+   *
+   * 原版有 `fileName` 就用 `<img src="isMac + kuGradient + "/" + fileName">`，没有才用 CSS 渐变
+   * （`app.v4.js:50558-50567`；`imgPath` = `path.kuGradient + "/"`，`:50617`；
+   * `isMac` = `getOsPrefix()`，Mac 返回 `"file://"`，Windows 返回 `""`，`:72855-72862`）。
+   * 渲染在页面做（要拼 OS 前缀），这里只把文件名透出来。
+   */
+  image?: string
 }
 
 export interface KuGroup {
@@ -94,7 +103,22 @@ function colorItem(raw: Record<string, unknown>): KuItem {
   return { name: itemName(raw) }
 }
 
-/** 渐变项：`{ name, gradient: { angle, gradient: { colors: [{ location, color: { hexValue } }] } } }` */
+/**
+ * 渐变项 → CSS `linear-gradient`。
+ *
+ * 原版 `getGradientArr`（`app.v4.js:50709-50727`）：
+ * ```js
+ * a[e].push("#" + t.color.hexValue + " " + t.location / 4096 * 100 + "%");
+ * a[e] = 90 + n[e] + "deg," + a[e].join(",");
+ * ```
+ * 三条照抄的规则：
+ * 1. `location` 是 **0–4096 刻度**（实测 `sj_kuGra6A784C90B4183F79.ini`：0 / 1997 / 4070），
+ *    必须 `/4096*100`。不换算会拼出 `#D8C09E 1997%`，浏览器只画最前面一小段 → 看着就是纯色块。
+ * 2. 角度是 `90 + angle`，不是 `angle` 本身。
+ * 3. **只取 `colors`**：`transparency`（同样 0–4096 刻度）原版没有拼进 CSS，我们也不自作聪明加。
+ *
+ * 百分比不四舍五入：`1997/4096*100 = 48.7548828125`，原版就是这个串。
+ */
 function gradientSwatch(value: unknown): string | undefined {
   if (!isRecord(value)) return undefined
   const inner = value.gradient
@@ -106,19 +130,30 @@ function gradientSwatch(value: unknown): string | undefined {
     const color = stop.color
     if (!isRecord(color) || typeof color.hexValue !== 'string') continue
     if (!HEX_RE.test(color.hexValue)) continue
-    const at = typeof stop.location === 'number' ? ` ${Math.round(stop.location)}%` : ''
+
+    // location 缺就省位置百分比；原版这里会拼出 "undefined%"，我们不补默认值
+    const at = typeof stop.location === 'number' ? ` ${(stop.location / 4096) * 100}%` : ''
     stops.push(`#${color.hexValue}${at}`)
   }
   if (stops.length < 2) return undefined
 
-  // angle 缺就不写方向：CSS 里 `linear-gradient(#fff 0%, #000 100%)` 合法，比默认成 90deg 更诚实
-  const angle = typeof value.angle === 'number' ? `${Math.round(value.angle)}deg, ` : ''
-  return `linear-gradient(${angle}${stops.join(', ')})`
+  // 原版恒写方向（`90 + n[e] + "deg,"`）；angle 不是数字时无从换算，直接不给色块而不是猜 90
+  if (typeof value.angle !== 'number') return undefined
+  return `linear-gradient(${90 + value.angle}deg, ${stops.join(', ')})`
 }
 
 function gradientItem(raw: Record<string, unknown>): KuItem {
-  const swatch = gradientSwatch(raw.gradient)
-  return swatch ? { name: itemName(raw), swatch } : { name: itemName(raw) }
+  const item: KuItem = { name: itemName(raw) }
+
+  // 图片型渐变优先：有 fileName 就交给页面渲染 <img>，不在这里拼 CSS（原版 :50558-50562）
+  const gradient = raw.gradient
+  if (isRecord(gradient) && typeof gradient.fileName === 'string' && gradient.fileName) {
+    item.image = gradient.fileName
+  }
+
+  const swatch = gradientSwatch(gradient)
+  if (swatch) item.swatch = swatch
+  return item
 }
 
 /** 字体项：`{ name, fonts: [{ family, size, ... }] }`；原版块里显示「字号 + 中文字」 */

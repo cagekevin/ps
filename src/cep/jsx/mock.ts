@@ -139,5 +139,39 @@ export function createMockJsx(): JsxPort {
         return null
       },
     },
+    // 样式域：返回结构未实测，mock 只保证"调用不炸、能看出走到哪一步"
+    style: {
+      useShapeFill: async (color) => {
+        log.info('mock', 'ys_useShapeFill', color)
+        return null
+      },
+      setBorderColor: async (color) => {
+        log.info('mock', 'ys_setBorderColor', color)
+        return null
+      },
+      changeStyleColor: async (color) => {
+        log.info('mock', 'cy_changeStyleColor', color)
+        return null
+      },
+      useStyleColor: async (color) => {
+        log.info('mock', 'ys_useStyleColor', color)
+        return null
+      },
+      useGradient: async (gradient) => {
+        log.info('mock', 'ys_useGradient', gradient)
+        return null
+      },
+      useStyle: async (item, groupId) => {
+        log.info('mock', 'ps_ysBtnUseStyle', { item, groupId })
+        return null
+      },
+      getForegroundColor: () =>
+        Promise.resolve({ name: '未命名', color: { hex: 'FF0000', c: 0, m: 100, y: 100, k: 0 } }),
+      getGradientInfo: () => Promise.resolve({ err: 0, data: null }),
+      addStyle: async (payload) => {
+        log.info('mock', 'ys_AddStyle', payload)
+        return { err: 0, data: null }
+      },
+    },
   }
 }
