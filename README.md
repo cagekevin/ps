@@ -55,13 +55,12 @@ public/
 |---|---|
 | `npm run dev` | 纯浏览器开发，走 mock 数据，不碰 PS |
 | `npm run dev:cep` | 把扩展目录指向 `localhost:5173` 再起 dev server，PS 里改代码即时生效 |
-| `npm run build` | 样式守卫 + 类型检查 + 构建，**产物直接写进 CEP 扩展目录**（build 即部署） |
-| `npm run deploy` | `check` + `build`，**唯一强制点**，进 PS 验收前跑这个 |
-| `npm run build:fast` | 跳过类型检查，只构建 |
-| `npm run typecheck` | 只跑 vue-tsc |
+| `npm run build` | 只构建（`vite build`），**产物直接写进 CEP 扩展目录**（build 即部署）。检查归 `check` / `typecheck` |
+| `npm run deploy` | `check` → `typecheck` → `build` → `verify:dist`，**唯一强制点**，进 PS 验收前跑这个 |
+| `npm run typecheck` | 只跑 vue-tsc（`src/**` 与 `tests/**` 两个 program） |
 | `npm run lint` | ESLint（vue essential + TS，`--max-warnings 0`） |
 | `npm run format` / `format:check` | Prettier（不管 `docs/`、`public/`、产物） |
-| `npm run check` | 样式守卫 + 台账校验 + lint |
+| `npm run check` | 样式守卫 + 台账校验 + 规模校验 + lint + prettier |
 | `npm test` / `test:watch` | 单元 / 组件测试（vitest + jsdom，不启浏览器） |
 | `npm run ledger` | 只校验 `docs/台账.md`（依赖、id、done 状态） |
 | `npm run registry` | 新增横切能力后同步 `docs/横切能力.md` |
