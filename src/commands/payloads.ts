@@ -1,0 +1,346 @@
+import type {
+  CreateButtonConfig,
+  FontSetSettings,
+  PasteFontConfig,
+} from '@/cep/data/legacy-settings'
+import type { QuickFont } from '@/cep/data/font-extra'
+import type { FontItem } from '@/cep/types'
+
+/**
+ * 命令 id → payload 类型的**唯一映射**。
+ *
+ * 为什么需要：`useCommand<P>` 的 P 如果由调用方自己写，传错 payload 编译不报错，
+ * 只在运行时炸。有了这张表，`execute(id, payload)` 和 `useCommand(id).run(payload)`
+ * 都由 id 推断类型，传错字段直接编译失败。
+ *
+ * 新增命令：先在这里加一行，再写实现（`defineCommand` 会强制 id 在表里）。
+ */
+export interface ApplyFontPayload {
+  font: FontItem
+  variantIndex: number
+}
+
+export interface RatePayload {
+  family: string
+  value: number
+}
+
+export interface TagTextPayload {
+  text: string
+}
+
+export interface RenameTagPayload {
+  from: string
+  to: string
+}
+
+export interface ToggleTagPayload {
+  tagText: string
+  family: string
+}
+
+export interface CallActionPayload {
+  group: string
+  name: string
+  alias?: string
+}
+
+export interface GroupCreatePayload {
+  name: string
+  /** 原版 data.addGroup(name, afterIndex)：插到该分组之后；不传则追加 */
+  afterIndex?: number
+}
+
+export interface GroupRenamePayload {
+  index: number
+  name: string
+}
+
+export interface GroupIndexPayload {
+  index: number
+}
+
+export interface ActionItemRef {
+  groupIndex: number
+  itemIndex: number
+}
+
+export interface SetAliasPayload extends ActionItemRef {
+  alias: string
+}
+
+export interface AddFromPsPayload {
+  groupIndex: number
+  items: Array<{ group: string; name: string }>
+}
+
+export interface AddWarehousePayload {
+  name?: string
+}
+
+export interface RenameWarehousePayload {
+  index: number
+  name: string
+}
+
+export interface DeleteWarehousePayload {
+  index: number
+}
+
+export interface ReorderGroupPayload {
+  from: number
+  to: number
+}
+
+export interface ReorderItemPayload {
+  fromGroup: number
+  fromIndex: number
+  toGroup: number
+  toIndex: number
+  position: 'before' | 'after'
+}
+
+export interface SetListTypePayload {
+  columns: 1 | 2 | 3
+}
+
+export interface ExportWarehousePayload {
+  current: boolean
+}
+
+export interface ImportWarehousePayload {
+  append: boolean
+}
+
+export type ActionImportDefaultPayload = Record<string, never>
+
+export interface FreePanelItemInput {
+  text: string
+  key: string
+  option?: unknown
+  icon?: string
+  type?: string
+  funcText?: string
+}
+
+export interface FreePanelAddPayload {
+  blockId: number
+  items: FreePanelItemInput[]
+}
+
+export interface FreePanelRemovePayload {
+  blockId: number
+  btnId: number
+}
+
+export interface FreePanelReorderPayload {
+  fromBlockId: number
+  fromBtnId: number
+  toBlockId: number
+  toBtnId: number
+  position: 'before' | 'after'
+}
+
+export interface FreePanelExecutePayload {
+  blockId: number
+  btnId: number
+}
+
+export interface FreePanelDisplayPayload {
+  showNumber?: 2 | 3 | 4
+  showIcon?: boolean
+  showText?: boolean
+}
+
+export interface FreePanelClearPayload {
+  /** 保留空工作区；不传等价于 clear */
+  all?: boolean
+}
+
+export interface FreePanelAddBlockPayload {
+  parentId?: number
+  type?: 'row' | 'norow'
+}
+
+export interface FreePanelRemoveBlockPayload {
+  blockId: number
+}
+
+export interface FreePanelSetBlockPayload {
+  blockId: number
+  type?: 'row' | 'norow'
+  width?: string
+  height?: string
+}
+
+export interface LegacyCallPayload {
+  key: string
+  args: unknown[]
+  label?: string
+}
+
+export interface CloudSetUrlPayload {
+  url: string
+}
+
+export interface CloudSetAutoSyncPayload {
+  enabled: boolean
+}
+
+export interface CloudUploadPayload {
+  /** 手动确认覆盖云端；自动同步不传 */
+  force?: boolean
+  onConfirm?: (decision: import('@/domain/cloud').UploadDecision) => Promise<boolean>
+}
+
+export interface CloudDownloadPayload {
+  onConfirm?: (diff: import('@/domain/cloud').SyncDiff) => Promise<boolean>
+}
+
+// ---------- 字体面板（/fontSet）----------
+
+export interface FontSetAlignPayload {
+  /** h 水平 / v 垂直 / bg-h 与背景水平 / bg-v 与背景垂直 */
+  axis: 'h' | 'v' | 'bg-h' | 'bg-v'
+  /** 0-2 普通对齐，3 居中分布 */
+  index: number
+}
+
+export interface FontSetDistributePayload {
+  /** 1 垂直分布 / 2 水平分布（原版 showDistribution） */
+  axis: 1 | 2
+  value: string
+}
+
+export interface FontSetSplitPayload {
+  mode: 1 | 2 | 3 | 4
+}
+
+export interface FontSetCreateButtonPayload {
+  config: CreateButtonConfig
+}
+
+export interface FontSetPasteFontPayload {
+  keeps: PasteFontConfig
+}
+
+export interface FontSetTranslatePayload {
+  from: string
+  to: string
+  replace: boolean
+}
+
+export interface FontSetTextAlignPayload {
+  index: number
+  /** 原版第二参数：shift 按住时设置点文本；不传表示只传一个参数（层级面板） */
+  shift?: boolean
+  /** ctrl 按住时走段落对齐 */
+  paragraph: boolean
+}
+
+export interface FontSetNumberPayload {
+  value: number
+}
+
+export interface FontSetStyleTogglePayload {
+  kind: 'caps' | 'kerning' | 'italic' | 'bold'
+  value: boolean
+}
+
+export interface FontSetFontNamePayload {
+  /** family：原版 squarecom 选字体，走 selectLayer 回读；weight：只改本地 weight */
+  kind: 'family' | 'weight'
+  postScriptName: string
+  name: string
+  weight: string
+  /** 家族名，用于记录最近使用；weight 时也带 */
+  family?: string
+}
+
+export interface FontSetSaveSettingsPayload {
+  patch: Partial<FontSetSettings>
+}
+
+export interface FontSetQuickFontPayload {
+  action: 'add' | 'apply' | 'select' | 'delete'
+  index?: number
+  weightIndex?: number
+  font?: QuickFont
+}
+
+export interface FontSetHierarchyPresetPayload {
+  action: 'save' | 'create' | 'rename' | 'delete' | 'select'
+  name?: string
+  index?: number
+  /** save / create 时的 6 级字号；页面当前值由页面传入，命令不猜 */
+  levels?: number[]
+}
+
+export interface CommandPayloads {
+  'font.apply': ApplyFontPayload
+  'font.rate': RatePayload
+  'font.createTag': TagTextPayload
+  'font.renameTag': RenameTagPayload
+  'font.deleteTag': TagTextPayload
+  'font.toggleTag': ToggleTagPayload
+  /** 无参数 */
+  'font.refreshList': void
+
+  'fontSet.align': FontSetAlignPayload
+  'fontSet.alignHorizontal': void
+  'fontSet.distribute': FontSetDistributePayload
+  'fontSet.split': FontSetSplitPayload
+  'fontSet.createButton': FontSetCreateButtonPayload
+  'fontSet.copyFont': void
+  'fontSet.pasteFont': FontSetPasteFontPayload
+  'fontSet.switchDirection': void
+  'fontSet.translate': FontSetTranslatePayload
+  'fontSet.textAlign': FontSetTextAlignPayload
+  'fontSet.hierarchySize': FontSetNumberPayload
+  'fontSet.fontSize': FontSetNumberPayload
+  'fontSet.leading': FontSetNumberPayload
+  'fontSet.tracking': FontSetNumberPayload
+  'fontSet.color': void
+  'fontSet.fontName': FontSetFontNamePayload
+  'fontSet.styleToggle': FontSetStyleTogglePayload
+  'fontSet.saveSettings': FontSetSaveSettingsPayload
+  'fontSet.quickFont': FontSetQuickFontPayload
+  'fontSet.hierarchyPreset': FontSetHierarchyPresetPayload
+
+  'action.call': CallActionPayload
+  'action.addGroup': GroupCreatePayload
+  'action.renameGroup': GroupRenamePayload
+  'action.deleteGroup': GroupIndexPayload
+  'action.deleteItem': ActionItemRef
+  'action.setAlias': SetAliasPayload
+  'action.deleteAlias': ActionItemRef
+  'action.addFromPs': AddFromPsPayload
+  'action.selectWarehouse': GroupIndexPayload
+  'action.toggleGroup': GroupIndexPayload
+  'action.addWarehouse': AddWarehousePayload
+  'action.renameWarehouse': RenameWarehousePayload
+  'action.deleteWarehouse': DeleteWarehousePayload
+  'action.reorderGroup': ReorderGroupPayload
+  'action.reorderItem': ReorderItemPayload
+  'action.setListType': SetListTypePayload
+  'action.exportWarehouse': ExportWarehousePayload
+  'action.importWarehouse': ImportWarehousePayload
+  'action.importDefault': ActionImportDefaultPayload
+
+  'freePanel.add': FreePanelAddPayload
+  'freePanel.remove': FreePanelRemovePayload
+  'freePanel.reorder': FreePanelReorderPayload
+  'freePanel.execute': FreePanelExecutePayload
+  'freePanel.setDisplay': FreePanelDisplayPayload
+  'freePanel.clear': FreePanelClearPayload
+  'freePanel.addBlock': FreePanelAddBlockPayload
+  'freePanel.removeBlock': FreePanelRemoveBlockPayload
+  'freePanel.setBlock': FreePanelSetBlockPayload
+  'legacy.call': LegacyCallPayload
+  'cloud.setUrl': CloudSetUrlPayload
+  'cloud.setAutoSync': CloudSetAutoSyncPayload
+  'cloud.upload': CloudUploadPayload
+  'cloud.download': CloudDownloadPayload
+}
+
+export type CommandId = keyof CommandPayloads

@@ -17,7 +17,12 @@ body,
 body {
   background: var(--bg);
   color: var(--text);
-  font: var(--fs-md) / 1.5 "Microsoft YaHei", "PingFang SC", -apple-system, "Segoe UI", sans-serif;
+  font:
+    var(--fs-md) / 1.5 'Microsoft YaHei',
+    'PingFang SC',
+    -apple-system,
+    'Segoe UI',
+    sans-serif;
   overflow: hidden;
   -webkit-user-select: none;
   user-select: none;

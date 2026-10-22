@@ -1,5 +1,6 @@
 <script setup lang="ts">
-import type { Category, CategoryTag, FilterState } from '@/cep/classification'
+import type { Category, CategoryTag } from '@/domain/classification'
+import type { FilterState } from '@/domain/font-filter'
 
 /**
  * 筛选面板。对应原版 font-manage-filter-panel：

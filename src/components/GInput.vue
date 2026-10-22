@@ -11,7 +11,7 @@ withDefaults(
   { placeholder: '', size: 'medium' },
 )
 
-const emit = defineEmits<{ (e: 'clear'): void; (e: 'enter'): void }>()
+const emit = defineEmits<{ (e: 'clear'): void; (e: 'enter'): void; (e: 'blur'): void }>()
 
 function clear() {
   model.value = ''
@@ -28,8 +28,15 @@ function clear() {
       :disabled="disabled"
       spellcheck="false"
       @keydown.enter="emit('enter')"
+      @blur="emit('blur')"
     />
-    <button v-if="clearable && model" class="g-input__clear" type="button" title="清空" @click="clear">
+    <button
+      v-if="clearable && model"
+      class="g-input__clear"
+      type="button"
+      title="清空"
+      @click="clear"
+    >
       ×
     </button>
     <slot name="suffix" />

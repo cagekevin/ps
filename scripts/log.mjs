@@ -1,18 +1,19 @@
 /**
- * 工作日志：一篇一文件，不搞无限追加的 changelog。
+ * 工作日志：一篇一文件，文件名带日期，平铺在 `docs/日志/`。
  *
- *   node scripts/log.mjs new "门禁降级"   新建一篇（自动带日期和区块模板）
- *   node scripts/log.mjs index           重建 docs/log/index.md
+ *   node scripts/log.mjs new "门禁降级"   新建一篇
+ *   node scripts/log.mjs index           重建 docs/日志/index.md
  *
- * 为什么按文件分：单一 changelog 会越来越长、没人读、冲突多、没法按主题查。
- * 文件名带日期和主题，内部固定四个区块，索引自动生成。
+ * 为什么不按年月分目录：集中开发期只有一个月，分出来也只会有一个子目录，
+ * 多一层路径没有收益。文件名自带日期，排序即时间序；真到几百篇再考虑按年切。
+ * 只在**决策 / 踩坑 / 横切机制变更**时写，日常改动不写。
  */
 import { existsSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const root = fileURLToPath(new URL('..', import.meta.url))
-const DIR = join(root, 'docs', 'log')
+const DIR = join(root, 'docs', '日志')
 const INDEX = join(DIR, 'index.md')
 
 function today() {
@@ -49,39 +50,51 @@ function template(date, title) {
 ## 影响 / 后续
 
 还有什么没做，或者留下了什么坑。
+
+## 这次为什么没一次对（只在返工时填）
+
+AGENTS「写代码前三个动作」里哪条没做：搜索 / 删除 / 先改第一页。
+写清是哪一条、缺了什么事实，下次同类改动才能提前撞见。
 `
+}
+
+/** 平铺目录，文件名即时间序 */
+function listEntries() {
+  if (!existsSync(DIR)) return []
+  return readdirSync(DIR)
+    .filter((file) => file.endsWith('.md') && file !== 'index.md')
+    .sort()
+    .reverse()
 }
 
 function rebuildIndex() {
   mkdirSync(DIR, { recursive: true })
-  const files = readdirSync(DIR)
-    .filter((f) => f.endsWith('.md') && f !== 'index.md')
-    .sort()
-    .reverse()
 
-  const rows = []
-  for (const file of files) {
-    const text = readFileSync(join(DIR, file), 'utf8')
-    const heading = text.match(/^#\s*(.+)$/m)?.[1]?.trim() ?? file
+  const rows = listEntries().map((rel) => {
+    const text = readFileSync(join(DIR, rel), 'utf8')
+    const heading = text.match(/^#\s*(.+)$/m)?.[1]?.trim() ?? rel
     const summary = text.match(/^>\s*(.+)$/m)?.[1]?.trim() ?? ''
     const [date, ...rest] = heading.split('·')
-    rows.push({
+    return {
       date: date.trim(),
       title: rest.join('·').trim() || heading,
       summary,
-      file,
-    })
-  }
+      file: rel,
+    }
+  })
 
   const body = [
     '# 日志索引',
     '',
     '> 由 `npm run log:index` 生成，别手改。',
     '> 只在**决策、踩坑、架构变更**时写日志，不要每次改动都写。',
+    '> 文件名即日期，平铺在本目录；排序就是时间序。',
     '',
     '| 日期 | 主题 | 摘要 | 文件 |',
     '|---|---|---|---|',
-    ...rows.map((r) => `| ${r.date} | ${r.title} | ${r.summary} | [${r.file}](${encodeURI(r.file)}) |`),
+    ...rows.map(
+      (r) => `| ${r.date} | ${r.title} | ${r.summary} | [${r.file}](${encodeURI(r.file)}) |`,
+    ),
     '',
   ].join('\n')
 
@@ -97,15 +110,15 @@ if (command === 'new') {
     console.error('用法：node scripts/log.mjs new "主题"')
     process.exit(1)
   }
-  mkdirSync(DIR, { recursive: true })
   const date = today()
+  mkdirSync(DIR, { recursive: true })
   const file = join(DIR, `${date}-${slug(title)}.md`)
   if (existsSync(file)) {
     console.error(`[log] 已存在：${file}`)
     process.exit(1)
   }
   writeFileSync(file, template(date, title), 'utf8')
-  console.log(`[log] 已创建 docs/log/${date}-${slug(title)}.md`)
+  console.log(`[log] 已创建 docs/日志/${date}-${slug(title)}.md`)
   rebuildIndex()
 } else if (command === 'index') {
   rebuildIndex()

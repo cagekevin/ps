@@ -2,9 +2,20 @@ import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import App from './App.vue'
 import router from './router'
+import '@/commands'
 import { injectSprite } from './components/icon/sprite'
 import { installErrorHandlers } from './utils/error-handler'
-import { log } from './utils/logger'
+import { installStartupCheck } from './utils/build-info'
+import { onSettingsWriteError } from './cep/data/settings'
+import { useFeedbackStore } from './stores/feedback'
+import { bindFontData } from './stores/font'
+import { bindActionData } from './stores/action'
+import { bindFreePanelData } from './stores/free-panel'
+import { bindFontSetData } from './stores/font-set'
+import { useTaskStore } from './stores/tasks'
+import { setProgressPort } from './commands/runtime'
+import { startSelectionWatch } from './selection'
+import { startCloudAutoSync } from './cloud/auto-sync'
 import './styles/tokens.css'
 import './styles/global.css'
 import './styles/layout.css'
@@ -13,17 +24,45 @@ import './styles/motion.css'
 // 图标 sprite 必须先注入，<use href="#id"> 才有东西可引
 injectSprite()
 
-// 环境自检：CEP 的 Chromium 版本决定哪些 CSS 特性可用（@container、:focus-visible、@layer）。
-// 这条只在控制台打一次，用来把"CEP 12 = Chromium 99"从猜测变成事实。
-log.info('env', `构建时间: ${__BUILD_TIME__}`)
-log.info('env', `UA: ${navigator.userAgent}`)
-log.info('env', `inCep=${typeof window.__adobe_cep__ === 'object'} node=${typeof window.require === 'function'}`)
+// 版本/构建时间/CEP 环境自检；只告警，不阻断启动
+installStartupCheck()
 
 const app = createApp(App)
 app.use(createPinia())
+
+// 数据仓库写成功后刷新只读投影（命令层是唯一写入点）
+bindFontData()
+bindActionData()
+bindFreePanelData()
+bindFontSetData()
+
+// 长任务状态由 store 实现，命令层只依赖端口（commands 不许依赖 stores）
+setProgressPort({
+  begin(title) {
+    const store = useTaskStore()
+    const id = store.begin(title)
+    return {
+      update: (progress, detail) => store.update(id, { progress, detail }),
+      end: () => store.end(id),
+      setCancel: (cancel) => store.setCancel(id, cancel),
+    }
+  },
+})
+
+// 偏好写失败必须可见（ADR-14），不能只留在控制台
+onSettingsWriteError((message) => useFeedbackStore().error(`偏好保存失败：${message}`))
 
 // 必须在 pinia 之后，错误处理里要用 feedback store
 installErrorHandlers(app)
 
 app.use(router)
 app.mount('#app')
+
+// 自由面板是独立 CEP 面板，不订阅主面板的选区事件，避免同一扩展注册两次
+const standaloneFreePanel = window.location.hash.startsWith('#/freePanel')
+
+// 事件不可用时会自己降级成"操作前查询"，不阻塞启动
+if (!standaloneFreePanel) {
+  void startSelectionWatch()
+  startCloudAutoSync()
+}

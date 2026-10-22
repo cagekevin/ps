@@ -5,7 +5,14 @@
  * 用法：npm run dev:cep
  * 生产：npm run build（构建产物自带 prod manifest，会覆盖这里的 dev manifest）
  */
-import { copyFileSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs'
+import {
+  copyFileSync,
+  mkdirSync,
+  readFileSync,
+  readdirSync,
+  statSync,
+  writeFileSync,
+} from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
@@ -34,7 +41,10 @@ mkdirSync(join(extDir, 'CSXS'), { recursive: true })
 copyDir(join(root, 'public', 'lib'), join(extDir, 'lib'))
 
 const manifest = readFileSync(join(root, 'public', 'CSXS', 'manifest.xml'), 'utf8')
-const devManifest = manifest.replace('<MainPath>./index.html</MainPath>', `<MainPath>${DEV_URL}</MainPath>`)
+const devManifest = manifest.replace(
+  '<MainPath>./index.html</MainPath>',
+  `<MainPath>${DEV_URL}</MainPath>`,
+)
 if (devManifest === manifest) {
   console.error('[cep-dev] manifest.xml 里没找到 <MainPath>./index.html</MainPath>，替换失败')
   process.exit(1)

@@ -1,6 +1,9 @@
-import { CepError, ERR_PREFIX, evalScriptRaw } from './eval-script'
+import { CepError, ERR_PREFIX } from '@/utils/errors'
+import { evalScriptRaw, hasCep } from './transport'
 import { USER_DIR } from './env'
 
+// CEP 的 require 返回 Node 内置模块，没有类型包；这里是唯一允许 any 的边界
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 type RequireFn = (id: string) => any
 
 function getRequire(): RequireFn | null {
@@ -15,6 +18,8 @@ export function hasNode(): boolean {
   return getRequire() !== null
 }
 
+// 同上：Node 内置模块的类型由调用方自己决定
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
 function nodeRequire<T = any>(id: string): T {
   const req = getRequire()
   if (!req) throw new CepError('NO_NODE', 'Node 不可用，检查 manifest 里的 --enable-nodejs')
@@ -38,7 +43,8 @@ export function extensionDir(): string {
 
 /** 用户数据目录，如 C:/Users/x/AppData/Roaming/SheJiZhuLi */
 export function userDir(): string {
-  const env = (globalThis as any).process?.env ?? {}
+  const g = globalThis as unknown as { process?: { env?: Record<string, string | undefined> } }
+  const env = g.process?.env ?? {}
   const path = nodeRequire('path')
   const os = nodeRequire('os')
   const roaming = env.APPDATA ?? path.join(os.homedir(), 'Library', 'Application Support')
@@ -63,6 +69,48 @@ export function writeTextFile(absPath: string, text: string): void {
   const path = nodeRequire('path')
   fs.mkdirSync(path.dirname(absPath), { recursive: true })
   fs.writeFileSync(absPath, text, 'utf8')
+}
+
+/** 读文件为 base64；失败返回 null */
+export function readBase64File(absPath: string): string | null {
+  if (!hasNode()) return null
+  try {
+    const fs = nodeRequire('fs')
+    if (!fs.existsSync(absPath)) return null
+    return fs.readFileSync(absPath).toString('base64') as string
+  } catch {
+    return null
+  }
+}
+
+/** 写 base64 到文件；目录不存在会建 */
+export function writeBase64File(absPath: string, base64: string): boolean {
+  if (!hasNode()) return false
+  try {
+    const fs = nodeRequire('fs')
+    const path = nodeRequire('path')
+    const buffer = nodeRequire<{ Buffer: { from(data: string, encoding: string): unknown } }>(
+      'buffer',
+    ).Buffer
+    fs.mkdirSync(path.dirname(absPath), { recursive: true })
+    fs.writeFileSync(absPath, buffer.from(base64, 'base64'))
+    return true
+  } catch {
+    return false
+  }
+}
+
+/** 删除文件；文件不存在视为成功（原版 delete 同语义） */
+export function removeFile(absPath: string): boolean {
+  if (!hasNode()) return false
+  try {
+    const fs = nodeRequire('fs')
+    if (!fs.existsSync(absPath)) return true
+    fs.unlinkSync(absPath)
+    return true
+  } catch {
+    return false
+  }
 }
 
 /**
@@ -101,7 +149,10 @@ export async function readTextViaJsx(absPath: string): Promise<string | null> {
   }
 }
 
-/** Node 优先，失败再走 jsx File */
+/** Node 优先，失败再走 jsx File；浏览器里两者都没有，直接当读不到（不发注定失败的 evalScript） */
 export async function readTextSmart(absPath: string): Promise<string | null> {
-  return readTextFile(absPath) ?? (await readTextViaJsx(absPath))
+  const text = readTextFile(absPath)
+  if (text !== null) return text
+  if (!hasCep()) return null
+  return readTextViaJsx(absPath)
 }

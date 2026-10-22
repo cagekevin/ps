@@ -1,5 +1,5 @@
 import type { App } from 'vue'
-import { describeCepError } from '@/cep/eval-script'
+import { describeCepError } from './error-text'
 import { useFeedbackStore } from '@/stores/feedback'
 import { log } from './logger'
 

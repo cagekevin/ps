@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { nextTick, ref, watch } from 'vue'
 import { useDismiss } from '@/composables/useDismiss'
 
 /**
@@ -33,16 +33,66 @@ function onCancel() {
 // 遮罩点击已负责「点外部关闭」，这里只补 Esc
 const modalRef = ref<HTMLElement>()
 useDismiss(() => visible.value, modalRef, onCancel, { outside: false })
+
+const FOCUSABLE = 'button, [href], input, select, textarea, [tabindex]:not([tabindex="-1"])'
+let restoreFocus: HTMLElement | null = null
+
+// 打开时把焦点移进对话框，关闭后还给触发元素——否则键盘用户会"掉"在页面顶部
+watch(
+  visible,
+  async (open) => {
+    if (open) {
+      restoreFocus = document.activeElement as HTMLElement | null
+      await nextTick()
+      modalRef.value?.focus()
+      return
+    }
+    restoreFocus?.focus()
+    restoreFocus = null
+  },
+  { immediate: true },
+)
+
+function onKeydown(event: KeyboardEvent) {
+  if (event.key !== 'Tab' || !modalRef.value) return
+  const nodes = Array.from(modalRef.value.querySelectorAll<HTMLElement>(FOCUSABLE)).filter(
+    (el) => !el.hasAttribute('disabled'),
+  )
+  if (!nodes.length) return
+
+  const first = nodes[0]
+  const last = nodes[nodes.length - 1]
+  const active = document.activeElement
+
+  if (event.shiftKey && (active === first || active === modalRef.value)) {
+    event.preventDefault()
+    last.focus()
+  } else if (!event.shiftKey && active === last) {
+    event.preventDefault()
+    first.focus()
+  }
+}
 </script>
 
 <template>
   <Teleport to="body">
     <transition name="scale">
       <div v-if="visible" class="modal-mask" @click.self="onCancel">
-        <div ref="modalRef" class="modal" :style="{ width: `${props.width}px` }">
+        <div
+          ref="modalRef"
+          class="modal"
+          role="dialog"
+          aria-modal="true"
+          :aria-label="title"
+          tabindex="-1"
+          :style="{ width: `${props.width}px` }"
+          @keydown="onKeydown"
+        >
           <header class="modal__header">
             <span class="modal__title">{{ title }}</span>
-            <button class="modal__close" type="button" @click="onCancel">×</button>
+            <button class="modal__close" type="button" aria-label="关闭" @click="onCancel">
+              ×
+            </button>
           </header>
           <div class="modal__body">
             <slot />

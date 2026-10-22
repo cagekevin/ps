@@ -1,5 +1,5 @@
 import { computed, onMounted, ref, watch, type Ref } from 'vue'
-import { describeCepError } from '@/cep/eval-script'
+import { describeCepError } from '@/utils/error-text'
 import { log } from '@/utils/logger'
 import { useInfiniteScroll } from './useInfiniteScroll'
 
@@ -81,25 +81,47 @@ export function usePagedList<T>(
     { root: listRef },
   )
 
-  async function load(reset = false) {
-    if (loading.value) return
-    if (loaded.value && !reset) return
+  /** 请求序号：刷新可以并发，旧请求回来时按序号丢弃，避免"刷了没反应" */
+  let requestSeq = 0
 
+  async function load(reset = false) {
+    if (loaded.value && !reset) return
+    // 首次加载去重；刷新（reset）允许并发，靠序号丢弃旧结果
+    if (!reset && loading.value) return
+
+    const seq = ++requestSeq
     loading.value = true
     error.value = ''
+
     try {
-      items.value = await fetcher()
+      const next = await fetcher()
+      if (seq !== requestSeq) return
+      items.value = next
       loaded.value = true
       count.value = pageSize
     } catch (e) {
+      if (seq !== requestSeq) return
       error.value = describeCepError(e)
       log.error('list', error.value, e)
     } finally {
-      loading.value = false
+      // 只有最后一次请求负责收起 loading
+      if (seq === requestSeq) loading.value = false
     }
   }
 
   if (opts.autoLoad) onMounted(() => void load())
 
-  return { items, visible, loading, loaded, error, hasMore, loadMore, load, bind, listRef, sentinelRef }
+  return {
+    items,
+    visible,
+    loading,
+    loaded,
+    error,
+    hasMore,
+    loadMore,
+    load,
+    bind,
+    listRef,
+    sentinelRef,
+  }
 }

@@ -1,0 +1,161 @@
+.action-page {
+  display: flex;
+  height: 100%;
+  min-height: 0;
+  flex-direction: column;
+  background: var(--c-surface);
+}
+
+.action-groups {
+  flex: 1;
+  min-height: 0;
+  padding-top: var(--sp-exact-10);
+  overflow-y: auto;
+}
+
+.action-group {
+  padding: 0 var(--sp-exact-10);
+  margin-bottom: var(--sp-1);
+}
+
+.action-group__add {
+  display: inline-flex;
+  width: var(--h-control-sm);
+  height: var(--h-control-sm);
+  align-items: center;
+  justify-content: center;
+  margin-left: auto;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.action-group__add:hover {
+  color: var(--text-strong);
+}
+
+.action-bottom {
+  position: relative;
+  display: flex;
+  width: 100%;
+  height: 26px;
+  flex: 0 0 26px;
+  align-items: center;
+  gap: var(--sp-1);
+  padding: 0 var(--sp-exact-10);
+  background: var(--c-font-btn);
+}
+
+.action-bottom__icon {
+  display: inline-flex;
+  width: 22px;
+  height: 22px;
+  align-items: center;
+  justify-content: center;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text);
+  cursor: pointer;
+}
+
+.action-bottom__icon:hover {
+  color: var(--text-strong);
+}
+
+.action-bottom__divider {
+  width: 1px;
+  height: 13px;
+  margin: 0 var(--sp-1);
+  background: var(--c-border);
+}
+
+.action-empty,
+.action-hint,
+.action-warning {
+  margin: 0;
+  padding: var(--sp-4) var(--page-pad-x);
+  color: var(--text-faint);
+  font-size: var(--fs-sm);
+}
+
+.action-empty--inline {
+  padding: 0 var(--sp-1);
+  line-height: 0.8em;
+}
+
+.action-warning {
+  color: var(--c-warn);
+}
+
+.action-hint--error {
+  color: var(--c-danger);
+}
+
+/* 右键菜单：fixed 跟随触发按钮 */
+.ctx-menu {
+  position: fixed;
+  z-index: var(--z-toast);
+  min-width: 140px;
+  margin: 0;
+  padding: var(--sp-2);
+  list-style: none;
+  border: 1px solid var(--c-border-strong);
+  border-radius: var(--r-md);
+  background: var(--c-float);
+  box-shadow: var(--shadow-pop);
+}
+
+.ctx-menu button {
+  width: 100%;
+  padding: var(--sp-2) var(--sp-3);
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--text);
+  font-size: var(--fs-sm);
+  text-align: left;
+  cursor: pointer;
+}
+
+.ctx-menu button:hover {
+  background: var(--c-surface-active);
+}
+
+/* 列布局菜单挂在底栏上，必须覆盖 .ctx-menu 的 fixed */
+.ctx-menu.action-layout-menu {
+  position: absolute;
+  right: var(--sp-exact-10);
+  bottom: 30px;
+  left: auto;
+  top: auto;
+}
+
+.action-io-menu {
+  min-width: 120px;
+  margin: 0;
+  padding: var(--sp-2);
+  list-style: none;
+  border: 1px solid var(--c-border-strong);
+  border-radius: var(--r-md);
+  background: var(--c-float);
+  box-shadow: var(--shadow-pop);
+}
+
+.action-io-menu button {
+  width: 100%;
+  padding: var(--sp-2) var(--sp-3);
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--text);
+  font-size: var(--fs-sm);
+  text-align: left;
+  cursor: pointer;
+}
+
+.action-io-menu button:hover {
+  background: var(--c-surface-active);
+}

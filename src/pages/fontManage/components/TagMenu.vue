@@ -1,10 +1,10 @@
 <script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import type { FontTag } from '@/cep/types'
-import { useDismiss } from '@/composables/useDismiss'
+import { usePointPopover } from '@/composables/usePointPopover'
 
 /**
- * 字体标签弹层。对应原版截图：
+ * 字体标签弹层（点列表项的标签图标弹出）：
  *   标题「标签」/ 输入框（标签名称不超过8个字）/ 已添加的标签(N) / 全部(N)
  *   两段都是灰底圆角 chip，点一下切换。
  */
@@ -23,16 +23,22 @@ const emit = defineEmits<{
   (e: 'create', text: string): void
 }>()
 
-const boxRef = ref<HTMLElement>()
 const keyword = ref('')
-const top = ref(props.y)
-
 const added = computed(() => props.tags.filter((t) => props.active.includes(t.text)))
 const rest = computed(() => props.tags.filter((t) => !props.active.includes(t.text)))
 
 function close() {
   emit('update:visible', false)
 }
+
+const boxRef = ref<HTMLElement | null>(null)
+const { style: positionStyle } = usePointPopover({
+  visible: () => props.visible,
+  x: () => props.x,
+  y: () => props.y,
+  close,
+  floating: boxRef,
+})
 
 function submit() {
   const value = keyword.value.trim()
@@ -42,23 +48,18 @@ function submit() {
   keyword.value = ''
 }
 
-useDismiss(() => props.visible, boxRef, close)
-
+// 每次打开都清空搜索；浮层定位/外部关闭由 usePointPopover 统一负责
 watch(
   () => props.visible,
   (value) => {
-    if (!value) return
-    keyword.value = ''
-    top.value = Math.min(props.y, window.innerHeight - 220)
+    if (value) keyword.value = ''
   },
 )
-
-
 </script>
 
 <template>
   <Teleport to="body">
-    <div v-if="visible" ref="boxRef" class="tm" :style="{ left: `${x}px`, top: `${top}px` }">
+    <div v-if="visible" ref="boxRef" class="tm" :style="positionStyle">
       <div class="tm__title">标签</div>
 
       <div class="tm__field">
@@ -69,7 +70,15 @@ watch(
           maxlength="8"
           @keydown.enter="submit"
         />
-        <button v-if="keyword" class="tm__clear" type="button" @click="keyword = ''">×</button>
+        <button
+          v-if="keyword"
+          class="tm__clear"
+          type="button"
+          aria-label="清空输入"
+          @click="keyword = ''"
+        >
+          ×
+        </button>
       </div>
 
       <p class="tm__section">已添加的标签({{ added.length }})</p>

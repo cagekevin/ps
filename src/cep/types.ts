@@ -54,19 +54,3 @@ export interface LayerState {
   hasSelection: boolean
   typeNumber: number
 }
-
-export type CepErrorCode =
-  | 'NO_CEP'
-  | 'NO_NODE'
-  | 'TIMEOUT'
-  | 'JSX'
-  | 'PARSE'
-  | 'INIT'
-  /** 没有选中图层 / 选中的不是文字图层 */
-  | 'NO_SELECTION'
-
-export interface PsResult<T = unknown> {
-  ok: boolean
-  data?: T
-  error?: string
-}

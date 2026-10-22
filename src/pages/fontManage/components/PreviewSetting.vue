@@ -24,19 +24,27 @@ function pick(mode: PreviewMode) {
   emit('update:mode', mode)
 }
 
-useDismiss(() => open.value, cardRef, () => {
-  open.value = false
-})
-
-
+useDismiss(
+  () => open.value,
+  cardRef,
+  () => {
+    open.value = false
+  },
+)
 </script>
 
 <template>
   <div class="ps">
-    <button class="ps__icon" type="button" @click="open = !open">
+    <button
+      class="ps__icon"
+      type="button"
+      aria-label="预览设置"
+      :aria-expanded="open"
+      @click="open = !open"
+    >
       <Icon name="iconxianshi" />
     </button>
-    <button class="ps__icon" type="button" @click="emit('toggle-text')">
+    <button class="ps__icon" type="button" aria-label="编辑预览文案" @click="emit('toggle-text')">
       <Icon name="iconzihaodaxiao1" />
     </button>
 
@@ -80,7 +88,7 @@ useDismiss(() => open.value, cardRef, () => {
 
 /* 原版 .preview-setting__actions>.gdaicon:active,:hover
    { background:rgba(0,0,0,.25); border:1px solid hsla(0,0%,100%,.2); border-radius:4px }
-   三件套必须齐全：只取背景不取边框/圆角，会像一块黑斑（之前就是这个错）。 */
+   背景 / 边框 / 圆角是同一组，只取背景会变成一块没有边的黑斑。 */
 .ps__icon:hover,
 .ps__icon:active {
   background: var(--c-mask-soft);

@@ -3,6 +3,14 @@
 Vue 3 + TypeScript + Vite + Pinia，跑在 CEP 12（PS 2022+）里。
 PS 能力层继续调原厂 jsxbin，不重写。
 
+## 先看哪份文档
+
+| 想知道 | 看 |
+|---|---|
+| 每页做到哪了 | `docs/进度.md` |
+| 接下来做什么（唯一待办源） | `docs/台账.md` |
+| 规范与约束 | `AGENTS.md` |
+
 ## 范围
 
 **做**：字体、常用、自定义、样式、动作、重命名、字体管理、设置（8 个页面）。
@@ -47,9 +55,18 @@ public/
 |---|---|
 | `npm run dev` | 纯浏览器开发，走 mock 数据，不碰 PS |
 | `npm run dev:cep` | 把扩展目录指向 `localhost:5173` 再起 dev server，PS 里改代码即时生效 |
-| `npm run build` | 类型检查 + 构建，**产物直接写进 CEP 扩展目录**（build 即部署） |
+| `npm run build` | 样式守卫 + 类型检查 + 构建，**产物直接写进 CEP 扩展目录**（build 即部署） |
+| `npm run deploy` | `check` + `build`，**唯一强制点**，进 PS 验收前跑这个 |
 | `npm run build:fast` | 跳过类型检查，只构建 |
 | `npm run typecheck` | 只跑 vue-tsc |
+| `npm run lint` | ESLint（vue essential + TS，`--max-warnings 0`） |
+| `npm run format` / `format:check` | Prettier（不管 `docs/`、`public/`、产物） |
+| `npm run check` | 样式守卫 + 台账校验 + lint |
+| `npm test` / `test:watch` | 单元 / 组件测试（vitest + jsdom，不启浏览器） |
+| `npm run ledger` | 只校验 `docs/台账.md`（依赖、id、done 状态） |
+| `npm run registry` | 新增横切能力后同步 `docs/横切能力.md` |
+| `npm run style:fix` / `style:baseline` | 自动修样式违规 / 修完后收紧基线 |
+| `npm run log:new` / `log:index` | 写日志（决策/踩坑/机制变更才写） |
 
 构建输出目录默认 `%APPDATA%\Adobe\CEP\extensions\com.local.psz.panel.v5`，
 可用环境变量 `PSZ_EXT_DIR` 覆盖。

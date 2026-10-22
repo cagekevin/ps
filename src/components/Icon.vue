@@ -9,7 +9,7 @@ import { getSymbol } from './icon/sprite'
  *
  * **默认 1em，跟随字号**——原版 `.icon{width:1em;height:1em}` 就是这个行为。
  * 大多数地方不用传 size。需要覆盖时才传预设名（xs/sm/md/lg…）。
- * 见 docs/视觉规范.md。
+ * 见 docs/规范/视觉规范.md。
  *
  * 实现上**不用 `<use href="#id">`**：在旧版 Chromium（CEP 12 是 99）里，
  * `<use>` 会在父级重绘时重新解析 symbol，表现为图标闪一下。
@@ -35,6 +35,8 @@ watchEffect(() => {
 </script>
 
 <template>
+  <!-- v-html 的内容来自本地注入的 sprite（icons-sprite.svg），不接受外部输入。
+       用内联 path 而不是 <use>，是为了避开 CEP/file:// 下 symbol 解析延迟导致的闪烁。 -->
   <svg
     class="psz-icon"
     :viewBox="symbol?.viewBox ?? '0 0 24 24'"

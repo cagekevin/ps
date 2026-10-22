@@ -24,7 +24,7 @@
   --shell-footer-bg: var(--c-bar);
 }
 
-/* 页头右上角的更多按钮（原版 .tabs__menu__icon，16px，无背景） */
+/* 页头右上角「更多」：图标 16px，按钮盒 28（--h-control），无背景 */
 .icon-btn {
   width: var(--h-control);
   height: var(--h-control);
@@ -56,7 +56,7 @@
   --input-margin-right: 34px;
 }
 
-/* 原版漏斗：框外右侧，24×24 */
+/* 原版漏斗在搜索框外右侧，绝对定位（filter-preview__header）；图标 16px，按钮盒 28 */
 .filter-btn {
   position: relative;
   width: var(--h-control);
@@ -79,19 +79,19 @@
   color: var(--accent-soft);
 }
 
-/* 原版 Badge :count */
+/* 原版 .gda-badge-count：14×14 / #3565ff / top 4 / right 3 */
 .filter-badge {
   position: absolute;
-  top: -2px;
-  right: -2px;
-  min-width: 12px;
-  height: 12px;
+  top: var(--sp-1);
+  right: var(--sp-exact-3);
+  min-width: var(--icon-sm);
+  height: var(--icon-sm);
   padding: 0 var(--sp-1);
   border-radius: var(--r-pill);
-  background: var(--accent);
+  background: var(--c-accent-solid);
   color: var(--c-text-inverse);
   font-size: var(--fs-xs);
-  line-height: 12px;
+  line-height: var(--icon-sm);
   text-align: center;
   box-sizing: border-box;
 }
@@ -158,7 +158,7 @@
   color: var(--c-text-inverse);
 }
 
-/* 原版 .gdaicon 的 chevron_down */
+/* 原版这里不是箭头，是文字「更多/收起」（scale .83、30% 白）；改用箭头图标 */
 .tags-toggle {
   display: inline-flex;
   align-items: center;
@@ -292,8 +292,8 @@
   overflow-y: auto;
 }
 
-/* 原版 .list-item{border-bottom:1px solid #2e2e2e;background:#363636;padding-top:6px}
-   背景要撑满整行（hover 才全宽），所以左右留白放在项内 */
+/* 原版 .list-item{border-bottom:1px solid #2e2e2e;background:#363636;padding-top:6px}，
+   左右 8px 在内层元素上；这里合到项上，好让 hover 背景撑满整行 */
 .font-item {
   gap: var(--sp-2);
   padding: var(--sp-3) var(--page-pad-x);
@@ -321,12 +321,11 @@
   line-height: 1;
 }
 
-/* 原版 __font-family{flex-grow:0;flex-shrink:1;max-width:calc(100% - 60px);color:#f5f5f5} */
+/* 原版 __font-family 只定义 flex-grow/shrink 和 max-width:calc(100% - 60px)，没有 color（继承） */
 .family {
   flex: 0 1 auto;
   min-width: 0;
   max-width: calc(100% - 60px);
-  color: var(--text-strong);
   font-size: var(--fs-md);
   white-space: nowrap;
   overflow: hidden;
@@ -372,12 +371,13 @@
   color: var(--c-icon);
 }
 
-/* 原版这个图标 hover 只变白，不加背景 */
+/* 图标 hover 只变色，不加背景（原版 __actions 里没有 hover 底色） */
 .act:hover {
   color: var(--c-text-inverse);
 }
 
-/* 原版 __preview{padding:6px 8px}，档位 24/38/50/72 + 行高 34/53/70/101 */
+/* 原版 __preview{padding:6px 8px}，左右 8px 已由 .font-item 给，这里只留上下。
+   档位 24/38/50/72 + 行高 34/53/70/101 */
 .preview {
   margin: 0;
   padding: var(--sp-3) 0;
@@ -411,6 +411,14 @@
 .sentinel {
   height: 1px;
   list-style: none;
+}
+
+/* ADR-14：数据降级提示。和标签读失败同类信息，不抢视觉 */
+.data-warning {
+  margin: 0;
+  padding: var(--sp-2) var(--page-pad-x) 0;
+  color: var(--c-warn);
+  font-size: var(--fs-sm);
 }
 
 /* ---------- 8. 弹窗内容 ---------- */

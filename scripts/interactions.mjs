@@ -7,7 +7,7 @@
  * 根因是"按组件树推功能，没穷举交互点"。有了清单就能逐条打勾，而不是靠回忆。
  *
  * 数据源：webpack 渲染函数里的 `staticClass: "xxx"` + `on: { click: ... }`。
- * 解析是启发式的，不保证 100% 完整，但足以当 checklist 用。
+ * 解析是启发式的，不保证 100% 完整，只适合当"某元素有没有事件"的排查表。
  */
 import { readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs'
 import { join, relative } from 'node:path'
@@ -15,7 +15,7 @@ import { fileURLToPath } from 'node:url'
 
 const root = fileURLToPath(new URL('..', import.meta.url))
 const SRC_DIR = join(root, '..', 'archive', '源码还原', 'webcrack输出', 'app')
-const OUT = join(root, 'docs', '交互清单.md')
+const OUT = join(root, 'docs', '生成/交互清单.md')
 
 function walk(dir, out = []) {
   for (const n of readdirSync(dir)) {
@@ -67,9 +67,11 @@ for (const file of walk(SRC_DIR)) {
       }
     }
     const body = text.slice(start, end)
-    const events = [...body.matchAll(/\b(click|dblclick|contextmenu|mouseenter|mouseleave|input|keydown|scroll|change):/g)].map(
-      (x) => x[1],
-    )
+    const events = [
+      ...body.matchAll(
+        /\b(click|dblclick|contextmenu|mouseenter|mouseleave|input|keydown|scroll|change):/g,
+      ),
+    ].map((x) => x[1])
     if (!events.length) continue
 
     entries.push({
@@ -84,7 +86,8 @@ for (const file of walk(SRC_DIR)) {
 const groups = new Map()
 for (const e of entries) {
   const parts = e.element.split('__')
-  const group = parts.length > 1 ? `${parts[0]}__${parts[1].split(' ')[0]}` : e.element.split(' ')[0]
+  const group =
+    parts.length > 1 ? `${parts[0]}__${parts[1].split(' ')[0]}` : e.element.split(' ')[0]
   if (!groups.has(group)) groups.set(group, [])
   groups.get(group).push(e)
 }
@@ -117,4 +120,6 @@ for (const [group, list] of [...groups.entries()].sort()) {
 }
 
 writeFileSync(OUT, lines.join('\n'), 'utf8')
-console.log(`[interactions] 已生成 docs/交互清单.md：${entries.length} 个交互点，${groups.size} 个组件`)
+console.log(
+  `[interactions] 已生成 docs/生成/交互清单.md：${entries.length} 个交互点，${groups.size} 个组件`,
+)

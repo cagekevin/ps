@@ -1,16 +1,9 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
-import {
-  createFontTag,
-  deleteFontTag,
-  getFontStars,
-  getFontTags,
-  renameFontTag,
-  setFont,
-  setFontStar,
-  toggleFontTag,
-} from '@/cep/ps'
-import { describeCepError } from '@/cep/eval-script'
+import { getFontList, getFontStars, getFontTags } from '@/cep/ps'
+import { starsRepo, tagsRepo } from '@/cep/data'
+import { describeCepError } from '@/utils/error-text'
+import { log } from '@/utils/logger'
 import { usePersistedRef } from '@/composables/usePersisted'
 import type { FontItem, FontTag } from '@/cep/types'
 
@@ -37,84 +30,44 @@ export function previewText(family: string): string {
 }
 
 /**
- * 字体相关的跨页面状态。
- * 列表数据不在这里 —— 列表归页面自己的 useListPage 管，
- * store 只放"多个页面都要用"的东西（标签、预览档位、最近应用）。
+ * 字体相关的跨页面**只读投影**。
+ *
+ * 写操作全部在 `commands/font.ts`（ADR-16）。这里只负责：
+ * 读一次、缓存、订阅仓库变更后刷新。
+ * 列表数据不在这里 —— 列表归页面自己的 `usePagedList`。
  */
 export const useFontStore = defineStore('font', () => {
   const tags = ref<FontTag[]>([])
   const tagsError = ref('')
   const stars = ref<Record<string, number>>({})
+  /** 最近一次成功应用的家族，仅用于列表高亮（页面写，不算业务真相） */
   const activeFamily = ref('')
   const previewMode = usePersistedRef<PreviewMode>('font.previewMode', 'small')
   /** 用户自定义的预览文案；空字符串表示用默认（按语言自动选） */
   const customPreviewText = usePersistedRef<string>('font.previewText', '')
 
+  /**
+   * 字体列表读取入口。
+   *
+   * 放 store 而不是让页面 import `cep/ps`：页面只有"读模型"和"命令"两条通道，
+   * 这样"页面不碰 cep"是结构事实，不靠 eslint 拦（上一轮就是页面在 ps.ts 上开了口子）。
+   */
+  async function fetchList(opts: { refresh?: boolean } = {}): Promise<FontItem[]> {
+    return getFontList(opts)
+  }
+
   async function loadStars() {
     try {
       stars.value = await getFontStars()
-    } catch {
+    } catch (e) {
       stars.value = {}
+      log.warn('font', '星级读取失败，按全未收藏处理', e)
     }
   }
 
-  /** 点同一颗星 = 取消收藏 */
-  async function rate(family: string, value: number) {
-    const next = stars.value[family] === value ? 0 : value
-    const copy = { ...stars.value }
-    if (next <= 0) delete copy[family]
-    else copy[family] = next
-    stars.value = copy
-
-    try {
-      await setFontStar(family, next)
-    } catch (e) {
-      tagsError.value = describeCepError(e)
-    }
-  }
-
-  /** 新建 / 重命名 / 删除标签，成功返回 null，失败返回文案 */
-  async function createTag(text: string): Promise<string | null> {
-    try {
-      await createFontTag(text)
-      tags.value = await getFontTags()
-      return null
-    } catch (e) {
-      return describeCepError(e)
-    }
-  }
-
-  async function renameTag(from: string, to: string): Promise<string | null> {
-    try {
-      await renameFontTag(from, to)
-      tags.value = await getFontTags()
-      return null
-    } catch (e) {
-      return describeCepError(e)
-    }
-  }
-
-  async function deleteTag(text: string): Promise<string | null> {
-    try {
-      await deleteFontTag(text)
-      tags.value = await getFontTags()
-      return null
-    } catch (e) {
-      return describeCepError(e)
-    }
-  }
-
-  async function toggleTag(tagText: string, family: string) {
-    try {
-      await toggleFontTag(tagText, family)
-      tags.value = await getFontTags()
-    } catch (e) {
-      tagsError.value = describeCepError(e)
-    }
-  }
-
-  async function loadTags() {
-    if (tags.value.length) return
+  /** force 用于仓库变更后的强制刷新；普通调用命中缓存就返回 */
+  async function loadTags(force = false) {
+    if (!force && tags.value.length) return
     tagsError.value = ''
     try {
       tags.value = await getFontTags()
@@ -128,17 +81,6 @@ export const useFontStore = defineStore('font', () => {
     previewMode.value = PREVIEW_MODES[(index + 1) % PREVIEW_MODES.length]
   }
 
-  /** 成功返回 null，失败返回可展示文案 */
-  async function apply(font: FontItem, variantIndex = 0): Promise<string | null> {
-    try {
-      await setFont(font, variantIndex)
-      activeFamily.value = font.family
-      return null
-    } catch (e) {
-      return describeCepError(e)
-    }
-  }
-
   return {
     tags,
     tagsError,
@@ -148,12 +90,27 @@ export const useFontStore = defineStore('font', () => {
     customPreviewText,
     loadTags,
     loadStars,
-    rate,
-    toggleTag,
-    createTag,
-    renameTag,
-    deleteTag,
+    fetchList,
     cyclePreview,
-    apply,
   }
 })
+
+let bound = false
+
+/**
+ * 装配层调用一次（main.ts）：命令写成功后刷新只读投影。
+ *
+ * 不放在 store setup 里，是因为测试每次 createPinia 都会新建 store，
+ * 订阅会累积到已销毁的实例上。
+ */
+export function bindFontData() {
+  if (bound) return
+  bound = true
+
+  tagsRepo.onChange(() => {
+    void useFontStore().loadTags(true)
+  })
+  starsRepo.onChange(() => {
+    void useFontStore().loadStars()
+  })
+}

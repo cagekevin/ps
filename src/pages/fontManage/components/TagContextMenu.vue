@@ -1,12 +1,12 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
-import { useDismiss } from '@/composables/useDismiss'
-import GMenu from '@/components/GMenu.vue'
-import GMenuItem from '@/components/GMenuItem.vue'
+import { ref } from 'vue'
+import { usePointPopover } from '@/composables/usePointPopover'
 
 /**
- * 标签右键菜单。对应原版 font-manage__tag-group__context-menu。
- * 内容形态复用 GMenu / GMenuItem，这里只负责「定位到鼠标位置」和「点外部关闭」。
+ * 官方 font-manage-user-tag-overlay（app.v4.js:44546-44585）：
+ * 右键标签弹出的 105px 蓝色浮层，只有「删除 / 重命名」两项。
+ *
+ * 定位/点外部关闭统一走 usePointPopover；不再用 GMenu 的深色菜单皮肤。
  */
 const props = defineProps<{
   visible: boolean
@@ -20,52 +20,48 @@ const emit = defineEmits<{
   (e: 'remove'): void
 }>()
 
-const menuRef = ref<HTMLElement>()
-const top = ref(props.y)
-
 function close() {
   emit('update:visible', false)
 }
 
-function onSelect(value: string | number) {
+const menuRef = ref<HTMLElement | null>(null)
+const { style: positionStyle } = usePointPopover({
+  visible: () => props.visible,
+  x: () => props.x,
+  y: () => props.y,
+  close,
+  floating: menuRef,
+})
+
+function onRemove() {
   close()
-  if (value === 'rename') emit('rename')
-  else if (value === 'remove') emit('remove')
+  emit('remove')
 }
 
-useDismiss(() => props.visible, menuRef, close)
-
-watch(
-  () => props.visible,
-  (value) => {
-    if (!value) return
-    top.value = Math.min(props.y, window.innerHeight - 90)
-  },
-)
-
-
+function onRename() {
+  close()
+  emit('rename')
+}
 </script>
 
 <template>
   <Teleport to="body">
-    <div v-if="visible" ref="menuRef" class="tcm" :style="{ left: `${x}px`, top: `${top}px` }">
-      <GMenu @select="onSelect">
-        <GMenuItem value="rename">重命名</GMenuItem>
-        <GMenuItem value="remove">删除</GMenuItem>
-      </GMenu>
+    <div v-if="visible" ref="menuRef" class="font-manage__user-tag-overlay" :style="positionStyle">
+      <div @click.stop="onRemove">删除</div>
+      <div @click.stop="onRename">重命名</div>
     </div>
   </Teleport>
 </template>
 
 <style scoped>
-/* 只负责浮层外观，菜单项样式来自 GMenu / GMenuItem */
-.tcm {
-  position: fixed;
-  z-index: var(--z-dropdown);
-  min-width: 100px;
-  border: 1px solid var(--c-border-float);
-  border-radius: var(--r-md);
-  background: var(--c-float);
-  box-shadow: var(--shadow-pop);
+/* 原版 app.bf68b505.css: width:105px; padding:6px 12px; background:#3565ff */
+.font-manage__user-tag-overlay {
+  width: 105px;
+  padding: 6px 12px;
+  background: var(--c-accent-solid);
+  color: var(--c-text-inverse);
+  font-size: var(--fs-md);
+  line-height: 20px;
+  cursor: pointer;
 }
 </style>

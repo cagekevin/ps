@@ -3,7 +3,7 @@ import { ref, watch } from 'vue'
 import CepModal from '@/components/CepModal.vue'
 
 /**
- * 新建 / 重命名标签。对应原版 font-manage__tag__creator（标题 + 输入 + 底部按钮）。
+ * 新建 / 重命名标签。对应原版 font-manage-font-creator（标题 + 输入 + 底部按钮）。
  * 校验交给父组件（重名、空值），这里只负责收值和回车。
  */
 const props = defineProps<{
@@ -37,7 +37,13 @@ function submit() {
     :width="260"
     @ok="submit"
   >
-    <input v-model="text" class="tc__input" placeholder="请输入标签名" maxlength="20" @keydown.enter="submit" />
+    <input
+      v-model="text"
+      class="tc__input"
+      placeholder="请输入标签名"
+      maxlength="20"
+      @keydown.enter="submit"
+    />
   </CepModal>
 </template>
 

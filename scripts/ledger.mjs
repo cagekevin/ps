@@ -14,7 +14,7 @@ import { join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const root = fileURLToPath(new URL('..', import.meta.url))
-const LEDGER = join(root, 'docs', '台账.md')
+const LEDGER = join(root, 'docs', '状态/台账.md')
 const SRC = join(root, 'src')
 
 const DONE = 'done'
@@ -25,14 +25,23 @@ function parseRows() {
   for (const line of text.split(/\r?\n/)) {
     const trimmed = line.trim()
     if (!/^\|\s*(T|D)-\d+/.test(trimmed)) continue
-    const cells = trimmed.split('|').slice(1, -1).map((c) => c.trim())
+    const cells = trimmed
+      .split('|')
+      .slice(1, -1)
+      .map((c) => c.trim())
     if (cells.length < 6) continue
     rows.push({
       id: cells[0],
       type: cells[1],
       title: cells[2],
       status: cells[3],
-      deps: cells[4] === '-' ? [] : cells[4].split(/[,，]/).map((d) => d.trim()).filter(Boolean),
+      deps:
+        cells[4] === '-'
+          ? []
+          : cells[4]
+              .split(/[,，]/)
+              .map((d) => d.trim())
+              .filter(Boolean),
       note: cells[5],
     })
   }
@@ -75,7 +84,11 @@ for (const row of rows) {
       errors.push(`${row.id} 状态是 ${row.status}，但依赖 ${dep} 还是 ${target.status}`)
     }
   }
-  if (row.status === 'doing' && row.deps.length && row.deps.every((d) => byId.get(d)?.status !== DONE)) {
+  if (
+    row.status === 'doing' &&
+    row.deps.length &&
+    row.deps.every((d) => byId.get(d)?.status !== DONE)
+  ) {
     warnings.push(`${row.id} 标了 doing 但依赖都没完成，建议改成 blocked`)
   }
 }

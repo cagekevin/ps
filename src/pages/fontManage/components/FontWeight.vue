@@ -21,7 +21,9 @@ const emit = defineEmits<{ (e: 'select', index: number): void }>()
 const open = ref(false)
 
 /** 只有一个字重时不显示这一行（原版逻辑） */
-const previews = computed(() => (props.font.postScriptNames.length > 1 ? props.font.postScriptNames.slice(0, 7) : []))
+const previews = computed(() =>
+  props.font.postScriptNames.length > 1 ? props.font.postScriptNames.slice(0, 7) : [],
+)
 
 const glyph = computed(() => (isAscii(props.font.family) ? 'A' : '永'))
 
@@ -46,8 +48,7 @@ function pick(index: number) {
           :class="{ 'is-current': index === current }"
           :style="{ fontFamily: `'${ps}', '${font.family}'` }"
           @click.stop="pick(index)"
-          >{{ glyph }}</pre
-        >
+          >{{ glyph }}</pre>
       </div>
       <button class="fw__count" type="button" @click.stop="open = !open">
         {{ font.weights.length }}
@@ -57,7 +58,7 @@ function pick(index: number) {
     <div v-if="open" class="fw__dropdown">
       <div
         v-for="(weight, index) in font.weights"
-        :key="index"
+        :key="weight"
         class="fw__option"
         @click.stop="pick(index)"
       >

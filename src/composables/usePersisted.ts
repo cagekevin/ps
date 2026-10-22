@@ -1,5 +1,5 @@
 import { ref, watch, type Ref } from 'vue'
-import { getPref, setPref } from '@/cep/prefs'
+import { getPref, setPref } from '@/cep/data/settings'
 
 /**
  * 会记住的 ref。用于界面偏好（预览档位、筛选、展开状态）。
@@ -8,11 +8,7 @@ import { getPref, setPref } from '@/cep/prefs'
 export function usePersistedRef<T>(key: string, fallback: T): Ref<T> {
   const state = ref(getPref(key, fallback)) as Ref<T>
 
-  watch(
-    state,
-    (value) => setPref(key, value),
-    { deep: true },
-  )
+  watch(state, (value) => setPref(key, value), { deep: true })
 
   return state
 }

@@ -3,9 +3,9 @@
  *
  *   node scripts/style-guard.mjs            检查（默认）
  *   node scripts/style-guard.mjs --fix      自动把已知裸值替换成 token，修不了的列出来
- *   node scripts/style-guard.mjs --update   把当前违规数量写进 docs/style-baseline.json
+ *   node scripts/style-guard.mjs --update   把当前违规数量写进 docs/生成/样式基线.json
  *
- * 设计依据见 docs/架构决策.md ADR-10：自动修复的成本 ≈ 0，报错阻止要人肉改，贵一个数量级。
+ * 设计依据见 docs/架构/决策记录.md ADR-10：自动修复的成本 ≈ 0，报错阻止要人肉改，贵一个数量级。
  */
 import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs'
 import { join, relative } from 'node:path'
@@ -14,10 +14,14 @@ import { fileURLToPath } from 'node:url'
 const root = fileURLToPath(new URL('..', import.meta.url))
 const SRC = join(root, 'src')
 const TOKENS = join(root, 'src', 'styles', 'tokens.css')
-const BASELINE = join(root, 'docs', 'style-baseline.json')
+const BASELINE = join(root, 'docs', '生成/样式基线.json')
 
 /** token 文件本身当然可以写裸值 */
-const ALLOW_FILES = new Set(['src/styles/tokens.css', 'src/styles/global.css', 'src/styles/motion.css'])
+const ALLOW_FILES = new Set([
+  'src/styles/tokens.css',
+  'src/styles/global.css',
+  'src/styles/motion.css',
+])
 
 const COLOR_RE = /#[0-9a-fA-F]{3,8}\b|\brgba?\([^)]*\)|\bhsla?\([^)]*\)/g
 const FS_RE = /font-size:\s*(\d+)px/g
@@ -32,7 +36,13 @@ function norm(value) {
 
   // #fff 和 #ffffff 要能对上
   const short = out.match(/^#([0-9a-f]{3,4})$/)
-  if (short) out = '#' + short[1].split('').map((c) => c + c).join('')
+  if (short)
+    out =
+      '#' +
+      short[1]
+        .split('')
+        .map((c) => c + c)
+        .join('')
 
   return out
 }
@@ -102,12 +112,21 @@ const TEMPLATE_RULES = [
   {
     id: 'icon-size',
     re: /<Icon\b[^>]*?:size="\d+"/g,
-    hint: '图标尺寸用预设名：size="2xs|xs|sm|md|lg|xl|2xl"，见 docs/视觉规范.md',
+    hint: '图标尺寸用预设名：size="2xs|xs|sm|md|lg|xl|2xl"，见 docs/规范/视觉规范.md',
   },
 ]
 
 /** 自动修复用的映射，和 components/icon/size.ts 保持一致 */
-const SIZE_TO_NAME = { 9: '2xs', 10: 'xs', 14: 'sm', 16: 'md', 18: 'lg', 20: 'xl', 24: '2xl' }
+const SIZE_TO_NAME = {
+  4: '3xs',
+  9: '2xs',
+  10: 'xs',
+  14: 'sm',
+  16: 'md',
+  18: 'lg',
+  20: 'xl',
+  24: '2xl',
+}
 
 function stripStyle(content) {
   return content.replace(/<style[^>]*>[\s\S]*?<\/style>/g, '')
@@ -135,6 +154,8 @@ function maskComments(css) {
   })
   return {
     masked,
+    // \u0000 是做占位符用的控制字符，只在内部中间产物里出现，不会落到文件
+    // eslint-disable-next-line no-control-regex
     restore: (text) => text.replace(/\u0000C(\d+)\u0000/g, (_m, index) => store[Number(index)]),
   }
 }
@@ -398,7 +419,12 @@ if (command === 'fix') {
     process.exit(1)
   }
 
-  const tightened = Object.entries(baseline).filter(([file, allowed]) => (current[file] ?? 0) < allowed)
+  const tightened = Object.entries(baseline).filter(
+    ([file, allowed]) => (current[file] ?? 0) < allowed,
+  )
   console.log('[style] 通过：无新增硬编码、无负 margin、无静默失败')
-  if (tightened.length) console.log(`[style] ${tightened.length} 个文件的违规数已下降，可执行 npm run style:baseline 收紧`)
+  if (tightened.length)
+    console.log(
+      `[style] ${tightened.length} 个文件的违规数已下降，可执行 npm run style:baseline 收紧`,
+    )
 }

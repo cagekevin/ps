@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref, watch } from 'vue'
+import { computed, ref, watch } from 'vue'
 import Icon from '@/components/Icon.vue'
 
 /**
@@ -20,7 +20,11 @@ watch(
   },
 )
 
+/** 只有空格也算空，按钮该置灰、回车不该提交 */
+const canApply = computed(() => text.value.trim().length > 0)
+
 function apply() {
+  if (!canApply.value) return
   emit('apply', text.value.trim())
 }
 </script>
@@ -28,13 +32,14 @@ function apply() {
 <template>
   <div class="pt">
     <Icon name="iconzihaodaxiao1" size="xl" class="pt__icon" />
-    <input
-      v-model="text"
-      class="pt__input"
-      placeholder="请输入预览文案"
-      @keydown.enter="apply"
-    />
-    <button class="pt__btn" :class="{ 'is-disabled': !text }" :disabled="!text" type="button" @click="apply">
+    <input v-model="text" class="pt__input" placeholder="请输入预览文案" @keydown.enter="apply" />
+    <button
+      class="pt__btn"
+      :class="{ 'is-disabled': !canApply }"
+      :disabled="!canApply"
+      type="button"
+      @click="apply"
+    >
       应用
     </button>
   </div>

@@ -1,9 +1,12 @@
-import { CepError, ERR_PREFIX, evalScriptRaw, hasCep, jsxCall } from './eval-script'
-import { DATA_FILES, PS_ENV } from './env'
-import { extensionDir, hasNode, readTextFile, readTextSmart, userDir } from './fs'
-import { jsonFile } from './json-file'
-import type { FontItem, FontTag, LayerState, SysFontFile } from './types'
-import * as mock from './mock'
+import { CepError, ERR_PREFIX } from '@/utils/errors'
+import { normalizeFontList } from '@/domain/font-normalize'
+import { evalScriptRaw, hasCep } from './transport'
+import { PS_ENV } from './env'
+import { extensionDir, hasNode, userDir } from './fs'
+import { hasCepEvents } from './events'
+import { mergeFontStars, readSysFontFile } from './data/sys-font'
+import { jsx } from './jsx'
+import type { FontItem, LayerState } from './types'
 
 let initPromise: Promise<void> | null = null
 
@@ -46,11 +49,14 @@ async function doInit(): Promise<void> {
         `return [f.exists ? 'exists' : 'missing', typeof Sys_setSystemEnvInfo, typeof app].join('|');})()`,
       10000,
     ).catch(() => '诊断脚本也失败了')
-    throw new CepError('INIT', `jsx 已加载，但 ztgl_initSystemList 不可用（typeof = ${typeRes}；${diag}）`)
+    throw new CepError(
+      'INIT',
+      `jsx 已加载，但 ztgl_initSystemList 不可用（typeof = ${typeRes}；${diag}）`,
+    )
   }
 
   // 不注入环境变量，jsx 内部拼路径时会报「undefined 不是对象」
-  await jsxCall('Sys_setSystemEnvInfo', [JSON.stringify(PS_ENV)], { label: '注入环境变量', timeout: 15000 })
+  await jsx.env.setEnv(JSON.stringify(PS_ENV))
 }
 
 /**
@@ -60,8 +66,6 @@ async function doInit(): Promise<void> {
  * 有些版本会返回状态字符串 "ok"、数据写到 SysFont2.json，所以两种都兜住。
  */
 export async function getFontList(opts: { refresh?: boolean } = {}): Promise<FontItem[]> {
-  if (!hasCep()) return mock.getFontList()
-
   await initJsx()
 
   if (!opts.refresh) {
@@ -69,7 +73,7 @@ export async function getFontList(opts: { refresh?: boolean } = {}): Promise<Fon
     if (cached.length) return cached
   }
 
-  const res = await jsxCall<unknown>('ztgl_initSystemList', [], { label: '读取系统字体', timeout: 120000 })
+  const res = await jsx.font.initSystemList()
 
   if (res === 'ok') {
     const fromFile = await readSysFontFile()
@@ -79,161 +83,43 @@ export async function getFontList(opts: { refresh?: boolean } = {}): Promise<Fon
     return fromFile
   }
 
-  const list = normalizeList(res)
+  const list = normalizeFontList(res)
   if (!list.length) {
-    throw new CepError('PARSE', `ztgl_initSystemList 返回了无法识别的数据：${String(res).slice(0, 120)}`)
+    throw new CepError(
+      'PARSE',
+      `ztgl_initSystemList 返回了无法识别的数据：${String(res).slice(0, 120)}`,
+    )
   }
-  return mergeStars(list)
+  return await mergeFontStars(list)
 }
 
-interface RawTag {
-  text?: string
-  arr?: string[]
-  xz?: boolean
-}
-
-interface RawStar {
-  name?: string
-  star?: string | number
-}
-
-/** 星级收藏文件（原面板 sj_ztglStar.ini） */
-const STAR_FILE = 'sj_ztglStar.ini'
-
-const tagFile = jsonFile<RawTag[]>(DATA_FILES.ztglTags, () => [])
-const starFile = jsonFile<RawStar[]>(STAR_FILE, () => [])
-
-/** 读字体标签（我的标签那一排） */
-export async function getFontTags(): Promise<FontTag[]> {
-  if (!hasCep()) return mock.getFontTags()
-
-  const raw = await tagFile.read()
-  return raw
-    .filter((item) => typeof item.text === 'string')
-    .map((item) => ({
-      text: item.text as string,
-      arr: Array.isArray(item.arr) ? item.arr : [],
-      xz: item.xz === true,
-    }))
-}
-
-/** 读星级：{ 家族名: 1~3 } */
-export async function getFontStars(): Promise<Record<string, number>> {
-  if (!hasCep()) return mock.getFontStars()
-
-  const raw = await starFile.read()
-  const map: Record<string, number> = {}
-  for (const item of raw) {
-    if (typeof item.name !== 'string') continue
-    const value = Number(item.star)
-    if (value > 0) map[item.name] = value
-  }
-  return map
-}
+/** 标签/星级读取已迁到 data/font-meta；这里保留旧入口，store 不需要知道迁移 */
+export { readFontTags as getFontTags, readFontStars as getFontStars } from './data/font-meta'
 
 /**
- * 写星级。注意原文件里 star 有的是字符串 "3" 有的是数字 3，统一写数字。
- * 写之前先备份成 .bak，避免写坏原面板的数据。
+ * 写 PS 文档的能力**不在这里**（`font.apply` 命令直接调 `ctx.jsx.font`）。
+ *
+ * 这样页面即使 import 了 `ps.ts`，也拿不到任何"写"入口——
+ * 结构上没有，比再多一条 eslint 规则可靠（见 plan 4.7）。
  */
-export async function setFontStar(family: string, star: number): Promise<void> {
-  if (!hasCep()) return mock.setFontStar(family, star)
 
-  await starFile.update((raw) => {
-    const list = raw
-      .filter((item) => typeof item.name === 'string')
-      .map((item) => ({ name: item.name as string, star: Number(item.star) || 0 }))
-
-    if (star <= 0) return list.filter((item) => item.name !== family)
-
-    const hit = list.find((item) => item.name === family)
-    if (hit) hit.star = star
-    else list.push({ name: family, star })
-    return list
-  })
-}
-
-/** 给字体加/去某个标签，写回 sj_ztglTags.ini */
-export async function toggleFontTag(tagText: string, family: string): Promise<void> {
-  if (!hasCep()) return mock.toggleFontTag(tagText, family)
-
-  await tagFile.update((list) => {
-    const tag = list.find((item) => item.text === tagText)
-    if (!tag) return
-
-    const arr = Array.isArray(tag.arr) ? tag.arr : []
-    const index = arr.indexOf(family)
-    if (index >= 0) arr.splice(index, 1)
-    else arr.push(family)
-    tag.arr = arr
-  })
-}
-
-/** 新建标签 */
-export async function createFontTag(text: string): Promise<void> {
-  if (!hasCep()) return mock.createFontTag(text)
-
-  await tagFile.update((list) => {
-    if (list.some((item) => item.text === text)) return
-    list.push({ text, arr: [], xz: false })
-  })
-}
-
-/** 重命名标签（关联的字体跟着走） */
-export async function renameFontTag(from: string, to: string): Promise<void> {
-  if (!hasCep()) return mock.renameFontTag(from, to)
-
-  await tagFile.update((list) => {
-    const tag = list.find((item) => item.text === from)
-    if (tag) tag.text = to
-  })
-}
-
-/** 删除标签（连同它和字体的关联） */
-export async function deleteFontTag(text: string): Promise<void> {
-  if (!hasCep()) return mock.deleteFontTag(text)
-
-  await tagFile.update((list) => list.filter((item) => item.text !== text))
-}
-
-/** 把字体设到当前选中的图层上，variantIndex 对应 weights/names/postScriptNames 的下标 */
-export async function setFont(font: FontItem, variantIndex = 0): Promise<void> {
-  if (!hasCep()) return mock.setFont(font, variantIndex)
-
+/**
+ * 读 PS 当前动作面板的**原始**返回。
+ *
+ * 只做"取回来"，不解析：结构未真机验证，解析放 `domain/action` 的 `readActionList`，
+ * 模型化放 `stores/action` 的 `loadPsActions`。这样页面不需要 import 这里。
+ */
+export async function getRawActionList(): Promise<unknown> {
   await initJsx()
-
-  // 先拦一道：没选中图层就别去调 jsx 了，否则只会拿到一句看不懂的 EvalScript error
-  const state = await getLayerState()
-  if (!state.hasSelection) {
-    throw new CepError('NO_SELECTION', '请先选择一个文字图层')
-  }
-
-  const postScriptName = font.postScriptNames[variantIndex]
-  const name = font.names[variantIndex] ?? font.family
-  const weight = font.weights[variantIndex] ?? 'Regular'
-  if (!postScriptName) {
-    throw new CepError('PARSE', `${font.family} 没有第 ${variantIndex + 1} 个字重的 PostScript 名`)
-  }
-
-  // 参数顺序对齐原面板：jsx("ztgl_setFont", [hjm, mz, zz])
-  // 返回是 { err, msg }，原版判断 i.err == 1 才提示错误 —— 这里同样要判，否则失败也会显示成功
-  const res = await jsxCall<{ err?: number; msg?: string } | null>('ztgl_setFont', [postScriptName, name, weight], {
-    label: `设置字体 ${font.family}`,
-    timeout: 20000,
-  })
-
-  if (res && typeof res === 'object' && res.err === 1) {
-    throw new CepError('JSX', res.msg || `设置字体失败：${font.family}`)
-  }
+  return jsx.action.getActionList()
 }
 
 /** 当前选中图层状态 */
 export async function getLayerState(): Promise<LayerState> {
-  if (!hasCep()) return mock.getLayerState()
-
   await initJsx()
 
-  const selected = await jsxCall<unknown>('Layer_isSelectLayer', [], { label: '查询是否有选中图层', timeout: 10000 })
-  const typeNumber = await jsxCall<unknown>('Layer_getTypeNumber', [], { label: '查询图层类型', timeout: 10000 })
+  const selected = await jsx.layer.isSelectLayer()
+  const typeNumber = await jsx.layer.getTypeNumber()
 
   return {
     hasSelection: selected === true || String(selected) === 'true',
@@ -255,75 +141,9 @@ export function runtimeInfo() {
   return {
     inCep,
     hasNode: hasNode(),
+    /** 宿主事件通道是否可用；不可用时禁用态不实时（降级为执行前查询） */
+    events: hasCepEvents(),
     extensionDir: inCep ? extensionDir() : '',
     userDir: dir,
-  }
-}
-
-function asArray(value: unknown): string[] {
-  if (Array.isArray(value)) return value.map((v) => String(v))
-  if (typeof value === 'string') return [value]
-  return []
-}
-
-/** 兼容两套键名：family/weights/names/postScriptNames 与 name/zz/mz/hjm */
-function normalizeFont(item: unknown): FontItem | null {
-  if (!item || typeof item !== 'object') return null
-  const f = item as Record<string, unknown>
-
-  const family =
-    typeof f.family === 'string' ? f.family : typeof f.name === 'string' ? f.name : ''
-  if (!family) return null
-
-  return {
-    family,
-    weights: asArray(f.weights ?? f.zz),
-    names: asArray(f.names ?? f.mz),
-    postScriptNames: asArray(f.postScriptNames ?? f.hjm),
-    star: typeof f.star === 'number' ? f.star : 0,
-  }
-}
-
-function normalizeList(raw: unknown): FontItem[] {
-  if (!Array.isArray(raw)) return []
-  const out: FontItem[] = []
-  for (const item of raw) {
-    const font = normalizeFont(item)
-    if (font) out.push(font)
-  }
-  return out
-}
-
-async function readSysFontFile(): Promise<FontItem[]> {
-  const abs = `${userDir()}/${DATA_FILES.sysFontList}`
-  const text = await readTextSmart(abs)
-  if (!text) return []
-  try {
-    const file = JSON.parse(text) as SysFontFile
-    return mergeStars(normalizeList(file.arr))
-  } catch {
-    return []
-  }
-}
-
-/** 把收藏等级合并进去（缺文件就当全是 0） */
-function mergeStars(list: FontItem[]): FontItem[] {
-  const stars = readStars()
-  if (!Object.keys(stars).length) return list
-  return list.map((f) => ({ ...f, star: stars[f.family] ?? 0 }))
-}
-
-function readStars(): Record<string, number> {
-  const text = readTextFile(`${userDir()}/${DATA_FILES.ztglStar}`)
-  if (!text) return {}
-  try {
-    const arr = JSON.parse(text) as Array<{ name?: string; star?: number }>
-    const map: Record<string, number> = {}
-    for (const item of arr) {
-      if (item?.name) map[item.name] = item.star ?? 0
-    }
-    return map
-  } catch {
-    return {}
   }
 }

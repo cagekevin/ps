@@ -7,23 +7,44 @@ withDefaults(
     disabled?: boolean
     loading?: boolean
     block?: boolean
+    /** 动作网格按钮：固定 24px，按列数取宽 */
+    grid?: boolean
+    columns?: 1 | 2 | 3 | 4
+    /** 动作网格：拖拽落点 */
+    drop?: 'before' | 'after'
+    /** 动作网格：hover 显示移除 */
+    removable?: boolean
   }>(),
-  { type: 'default', size: 'medium' },
+  { type: 'default', size: 'medium', columns: 1 },
 )
 
-defineEmits<{ (e: 'click', ev: MouseEvent): void }>()
+defineEmits<{ (e: 'click', ev: MouseEvent): void; (e: 'remove', ev: MouseEvent): void }>()
 </script>
 
 <template>
   <button
     class="g-btn"
-    :class="[`g-btn--${type}`, `g-btn--${size}`, { 'is-block': block, 'is-loading': loading }]"
+    :class="[
+      `g-btn--${type}`,
+      `g-btn--${size}`,
+      {
+        'is-block': block,
+        'is-loading': loading,
+        'is-grid': grid,
+        [`is-grid-${columns}`]: grid,
+        'is-drop-before': drop === 'before',
+        'is-drop-after': drop === 'after',
+      },
+    ]"
     :disabled="disabled || loading"
     type="button"
     @click="$emit('click', $event)"
   >
     <span v-if="loading" class="g-btn__spin" />
     <slot />
+    <span v-if="removable" class="g-btn__remove" title="移除" @click.stop="$emit('remove', $event)"
+      >×</span
+    >
   </button>
 </template>
 
@@ -92,6 +113,61 @@ defineEmits<{ (e: 'click', ev: MouseEvent): void }>()
 .g-btn.is-block {
   display: flex;
   width: 100%;
+}
+
+/* 动作网格：原版 .btn-min / .btn-* 的 24px 皮肤 */
+.g-btn.is-grid {
+  height: var(--h-control-sm);
+  justify-content: center;
+  gap: var(--sp-1);
+  padding: 0 var(--sp-exact-5);
+  margin: 0 var(--sp-3) var(--sp-exact-5) 0;
+  overflow: hidden;
+  border: 0;
+  border-radius: var(--r-sm);
+  background: var(--c-font-btn);
+  color: var(--text);
+  font-size: var(--fs-md);
+  line-height: var(--h-control-sm);
+  text-overflow: ellipsis;
+}
+
+.g-btn.is-grid:hover:not(:disabled) {
+  background: var(--c-font-btn-hover);
+}
+
+.g-btn.is-grid-1 {
+  width: calc(100% - var(--sp-3));
+}
+
+.g-btn.is-grid-2 {
+  width: calc(50% - var(--sp-3));
+}
+
+.g-btn.is-grid-3 {
+  width: calc(33.33333% - var(--sp-3));
+}
+
+.g-btn.is-grid-4 {
+  width: calc(25% - var(--sp-3));
+}
+
+.g-btn.is-drop-before {
+  box-shadow: inset 2px 0 0 var(--accent);
+}
+
+.g-btn.is-drop-after {
+  box-shadow: inset -2px 0 0 var(--accent);
+}
+
+.g-btn__remove {
+  display: none;
+  flex: 0 0 auto;
+  color: var(--text-faint);
+}
+
+.g-btn.is-grid:hover .g-btn__remove {
+  display: inline;
 }
 
 .g-btn:disabled {

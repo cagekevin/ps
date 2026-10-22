@@ -5,7 +5,7 @@ import { ref, watch } from 'vue'
  * 星级收藏，对应原版 font-manage-rating。
  * hover 时临时显示到第几星，移开恢复成已选值；点击 emit 具体星数。
  *
- * 原版的图标 sprite 里没有星形图标，这里用文本 ★，避免瞎编图标名。
+ * 原版用 gdaicon 字体图标画星；我们的 sprite 里没有星形，改用文本 ★（不编图标名）。
  */
 const props = withDefaults(defineProps<{ selected?: number; nums?: number }>(), {
   selected: 0,
@@ -33,13 +33,15 @@ function leave() {
 </script>
 
 <template>
-  <div class="rating" @mouseleave="leave">
+  <div class="rating" role="group" aria-label="收藏评分" @mouseleave="leave">
     <button
       v-for="index in nums"
       :key="index"
       class="rating__star"
       :class="{ 'is-on': index <= score }"
       type="button"
+      :aria-label="`${index} 星`"
+      :aria-pressed="index <= score"
       @mouseenter="enter(index)"
       @click.stop="emit('rating', index)"
     >

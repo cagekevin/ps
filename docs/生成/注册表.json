@@ -1,0 +1,493 @@
+{
+  "version": 1,
+  "updated": "2026-10-21",
+  "note": "横切能力注册表。新增 src/{cep,composables,stores,utils,styles} 下的文件必须在这里登记，否则 npm run build 会失败。",
+  "items": [
+    {
+      "id": "motion",
+      "name": "动效 token 与过渡类",
+      "entry": "src/styles/motion.css",
+      "api": "--dur-fast / --dur-base / --dur-slow / --ease；.fade / .slide-up / .slide-down / .scale / .page / .list",
+      "when": "任何过渡动效，禁止在组件里写死时长",
+      "status": "stable",
+      "since": "2026-10-20"
+    },
+    {
+      "id": "logger",
+      "name": "日志",
+      "entry": "src/utils/logger.ts",
+      "api": "log.debug/info/warn/error(scope, msg, detail)；log.dump()；控制台 __pszDump()",
+      "when": "所有 catch、关键流程节点",
+      "status": "stable",
+      "since": "2026-10-20"
+    },
+    {
+      "id": "jsx-result",
+      "name": "jsx 返回结构归一",
+      "entry": "src/utils/jsx-result.ts",
+      "api": "asJsxResult(raw) → {ok,err,code,msg,data}；requireJsxOk / assertJsxOk",
+      "when": "任何命令判断 jsx 成败；禁止再写 res.err === 1",
+      "status": "stable",
+      "since": "2026-10-21"
+    },
+    {
+      "id": "http",
+      "name": "外部网络通道（JSONP）",
+      "entry": "src/cep/http.ts",
+      "api": "jsonp(url, params, { timeout }) → Promise<unknown>",
+      "when": "翻译等云端接口；页面/组件禁止直接发请求",
+      "status": "stable",
+      "since": "2026-10-21"
+    },
+    {
+      "id": "error-handler",
+      "name": "全局错误兜底",
+      "entry": "src/utils/error-handler.ts",
+      "api": "installErrorHandlers(app)",
+      "when": "main.ts 里 pinia 之后调用一次",
+      "status": "stable",
+      "since": "2026-10-20"
+    },
+    {
+      "id": "error-boundary",
+      "name": "页面错误边界",
+      "entry": "src/components/ErrorBoundary.vue",
+      "api": "<ErrorBoundary><router-view/></ErrorBoundary>",
+      "when": "包住页面内容，崩溃只影响内容区",
+      "status": "stable",
+      "since": "2026-10-20"
+    },
+    {
+      "id": "feedback",
+      "name": "操作反馈（toast 队列）",
+      "entry": "src/stores/feedback.ts",
+      "api": "feedback.ok/error/warn/info(text)",
+      "when": "所有操作结果，页面不要自己弹提示",
+      "status": "stable",
+      "since": "2026-10-20"
+    },
+    {
+      "id": "toast-host",
+      "name": "toast 渲染宿主",
+      "entry": "src/components/ToastHost.vue",
+      "api": "<ToastHost />",
+      "when": "MainLayout 挂一次即可",
+      "status": "stable",
+      "since": "2026-10-20"
+    },
+    {
+      "id": "modal",
+      "name": "弹窗",
+      "entry": "src/components/CepModal.vue",
+      "api": "v-model:visible + title/width/okText + 默认插槽",
+      "when": "需要看清详情、危险操作确认",
+      "status": "stable",
+      "since": "2026-10-20"
+    },
+    {
+      "id": "page-shell",
+      "name": "页面骨架",
+      "entry": "src/components/PageShell.vue",
+      "api": "props: title/count；slots: extra/toolbar/footer",
+      "when": "所有列表页，禁止自己再拼 header + 滚动区",
+      "status": "stable",
+      "since": "2026-10-20"
+    },
+    {
+      "id": "paged-list",
+      "name": "列表页一站式（加载 + 增量渲染 + 滚动加载）",
+      "entry": "src/composables/usePagedList.ts",
+      "api": "usePagedList(fetcher, {pageSize=60}) → items/visible/loading/error/load/bind/listRef/sentinelRef",
+      "when": "所有列表页；有筛选时用 bind(filtered)",
+      "status": "stable",
+      "since": "2026-10-20"
+    },
+    {
+      "id": "element-width",
+      "name": "容器宽度监听",
+      "entry": "src/composables/useElementWidth.ts",
+      "api": "useElementWidth(elRef) → Ref<number>",
+      "when": "按面板宽度切单列/双列（原版阈值 420px）",
+      "status": "stable",
+      "since": "2026-10-20"
+    },
+    {
+      "id": "infinite-scroll",
+      "name": "滚到底自动加载",
+      "entry": "src/composables/useInfiniteScroll.ts",
+      "api": "useInfiniteScroll(sentinelRef, onReach, { root: listRef })",
+      "when": "usePagedList 内部已调用，一般不用直接引；哨兵元素放在滚动容器末尾",
+      "status": "stable",
+      "since": "2026-10-20"
+    },
+    {
+      "id": "persisted",
+      "name": "持久化 ref",
+      "entry": "src/composables/usePersisted.ts",
+      "api": "usePersistedRef(key, fallback)",
+      "when": "界面偏好（预览档位、筛选、展开状态）",
+      "status": "stable",
+      "since": "2026-10-20"
+    },
+    {
+      "id": "cep-ps",
+      "name": "PS 领域封装（只读 + 初始化）",
+      "entry": "src/cep/ps.ts",
+      "api": "initJsx / getFontList / getFontTags / getRawActionList / getLayerState / runtimeInfo",
+      "when": "写能力的入口在 commands/*；页面读走 store，不直接 import 这里（ADR-16）",
+      "status": "stable",
+      "since": "2026-10-20"
+    },
+    {
+      "id": "cep-fs",
+      "name": "文件读写",
+      "entry": "src/cep/fs.ts",
+      "api": "readTextFile / readTextSmart / writeTextFile / userDir / extensionDir / hasNode",
+      "when": "读写 %APPDATA%\\SheJiZhuLi 下的数据文件",
+      "status": "stable",
+      "since": "2026-10-20"
+    },
+    {
+      "id": "cep-mock",
+      "name": "浏览器假数据",
+      "entry": "src/cep/mock.ts",
+      "api": "由 cep/ps.ts 自动切换，页面无感",
+      "when": "npm run dev 时替代真实 PS 调用",
+      "status": "stable",
+      "since": "2026-10-20"
+    },
+    {
+      "id": "icon-sprite",
+      "name": "图标 sprite 注入",
+      "entry": "src/components/icon/sprite.ts",
+      "api": "injectSprite()",
+      "when": "main.ts 启动时一次，file:// 下不能用外部引用",
+      "status": "stable",
+      "since": "2026-10-20"
+    },
+    {
+      "id": "tokens",
+      "name": "设计 token（唯一数值来源）",
+      "entry": "src/styles/tokens.css",
+      "api": "--c-* 颜色 / --sp-* 间距 / --fs-* 字号 / --r-* 圆角 / --h-* 尺寸 / --z-* 层级 / --shadow-*",
+      "when": "组件里禁止写裸色值、font-size: 12px、border-radius: 4px，一律引用变量",
+      "status": "stable",
+      "since": "2026-10-20"
+    },
+    {
+      "id": "theme",
+      "name": "全局 reset、状态约定、焦点样式",
+      "entry": "src/styles/global.css",
+      "api": "reset、body 排版、滚动条、hover/active/disabled/focus 约定、:focus-visible",
+      "when": "只放全局基础；数值全部来自 tokens.css",
+      "status": "stable",
+      "since": "2026-10-20"
+    },
+    {
+      "id": "layout",
+      "name": "布局原语",
+      "entry": "src/styles/layout.css",
+      "api": ".u-stack / .u-row / .u-fill / .u-center / .u-scroll / .u-nowrap / .u-gap-1..6",
+      "when": "页面和组件布局，替代重复写 flex 三件套；utility 统一 u- 前缀",
+      "status": "stable",
+      "since": "2026-10-20"
+    },
+    {
+      "id": "cep-types",
+      "name": "PS 数据类型契约",
+      "entry": "src/cep/types.ts",
+      "api": "FontItem / FontTag / LayerState / CepErrorCode",
+      "when": "新增 PS 能力时同步补类型；字段名必须对齐真实返回",
+      "status": "stable",
+      "since": "2026-10-20"
+    },
+    {
+      "id": "cep-env",
+      "name": "jsx 环境变量与数据文件路径",
+      "entry": "src/cep/env.ts",
+      "api": "PS_ENV / USER_DIR / DATA_FILES",
+      "when": "注入 Sys_setSystemEnvInfo、拼数据文件路径时用",
+      "status": "stable",
+      "since": "2026-10-20"
+    },
+    {
+      "id": "store-font",
+      "name": "字体状态",
+      "entry": "src/stores/font.ts",
+      "api": "useFontStore：list/tags/keyword/activeTag/previewMode/filtered/load/apply",
+      "when": "字体页、常用页、字体管理页共用字体列表与筛选",
+      "status": "stable",
+      "since": "2026-10-20"
+    },
+    {
+      "id": "cep-data-classification-ts",
+      "name": "字体分类数据（读 + degraded）",
+      "entry": "src/cep/data/classification-repo.ts",
+      "api": "getClassification() → { value, degraded }；emptyClassification()",
+      "when": "读 classification.json；筛选规则在 domain/font-filter.ts，不在这里",
+      "status": "stable",
+      "since": "2026-10-20"
+    },
+    {
+      "id": "cep-transport-ts",
+      "name": "ExtendScript 调用层",
+      "entry": "src/cep/transport.ts",
+      "api": "evalScriptRaw / jsxCall / hasCep",
+      "when": "所有 PS 调用；串行队列 + 超时 + ERR: 协议。页面禁止裸调",
+      "status": "stable",
+      "since": "2026-10-21"
+    },
+    {
+      "id": "composables-usedismiss-ts",
+      "name": "点击外部 / Esc 关闭",
+      "entry": "src/composables/useDismiss.ts",
+      "api": "useDismiss(visible: () => boolean, container: Ref, close: () => void, { outside = true })",
+      "when": "浮层组件（下拉、右键菜单）关闭逻辑",
+      "status": "stable",
+      "since": "2026-10-20"
+    },
+    {
+      "id": "utils-error-text-ts",
+      "name": "错误文案",
+      "entry": "src/utils/error-text.ts",
+      "api": "describeCepError(e) → string",
+      "when": "任何要把异常变成用户可读文案的地方；不要各写各的",
+      "status": "stable",
+      "since": "2026-10-21"
+    },
+    {
+      "id": "utils-errors-ts",
+      "name": "错误类型（零依赖）",
+      "entry": "src/utils/errors.ts",
+      "api": "CepError / CepErrorCode / ERR_PREFIX",
+      "when": "transport、错误文案、测试抛错；避免 cep 与 utils 互相依赖",
+      "status": "stable",
+      "since": "2026-10-21"
+    },
+    {
+      "id": "cep-jsx",
+      "name": "jsx 能力层（按域拆）",
+      "entry": "src/cep/jsx/",
+      "api": "jsx.font / jsx.layer / jsx.action / jsx.env",
+      "when": "命令层调用 PS 的唯一位置；页面禁止 import。新增函数要同时改 <域>.ts + types.ts + mock.ts（JsxPort 强制）",
+      "status": "stable",
+      "since": "2026-10-21"
+    },
+    {
+      "id": "cep-data-repo",
+      "name": "数据仓库（串行 + 原子写 + 备份 + degraded）",
+      "entry": "src/cep/data/",
+      "api": "fileRepo(path, fallback) / memoryRepo(fallback) → { read, write, update, onChange }",
+      "when": "读写 %APPDATA%\\SheJiZhuLi 下任何数据文件；禁止自己拼 read/modify/write",
+      "status": "stable",
+      "since": "2026-10-21"
+    },
+    {
+      "id": "cep-events-ts",
+      "name": "PS 宿主事件通道（应用 ← PS）",
+      "entry": "src/cep/events.ts",
+      "api": "subscribeHostEvent(name, cb) / hostEventsAvailable() / parseEventData()",
+      "when": "任何要跟随 PS 状态变化的场景（选区、文档、当前文字属性）；新增事件只改 EVENT_IDS 一行，禁止页面私有订阅。见 ADR-17",
+      "status": "stable",
+      "since": "2026-10-21"
+    },
+    {
+      "id": "stores-classification-ts",
+      "name": "分类数据读模型",
+      "entry": "src/stores/classification-view.ts",
+      "api": "useClassificationStore() → data / degraded / loaded / load()",
+      "when": "字体页筛选面板；页面不直接 import cep/data，degraded 统一从这里出",
+      "status": "stable",
+      "since": "2026-10-21"
+    },
+    {
+      "id": "utils-signal-ts",
+      "name": "跨层信号（命令 → 视图）",
+      "entry": "src/utils/signal.ts",
+      "api": "createSignal() → { emit, on }；fontListRefresh 单例",
+      "when": "命令需要让视图重新取数据，但命令不能依赖 store；视图订阅后自己刷新",
+      "status": "stable",
+      "since": "2026-10-21"
+    },
+    {
+      "id": "stores-tasks-ts",
+      "name": "长任务状态（进度 / 进行中）",
+      "entry": "src/stores/tasks.ts",
+      "api": "useTaskStore() → tasks / begin / update / end / clear；命令通过 ctx.progress 上报",
+      "when": "kind='long' 的命令（播放动作、批量导出、优化文档）；由 registry 自动 begin/end，页面不用管",
+      "status": "stable",
+      "since": "2026-10-21"
+    },
+    {
+      "id": "stores-action-ts",
+      "name": "动作库读模型（仓库 → 分组 → 动作）",
+      "entry": "src/stores/action.ts",
+      "api": "useActionStore() → warehouses / activeIndex / groups / degraded / load()；bindActionData() 在 main.ts 装配",
+      "when": "动作页；切仓库时 load() 会改仓库实例路径并重读",
+      "status": "stable",
+      "since": "2026-10-21"
+    },
+    {
+      "id": "cep-data-actions-ts",
+      "name": "动作库仓库",
+      "entry": "src/cep/data/actions.ts",
+      "api": "actionIndexRepo / actionLibraryRepo / selectActionFile / currentWarehouseFile",
+      "when": "动作页读写 sj_dzStoreInfo.json 与仓库文件",
+      "status": "stable",
+      "since": "2026-10-21"
+    },
+    {
+      "id": "cep-data-file-repo-ts",
+      "name": "单文件 JSON 仓库",
+      "entry": "src/cep/data/file-repo.ts",
+      "api": "fileRepo(path, fallback) → read/write/update/onChange",
+      "when": "任何数据文件；串行 + 原子写 + .bak + degraded，禁止自己拼 read-modify-write",
+      "status": "stable",
+      "since": "2026-10-21"
+    },
+    {
+      "id": "cep-data-index-ts",
+      "name": "字体域仓库实例",
+      "entry": "src/cep/data/index.ts",
+      "api": "tagsRepo / starsRepo",
+      "when": "标签与星级的读写入口",
+      "status": "stable",
+      "since": "2026-10-21"
+    },
+    {
+      "id": "cep-data-memory-repo-ts",
+      "name": "内存仓库（浏览器 dev）",
+      "entry": "src/cep/data/memory-repo.ts",
+      "api": "memoryRepo(seed)",
+      "when": "只在无 CEP 时由 pick 选用，页面不直接引用",
+      "status": "stable",
+      "since": "2026-10-21"
+    },
+    {
+      "id": "cep-data-pick-ts",
+      "name": "仓库环境选择",
+      "entry": "src/cep/data/pick.ts",
+      "api": "pick(resolvePath, fallback, seed)",
+      "when": "新增数据文件时套一层，不要在新文件里判断 hasCep",
+      "status": "stable",
+      "since": "2026-10-21"
+    },
+    {
+      "id": "cep-data-settings-ts",
+      "name": "界面偏好（sj_v5_ui.json）",
+      "entry": "src/cep/data/settings.ts",
+      "api": "getPref / setPref / settingsSnapshot / flushPrefs",
+      "when": "我们自己的界面偏好；原面板的 sj_set.json 不在这里",
+      "status": "stable",
+      "since": "2026-10-21"
+    },
+    {
+      "id": "cep-data-types-ts",
+      "name": "仓库契约",
+      "entry": "src/cep/data/types.ts",
+      "api": "Repo<T> / RepoRead<T>",
+      "when": "定义或消费任何仓库时；读必带 degraded，写失败必抛",
+      "status": "stable",
+      "since": "2026-10-21"
+    },
+    {
+      "id": "cep-jsx-action-ts",
+      "name": "动作域 jsx",
+      "entry": "src/cep/jsx/action.ts",
+      "api": "createActionJsx() → getActionList / callAction",
+      "when": "只在 commands/action.ts 用",
+      "status": "stable",
+      "since": "2026-10-21"
+    },
+    {
+      "id": "cep-jsx-env-ts",
+      "name": "jsx 环境注入",
+      "entry": "src/cep/jsx/env.ts",
+      "api": "createEnvJsx() → setEnv(json)",
+      "when": "initJsx 启动时一次",
+      "status": "stable",
+      "since": "2026-10-21"
+    },
+    {
+      "id": "cep-jsx-font-ts",
+      "name": "字体域 jsx",
+      "entry": "src/cep/jsx/font.ts",
+      "api": "createFontJsx() → initSystemList / setFont / 字体面板读写函数",
+      "when": "只在 commands/font*.ts 用；新增函数必须同时改 types.ts 与 mock.ts",
+      "status": "stable",
+      "since": "2026-10-21"
+    },
+    {
+      "id": "cep-jsx-index-ts",
+      "name": "jsx 端口装配",
+      "entry": "src/cep/jsx/index.ts",
+      "api": "jsx（按 hasCep 选真实/mock）；createJsxPort(inCep) 供测试",
+      "when": "命令层通过 ctx.jsx 拿，不直接 import 具体域",
+      "status": "stable",
+      "since": "2026-10-21"
+    },
+    {
+      "id": "cep-jsx-layer-ts",
+      "name": "图层域 jsx",
+      "entry": "src/cep/jsx/layer.ts",
+      "api": "createLayerJsx() → isSelectLayer / getTypeNumber",
+      "when": "selection/ 与命令的 requires 判定",
+      "status": "stable",
+      "since": "2026-10-21"
+    },
+    {
+      "id": "cep-jsx-mock-ts",
+      "name": "jsx 浏览器假实现",
+      "entry": "src/cep/jsx/mock.ts",
+      "api": "createMockJsx()",
+      "when": "无 CEP 时由 createJsxPort 选用；新增 jsx 函数必须同步补这里",
+      "status": "stable",
+      "since": "2026-10-21"
+    },
+    {
+      "id": "cep-jsx-types-ts",
+      "name": "jsx 能力接口",
+      "entry": "src/cep/jsx/types.ts",
+      "api": "JsxPort / FontJsx / LayerJsx / EnvJsx / ActionJsx",
+      "when": "新增 jsx 函数先改这里，类型会强制实现与 mock 同步",
+      "status": "stable",
+      "since": "2026-10-21"
+    },
+    {
+      "id": "cep-data-font-extra-ts",
+      "name": "字体面板附属数据",
+      "entry": "src/cep/data/font-extra.ts",
+      "api": "quickFontRepo / hierarchyRepo / translateCounterRepo；dayKey / normalizeCounter",
+      "when": "快捷字体、层级预设、翻译计数三份文件；禁止别处拼路径",
+      "status": "stable",
+      "since": "2026-10-21"
+    },
+    {
+      "id": "cep-data-legacy-settings-ts",
+      "name": "原面板设置（sj_set.json 局部）",
+      "entry": "src/cep/data/legacy-settings.ts",
+      "api": "readFontSetSettings / patchFontSetSettings / mergeFontSetSettings",
+      "when": "字体面板读写的 ztHierarych / ztPasteFont / ztCreateButton / ztTranslate；只改本页字段，未知键保留",
+      "status": "stable",
+      "since": "2026-10-21"
+    },
+    {
+      "id": "stores-font-set-ts",
+      "name": "字体面板读模型",
+      "entry": "src/stores/font-set.ts",
+      "api": "useFontSetStore() → settings / quickFonts / hierarchy / counter / textInfo / typeUnits / load()；bindFontSetData() 在 main.ts 装配",
+      "when": "字体面板页面读配置与当前文字属性；写走 commands/fontSet.ts",
+      "status": "stable",
+      "since": "2026-10-21"
+    },
+    {
+      "id": "utils-md5-ts",
+      "name": "MD5（翻译签名）",
+      "entry": "src/utils/md5.ts",
+      "api": "md5(input) → 32 位小写 hex",
+      "when": "只在 domain/translate.ts 的百度签名用；不要用于安全场景",
+      "status": "stable",
+      "since": "2026-10-21"
+    }
+  ]
+}

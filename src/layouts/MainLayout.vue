@@ -1,49 +1,58 @@
 <script setup lang="ts">
-import { navBottomRoutes, navRoutes } from '@/router'
+import { computed } from 'vue'
+import { useRoute } from 'vue-router'
+import { useNavStore } from '@/stores/nav'
 
 import Icon from '@/components/Icon.vue'
 import ToastHost from '@/components/ToastHost.vue'
+import TaskHud from '@/components/TaskHud.vue'
+import ConfirmHost from '@/components/ConfirmHost.vue'
+import GlobalLoading from '@/components/GlobalLoading.vue'
+import DebugLog from '@/components/DebugLog.vue'
 import ErrorBoundary from '@/components/ErrorBoundary.vue'
-
-
+import { log } from '@/utils/logger'
 
 // 构建时间只打日志，不放在界面上（原版导航底部只有设置齿轮）
-if (import.meta.env.DEV) console.info(`[build] ${__BUILD_TIME__}`)
+if (import.meta.env.DEV) log.info('build', __BUILD_TIME__)
+
+const route = useRoute()
+const nav = useNavStore()
+const standalone = computed(() => route.meta.standalone === true)
 </script>
 
 <template>
-  <div class="layout">
-    <nav class="nav">
+  <div class="layout" :class="{ 'is-standalone': standalone }">
+    <nav v-if="!standalone" class="nav">
       <router-link
-        v-for="item in navRoutes"
+        v-for="item in nav.topItems"
         :key="item.path"
         :to="item.path"
         class="nav-item"
-        :data-label="item.meta?.title"
+        :data-label="item.title"
       >
         <!-- 原版导航图标统一 svg-24 -->
-        <Icon v-if="item.meta?.icon" :name="item.meta.icon" size="2xl" />
-        <span v-else class="glyph">{{ item.meta?.glyph }}</span>
+        <Icon v-if="item.icon" :name="item.icon" size="2xl" />
+        <span v-else class="glyph">{{ item.glyph }}</span>
       </router-link>
 
       <div class="nav-spacer" />
 
       <!-- 原版底部是 .sub-nav-item：26×26、图标 16px -->
       <router-link
-        v-for="item in navBottomRoutes"
+        v-for="item in nav.bottomItems"
         :key="item.path"
         :to="item.path"
         class="nav-item is-sub"
       >
-        <Icon v-if="item.meta?.icon" :name="item.meta.icon" size="md" />
-        <span v-else class="glyph">{{ item.meta?.glyph }}</span>
+        <Icon v-if="item.icon" :name="item.icon" size="md" />
+        <span v-else class="glyph">{{ item.glyph }}</span>
       </router-link>
-
-
     </nav>
 
     <main class="content">
-      <ErrorBoundary>
+      <!-- key 用路由：某页崩过之后切到别的页，错误边界必须重置，
+           否则左侧导航能点但内容区永远停在上一个页面的报错上 -->
+      <ErrorBoundary :key="$route.fullPath">
         <!-- 页面切换不做淡入淡出：整页渐变会让人以为在闪 -->
         <router-view v-slot="{ Component }">
           <component :is="Component" />
@@ -52,6 +61,10 @@ if (import.meta.env.DEV) console.info(`[build] ${__BUILD_TIME__}`)
     </main>
 
     <ToastHost />
+    <TaskHud />
+    <ConfirmHost />
+    <GlobalLoading />
+    <DebugLog />
   </div>
 </template>
 
@@ -60,6 +73,10 @@ if (import.meta.env.DEV) console.info(`[build] ${__BUILD_TIME__}`)
   display: flex;
   height: 100%;
   background: var(--bg);
+}
+
+.layout.is-standalone .content {
+  width: 100%;
 }
 
 /* 原版：#nav{width:40px;height:100vh;background:#535353}，导航项 40×40 无圆角 */

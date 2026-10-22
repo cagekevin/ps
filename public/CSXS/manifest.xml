@@ -4,6 +4,7 @@
   xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
   <ExtensionList>
     <Extension Id="com.local.psz.panel.v5" Version="0.1.0" />
+    <Extension Id="com.local.psz.panel.v5.freePanel" Version="0.1.0" />
   </ExtensionList>
   <ExecutionEnvironment>
     <HostList>
@@ -43,6 +44,41 @@
             <MinSize>
               <Height>420</Height>
               <Width>300</Width>
+            </MinSize>
+            <MaxSize>
+              <Height>2400</Height>
+              <Width>1200</Width>
+            </MaxSize>
+          </Geometry>
+          <Icons />
+        </UI>
+      </DispatchInfo>
+    </Extension>
+    <Extension Id="com.local.psz.panel.v5.freePanel">
+      <DispatchInfo>
+        <Resources>
+          <MainPath>./freePanel.html</MainPath>
+          <CEFCommandLine>
+            <Parameter>--enable-nodejs</Parameter>
+            <Parameter>--mixed-context</Parameter>
+            <Parameter>--allow-file-access</Parameter>
+            <Parameter>--allow-file-access-from-files</Parameter>
+          </CEFCommandLine>
+        </Resources>
+        <Lifecycle>
+          <AutoVisible>true</AutoVisible>
+        </Lifecycle>
+        <UI>
+          <Type>Panel</Type>
+          <Menu>自由面板</Menu>
+          <Geometry>
+            <Size>
+              <Height>700</Height>
+              <Width>320</Width>
+            </Size>
+            <MinSize>
+              <Height>420</Height>
+              <Width>240</Width>
             </MinSize>
             <MaxSize>
               <Height>2400</Height>

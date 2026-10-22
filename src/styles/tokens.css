@@ -14,6 +14,8 @@
   --c-surface: #363636;
   /* 比表面更深的凹陷层：输入框（.base-input）、导航激活项（.nav-item-act） */
   --c-sunken: #222;
+  /* 字体属性面板 .verline 原版 #333 */
+  --c-verline: #333;
   --c-surface-hover: #3d3d3d;
   --c-surface-active: #424242;
   --c-surface-raised: #4b4b4b;
@@ -25,6 +27,10 @@
   --c-mask: rgba(0, 0, 0, 0.45);
   /* 图标按钮 hover 底（原版 .preview-setting__actions>.gdaicon:hover rgba(0,0,0,.25)） */
   --c-mask-soft: rgba(0, 0, 0, 0.25);
+  /* 原版 input-box 遮罩更淡：rgba(0,0,0,.1) */
+  --c-mask-faint: rgba(0, 0, 0, 0.1);
+  /* 原版 input-box-main 边框 #ddd */
+  --c-dialog-border: #ddd;
   /* 图标按钮 hover 边（原版 hsla(0,0%,100%,.2)） */
   --c-border-float-strong: hsla(0, 0%, 100%, 0.2);
   /* 底部工具条（原版 .preview-setting__actions background:#545454） */
@@ -33,12 +39,28 @@
   --c-accent-solid: #3565ff;
   /* 新建标签按钮（原版 .tag-input__create background:#3968ff） */
   --c-create: #3968ff;
+  /* 字体面板分隔线（原版 hr.line background-color:rgba(0,0,0,.15)） */
+  --c-divider: rgba(0, 0, 0, 0.15);
+  /* 颜色预览默认块（原版 .color-preview background:#6e78ff） */
+  --c-color-swatch: #6e78ff;
+  /* 旧版快捷按钮底（原版 .old-version-btn background:rgba(0,0,0,.2)） */
+  --c-btn-muted: rgba(0, 0, 0, 0.2);
+  /* 字体面板 baseIcon：原版 .base-icon:hover{background:rgba(0,0,0,.2);border-color:#444}，
+     选中 .select{background:#222;border-color:#444}。同一套"深色盒子"，没有蓝色 */
+  --c-icon-hover: rgba(0, 0, 0, 0.2);
+  --c-icon-selected: #222;
+  --c-icon-hover-border: #444;
+  /* 字体面板控件（原版 base-input / base-dropdown / btn-small / hierarchy-layout-input） */
+  --c-font-input: #222;
+  --c-font-btn: #535353;
+  --c-font-btn-hover: #444;
+  --c-font-editor-input: #111;
 
   /* ---------- 自设计层（不再照抄原版）----------
      hover 统一用半透明白层，不逐组件定义颜色 */
   --c-hover-1: hsla(0, 0%, 100%, 0.06);
   --c-hover-2: hsla(0, 0%, 100%, 0.1);
-  /* 侧边栏：从原版截图取样得到 #535353（比内容区 #363636 亮） */
+  /* 侧边栏：原版 #nav{background:#535353}（比内容区 #363636 亮） */
   --c-nav: #535353;
   /* 页头：原版 .font-manage__layouts__tabs__nav{background:#333} */
   --c-header: #333333;
@@ -104,11 +126,16 @@
   --sp-5: 12px;
   --sp-6: 16px;
   --sp-7: 24px;
-  /* 原版精确值：不在语义阶梯内，只在需要像素级还原时用（依据见 docs/视觉规范.md） */
+  /* 原版精确值：不在语义阶梯内，只在需要像素级还原时用（依据见 docs/规范/视觉规范.md） */
+  --sp-exact-1: 1px;
   --sp-exact-3: 3px; /* 原版 .hcf__footer padding:3px */
   --sp-exact-5: 5px; /* 原版 .preview-setting__card>div padding:5px 30px */
   --sp-exact-7: 7px; /* 原版 .tag__content>div padding:4px 7px */
-  --sp-exact-10: 10px; /* 原版 .tabs__nav padding:0 10px */
+  --sp-exact-10: 10px;
+  --sp-exact-12: 12px; /* 原版 .tabs__nav padding:0 10px */
+  --sp-exact-15: 15px; /* 原版字体面板各子面板 padding:15px 10px */
+  /* 原版 .btn-small-6：6 列 + 5×6px gap 正好 100%；字体面板两处共用 */
+  --fontset-six-col: calc(16.66667% - 5px);
 
   /* ---------- 字号阶梯 ---------- */
   --fs-xs: 10px;
@@ -133,8 +160,9 @@
   --preview-xl-lh: 101px;
 
   /* ---------- 图标阶梯 ----------
-     取自原版模板 svg-N 的真实使用频率，见 docs/视觉规范.md
+     取自原版模板 svg-N 的真实使用频率，见 docs/规范/视觉规范.md
      注意：图标尺寸不跟字号绑定，各自按场景取。 */
+  --icon-3xs: 4px; /* 原版 svg-4：图标右下角标 */
   --icon-2xs: 9px;
   --icon-xs: 10px;
   --icon-sm: 14px;
@@ -159,10 +187,9 @@
   --h-control: 28px;
   --h-control-sm: 24px;
   --h-row: 26px;
-  /* 预览文案输入框（原版 .preview-text>input height:30px） */
+  /* 预览文案输入框（原版 .preview-text>input height:30px）
+     搜索框也用它：原版 Search 组件内部是 G-UI Input（.base-input 30px / 圆角 5） */
   --h-field: 30px;
-  /* 搜索框（原版 .search input 高 28） */
-  --h-search: 28px;
   /* 底部工具条（原版 .preview-setting__actions height:24px） */
   --h-footer: 24px;
   /* 原版 .sub-nav-item-inner{width:26px;height:26px}，hover 时在这里加边框 */

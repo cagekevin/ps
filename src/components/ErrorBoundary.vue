@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { onErrorCaptured, ref } from 'vue'
-import { describeCepError } from '@/cep/eval-script'
+import { describeCepError } from '@/utils/error-text'
 import { log } from '@/utils/logger'
 
 /**
@@ -12,7 +12,7 @@ const stack = ref('')
 
 onErrorCaptured((error, _instance, info) => {
   message.value = describeCepError(error)
-  stack.value = `${info}\n${error instanceof Error ? error.stack ?? '' : ''}`
+  stack.value = `${info}\n${error instanceof Error ? (error.stack ?? '') : ''}`
   log.error('boundary', message.value, stack.value)
   // 返回 false 阻止继续向上冒泡，避免同时触发全局 toast
   return false

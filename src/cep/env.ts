@@ -30,4 +30,14 @@ export const DATA_FILES = {
   ztglStar: 'sj_ztglStar.ini',
   ztglTags: 'sj_ztglTags.ini',
   ztQuickFont: 'sj_ztQuickFont.json',
+  ztHierarych: 'sj_ztHierarych.json',
+  ztglHistory: 'sj_ztglHistory.json',
+  ztTranslate: 'sj_ztTranslate.json',
+  /** 原面板的设置主文件；我们只读写字体面板相关字段，其余键原样保留 */
+  ztSet: 'sj_set.json',
+  classification: 'classification.json',
+  /** 动作仓库索引：{ index, list: [{ name, fileName }] } */
+  actionLibrary: 'sj_dzStoreInfo.json',
+  /** 自由面板：{ uid, btnId, obj:{version,type,list:Block[]} } */
+  appFreePanel: 'sj_appFreePanel.json',
 } as const
