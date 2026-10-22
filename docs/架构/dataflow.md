@@ -179,7 +179,7 @@ mousedown + Ctrl/Meta + 300ms
 | 5 | `legacy.call` 只走 `jsxCall` | 不写 `jsxHistory/jsxHistoryNoCheck`，历史记录与原版不同 |
 | 6 | `freePanel.setDisplay` 对所有 block 写 `showNumber/showIcon/showText` | 不能按区域单独设置；`showNumber` 同时是列数（2/3/4） |
 | 7 | `freePanel.clear` 用 `createEmptyFreePanel()` 重置 `uid=1`；`addBlock` 用 `uid += 1` | id 不保证全局唯一；不要假设旧 id 不会复用 |
-| 8 | `free-panel` store 的 `degraded` 只在 `load()` 更新，`onChange` 只刷 `blocks` | 写后读失败时页面可能仍显示旧降级状态 |
+| 8 | ~~`free-panel` store 的 `degraded` 只在 `load()` 更新~~ | **已销（D-40）**：该字段已删除。写路径在 `degraded` 时由 `file-repo.update` 直接抛 `IO` 拒绝，页面本就没有消费方，留着只会误导。 |
 | 9 | `settingsSnapshot()` 是命令执行时的快照 | 命令运行中再改偏好，不影响当前 `ctx.settings` |
 | 10 | `freePanel.add` 的 option 规则：`undefined → {}`，`null` 原样保留 | 原版实际存在 `option:null`，不要统一成 `{}` |
 | 11 | `actionIndexRepo.onChange` 里写当前文件指针 | 这是带副作用的读模型监听；新增监听不要照抄 |
