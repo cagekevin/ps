@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync } from 'node:fs'
+﻿import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { mount } from '@vue/test-utils'
 import { defineComponent } from 'vue'
@@ -71,14 +71,14 @@ describe('PageBottomBar 皮肤（机制）', () => {
     expect(css).not.toContain('[data-v-')
   })
 
-  it('按钮规格：26×26、1px 透明边框、透明底；hover 用 #222 底 + #444 边（走 token）', () => {
+  it('按钮规格：26×26、1px 透明边框、透明底；hover 用 rgba(0,0,0,.2) 底 + #444 边（原版 .base-icon:hover）', () => {
     const css = stripComments(globalStyleBlock())
 
     expect(css).toMatch(/width:\s*26px/)
     expect(css).toMatch(/height:\s*26px/)
     expect(css).toMatch(/border:\s*1px solid transparent/)
     expect(css).toMatch(/background:\s*transparent/)
-    expect(css).toMatch(/background:\s*var\(--c-sunken\)/)
+    expect(css).toMatch(/background:\s*var\(--c-icon-hover\)/)
     expect(css).toMatch(/border-color:\s*var\(--c-icon-hover-border\)/)
   })
 })

@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref } from 'vue'
 
 /**
@@ -48,10 +48,10 @@ defineExpose({ root })
   cursor: pointer;
 }
 
-/* 原版 .hover:hover,.hoverClick{background-color:#222;border-color:#444} */
+/* 原版 .base-icon[data-v-63c7852d]:hover{background-color:rgba(0,0,0,.2);border-color:#444} */
 .g-bottom-bar__icon:hover:not(:disabled) {
   border-color: var(--c-icon-hover-border);
-  background: var(--c-sunken);
+  background: var(--c-icon-hover);
 }
 
 .g-bottom-bar__icon:disabled {
