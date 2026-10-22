@@ -1,10 +1,23 @@
 # 数据流总览
 
-> **这不是开发日志。**  
-> 本文只写当前仓库代码的**实现事实**。  
-> **⚠️ 表示当前代码自身存在的不一致、重复实现或未接通，用于改代码前核对。**
+> 只写**跨页不变量**：分层、唯一入口、存储归属、跨页机制、写入边界。
+> 单页细节 → `docs/页面/0N-*.md`；待办 → `docs/状态/台账.md`；机制选型 → `docs/架构/决策记录.md`。
+> 复核：2026-10-22（命令见 §8）。**本文不记录“当前通过 / 正常”**——那是命令输出，抄进来就会过期。
 
-## 0. 分层原则
+## 0. 怎么读
+
+| 你要做什么 | 看哪节 |
+|---|---|
+| 改页面前确认调用链 | §1、§2、§6 |
+| 新增命令 / 数据文件 | §2、§3 |
+| 动拖拽 / 浮层 / Ctrl 语义 | §4 |
+| 判断写入失败 / 并发 | §5 |
+| 查自由面板 | §7 |
+| 复核本文是否还准 | §8 |
+
+不写：页面布局与视觉值（`docs/页面/0N`）、待办（台账）、单条 jsx 返回结构（`docs/架构/jsx契约.md`）。
+
+## 1. 分层与数据流硬约束
 
 ```
 页面 / 组件
@@ -20,57 +33,40 @@ data repos（唯一存储入口，队列串行）
 stores（只读投影，由 repo.onChange 刷新）
 ```
 
-硬约束：
+1. 页面不 import `cep/jsx`、`cep/data`、`cep/events`；只允许 `import type`。`pages/_probe` 是唯一例外（开发探针）。
+2. 业务写操作只在 `commands/**`；store 只读，由 `repo.onChange` 刷新，页面不直接改业务字段。
+3. 一次用户操作只发一条命令；命令内部可以 `execute` 子命令，但组合关系必须写在该命令里（例：`freePanel.execute`）。
+4. 同一文件的所有 `update` 由 `fileRepo` 队列串行；队列**只在本进程内**有效（跨进程见 §5）。
+5. 旧自由面板 key 必须先过 `domain/free-panel-legacy.ts`；未知 key 返回 `null`，由命令层报错。
 
-1. 页面不 import `cep/data`、`cep/jsx`、`cep/transport`；只允许 `import type`。
-2. 一次用户操作只发一条命令；命令内部可以 `execute` 子命令，但组合关系必须明确。
-3. 所有业务写操作走 `commands`；store 只读。
-4. 同一文件的所有 `update` 由 `fileRepo` 队列串行。
-5. 自由面板旧 key 必须经过 `domain/free-panel-legacy.ts` 适配。
+唯一入口的完整清单在 `docs/架构/目标架构.md` §4.7，本文不重复。
 
-## 1. 启动装配
+## 2. 启动与命令链
 
-文件：`src/main.ts`
+### 2.1 启动装配（`src/main.ts`）
 
 ```
 createApp
   → createPinia
-  → bindFontData / bindActionData / bindFreePanelData / bindFontSetData
+  → bindFontData / bindActionData / bindFreePanelData / bindFontSetData / bindRenameData
   → setProgressPort
+  → onSettingsWriteError
   → installErrorHandlers
   → app.use(router).mount
-  → startSelectionWatch（#/freePanel 除外）
+  → 非独立面板：startSelectionWatch() + startCloudAutoSync()
 ```
 
-独立自由面板判断：
+独立面板判断只有一条：
 
 ```ts
 window.location.hash.startsWith('#/freePanel')
 ```
 
-⚠️ 判断只依赖 hash；如果入口不以 hash 进入，`startSelectionWatch` 不会跳过。
+它同时决定三件事：跳过选区监听、跳过云自动同步、`MainLayout` 隐藏导航（`route.meta.standalone`）。
 
-## 2. 存储地图
+⚠️ 只认 hash。换入口方式（query、独立 html 直接 mount）时这条判断会失效。
 
-| 数据 | 文件 | 仓库 | store |
-|---|---|---|---|
-| 字体偏好 | `sj_set.json` | `cep/data/legacy-settings.ts` | `font-set` |
-| 快捷字体/层级/翻译计数 | `sj_ztQuickFont.json`、`sj_ztHierarych.json`、`sj_ztTranslate.json` | `cep/data/font-extra.ts` | `font-set` |
-| 面板 UI 偏好 | `sj_v5_ui.json` | `cep/data/settings.ts` | `usePersistedRef` |
-| 字体列表 | 字体缓存 / PS | `stores/font` + `cep/jsx/font` | `font` |
-| 动作仓库索引 | `sj_dzStoreInfo.json` | `cep/data/actions.ts` | `action` |
-| 动作仓库文件 | `sj_dz*.json` | `cep/data/actions.ts` | `action` |
-| 自由面板 | `sj_appFreePanel.json` | `cep/data/free-panel.ts` | `free-panel` |
-| 分类 | `classification.json` | `classification-repo.ts` | `classification-view` |
-| 标签 | `sj_ztglTags.ini` | `cep/data/index.ts` 的 `tagsRepo` | `font` |
-| 星级 | `sj_ztglStar.ini` | `cep/data/index.ts` 的 `starsRepo` | `font` |
-
-浏览器 dev 下 `settings.ts` 用 `localStorage`；CEP 下读写 `sj_v5_ui.json`。  
-分类数据由独立读取函数处理，不走 `pick`。
-
-## 3. 命令执行通用链
-
-文件：`commands/registry.ts`
+### 2.2 命令执行链（`commands/registry.ts`）
 
 ```
 useCommand.run(payload, successText)
@@ -100,113 +96,122 @@ useCommand.run(payload, successText)
 { ok: true } | { ok: false, reason, code? } | { ok: 'cancelled' }
 ```
 
-当前注册命令 55 条，唯一注册点 `commands/index.ts`。
+命令条数**不写死在正文**：`src/commands/*.ts` 的 `id:` 去重后由 §8 第 4 条现算。唯一注册点是 `src/commands/index.ts`。
 
-## 4. 动作面板数据流
+## 3. 存储地图
 
-### 4.1 读
+文件都在 `%APPDATA%/SheJiZhuLi/` 下；本仓库不写这个目录以外的位置。
 
-```
-actionIndexRepo.read()
-  → 当前仓库文件 actionLibraryRepo.read()
-  → normalizeGroups
-  → stores/action.groups
-  → pages/action/index.vue
-```
+| 数据 | 文件 | 仓库 / 入口 | store |
+|---|---|---|---|
+| 字体偏好（仅字体面板字段） | `sj_set.json` | `cep/data/legacy-settings.ts` | `font-set` |
+| 快捷字体 / 层级 / 翻译计数 / 字体历史 | `sj_ztQuickFont.json`、`sj_ztHierarych.json`、`sj_ztTranslate.json`、`sj_ztglHistory.json` | `cep/data/font-extra.ts` | `font-set` |
+| 面板 UI 偏好 / 云同步地址与开关 | `sj_v5_ui.json` | `cep/data/settings.ts` | `usePersistedRef` |
+| 字体列表缓存 | `SysFont2.json` | `cep/data/sys-font.ts` + `cep/jsx/font.ts` | `font` |
+| 标签 / 星级 | `sj_ztglTags.ini`、`sj_ztglStar.ini` | `cep/data/index.ts`（`tagsRepo` / `starsRepo`） | `font` |
+| 分类 | `classification.json` | `cep/data/classification-repo.ts` | `classification-view` |
+| 动作仓库索引 | `sj_dzStoreInfo.json` | `cep/data/actions.ts`（`actionIndexRepo`） | `action` |
+| 动作仓库文件 | `sj_dz*.json` | `cep/data/actions.ts`（`actionLibraryRepo`） | `action` |
+| 自由面板 | `sj_appFreePanel.json` | `cep/data/free-panel.ts` | `free-panel` |
+| 重命名预设 | `sj_cmmRename.ini` | `cep/data/rename.ts` | `rename` |
+| 样式仓库索引 | `sj_kuStoreInfo.ini` | `cep/data/style-library-repo.ts` | `style-library` |
+| 四库文件 | 索引里的 `sj_ku*.json` | `cep/data/style-library-repo.ts` + `style-library-io.ts` | `style-library` |
+| 云同步台账 | `sj_v5_cloud_sync.json` | `cep/cloud/ledger.ts` | `cloud`（只读状态） |
 
-PS 动作列表：
+- 浏览器 dev 下 `settings.ts` 走 `localStorage`；CEP 下读写 `sj_v5_ui.json`。
+- 样式库索引里的四个字段是**相对文件名**，扩展名不代表格式（见 `docs/生成/库文件格式契约.md` §2.2）。
+- 字体面板的 `sj_set.json` 由 `legacy-settings.ts` 局部读写，不走 `settings.ts`；其余键原样保留。
 
-```
-jsx.action.getActionList()
-  → readActionList()  // {name,children} / {groupName,list}
-  → psGroups
-  → ActionAddContext
-```
+## 4. 跨页机制
 
-仓库索引变更：
-
-```
-actionIndexRepo.onChange
-  → stores/action.warehouses / activeIndex
-  → selectActionFile(currentWarehouseFile)
-```
-
-⚠️ `onChange` 里写当前文件指针，是带副作用的读模型监听。
-
-⚠️ `action.addWarehouse` 只加索引；仓库文件在首次写入时创建。
-
-### 4.2 写
+### 4.1 拖拽（T-67 后统一为原版 `am()`）
 
 ```
-页面组件
-  → useCommand('action.*')
-  → commands/action.ts
-  → actionLibraryRepo.update / actionIndexRepo.update
-  → repo.onChange
-  → stores/action 投影
+mousedown + Ctrl/Meta + 300ms
+  → useLongPressDrag.start()（未按 Ctrl/Meta 直接返回 false，按普通点击处理）
+  → 克隆占位 + 浮层跟手 + 落点前 / 后布尔
+  → 页面命令（action.reorderItem / rename.reorderItem / style.moveItemTo / freePanel.reorder）
+  → domain/reorder.ts（纯函数，唯一落点实现）
 ```
 
-### 4.3 执行
+使用方：`/style` 四库项与组、`/action` 项与组、`/rename` 项与组、`/freePanel` 项（可跨 block）。
 
-```
-ActionGrid @run
-  → page.runAction
-  → action.call({ group, name, alias })
-  → jsx.action.callAction
-```
+- **Ctrl/Meta 是拖拽的闸门，不是复制修饰键**；短按 Ctrl+click 仍然是“加入自由面板”。
+- 没有 HTML5 DnD。不要再加 `draggable` / `dragstart` / `dragover` / `drop`。
+- 同列表移动的下标补偿只在 `domain/reorder.ts` 里做，页面不写 splice。
 
-### 4.4 Ctrl / 拖拽
+### 4.2 Ctrl 矩阵
 
-```
-动作按钮 Ctrl+click
-  → useFreePanelAdd.open([item])
-  → FreePanelRegionPicker
-  → freePanel.add({ blockId, items })
-  → block.data
+| 场景 | 行为 | 落点 |
+|---|---|---|
+| 动作项 Ctrl+click | 打开区域选择器 | `page.runAction` |
+| 动作组 Ctrl+click | 批量加入自由面板 | `BaseGroup @ctrl` |
+| 字体顶部 5 个图标 Ctrl+click | 加入自由面板 | `FontSetIcon @ctrl` |
+| 动作项 / 组拖拽 | Ctrl/Meta + 长按 300ms | `useLongPressDrag` → `action.reorder*` |
+| 自由面板项拖拽 | 同上，可跨 block | `FreePanel` → `freePanel.reorder` |
+| 重命名项 / 组拖拽 | 同上 | `rename.reorder*` |
+| 样式四库项 / 组拖拽 | 同上 | `style.move*` |
+| 无 Ctrl/Meta 的拖拽 | 不启动 | — |
 
-动作组 Ctrl+click
-  → useFreePanelAdd.open(group.list, '批量添加动作组')
-  → freePanel.add
+### 4.3 浮层
 
-动作按钮 drag
-  ← ActionGrid
-  → page drag state
-  → action.reorderItem
+| 组件 / 场景 | 机制 |
+|---|---|
+| `GDropdown` / `SelectBox` / `ActionWarehouse` | `usePopover`（定位 + outside + Esc + ARIA） |
+| `TagMenu` / `TagContextMenu` | `useFloatingPosition` + `useDismiss` |
+| 动作页右键菜单 / 样式页 `StyleMenu` / 样式项 `.describe` | `useFloatingPosition` + `useDismiss` |
+| 动作页列布局菜单 | `absolute` 挂底栏（有意，不跟鼠标） |
+| `FontSetSelect` / `GTooltip` | 仍是 `relative` / `absolute` |
+| `GPopover` | 只有 `_atoms` 演示，业务未用 |
 
-动作分组 drag
-  ← page 的 <section draggable>
-  → page drag state
-  → action.reorderGroup
-```
+统一几何在 `composables/floating-position.ts`；不要新写一套坐标计算。
 
-⚠️ `ActionGrid` 的 drag 不读 `event.ctrlKey`；Ctrl+拖拽没有复制/追加语义。
+## 5. 写入边界与失败模式
 
-## 5. 自由面板数据流
+这些是**现状**，不是待办清单。要修其中一条，先在 `docs/状态/台账.md` 登记 id，再动代码。
 
-### 5.1 数据结构
+| # | 事实 | 改代码时必须知道 |
+|---|---|---|
+| 1 | `fileRepo` 队列每实例一条，只在进程内串行 | 主面板 + 独立面板同时写同一文件 = last-write-wins；跨进程没有锁 |
+| 2 | CEP 下无 Node 时 `writeTextFile` 抛 `NO_NODE`，不退回内存（ADR-14） | 写失败必须可见；不要加内存兜底 |
+| 3 | `update` 读不到文件直接报 `IO`（`legacySettingsRepo` 的 `requireExisting`） | 不会用 fallback 覆盖用户文件 |
+| 4 | `freePanel.execute` 内部再 `execute` 子命令 | 选区刷新两次；子命令失败被包成 `CepError('JSX')` |
+| 5 | `legacy.call` 只走 `jsxCall` | 不写 `jsxHistory/jsxHistoryNoCheck`，历史记录与原版不同 |
+| 6 | `freePanel.setDisplay` 对所有 block 写 `showNumber/showIcon/showText` | 不能按区域单独设置；`showNumber` 同时是列数（2/3/4） |
+| 7 | `freePanel.clear` 用 `createEmptyFreePanel()` 重置 `uid=1`；`addBlock` 用 `uid += 1` | id 不保证全局唯一；不要假设旧 id 不会复用 |
+| 8 | `free-panel` store 的 `degraded` 只在 `load()` 更新，`onChange` 只刷 `blocks` | 写后读失败时页面可能仍显示旧降级状态 |
+| 9 | `settingsSnapshot()` 是命令执行时的快照 | 命令运行中再改偏好，不影响当前 `ctx.settings` |
+| 10 | `freePanel.add` 的 option 规则：`undefined → {}`，`null` 原样保留 | 原版实际存在 `option:null`，不要统一成 `{}` |
+| 11 | `actionIndexRepo.onChange` 里写当前文件指针 | 这是带副作用的读模型监听；新增监听不要照抄 |
+
+## 6. 页面数据流索引
+
+| 页面 | 一行数据流 | 细节落点 | 状态（台账） |
+|---|---|---|---|
+| `/fontManage` | `stores/font.load*` → `tagsRepo` / `starsRepo` / `sys-font`；`classification-view` → `classification-repo`；列表走 `usePagedList` | `docs/页面/01-字体管理.md` §六 / 七 / 十；`docs/生成/横切能力.md` §二 | 部分实现（T-51 / 52 / 53 / 58） |
+| `/fontSet` | 页面 → `useCommand('fontSet.*')` → `commands/fontSet.ts` → `ctx.jsx.font.*`；当前文字走 `selection/current-text` → `stores/font-set`；字体列表走 `cep/jsx/font.initSystemList` → `stores/font` | `docs/页面/02-字体面板.md` §三；`docs/架构/字体面板事件数据流.md` §一 / 三 | 部分实现（T-54 / 55） |
+| `/action` | 读：`actionIndexRepo` → `actionLibraryRepo` → `normalizeGroups` → `stores/action`；写：页面 → `action.*` → `commands/action.ts` → repo → `onChange`；执行：`ActionGrid @run` → `action.call` → `jsx.action.callAction` | `docs/页面/03-动作.md` §十 | 部分实现（T-56） |
+| `/freePanel` | 见 §7 | 本文 §7（没有单页文档） | 独立面板 |
+| `/style` | 页面 → `style.*` → `commands/style.ts` → `style-library-repo` / `style-library-io` → `store.load()` | `docs/页面/06-样式.md` §三；`docs/生成/库文件格式契约.md` | 部分实现（T-65） |
+| `/rename` | 页面 → `rename.*` → `commands/rename.ts` → `renameRepo` → `bindRenameData` → `stores/rename` | `docs/页面/07-重命名.md` §三 / §8.2 | 部分实现（T-49） |
+| `/commonUse` | 占位；设计态见 `docs/页面/05-常用.md` §四（尚无实现） | `docs/页面/05-常用.md` §四 | 占位（T-47） |
+| `/set` | `cloud.setAutoSync` → `cep/cloud/config` → `sj_v5_ui.json`；`cloud.upload/download` → `cloudEngine`；`stores/cloud` 只读状态 | `docs/页面/08-设置.md` §三 / 五；`docs/架构/云同步契约.md` §11 | 部分实现（T-50） |
+| `/custom` | 占位；设计态见 `docs/页面/04-自定义.md` | `docs/页面/04-自定义.md` | 占位（T-46） |
+| 云同步（非页面） | `cloud.*` → `cep/cloud` → GAS；本地台账 `sj_v5_cloud_sync.json` | `docs/架构/云同步契约.md` §7 / 8；`docs/架构/云同步底层设施.md` §8 / 11 | T-55 / 56 |
+
+## 7. 自由面板（唯一没有单页文档的页面）
+
+### 7.1 数据结构
+
+结构定义以 `src/domain/free-panel.ts` 为准，这里只列字段名：
 
 ```ts
-FreePanelFile {
-  uid: number
-  btnId: number
-  obj: {
-    version: string
-    type: 'row' | 'norow'
-    list: FreePanelBlock[]
-  }
-}
+FreePanelFile { uid, btnId, obj: { version, type: 'row' | 'norow', list: FreePanelBlock[] } }
 
 FreePanelBlock {
-  id: number
-  zIndex: number | string
-  showIcon: boolean
-  showNumber: number
-  showText?: boolean
-  type: 'row' | 'norow'
-  width?: string
-  height?: string
-  children: FreePanelBlock[]
-  data: FreePanelItem[]
+  id, zIndex, showIcon, showNumber, showText?,
+  type: 'row' | 'norow', width?, height?,
+  children: FreePanelBlock[], data: FreePanelItem[]
 }
 
 FreePanelItem {
@@ -215,7 +220,7 @@ FreePanelItem {
 }
 ```
 
-### 5.2 读
+### 7.2 读
 
 ```
 freePanelRepo.read()
@@ -226,51 +231,41 @@ freePanelRepo.read()
   → ActionGrid
 ```
 
-### 5.3 接收快捷方式
+### 7.3 加入 / 排序 / 区域编辑
 
 ```
-动作页 / 字体页
+动作项 / 动作组 / 字体顶部 5 图标
   → useFreePanelAdd.open(items, title)
-  → FreePanelRegionPicker
-  → 用户选 block
+  → FreePanelRegionPicker → FreePanelBlockPicker（区域 id / 横排竖排 / 项数）
   → freePanel.add({ blockId, items })
-  → commands/freePanel.ts
-  → freePanelRepo.update
-  → onChange
-  → store.blocks
+  → freePanelRepo.update → onChange → store.blocks
 ```
 
-发送端构造：
+- 发送端构造：`{ text, key, option, icon?, type? }`。
+- `freePanel.add` 的 option 规则见 §5 第 10 条。
+- 区域选择器是树形列表，不是完整按钮布局。
 
-```ts
-{ text, key, option, icon?, type? }
-```
-
-`freePanel.add` 的 option 规则：
-
-```ts
-option: item.option === undefined ? {} : item.option
-```
-
-区域选择器：
+排序：
 
 ```
-FreePanelRegionPicker
-  → FreePanelBlockPicker（区域 id / 横排/竖排 / 项数）
-  → confirm(blockId)
+Ctrl/Meta + 长按 300ms
+  → useLongPressDrag（落点候选 = 所有 block 里的所有项）
+  → freePanel.reorder({ fromBlockId, fromBtnId, toBlockId, toBtnId, position })
+  → domain/reorder.applyItemDrop
 ```
 
-⚠️ 区域选择器是树形列表，不是完整按钮布局。
+区域编辑：
 
-当前发送端：
+```
+菜单「新增区域」→ freePanel.addBlock（obj.list 或 parent.children）
+区域 hover → ↔/↕ freePanel.setBlock({ type })
+          → ⤢  CepModal → freePanel.setBlock({ width, height })
+          → ×  freePanel.removeBlock
+菜单显示项 → freePanel.setDisplay（所有 block，见 §5 第 6 条）
+菜单清空   → freePanel.clear（uid 重置，见 §5 第 7 条）
+```
 
-- 动作按钮 Ctrl+点击
-- 动作组 Ctrl+点击
-- 字体顶部 5 个 Ctrl 图标
-
-⚠️ 常用页、样式页等仍没有发送端。
-
-### 5.4 执行
+### 7.4 执行
 
 ```
 ActionGrid @run
@@ -283,69 +278,31 @@ ActionGrid @run
   → jsx / legacy
 ```
 
-旧 key 映射：
+旧 key 映射（`domain/free-panel-legacy.ts`）：
 
 ```
-dz_useAction        → action.call
-zt_translate        → fontSet.translate
-zt_createButton     → fontSet.createButton
-zt_copyFontInfo     → fontSet.copyFont
-zt_pasteFontInfo    → fontSet.pasteFont
-zt_switchFontDirection → fontSet.switchDirection
-zt_setFontSize       → fontSet.fontSize
-zt_setFontLeading    → fontSet.leading
-zt_setFontTracking   → fontSet.tracking
-zt_setLeftRightAlign → fontSet.align
-zt_setUpDownAlign    → fontSet.align
+dz_useAction            → action.call
+zt_translate            → fontSet.translate
+zt_createButton         → fontSet.createButton
+zt_copyFontInfo         → fontSet.copyFont
+zt_pasteFontInfo        → fontSet.pasteFont
+zt_switchFontDirection  → fontSet.switchDirection
+zt_setFontSize          → fontSet.fontSize
+zt_setFontLeading       → fontSet.leading
+zt_setFontTracking      → fontSet.tracking
+zt_setLeftRightAlign    → fontSet.align (h)
+zt_setUpDownAlign       → fontSet.align (v)
 zt_changeTextBranchMerge → fontSet.split
-cy_swapWireframeFill → legacy.call
-cy_exportOpenFolder  → legacy.call('cy_openDirectory')
-cy_batchExportLayer  → legacy.call('cy_BatchExportLayer')
+cy_swapWireframeFill    → legacy.call
+cy_exportOpenFolder     → legacy.call('cy_openDirectory')
+cy_batchExportLayer     → legacy.call('cy_BatchExportLayer')
 cy_batchExportSecondLayer → legacy.call('cy_BatchExportSecondLayer')
-cy_exportImage       → legacy.call('cy_ExportImage')
+cy_exportImage          → legacy.call('cy_ExportImage')
 ```
 
 `legacy.call` 只允许 `commands/legacy.ts` 的 `ALLOWED` 白名单；未知 key 报“未开放”。
 
-⚠️ `freePanel.execute` 外层 `execute` 已刷新选区，子命令 `execute` 再刷新一次；错误被包成 `CepError('JSX', result.reason)`。
-
-⚠️ `legacy.call` 只走 `jsxCall`，没有 `jsxHistory/jsxHistoryNoCheck` 的历史写入。
-
-### 5.5 拖拽
-
-```
-ActionGrid dragstart/dragover/drop
-  → FreePanelBlock 加 blockId
-  → FreePanel drag state
-  → freePanel.reorder({
-       fromBlockId, fromBtnId,
-       toBlockId, toBtnId,
-       position
-     })
-```
-
-同 block 移动补偿下标；跨 block 不补偿。
-
-### 5.6 区域编辑
-
-```
-菜单「新增区域」
-  → freePanel.addBlock
-  → obj.list 或 parent.children
-
-区域 hover
-  → ↔/↕ → freePanel.setBlock({ type })
-  → ⤢  → CepModal → freePanel.setBlock({ width,height })
-  → ×  → freePanel.removeBlock
-```
-
-⚠️ `setDisplay` 对所有 block 写 `showNumber/showIcon/showText`，没有按区域独立设置。
-
-⚠️ `freePanel.clear` 用 `createEmptyFreePanel()` 重置 `uid=1`。
-
-⚠️ `addBlock` 用 `next.uid += 1`，不取现有 block 的 `max(id)`。
-
-### 5.7 独立面板入口
+### 7.5 独立面板入口
 
 ```
 manifest 第二扩展
@@ -355,254 +312,43 @@ manifest 第二扩展
   → FreePanel
 ```
 
-独立面板与主面板共享同一份前端产物和 `sj_appFreePanel.json`。
+独立面板与主面板共享同一份前端产物和 `sj_appFreePanel.json`；启动时跳过选区监听与云自动同步（见 §2.1）。跨进程写同一文件的边界见 §5 第 1 条。
 
-## 6. 字体面板数据流
+## 8. 复核命令
 
-```
-fontSet 页面
-  → useCommand('fontSet.*')
-  → commands/fontSet.ts
-  → ctx.jsx.font.*
-  → PS
+跑完只看输出，不把结果抄回本文；只更新顶部“复核”日期。
 
-当前文字
-  → selection/current-text
-  → stores/font-set
-  → FontColor / FontQuick / FontHierarchy
+```bash
+# 1. 门禁：样式守卫 + 台账 + ESLint + Prettier
+npm run check
 
-字体列表
-  → cep/jsx/font.initSystemList
-  → stores/font
-  → FontQuick / FontSetSelect
-```
+# 2. 类型
+npm run typecheck
 
-Ctrl+点击：
+# 3. 单测（jsdom）
+npm test
 
-```
-FontSetIcon @ctrl
-  → page.openFreePanel
-  → useFreePanelAdd
-  → freePanel.add
+# 4. 命令数量与唯一注册点（正文不写死数字）
+grep -rhoE "^\s+id: '[^']+'" src/commands/*.ts | sort -u | wc -l
+grep -n "register(command)" src/commands/index.ts
+
+# 5. 页面边界：期望 0 / 0（_probe 是唯一例外）
+grep -rn "cep/jsx\|cep/data\|cep/events" src/pages --exclude-dir=_probe | wc -l
+grep -rn "__adobe_cep__\|evalScript\|evalFile" src/pages | wc -l
+
+# 6. 存储地图锚点：每个 repo 都应在 §3 有一行
+grep -rn "export const .*Repo" src/cep/data/*.ts
 ```
 
-当前只覆盖字体顶部 5 个图标。
+## 9. 维护规则
 
-## 6.1 字体管理 / 标签 / 分类
-
-```
-字体列表
-  → stores/font.fetchList
-  → cep/ps.getFontList
-  → jsx.font.initSystemList
-  → fontManage 列表（usePagedList）
-
-标签
-  → tagsRepo / getFontTags
-  → stores/font.tags
-  → TagMenu / FontWeight / FilterPanel
-
-分类
-  → cep/data/classification-repo
-  → stores/classification-view
-  → fontManage 筛选
-
-预览
-  → usePersistedRef('font.previewMode' / 'font.previewText')
-  → PreviewSetting / PreviewText
-```
-
-标签创建/重命名/删除走 `commands/font.ts`；`TagCreator/TagMenu` 仍持有页面弹层状态。
-
-## 6.2 选区 / PS 事件
-
-```
-PS 事件（selection / transform / make / setd）
-  → cep/events
-  → selection/index.selectionRef
-  → useCommand 的 requires 检查
-  → 当前文字快照
-      → selection/current-text
-      → jsx.font.getFontSimpleInfo
-      → textInfoRef
-      → stores/font-set
-      → FontColor / FontHierarchy
-```
-
-独立自由面板启动时跳过 `startSelectionWatch()`，因此没有选区快照。
-
-## 6.3 设置 / 偏好
-
-```
-页面
-  → usePersistedRef / setPref
-  → cep/data/settings.ts
-  → sj_v5_ui.json（浏览器 dev 用 localStorage）
-  → settingsSnapshot()
-  → CommandContext.settings
-```
-
-字体面板的 `sj_set.json` 由 `cep/data/legacy-settings.ts` 局部读写，不走 `settings.ts`。
-
-`settingsSnapshot()` 是命令执行时的快照；命令运行中再改偏好，不影响当前 `ctx.settings`。
-
-## 6.4 `.dzx` 导入导出
-
-```
-导出
-  → action.exportWarehouse
-  → cep/dialog.saveFile
-  → data/action-archive.exportActionArchive
-      → actionIndexRepo.read
-      → 读仓库文件 base64
-      → encodeDzx
-      → writeTextFile
-
-导入
-  → action.importWarehouse
-  → cep/dialog.openFile
-  → data/action-archive.importActionArchive
-      → decodeDzx / remapDzxFileNames / validate
-      → 先写新仓库文件
-      → actionIndexRepo.write
-      → selectActionFile
-      → 替换模式最后清理旧文件
-```
-
-写入失败时删除本次已写文件；索引未写成功前，旧索引和旧文件保持可用。
-
-## 6.5 网络 / 翻译
-
-```
-FontSet 翻译
-  → commands/fontSet.translate
-  → cep/http（JSONP）
-  → translateCounterRepo
-  → jsx.font.setTranslateText
-```
-
-## 7. 浮层与弹窗数据流
-
-### 7.1 统一几何
-
-```
-computeFloatingPosition（纯函数）
-  → useFloatingPosition（DOM 测量 + resize/scroll）
-  → usePopover（open / outside / Esc / ARIA / 清理）
-  → GPopover.vue（trigger + panel 壳）
-```
-
-### 7.2 已接入
-
-| 组件 | 方式 |
+| 变化 | 只改 |
 |---|---|
-| `GDropdown` | `usePopover` |
-| `SelectBox` | `usePopover` |
-| `ActionWarehouse` | `usePopover` |
-| `TagMenu` | `useFloatingPosition` + `useDismiss` |
-| `TagContextMenu` | `useFloatingPosition` + `useDismiss` |
-| 动作页 `ctx-menu` | `useFloatingPosition` + `useDismiss` |
+| 新页面 | §6 加一行（一行流 + 落点 + 台账 id），不抄流程 |
+| 新数据文件 / repo | §3 加一行 |
+| 新命令域 / 注册点变化 | §2 的链路；不写数量 |
+| 拖拽 / 浮层 / Ctrl 语义变化 | 先落 ADR，再改 §4 |
+| 边界修掉 | 删 §5 对应行，台账归档 |
+| 复核 | 跑 §8，只改顶部日期 |
 
-### 7.3 未接入 / 重复
-
-⚠️ `FontSetSelect` 仍是 absolute。  
-⚠️ `GTooltip` 仍是 anchored absolute。  
-⚠️ 动作页列布局菜单仍是 absolute，没有当前项勾选。  
-⚠️ `GPopover.vue` 没有被业务组件使用。  
-⚠️ `CepModal` 是固定 `width` + `max-width/max-height` 的居中弹窗。  
-⚠️ `TagMenu/TagContextMenu/动作 ctx-menu` 仍各自保留 `useDismiss`。
-
-## 8. 公共组件与重复实现
-
-### 已抽
-
-| 组件 | 使用方 |
-|---|---|
-| `ActionGrid.vue` | 动作页（1/2/3 列）、自由面板（2/3/4 列） |
-| `BaseGroup.vue` | 动作页 |
-| `SelectBox.vue` | 动作添加弹层 |
-| `CheckBox.vue` | 动作添加弹层 |
-| `CepModal.vue` | 确认 / 区域尺寸 |
-| `useFreePanelAdd.ts` | 动作页、字体页 |
-| `usePopover` / `useFloatingPosition` | 部分浮层 |
-
-### 仍未抽 / 有重复
-
-⚠️ `ActionGrid.vue` 仍带动作页专用类 `action-item__run`。  
-⚠️ 动作页列布局菜单与自由面板工作区菜单是两套；动作 1/2/3，自由 2/3/4。  
-⚠️ `FreePanelBlock` 的 block 布局和悬浮工具按钮没有和动作页分组布局共享。  
-⚠️ 标签菜单、右键菜单、ActionWarehouse 内容层各自实现。  
-⚠️ `CepModal`、`DistributedDialog` 是两套弹窗壳。
-
-## 9. Ctrl / 拖拽矩阵
-
-| 场景 | 行为 | 落点 | 状态 |
-|---|---|---|---|
-| 动作按钮 Ctrl+click | 打开区域选择器 | `runAction(item, event)` | ✅ |
-| 动作组 Ctrl+click | 批量加入自由面板 | `BaseGroup @ctrl` | ✅ |
-| 字体顶部 Ctrl+click | 加入自由面板 | `FontSetIcon @ctrl` | ✅ |
-| 动作按钮 drag | 同组/跨组移动 | `ActionGrid` → `action.reorderItem` | ✅ |
-| 动作组 drag | 组排序 | page `<section draggable>` → `action.reorderGroup` | ✅ |
-| 自由面板按钮 drag | 同/跨 block 移动 | `ActionGrid` → `freePanel.reorder` | ✅ |
-| Ctrl+drag | 无特殊行为 | 无 | ⚠️ |
-| 自由面板 block drag | 无 | 无 | ⚠️ |
-| 动作组 Ctrl+drag | 无 | 无 | ⚠️ |
-
-## 10. 数据流问题清单
-
-| # | 严重度 | 问题 | 影响 |
-|---|---|---|---|
-| 1 | 高 | 独立面板是 `freePanel.html` → 主应用 `#/freePanel`，不是独立前端入口 | UI/通信与主面板共享 |
-| 2 | 高 | 多进程同时写 `sj_appFreePanel.json`，`fileRepo` 队列只在本进程内串行 | last-write-wins |
-| 3 | 高 | `legacy.call` 只调用 `jsxCall`，不写 `jsxHistory` | 历史记录不同 |
-| 4 | 中 | `freePanel.execute` 嵌套子命令，重复 `refresh()` | 多一次选区查询，错误被二次包装 |
-| 5 | 中 | `showText` 是当前代码新增字段 | 写回文件后多一个字段 |
-| 6 | 中 | `setDisplay` 一次改所有 block | 不能按区域配置 |
-| 7 | 中 | 发送端只有动作页、字体页 | 其他页面不能加入自由面板 |
-| 7b | 中 | 区域选择器是树形列表 | 看不到按钮布局 |
-| 8 | 中 | Ctrl+drag 未实现 | 没有复制/追加语义 |
-| 9 | 中 | `ActionGrid` 仍带 `action-item__run` | 自由面板继承动作类名 |
-| 10 | 中 | 列布局菜单两套 | 动作 1/2/3，自由 2/3/4 |
-| 11 | 低 | `freePanel.clear` 重置 uid=1 | 旧 id 会被重新使用 |
-| 12 | 低 | `addBlock` 不取 max(id) | uid 不同步时 id 会重复 |
-| 13 | 低 | `free-panel` store 的 `degraded` 不在 `onChange` 更新 | 写后状态滞后 |
-| 14 | 中 | 浮层只接了一半 | `FontSetSelect`/`GTooltip`/动作列菜单仍 absolute |
-| 15 | 低 | `GPopover` 未使用 | 多一层未消费的壳 |
-
-## 11. 当前代码验证
-
-```
-npm run check        通过
-vue-tsc              通过
-npm test             40 个测试文件通过
-npm run build        通过
-```
-
-证据索引：
-
-| 事实 | 证据 |
-|---|---|
-| 命令总数 55 | `src/commands/*.ts` 的 `id:` 去重统计 |
-| 唯一注册点 | `src/commands/index.ts` |
-| 唯一执行入口 | `src/commands/registry.ts` |
-| 自由面板仓库 | `src/cep/data/free-panel.ts` |
-| 动作归档 | `src/cep/data/action-archive.ts` |
-| 自由面板命令 | `src/commands/freePanel.ts` |
-| 旧 key 适配 | `src/domain/free-panel-legacy.ts` |
-| 快捷方式发送端 | `src/composables/useFreePanelAdd.ts` |
-| 共用按钮网格 | `src/components/ActionGrid.vue` |
-| 浮层几何 | `src/composables/floating-position.ts` |
-| 浮层行为 | `src/composables/usePopover.ts` |
-| 独立面板入口 | `public/freePanel.html` + `public/CSXS/manifest.xml` |
-| 单测 | `tests/**/*.test.ts`，40 个文件 |
-
-## 12. 结论
-
-当前代码的数据流主链：
-
-```
-发送端 → useFreePanelAdd → freePanel.add → repo → store → ActionGrid
-ActionGrid → freePanel.execute → legacy adapter → command → jsx
-```
-
-代码层结构如上，所有 ⚠️ 都是当前实现的已知边界。
+**最容易腐烂的三处**：§6 的状态列（页面推进）、§4.3 的浮层表（组件接入）、§5 的边界（修了没删）。数字一律不写进正文。
