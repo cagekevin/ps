@@ -25,11 +25,21 @@ function parseRows() {
   for (const line of text.split(/\r?\n/)) {
     const trimmed = line.trim()
     if (!/^\|\s*(T|D)-\d+/.test(trimmed)) continue
+    const rowId = (trimmed.match(/^\|\s*((?:T|D)-\d+)/) ?? [])[1]
+    // 坏行不许静默跳过：说明列里的换行会把一行拆成多行，被拆的后续行不以 | 开头、
+    // 首行也不以 | 结尾。以前用 `cells.length < 6 → continue` 直接吞掉，条数少 1 却报"通过"。
+    if (!trimmed.endsWith('|')) {
+      throw new Error(
+        `[ledger] ${rowId} 这一行没有以 | 结尾——很可能说明列里写了换行，把一行拆成了多行。请合并成一行。`,
+      )
+    }
     const cells = trimmed
       .split('|')
       .slice(1, -1)
       .map((c) => c.trim())
-    if (cells.length < 6) continue
+    if (cells.length < 6) {
+      throw new Error(`[ledger] ${rowId} 列数不足（${cells.length} < 6）——表格行格式坏了，请检查。`)
+    }
     rows.push({
       id: cells[0],
       type: cells[1],
