@@ -47,31 +47,32 @@ describe('TagMenu', () => {
 
   it('输入已有标签回车 → 切换（不新建）', async () => {
     const wrapper = mountMenu([])
-    const input = wrapper.find('.tm__input')
+    const input = wrapper.find('.tag-input__field')
     await input.setValue('免费')
-    await input.trigger('keydown.enter')
+    // setValue 后清空按钮出现，Vue 重建了 input 节点 → 必须重新查，否则触发的是已脱离 DOM 的旧节点
+    await wrapper.find('.tag-input__field').trigger('keydown.enter')
 
     expect(wrapper.emitted('toggle')?.[0]).toEqual(['免费'])
     expect(wrapper.emitted('create')).toBeUndefined()
     // 提交后输入被清空：清空按钮跟着消失（比读 DOM value 稳）
     await nextTick()
-    expect(wrapper.find('.tm__clear').exists()).toBe(false)
+    expect(wrapper.find('.tag-input__clear').exists()).toBe(false)
   })
 
   it('输入新名字回车 → 新建', async () => {
     const wrapper = mountMenu([])
-    const input = wrapper.find('.tm__input')
+    const input = wrapper.find('.tag-input__field')
     await input.setValue('新标签')
-    await input.trigger('keydown.enter')
+    await wrapper.find('.tag-input__field').trigger('keydown.enter')
 
     expect(wrapper.emitted('create')?.[0]).toEqual(['新标签'])
   })
 
   it('空输入或纯空格回车不发事件', async () => {
     const wrapper = mountMenu([])
-    const input = wrapper.find('.tm__input')
+    const input = wrapper.find('.tag-input__field')
     await input.setValue('   ')
-    await input.trigger('keydown.enter')
+    await wrapper.find('.tag-input__field').trigger('keydown.enter')
     expect(wrapper.emitted('toggle')).toBeUndefined()
     expect(wrapper.emitted('create')).toBeUndefined()
   })
@@ -84,13 +85,13 @@ describe('TagMenu', () => {
 
   it('输入框限 8 个字，输入后出现清空按钮', async () => {
     const wrapper = mountMenu([])
-    expect(wrapper.find('.tm__input').attributes('maxlength')).toBe('8')
+    expect(wrapper.find('.tag-input__field').attributes('maxlength')).toBe('8')
 
-    expect(wrapper.find('.tm__clear').exists()).toBe(false)
-    await wrapper.find('.tm__input').setValue('abc')
-    expect(wrapper.find('.tm__clear').exists()).toBe(true)
+    expect(wrapper.find('.tag-input__clear').exists()).toBe(false)
+    await wrapper.find('.tag-input__field').setValue('abc')
+    expect(wrapper.find('.tag-input__clear').exists()).toBe(true)
 
-    await wrapper.find('.tm__clear').trigger('click')
-    expect((wrapper.find('.tm__input').element as HTMLInputElement).value).toBe('')
+    await wrapper.find('.tag-input__clear').trigger('click')
+    expect((wrapper.find('.tag-input__field').element as HTMLInputElement).value).toBe('')
   })
 })

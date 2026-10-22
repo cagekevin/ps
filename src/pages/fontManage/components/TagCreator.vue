@@ -1,10 +1,12 @@
 <script setup lang="ts">
 import { ref, watch } from 'vue'
 import CepModal from '@/components/CepModal.vue'
+import TagInput from './TagInput.vue'
 
 /**
  * 新建 / 重命名标签。对应原版 font-manage-font-creator（标题 + 输入 + 底部按钮）。
  * 校验交给父组件（重名、空值），这里只负责收值和回车。
+ * 输入框与原版一致地复用 TagInput（`font-manage__tag__input`，T-53）。
  */
 const props = defineProps<{
   mode: 'create' | 'rename'
@@ -37,35 +39,13 @@ function submit() {
     :width="260"
     @ok="submit"
   >
-    <input
+    <TagInput
       v-model="text"
-      class="tc__input"
+      variant="modal"
       placeholder="请输入标签名"
-      maxlength="20"
-      @keydown.enter="submit"
+      :maxlength="20"
+      :clearable="false"
+      @enter="submit"
     />
   </CepModal>
 </template>
-
-<style scoped>
-.tc__input {
-  width: 100%;
-  height: 30px;
-  padding: 0 var(--sp-4);
-  border: 1px solid var(--c-border-checked);
-  border-radius: var(--r-md);
-  background: var(--c-surface-raised);
-  color: var(--c-text-inverse);
-  font-size: var(--fs-md);
-  box-sizing: border-box;
-}
-
-.tc__input::placeholder {
-  color: var(--c-text-muted);
-}
-
-.tc__input:focus {
-  border-color: var(--accent-soft);
-  outline: none;
-}
-</style>

@@ -2,6 +2,7 @@
 import { computed, ref, watch } from 'vue'
 import type { FontTag } from '@/cep/types'
 import { usePointPopover } from '@/composables/usePointPopover'
+import TagInput from './TagInput.vue'
 
 /**
  * 字体标签弹层（点列表项的标签图标弹出）：
@@ -62,24 +63,8 @@ watch(
     <div v-if="visible" ref="boxRef" class="tm">
       <div class="tm__title">标签</div>
 
-      <div class="tm__field">
-        <input
-          v-model="keyword"
-          class="tm__input"
-          placeholder="标签名称不超过8个字"
-          maxlength="8"
-          @keydown.enter="submit"
-        />
-        <button
-          v-if="keyword"
-          class="tm__clear"
-          type="button"
-          aria-label="清空输入"
-          @click="keyword = ''"
-        >
-          ×
-        </button>
-      </div>
+      <!-- 与原版一致地复用 TagInput（font-manage__tag__input，T-53） -->
+      <TagInput v-model="keyword" @enter="submit" />
 
       <p class="tm__section">已添加的标签({{ added.length }})</p>
       <div v-if="added.length" class="tm__chips">
@@ -129,44 +114,6 @@ watch(
   color: var(--c-text-strong);
   font-size: var(--fs-md);
   line-height: 1.4;
-}
-
-.tm__field {
-  position: relative;
-  margin: var(--sp-4) 0 var(--sp-2);
-}
-
-.tm__input {
-  width: 100%;
-  height: var(--h-control);
-  padding: 0 var(--sp-6) 0 var(--sp-3);
-  border: 1px solid var(--accent);
-  border-radius: var(--r-md);
-  background: var(--c-input);
-  color: var(--c-text-inverse);
-  font-size: var(--fs-sm);
-  box-sizing: border-box;
-}
-
-.tm__input::placeholder {
-  color: var(--c-text-muted);
-}
-
-.tm__input:focus {
-  outline: none;
-}
-
-.tm__clear {
-  position: absolute;
-  right: var(--sp-2);
-  top: 50%;
-  transform: translateY(-50%);
-  padding: 0;
-  border: 0;
-  background: transparent;
-  color: var(--c-text-muted);
-  font-size: var(--fs-lg);
-  line-height: 1;
 }
 
 .tm__section {

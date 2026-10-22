@@ -369,15 +369,26 @@ describe('style.addFont（原版 addFont：ys_getFontInfo 的 data 整份入库�
     expect(styleLib[0].list).toHaveLength(0)
   })
 
-  it('false / err=1 / fonts 为空都不入库（原版 :51246-51262 三个分支）', async () => {
-    jsx.font.getFontInfo.mockResolvedValue(false)
-    await expect(execute('style.addFont', { groupIndex: 0 })).resolves.toMatchObject({ ok: false })
-
+  it('err=1 / fonts 为空都不入库（原版 :51256-51262 两个分支）', async () => {
     jsx.font.getFontInfo.mockResolvedValue({ err: 1, msg: '没有文字层' })
     await expect(execute('style.addFont', { groupIndex: 0 })).resolves.toMatchObject({ ok: false })
 
     jsx.font.getFontInfo.mockResolvedValue({ err: 0, data: { fonts: [] } })
     await expect(execute('style.addFont', { groupIndex: 0 })).resolves.toMatchObject({ ok: false })
+
+    const g = (await read(FONT_LIB)) as Array<{ list: unknown[] }>
+    expect(g[0].list).toHaveLength(1)
+  })
+
+  it('false → 报错且不入库（有意偏离，原版 :51246 静默 return，见 D-23）', async () => {
+    // 原版 `addFont`（app.v4.js:51243-51264）：`ys_getFontInfo` 返回 `false` 直接 `return`，
+    // 不 toast、不写库。我方抛错 —— 有意偏离，理由见 docs/页面/06-样式.md 段 2 的偏离记录。
+    jsx.font.getFontInfo.mockResolvedValue(false)
+
+    await expect(execute('style.addFont', { groupIndex: 0 })).resolves.toMatchObject({
+      ok: false,
+      reason: '读取字体属性失败',
+    })
 
     const g = (await read(FONT_LIB)) as Array<{ list: unknown[] }>
     expect(g[0].list).toHaveLength(1)

@@ -79,14 +79,15 @@
   color: var(--accent-soft);
 }
 
-/* 原版 .gda-badge-count：14×14 / #3565ff / top 4 / right 3 */
+/* 原版 .font-manage__filter-preview__header .gda-badge-count{font-size:10px;background:#3565ff;
+   width:14px;min-width:14px;padding:1px;height:14px;line-height:14px;top:4px;right:3px} */
 .filter-badge {
   position: absolute;
-  top: var(--sp-1);
+  top: var(--sp-2);
   right: var(--sp-exact-3);
   min-width: var(--icon-sm);
   height: var(--icon-sm);
-  padding: 0 var(--sp-1);
+  padding: 0 var(--sp-exact-1);
   border-radius: var(--r-pill);
   background: var(--c-accent-solid);
   color: var(--c-text-inverse);

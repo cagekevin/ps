@@ -276,9 +276,13 @@ export const styleCommands: Command<unknown>[] = [
     requires: 'layer',
     kind: 'instant',
     async run(ctx, { groupIndex }) {
-      // 原版 `addFont`（`app.v4.js:51243-51264`）：`ys_getFontInfo` → `false` 直接返回 /
+      // 原版 `addFont`（`app.v4.js:51243-51264`）：`ys_getFontInfo` → `false` **静默 return（不 toast）** /
       // `err == 1` 报错 / `err == 0` 且 `data.fonts` 为空报错「读取字体属性失败」/ 否则 `addItem(data)`。
       // jsx 用的是字体域已有的 `getFontInfo`（`cep/jsx/font.ts:53` = `ys_getFontInfo`），不新造函数名。
+      //
+      // **有意偏离（D-23）**：原版 `false` 分支直接 return、无任何提示；我方抛错。
+      // 理由：点了「添加字体」却毫无反应（无 toast、按钮不变化）比报错更难排查，
+      // 用户会以为面板卡住。偏离记录见 docs/页面/06-样式.md 段 2。
       const raw = await ctx.jsx.font.getFontInfo()
       if (raw === false) throw new CepError('JSX', '读取字体属性失败')
       const result = check(raw, '读取字体属性失败')

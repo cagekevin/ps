@@ -45,6 +45,8 @@ const renameTagCmd = useCommand('font.renameTag')
 const deleteTagCmd = useCommand('font.deleteTag')
 const toggleTagCmd = useCommand('font.toggleTag')
 const refreshListCmd = useCommand('font.refreshList')
+const importTagsCmd = useCommand('font.importTags')
+const exportTagsCmd = useCommand('font.exportTags')
 
 const showTextPanel = ref(false)
 
@@ -187,8 +189,7 @@ const countText = computed(() => {
   return hasFilter.value ? `${label}(${filtered.value.length})` : `${label}(${items.value.length})`
 })
 
-// 单列。原版有双列，但 CEP 面板宽度远小于 420px，用不上；
-// useElementWidth 在窄视口下也测不准，所以不做双列。
+// 单列。原版有双列，但 CEP 面板宽度远小于 420px，用不上。
 
 const filterOn = computed(() => Object.values(filterState.value).some((ids) => ids.length > 0))
 
@@ -274,6 +275,47 @@ function onMenuSelect(value: string | number) {
   menuOpen.value = false
   if (value === 'refresh') void refreshListCmd.run()
   else if (value === 'preview') store.cyclePreview()
+  else if (value === 'import-tags') openImport()
+  else if (value === 'export-tags') openExport()
+}
+
+/* ---------- 标签导入 / 导出（T-51，原版 `zg()` 菜单 + `vg()` 确认框）---------- */
+
+// 确认框：原版是 `vg()` 的 CepModal，两条文案按模式切换
+const tagIo = ref({ visible: false, mode: 'import' as 'import' | 'export' })
+
+const IMPORT_TIP = '导入标签，会覆盖原来的标签及评分，是否继续？'
+const EXPORT_TIP = '导出标签，不包含字体文件，仅导出标签及评分，是否继续？'
+
+function openImport() {
+  menuOpen.value = false
+  tagIo.value = { visible: true, mode: 'import' }
+}
+
+function openExport() {
+  menuOpen.value = false
+  tagIo.value = { visible: true, mode: 'export' }
+}
+
+/**
+ * 确认框点了「确定」之后才跑命令。
+ *
+ * 取消 = 不跑命令 = 不碰任何文件（P0：取消对话框不写盘）。
+ * 命令内部还会在**校验通过后、落盘前**再问一次 `onConfirm`，
+ * 那道是命令级护栏（测试直接调命令时用它证明"取消不写盘"）。
+ */
+async function confirmTagIo() {
+  const mode = tagIo.value.mode
+  if (mode === 'import') {
+    const ok = await importTagsCmd.run({ onConfirm: async () => true }, '已导入标签')
+    // 导入是覆盖写，标签与评分都要重读
+    if (ok) {
+      await store.loadTags(true)
+      await store.loadStars()
+    }
+    return
+  }
+  await exportTagsCmd.run({ onConfirm: async () => true }, '已导出标签')
 }
 
 /** 每个家族当前选中的字重下标 */
@@ -309,18 +351,21 @@ async function apply(font: FontItem, variantIndex = currentWeight(font.family)) 
     <template #extra>
       <GDropdown v-model:visible="menuOpen" placement="bottom-end">
         <template #trigger>
-          <!-- 原版是竖三点 ⋮（sprite 里没有，用内联 SVG） -->
+          <!-- 原版 .font-manage__layouts__tabs__menu__icon{font-size:16px} 是 gdaicon 的
+               Icon type:"menu"（三横线）；原版 CSS 里 @font-face 出现 0 次（D-08），
+               形状取 sprite 里等价的三横线 icongengduocaidan -->
           <button class="icon-btn" type="button" aria-label="更多操作">
-            <svg width="16" height="16" viewBox="0 0 16 16" fill="currentColor" aria-hidden="true">
-              <circle cx="8" cy="3" r="1.3" />
-              <circle cx="8" cy="8" r="1.3" />
-              <circle cx="8" cy="13" r="1.3" />
-            </svg>
+            <Icon name="icongengduocaidan" size="md" />
           </button>
         </template>
         <GMenu @select="onMenuSelect">
           <GMenuItem value="refresh">刷新字体列表</GMenuItem>
           <GMenuItem value="preview">切换预览：{{ PREVIEW_LABEL[previewMode] }}</GMenuItem>
+          <!-- 原版这两个入口在 `zg()` 的 font-manager__menu（180px 独立浮层）里，
+               触发点是「我的字体」页右上角的另一处图标；我方并进页头已有的 ⋮ 菜单，
+               避免为一个新浮层再开一个控件（有意偏离，见台账 T-51） -->
+          <GMenuItem value="import-tags">导入标签</GMenuItem>
+          <GMenuItem value="export-tags">导出标签</GMenuItem>
         </GMenu>
       </GDropdown>
     </template>
@@ -335,7 +380,7 @@ async function apply(font: FontItem, variantIndex = currentWeight(font.family)) 
         <GDropdown v-model:visible="filterOpen" placement="bottom-end" class="filter-dropdown">
           <template #trigger>
             <!-- 原版用 Badge 包 filter 图标，角标 .gda-badge-count：14×14 / #3565ff / top 4 / right 3
-                 我们沿用 G-UI 的 12×12 角标，位置贴按钮边（有意偏离） -->
+                 尺寸与位置见 index.css 的 .filter-badge -->
             <button
               class="filter-btn"
               :class="{ 'is-on': filterOn }"
@@ -533,6 +578,19 @@ async function apply(font: FontItem, variantIndex = currentWeight(font.family)) 
         <template v-if="tagDelete.count">
           该标签下有 {{ tagDelete.count }} 个字体，删除后关联会一起消失。
         </template>
+      </p>
+    </CepModal>
+
+    <!-- 标签导入 / 导出确认框：原版 `vg()`（`app.v4.js:43613-43650`），
+         两条文案按模式切换；取消 = 不跑命令 = 不写盘 -->
+    <CepModal
+      v-model:visible="tagIo.visible"
+      :title="tagIo.mode === 'import' ? '导入标签' : '导出标签'"
+      :width="280"
+      @ok="confirmTagIo"
+    >
+      <p class="del-tip">
+        {{ tagIo.mode === 'import' ? IMPORT_TIP : EXPORT_TIP }}
       </p>
     </CepModal>
   </PageShell>
