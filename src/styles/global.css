@@ -17,15 +17,33 @@ body,
 body {
   background: var(--bg);
   color: var(--text);
-  font:
-    var(--fs-md) / 1.5 'Microsoft YaHei',
-    'PingFang SC',
-    -apple-system,
-    'Segoe UI',
-    sans-serif;
+  font-size: var(--fs-md);
+  line-height: 1.5;
   overflow: hidden;
   -webkit-user-select: none;
   user-select: none;
+}
+
+/* 原版 app.bf68b505.css 的全局字体规则，选择器列表照抄（字节偏移 270）：
+   body,button,div,h1,h2,h3,h4,h5,h6,html,input,p,pre,select,span,textarea
+   表单控件不继承字体，所以必须逐个列出；其余元素跟着继承。 */
+html,
+body,
+div,
+h1,
+h2,
+h3,
+h4,
+h5,
+h6,
+p,
+pre,
+span,
+select,
+textarea,
+button,
+input {
+  font-family: var(--font-family);
 }
 
 input {

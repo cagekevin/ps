@@ -1,4 +1,4 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { ref } from 'vue'
 
 /**
@@ -54,9 +54,11 @@ defineExpose({ root })
   background: var(--c-icon-hover);
 }
 
+/* 原版 `.base-icon` 没有 :disabled 规则，这条是我们自己加的；值只来自 token，
+   与 `FontSetIcon` 共用同一个 `--op-icon-disabled`（守卫测试断言两处同值） */
 .g-bottom-bar__icon:disabled {
   cursor: not-allowed;
-  opacity: 0.4;
+  opacity: var(--op-icon-disabled);
 }
 
 .g-bottom-bar__icon:disabled:hover {

@@ -1,4 +1,4 @@
-﻿import { readFileSync, readdirSync } from 'node:fs'
+import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { mount } from '@vue/test-utils'
 import { defineComponent } from 'vue'
@@ -25,9 +25,9 @@ const SFC = readFileSync(join(process.cwd(), 'src/components/PageBottomBar.vue')
  * 按行取出所有 `<style …>` 块。
  * 不能用正则直接扫全文：脚本注释里出现了 `<style>` 这几个字，会把注释当成块首。
  */
-function styleBlocks(): Array<{ scoped: boolean; css: string }> {
+function styleBlocksOf(source: string): Array<{ scoped: boolean; css: string }> {
   const blocks: Array<{ scoped: boolean; css: string }> = []
-  const lines = SFC.split(/\r?\n/)
+  const lines = source.split(/\r?\n/)
   let current: { scoped: boolean; css: string } | null = null
   for (const line of lines) {
     const open = line.match(/^<style(\s+scoped)?>\s*$/)
@@ -43,6 +43,10 @@ function styleBlocks(): Array<{ scoped: boolean; css: string }> {
     if (current) current.css += `${line}\n`
   }
   return blocks
+}
+
+function styleBlocks(): Array<{ scoped: boolean; css: string }> {
+  return styleBlocksOf(SFC)
 }
 
 /** 非 scoped 的那个块：皮肤必须在这里才能覆盖插槽里的嵌套按钮 */
@@ -127,7 +131,6 @@ describe('PageBottomBar 皮肤（落地）', () => {
  */
 
 const ROOT = process.cwd()
-
 function relative(file: string): string {
   return file.replace(ROOT, '').replace(/\\/g, '/').replace(/^\//, '')
 }
@@ -178,5 +181,94 @@ describe('底排图标守卫', () => {
       ]),
     )
     expect(scannedButtons).toBeGreaterThanOrEqual(6)
+  })
+})
+
+/**
+ * 守卫：同一个「底部图标按钮」有两份实现 —— 三页底栏的 `PageBottomBar`
+ * （`.g-bottom-bar__icon`）与字体面板图标行的 `FontSetIcon`（`.fontset-icon`）。
+ *
+ * 两份实现必须给出同一套值，否则用户看到"字体面板的按钮和别的页不一样"。
+ * 只断言源码文本，不渲染：jsdom 的 `getComputedStyle` 拿不到样式表里的声明，
+ * 而这里要防的正是"两边各写一份字面值然后慢慢漂开"。
+ */
+describe('底部图标按钮：两份实现必须同值', () => {
+  const TOKENS = readFileSync(join(ROOT, 'src/styles/tokens.css'), 'utf8')
+  const FONT_ICON_SRC = readFileSync(
+    join(ROOT, 'src/pages/fontSet/components/FontSetIcon.vue'),
+    'utf8',
+  )
+  const FONT_PAGE_SRC = readFileSync(join(ROOT, 'src/pages/fontSet/index.vue'), 'utf8')
+
+  /** 取某个文件里所有 <style> 块的 CSS 文本（已去注释） */
+  function cssOf(source: string): string {
+    return stripComments(
+      styleBlocksOf(source)
+        .map((block) => block.css)
+        .join('\n'),
+    )
+  }
+
+  /** 取一条规则的花括号内容；选择器必须写全（含伪类），找不到直接报错，避免空跑 */
+  function blockOf(css: string, selector: string): string {
+    const at = css.indexOf(`${selector} {`)
+    if (at < 0) throw new Error(`没有找到规则 ${selector}`)
+    const open = css.indexOf('{', at)
+    const close = css.indexOf('}', open)
+    return css.slice(open + 1, close)
+  }
+
+  /** 取一条声明值；没有该声明返回 null */
+  function declOf(block: string, prop: string): string | null {
+    const m = block.match(new RegExp(`(?:^|[;\\s])${prop}\\s*:\\s*([^;]+);`))
+    return m ? m[1].trim() : null
+  }
+
+  const barCss = cssOf(SFC)
+  const fontIconCss = cssOf(FONT_ICON_SRC)
+  const fontPageCss = cssOf(FONT_PAGE_SRC)
+
+  it('禁用态 opacity 一致，且都来自同一个 token', () => {
+    const barOpacity = declOf(blockOf(barCss, '.g-bottom-bar__icon:disabled'), 'opacity')
+    const fontOpacity = declOf(blockOf(fontIconCss, '.fontset-icon:disabled'), 'opacity')
+
+    expect(barOpacity).toBe('var(--op-icon-disabled)')
+    expect(fontOpacity).toBe(barOpacity)
+    // 值本身也钉住：token 被改成别的数时这条会红
+    expect(TOKENS).toMatch(/--op-icon-disabled:\s*0\.4;/)
+  })
+
+  it('禁用态 cursor 一致（都是 not-allowed）', () => {
+    const barCursor = declOf(blockOf(barCss, '.g-bottom-bar__icon:disabled'), 'cursor')
+    const fontCursor = declOf(blockOf(fontIconCss, '.fontset-icon:disabled'), 'cursor')
+
+    expect(barCursor).toBe('not-allowed')
+    expect(fontCursor).toBe(barCursor)
+  })
+
+  it('分隔线：两处都是 1×13 的 #333 可见线（原版 .verline），不许用 accent 色或 opacity:0 藏起来', () => {
+    const barDivider = blockOf(barCss, '.g-bottom-bar__divider')
+    const fontDivider = blockOf(fontPageCss, '.fontset__divider')
+
+    for (const block of [barDivider, fontDivider]) {
+      expect(declOf(block, 'width')).toBe('1px')
+      expect(declOf(block, 'height')).toBe('13px')
+      expect(declOf(block, 'background')).toBe('var(--c-verline)')
+      // 原版没有透明度，藏起来的线等于没有线
+      expect(declOf(block, 'opacity')).toBeNull()
+    }
+    expect(declOf(fontDivider, 'background')).toBe(declOf(barDivider, 'background'))
+    expect(fontDivider).not.toContain('--c-accent')
+  })
+
+  it('盒模型一致：都没有 padding 和圆角（原版 .base-icon 只给宽高和边框）', () => {
+    for (const block of [
+      blockOf(barCss, '.g-bottom-bar__icon'),
+      blockOf(fontIconCss, '.fontset-icon'),
+    ]) {
+      expect(declOf(block, 'padding')).toBe('0')
+      expect(declOf(block, 'border-radius')).toBe('0')
+      expect(declOf(block, 'border')).toBe('1px solid transparent')
+    }
   })
 })

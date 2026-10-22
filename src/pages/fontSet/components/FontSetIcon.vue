@@ -1,4 +1,4 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import Icon from '@/components/Icon.vue'
 import type { IconSize } from '@/components/icon/size'
 
@@ -11,8 +11,12 @@ import type { IconSize } from '@/components/icon/size'
  * 状态机制（100% 照原版 `baseIcon`，app.v4.js 组件 + `app.bf68b505.css`）：
  * - 根节点 `.base-icon.f-center`，默认 26×26，1px 透明边框，无 padding / 无圆角
  * - `:hover` → `background:rgba(0,0,0,.2); border-color:#444`
- * - `select` → `background:#222; border-color:#444`
+ * - `select` → `background:#222; border-color:#444`（原版确有选中态：app.v4.js:2329
+ *   `class:[t.select?"select":""]`，props `select` 默认 false 见 :2387；样式
+ *   `.select[data-v-63c7852d]{background-color:#222;border-color:#444}`）
  * - 图标颜色始终 `currentColor`，选中不改成蓝色
+ * - 禁用态是**我们自己加的**（原版没有 `:disabled`），值走 `--op-icon-disabled`，
+ *   与 `PageBottomBar` 同一份 token
  */
 withDefaults(
   defineProps<{
@@ -66,8 +70,11 @@ function onClick(event: MouseEvent) {
   align-items: center;
   justify-content: center;
   /* 原版 .base-icon{height:26px;width:26px;border:1px solid transparent}：
-     无 padding、无圆角、无过渡 */
+     无 padding、无圆角、无过渡。padding/圆角必须显式写 0——
+     不写会落回浏览器 button 默认内边距，和 PageBottomBar 的 26px 盒子对不上 */
+  padding: 0;
   border: 1px solid transparent;
+  border-radius: 0;
   background: transparent;
   color: var(--text);
   cursor: pointer;
@@ -88,9 +95,10 @@ function onClick(event: MouseEvent) {
   background: var(--c-icon-selected);
 }
 
+/* 禁用态是我们自己加的（原版无 :disabled 规则）：与 PageBottomBar 同 token、同光标 */
 .fontset-icon:disabled {
-  opacity: 0.45;
-  cursor: default;
+  opacity: var(--op-icon-disabled);
+  cursor: not-allowed;
 }
 
 /* 原版角标：`baseSvg.svg-4.mt12`，作为第二个 flex 子项，margin-top 12px 压到右下 */

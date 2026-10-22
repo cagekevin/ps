@@ -1,4 +1,4 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import CepModal from '@/components/CepModal.vue'
 import { useCommand } from '@/components/command/useCommand'
@@ -535,11 +535,14 @@ function onRenamePreset(index: number, name: string) {
   margin-top: var(--sp-2);
 }
 
+/* 原版 `.verline{width:1px;height:13px;background-color:#333;border:none}`（app.bf68b505.css
+   @6396），字体面板底排两处都是可见的 `.verline`（app.v4.js:38377 / :38419）。
+   与底栏 `.g-bottom-bar__divider`、本页 `.fontset-color__divider` 同一个值。 */
 .fontset__divider {
+  flex: 0 0 auto;
   width: 1px;
   height: 13px;
-  background: var(--c-accent);
-  opacity: 0;
+  background: var(--c-verline);
 }
 
 /* 展开面板的背景要全宽，左右 10px 由面板自己的 padding 提供（原版 .translate-wrap 等） */
