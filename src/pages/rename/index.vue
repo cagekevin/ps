@@ -324,7 +324,8 @@ onMounted(() => {
 </script>
 
 <template>
-  <PageShell title="重命名" class="rename-page">
+  <!-- 原版这一页没有 header（.Rename 直接从 37px 顶条开始，app.v4.js:56478-56482），所以不传 title -->
+  <PageShell class="rename-page">
     <template #footer>
       <button
         class="rename-bottom__icon"
@@ -366,7 +367,14 @@ onMounted(() => {
         class="rename-input"
         @click="openExpressionMenu"
       >
-        <GInput v-model="changeval" placeholder="请输入图层名或表达式" @enter="runRename">
+        <!-- 原版 baseInput 的 tips 就是 placeholder（app.v4.js:2675 `placeholder: t.tips`），
+             这一处 tips="回车确认修改"（:56548），title="重命名图层"（:56544） -->
+        <GInput
+          v-model="changeval"
+          placeholder="回车确认修改"
+          title="重命名图层"
+          @enter="runRename"
+        >
           <template #suffix>
             <button class="rename-apply" type="button" title="重命名图层" @click.stop="runRename">
               <Icon name="#iconyingyong" size="sm" />
@@ -530,17 +538,22 @@ onMounted(() => {
 </template>
 
 <style scoped>
-/* 底条沿用 PageShell footer：26px + 原版底色 #535353（.reanme-bottom，:56761） */
+/* 底条沿用 PageShell footer：26px + 原版底色 #535353（.reanme-bottom，:56761）；
+   底条在原版是 `.reanme-bottom app-padding`（:56761），所以左右也是 10px */
 .rename-page {
   --shell-footer-height: var(--h-row);
   --shell-footer-bg: var(--c-footbar);
+  --shell-footer-padding: 0 var(--sp-exact-10);
 }
 
+/* 原版每段都用全局 `.app-padding,.more-content{padding:0 10px}`（输入区 :56533、分组 :56647、
+   色块区 :56708）。这里只在本页给 10px，不动全局 --page-pad-x（那是给别的页的）。 */
 .rename-body {
   gap: var(--sp-3);
-  padding: 0 var(--page-pad-x) var(--sp-4);
+  padding: 0 var(--sp-exact-10) var(--sp-4);
 }
 
+/* 原版 .app-padding.mt10（:56533）：上下由 mt10 给，左右已由 .rename-body 给 */
 .rename-input {
   padding-top: var(--sp-exact-10);
 }
@@ -706,13 +719,13 @@ onMounted(() => {
   color: var(--text-strong);
 }
 
-/* 原版 .verline{height:13px;border-left:2px solid #006fff;opacity:0}（:56774，原版就是不可见的） */
+/* 原版全局 .verline{width:1px;height:13px;background-color:#333;border:none} —— 可见的竖线。
+   早前按生成物写成"border-left 2px #006fff + opacity:0"是错的：那条属于别的 data-v 块，
+   本页没有 `.verline[data-v-2d612e86]` 规则。 */
 .rename-bottom__divider {
   width: 1px;
   height: var(--h-verline);
   border: none;
-  border-left: 2px solid var(--c-accent);
   background: var(--c-verline);
-  opacity: 0;
 }
 </style>

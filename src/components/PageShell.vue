@@ -2,10 +2,13 @@
 /**
  * 页面骨架。所有列表页都用它，别自己再写一遍 header + toolbar + 滚动区。
  * 结构：标题栏 / 工具条（搜索、筛选、标签）/ 内容区（可滚动）
+ *
+ * `title` 可选：不传就不渲染标题栏。原版有些页（如重命名，`app.v4.js:56478-56482`）
+ * 根本没有 header，直接从自己的顶条开始，传空标题只会多出一条 40px 空行。
  */
 withDefaults(
   defineProps<{
-    title: string
+    title?: string
     /** 右上角计数，如 "259" */
     count?: string | number
   }>(),
@@ -15,7 +18,7 @@ withDefaults(
 
 <template>
   <div class="shell">
-    <header class="shell__header">
+    <header v-if="title" class="shell__header">
       <h1>{{ title }}</h1>
       <span v-if="count !== undefined && count !== ''" class="shell__count">{{ count }}</span>
       <slot name="extra" />
