@@ -254,6 +254,98 @@ describe('cloud engine', () => {
     expect(ledgerWrite).not.toHaveBeenCalled()
   })
 
+  it('T-76①：没有 per-unit 基线（老台账）时首推视为新增，并写入基线', async () => {
+    pull.mockResolvedValue(
+      cloudView(
+        { 'font.stars': toUnit(payloadA), 'font.tags': { ...toUnit(payloadB), hash: 'cloud-b' } },
+        5,
+      ),
+    )
+    // 老台账：有 rev / localHash，但没有 units —— 修复前这里一律判冲突，首推必死
+    ledgerRead.mockReturnValue({ rev: 3, syncedAt: 100, localHash: 'legacy' })
+
+    const result = await engine.pushUnits(['font.tags'])
+
+    expect(result).toMatchObject({ ok: true, pushed: ['font.tags'], rev: 6 })
+    const written = ledgerWrite.mock.calls[0][0]
+    expect(written.units['font.tags']).toBe(toUnit(payloadB).hash)
+  })
+
+  it('T-76②：内容一致 skipped 时也把 per-unit 基线刷新到当前云端', async () => {
+    pull.mockResolvedValue(
+      cloudView({ 'font.stars': toUnit(payloadA), 'font.tags': toUnit(payloadB) }, 5),
+    )
+    // 基线停在上次推送时的旧值：不刷新的话，本地之后真改了会拿旧 base 判出「两边都改」
+    ledgerRead.mockReturnValue({
+      rev: 3,
+      syncedAt: 100,
+      localHash: 'old',
+      units: { 'font.stars': toUnit(payloadA).hash, 'font.tags': 'stale-b' },
+    })
+
+    const result = await engine.pushUnits(['font.tags'])
+
+    expect(result).toMatchObject({ ok: true, skipped: true, count: 0 })
+    expect(push).not.toHaveBeenCalled()
+    const written = ledgerWrite.mock.calls[0][0]
+    expect(written.rev).toBe(5)
+    expect(written.units['font.tags']).toBe(toUnit(payloadB).hash)
+  })
+
+  it('T-76③：一个 unit 读失败不拖死整批，失败的记 pending 其余照推', async () => {
+    readB.mockRejectedValue(new Error('sj_set.json 不存在'))
+    pull.mockResolvedValue(cloudView({}, 0))
+
+    const result = await engine.pushUnits(['font.stars', 'font.tags'])
+
+    expect(result).toMatchObject({ ok: true, pushed: ['font.stars'] })
+    expect(pendingRecord).toHaveBeenCalledWith(['font.tags'], 'collect-failed')
+    const snapshot = push.mock.calls[0][0]
+    expect(snapshot.units['font.stars']).toBeDefined()
+    expect(snapshot.units['font.tags']).toBeUndefined()
+  })
+
+  it('T-76③：全部 unit 都读失败时不 push，并报读取失败', async () => {
+    readA.mockRejectedValue(new Error('a 读不到'))
+    readB.mockRejectedValue(new Error('b 读不到'))
+
+    const result = await engine.pushUnits(['font.stars', 'font.tags'])
+
+    expect(result).toMatchObject({ ok: false, errorCode: 'CLOUD_COLLECT_FAILED' })
+    expect(pendingRecord).toHaveBeenCalledWith(['font.stars', 'font.tags'], 'collect-failed')
+    expect(push).not.toHaveBeenCalled()
+  })
+
+  it('T-76①：老台账首推成功后基线就位，第二次推送不再判冲突', async () => {
+    pull.mockResolvedValue(
+      cloudView(
+        { 'font.stars': toUnit(payloadA), 'font.tags': { ...toUnit(payloadB), hash: 'cloud-b' } },
+        5,
+      ),
+    )
+    // 存量用户的台账：有 rev / localHash，没有 units
+    ledgerRead.mockReturnValue({ rev: 3, syncedAt: 100, localHash: 'legacy' })
+
+    const first = await engine.pushUnits(['font.tags'])
+    expect(first).toMatchObject({ ok: true, pushed: ['font.tags'] })
+
+    // 模拟推送生效：云端 = 刚推上去的快照；台账 = 刚写入的记录
+    const snapshot = push.mock.calls[0][0]
+    pull.mockResolvedValue({
+      rev: snapshot.rev,
+      updatedAt: snapshot.updatedAt,
+      units: snapshot.units,
+      raw: snapshot,
+    })
+    ledgerRead.mockReturnValue(ledgerWrite.mock.calls[0][0])
+
+    const second = await engine.pushUnits(['font.tags'])
+
+    expect(second).toMatchObject({ ok: true, skipped: true, count: 0 })
+    expect(push).toHaveBeenCalledTimes(1)
+    expect(ledgerWrite.mock.calls[1][0].units['font.tags']).toBe(toUnit(payloadB).hash)
+  })
+
   it('两边都改过 → 无确认时取消，并留 pending 痕迹', async () => {
     pull.mockResolvedValue(
       cloudView(

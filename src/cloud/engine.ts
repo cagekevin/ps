@@ -5,6 +5,7 @@ import {
   diffUnits,
   unitHash,
   unitsHash,
+  type CloudSnapshotView,
   type SyncDiff,
   type SyncUnit,
   type SyncUnitAdapter,
@@ -60,6 +61,31 @@ async function collectUnits(entries: SyncUnitAdapter[]): Promise<Record<string, 
     }
   }
   return units
+}
+
+/**
+ * 按 unit 独立成败地读本地（T-76③）。
+ *
+ * `collectUnits` 是全或无的：一个 unit 读失败就整批放弃。后台推送要的是"能推几条推几条"，
+ * 否则一个坏 unit（动作仓库文件缺失、`sj_set.json` 不存在）会让其余几个永远推不上去。
+ * 整包 `upload()` / `download()` 仍用全或无版本——那是用户在场的整包操作，半截成功更危险。
+ */
+async function collectUnitsTolerant(
+  entries: SyncUnitAdapter[],
+): Promise<{ units: Record<string, SyncUnit>; failed: { id: string; message: string }[] }> {
+  const units: Record<string, SyncUnit> = {}
+  const failed: { id: string; message: string }[] = []
+  for (const entry of entries) {
+    try {
+      units[entry.id] = toSyncUnit(await entry.read())
+    } catch (error) {
+      failed.push({
+        id: entry.id,
+        message: error instanceof Error ? error.message : '未知错误',
+      })
+    }
+  }
+  return { units, failed }
 }
 
 function errorResult(error: unknown): { error: string; errorCode: string } {
@@ -298,28 +324,72 @@ export function createCloudEngine(deps: CloudDeps): CloudEngine {
       .map((id) => adapters.get(id))
       .filter((adapter): adapter is SyncUnitAdapter => adapter !== undefined)
 
-    let localUnits: Record<string, SyncUnit>
-    try {
-      localUnits = await collectUnits(targets)
-    } catch (error) {
-      deps.pending.record(wanted, 'collect-failed')
-      return { ok: false, count: 0, pushed: [], pending: wanted, ...errorResult(error) }
+    // T-76③：逐 unit 读，单个读失败只把自己记成待同步，不拖死整批
+    const collected = await collectUnitsTolerant(targets)
+    const failedIds = collected.failed.map((item) => item.id)
+    if (failedIds.length > 0) deps.pending.record(failedIds, 'collect-failed')
+
+    const localUnits = collected.units
+    const ready = wanted.filter((id) => localUnits[id] !== undefined)
+    if (ready.length === 0) {
+      return {
+        ok: false,
+        count: 0,
+        pushed: [],
+        pending: failedIds,
+        error: `同步项读取失败：${collected.failed.map((f) => `${f.id}（${f.message}）`).join('、')}`,
+        errorCode: 'CLOUD_COLLECT_FAILED',
+      }
     }
 
-    let cloud
+    let cloud: CloudSnapshotView | null
     try {
       cloud = await deps.transport.pull()
     } catch (error) {
-      deps.pending.record(wanted, 'network')
-      return { ok: false, count: 0, pushed: [], pending: wanted, ...errorResult(error) }
+      deps.pending.record(ready, 'network')
+      return { ok: false, count: 0, pushed: [], pending: ready, ...errorResult(error) }
     }
 
     const ledger = deps.ledger.read()
     const cloudUnits = cloud?.units ?? {}
-    const changed = wanted.filter((id) => cloudUnits[id]?.hash !== localUnits[id].hash)
+    const changed = ready.filter((id) => cloudUnits[id]?.hash !== localUnits[id].hash)
 
-    // 云端已经一致：不 push、不写台账（与 upload 的"内容一致就跳过"同一语义）
-    if (changed.length === 0) return { ok: true, count: 0, pushed: [], skipped: true }
+    /**
+     * 内容一致也要把 per-unit 基线刷新到「当前云端」（T-76②）。
+     *
+     * 不刷新的后果：基线停在上次推送时的旧值，本地之后真改了，三方比较会拿旧 base 算出
+     * 「mineChanged && theirsChanged」→ 判成假冲突 → 该推的推不上去，之后每次都被拦住。
+     *
+     * 没有台账时不新建：`hasCloudLedger()` 是"新设备不自动覆盖云端"的护栏
+     * （`src/cloud/auto-sync.ts:28`），不该被一次"内容恰好相同"顺手解除。
+     * `syncedAt` 保持不动——本次没有数据真的同步过，它记的是"上次真正推成功的时间"。
+     */
+    function refreshBaseline(): void {
+      if (!ledger) return
+      const baseline: Record<string, string> = {}
+      for (const id of ready) {
+        const hash = cloudUnits[id]?.hash ?? localUnits[id].hash
+        if (hash) baseline[id] = hash
+      }
+      deps.ledger.write({
+        rev: Math.max(cloud?.rev ?? 0, ledger.rev),
+        syncedAt: ledger.syncedAt,
+        // 与推送路径同一语义：upload() 的 inSync 判定读的就是这个字段
+        localHash: unitsHash(cloudUnits),
+        units: { ...(ledger.units ?? {}), ...baseline },
+      })
+    }
+
+    if (changed.length === 0) {
+      refreshBaseline()
+      return {
+        ok: true,
+        count: 0,
+        pushed: [],
+        skipped: true,
+        ...(failedIds.length > 0 ? { pending: failedIds } : {}),
+      }
+    }
 
     /**
      * 三方比较：base = 台账里这一条上次同步时的指纹，mine = 本地，theirs = 云端。
@@ -328,7 +398,10 @@ export function createCloudEngine(deps: CloudDeps): CloudEngine {
      */
     const conflicts = changed.filter((id) => {
       const base = ledger?.units?.[id]
-      if (!base) return true // 没有 per-unit 基线（老台账 / 首次推送）：无法判断，交给确认
+      // T-76①：没有 per-unit 基线（老台账 / 首次推送）**不能**判成冲突。
+      // 判冲突的后果是首推永远 cancelled，启动补偿跑一次就死在这里。
+      // 按"新增"处理：本地是唯一真相，推上去并在下面一次写入基线。
+      if (!base) return false
       const mineChanged = base !== localUnits[id].hash
       const theirsChanged = base !== (cloudUnits[id]?.hash ?? '')
       return mineChanged && theirsChanged
@@ -390,8 +463,15 @@ export function createCloudEngine(deps: CloudDeps): CloudEngine {
       return { ok: false, count: changed.length, pushed: changed, ...errorResult(error) }
     }
 
-    deps.pending.clear(wanted)
-    return { ok: true, count: changed.length, pushed: changed, rev: nextRev }
+    // 只清"这次真的对齐了"的 unit：读失败的那些刚记进 pending，清掉就等于把痕迹抹了
+    deps.pending.clear(ready)
+    return {
+      ok: true,
+      count: changed.length,
+      pushed: changed,
+      rev: nextRev,
+      ...(failedIds.length > 0 ? { pending: failedIds } : {}),
+    }
   }
 
   return { getStatus, upload, download, pushUnits }
