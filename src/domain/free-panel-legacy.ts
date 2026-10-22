@@ -103,6 +103,48 @@ export function adaptFreePanelItem(item: FreePanelItem): LegacyCommand | null {
         },
       }
 
+    // ---------- 常用页（/commonUse）----------
+    //
+    // 常用页的 7 个子面板可以「添加到自由面板」（C-2：复用自由面板数据）。
+    // 面板在添加时把自己的状态存进 `option`，这里按 key 还原成命令 id + payload。
+    // 依据：`docs/页面/05-常用.md` 的 7 个子组件与参数顺序表（`:57` 变换、`:63` 分布）。
+
+    case 'commonUse.embed':
+      return { id: 'commonUse.embedImage', payload: { options: asRecord(option) } }
+
+    case 'commonUse.import':
+      return {
+        id: 'commonUse.importMultipleImages',
+        payload: { paths: Array.isArray(option) ? option : [] },
+      }
+
+    case 'commonUse.optimization':
+      return { id: 'commonUse.optimizeDoc', payload: { options: asRecord(option) } }
+
+    case 'commonUse.customChange':
+      return {
+        id: 'commonUse.transform',
+        payload: { params: asRecord(option).params ?? [] },
+      }
+
+    case 'commonUse.export':
+      return {
+        id: 'commonUse.exportImages',
+        payload: {
+          mode: asRecord(option).mode ?? 'image',
+          options: asRecord(option).options ?? {},
+        },
+      }
+
+    case 'commonUse.reference':
+      return {
+        id: 'commonUse.referenceLines',
+        payload: { action: asRecord(option).action ?? 'toggle', options: asRecord(option).options },
+      }
+
+    case 'commonUse.spacing':
+      return { id: 'commonUse.distribute', payload: { params: asRecord(option).params ?? [] } }
+
     default:
       return null
   }
