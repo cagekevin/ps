@@ -101,10 +101,24 @@ export interface LegacyJsx {
   call(key: string, args: unknown[], label?: string): Promise<unknown>
 }
 
+/**
+ * 重命名域。
+ *
+ * 表达式求值在 PS 侧（`cmm_batchName`），我们只发字符串；
+ * 返回结构未实测（jsxbin 不可读），所以签名是 `unknown` 且调用方不回读。
+ */
+export interface RenameJsx {
+  /** cmm_batchName([表达式, 是否过滤子图层], "重命名")（app.v4.js:57234） */
+  batchName(expression: string, filterChildren: boolean): Promise<unknown>
+  /** cmm_setLayerColor([颜色序号])，0 = 清除（app.v4.js:57220） */
+  setLayerColor(colorIndex: number): Promise<unknown>
+}
+
 export interface JsxPort {
   font: FontJsx
   layer: LayerJsx
   env: EnvJsx
   action: ActionJsx
   legacy: LegacyJsx
+  rename: RenameJsx
 }

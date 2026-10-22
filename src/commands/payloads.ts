@@ -276,6 +276,61 @@ export interface FontSetHierarchyPresetPayload {
   levels?: number[]
 }
 
+// ---------- 重命名（/rename）----------
+
+export interface RenameBatchPayload {
+  /** 表达式原文，求值在 PS 侧（cmm_batchName） */
+  expression: string
+  /** 是否过滤子图层（原版 filterFun：勾选 1 个才为 true，app.v4.js:57011） */
+  filterChildren: boolean
+}
+
+export interface RenameLayerColorPayload {
+  /** 1-7 对应七色，0 = 清除（app.v4.js:56736 / :56757） */
+  colorIndex: number
+}
+
+export interface RenameGroupAddPayload {
+  name: string
+  /** 原版 data.addGroup(name, afterIndex)：插到该组之后；不传则追加 */
+  afterIndex?: number
+}
+
+export interface RenameGroupRenamePayload {
+  index: number
+  name: string
+}
+
+export interface RenameGroupIndexPayload {
+  index: number
+}
+
+export interface RenameItemRefPayload {
+  groupIndex: number
+  itemIndex: number
+}
+
+export interface RenameItemTextPayload extends RenameItemRefPayload {
+  text: string
+}
+
+export interface RenameItemAddPayload {
+  groupIndex: number
+  text: string
+}
+
+export interface RenameReorderGroupPayload {
+  from: number
+  to: number
+}
+
+export interface RenameReorderItemPayload {
+  fromGroup: number
+  fromIndex: number
+  toGroup: number
+  toIndex: number
+}
+
 export interface CommandPayloads {
   'font.apply': ApplyFontPayload
   'font.rate': RatePayload
@@ -336,6 +391,22 @@ export interface CommandPayloads {
   'freePanel.addBlock': FreePanelAddBlockPayload
   'freePanel.removeBlock': FreePanelRemoveBlockPayload
   'freePanel.setBlock': FreePanelSetBlockPayload
+
+  'rename.batchName': RenameBatchPayload
+  'rename.setLayerColor': RenameLayerColorPayload
+  'rename.toggleGroup': RenameGroupIndexPayload
+  'rename.addGroup': RenameGroupAddPayload
+  'rename.renameGroup': RenameGroupRenamePayload
+  'rename.deleteGroup': RenameGroupIndexPayload
+  'rename.addItem': RenameItemAddPayload
+  'rename.changeItem': RenameItemTextPayload
+  'rename.deleteItem': RenameItemRefPayload
+  'rename.reorderGroup': RenameReorderGroupPayload
+  'rename.reorderItem': RenameReorderItemPayload
+  /** 导出/导入走文件对话框，无参数 */
+  'rename.exportPreset': void
+  'rename.importPreset': void
+
   'legacy.call': LegacyCallPayload
   'cloud.setUrl': CloudSetUrlPayload
   'cloud.setAutoSync': CloudSetAutoSyncPayload

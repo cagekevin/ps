@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-10-21",
+  "updated": "2026-10-22",
   "note": "横切能力注册表。新增 src/{cep,composables,stores,utils,styles} 下的文件必须在这里登记，否则 npm run build 会失败。",
   "items": [
     {
@@ -488,6 +488,303 @@
       "when": "只在 domain/translate.ts 的百度签名用；不要用于安全场景",
       "status": "stable",
       "since": "2026-10-21"
+    },
+    {
+      "id": "cep-cloud-config-ts",
+      "name": "（待补：中文名）",
+      "entry": "src/cep/cloud/config.ts",
+      "api": "（待补：怎么调）",
+      "when": "（待补：什么时候用）",
+      "status": "todo",
+      "since": "2026-10-22"
+    },
+    {
+      "id": "cep-cloud-entries-action-library-ts",
+      "name": "（待补：中文名）",
+      "entry": "src/cep/cloud/entries/action-library.ts",
+      "api": "（待补：怎么调）",
+      "when": "（待补：什么时候用）",
+      "status": "todo",
+      "since": "2026-10-22"
+    },
+    {
+      "id": "cep-cloud-entries-font-settings-ts",
+      "name": "（待补：中文名）",
+      "entry": "src/cep/cloud/entries/font-settings.ts",
+      "api": "（待补：怎么调）",
+      "when": "（待补：什么时候用）",
+      "status": "todo",
+      "since": "2026-10-22"
+    },
+    {
+      "id": "cep-cloud-entries-font-stars-ts",
+      "name": "（待补：中文名）",
+      "entry": "src/cep/cloud/entries/font-stars.ts",
+      "api": "（待补：怎么调）",
+      "when": "（待补：什么时候用）",
+      "status": "todo",
+      "since": "2026-10-22"
+    },
+    {
+      "id": "cep-cloud-entries-font-tags-ts",
+      "name": "（待补：中文名）",
+      "entry": "src/cep/cloud/entries/font-tags.ts",
+      "api": "（待补：怎么调）",
+      "when": "（待补：什么时候用）",
+      "status": "todo",
+      "since": "2026-10-22"
+    },
+    {
+      "id": "cep-cloud-entries-index-ts",
+      "name": "（待补：中文名）",
+      "entry": "src/cep/cloud/entries/index.ts",
+      "api": "（待补：怎么调）",
+      "when": "（待补：什么时候用）",
+      "status": "todo",
+      "since": "2026-10-22"
+    },
+    {
+      "id": "cep-cloud-entries-util-ts",
+      "name": "（待补：中文名）",
+      "entry": "src/cep/cloud/entries/util.ts",
+      "api": "（待补：怎么调）",
+      "when": "（待补：什么时候用）",
+      "status": "todo",
+      "since": "2026-10-22"
+    },
+    {
+      "id": "cep-cloud-ledger-ts",
+      "name": "（待补：中文名）",
+      "entry": "src/cep/cloud/ledger.ts",
+      "api": "（待补：怎么调）",
+      "when": "（待补：什么时候用）",
+      "status": "todo",
+      "since": "2026-10-22"
+    },
+    {
+      "id": "cep-cloud-setup-ts",
+      "name": "（待补：中文名）",
+      "entry": "src/cep/cloud/setup.ts",
+      "api": "（待补：怎么调）",
+      "when": "（待补：什么时候用）",
+      "status": "todo",
+      "since": "2026-10-22"
+    },
+    {
+      "id": "cep-cloud-transport-ts",
+      "name": "（待补：中文名）",
+      "entry": "src/cep/cloud/transport.ts",
+      "api": "（待补：怎么调）",
+      "when": "（待补：什么时候用）",
+      "status": "todo",
+      "since": "2026-10-22"
+    },
+    {
+      "id": "cep-data-action-archive-ts",
+      "name": "（待补：中文名）",
+      "entry": "src/cep/data/action-archive.ts",
+      "api": "（待补：怎么调）",
+      "when": "（待补：什么时候用）",
+      "status": "todo",
+      "since": "2026-10-22"
+    },
+    {
+      "id": "cep-data-font-meta-ts",
+      "name": "（待补：中文名）",
+      "entry": "src/cep/data/font-meta.ts",
+      "api": "（待补：怎么调）",
+      "when": "（待补：什么时候用）",
+      "status": "todo",
+      "since": "2026-10-22"
+    },
+    {
+      "id": "cep-data-free-panel-ts",
+      "name": "（待补：中文名）",
+      "entry": "src/cep/data/free-panel.ts",
+      "api": "（待补：怎么调）",
+      "when": "（待补：什么时候用）",
+      "status": "todo",
+      "since": "2026-10-22"
+    },
+    {
+      "id": "cep-data-rename-ts",
+      "name": "重命名预设仓库",
+      "entry": "src/cep/data/rename.ts",
+      "api": "renameRepo: Repo<RenamePreset>；读写 <userDir>/sj_cmmRename.ini",
+      "when": "重命名页的预设读写；命令层与 stores/rename 共用，页面不许 import",
+      "status": "stable",
+      "since": "2026-10-22"
+    },
+    {
+      "id": "cep-data-sys-font-ts",
+      "name": "（待补：中文名）",
+      "entry": "src/cep/data/sys-font.ts",
+      "api": "（待补：怎么调）",
+      "when": "（待补：什么时候用）",
+      "status": "todo",
+      "since": "2026-10-22"
+    },
+    {
+      "id": "cep-dialog-ts",
+      "name": "（待补：中文名）",
+      "entry": "src/cep/dialog.ts",
+      "api": "（待补：怎么调）",
+      "when": "（待补：什么时候用）",
+      "status": "todo",
+      "since": "2026-10-22"
+    },
+    {
+      "id": "cep-jsx-legacy-ts",
+      "name": "（待补：中文名）",
+      "entry": "src/cep/jsx/legacy.ts",
+      "api": "（待补：怎么调）",
+      "when": "（待补：什么时候用）",
+      "status": "todo",
+      "since": "2026-10-22"
+    },
+    {
+      "id": "cep-jsx-rename-ts",
+      "name": "重命名域 jsx",
+      "entry": "src/cep/jsx/rename.ts",
+      "api": "createRenameJsx() → batchName(expression, filterChildren) / setLayerColor(colorIndex)",
+      "when": "只在 commands/rename.ts 用；返回结构未实测（jsxbin 不可读），不回读",
+      "status": "stable",
+      "since": "2026-10-22"
+    },
+    {
+      "id": "cep-open-url-ts",
+      "name": "（待补：中文名）",
+      "entry": "src/cep/open-url.ts",
+      "api": "（待补：怎么调）",
+      "when": "（待补：什么时候用）",
+      "status": "todo",
+      "since": "2026-10-22"
+    },
+    {
+      "id": "composables-floating-position-ts",
+      "name": "（待补：中文名）",
+      "entry": "src/composables/floating-position.ts",
+      "api": "（待补：怎么调）",
+      "when": "（待补：什么时候用）",
+      "status": "todo",
+      "since": "2026-10-22"
+    },
+    {
+      "id": "composables-usefloatingposition-ts",
+      "name": "（待补：中文名）",
+      "entry": "src/composables/useFloatingPosition.ts",
+      "api": "（待补：怎么调）",
+      "when": "（待补：什么时候用）",
+      "status": "todo",
+      "since": "2026-10-22"
+    },
+    {
+      "id": "composables-usefreepaneladd-ts",
+      "name": "（待补：中文名）",
+      "entry": "src/composables/useFreePanelAdd.ts",
+      "api": "（待补：怎么调）",
+      "when": "（待补：什么时候用）",
+      "status": "todo",
+      "since": "2026-10-22"
+    },
+    {
+      "id": "composables-usepointpopover-ts",
+      "name": "（待补：中文名）",
+      "entry": "src/composables/usePointPopover.ts",
+      "api": "（待补：怎么调）",
+      "when": "（待补：什么时候用）",
+      "status": "todo",
+      "since": "2026-10-22"
+    },
+    {
+      "id": "composables-usepopover-ts",
+      "name": "（待补：中文名）",
+      "entry": "src/composables/usePopover.ts",
+      "api": "（待补：怎么调）",
+      "when": "（待补：什么时候用）",
+      "status": "todo",
+      "since": "2026-10-22"
+    },
+    {
+      "id": "stores-cloud-ts",
+      "name": "（待补：中文名）",
+      "entry": "src/stores/cloud.ts",
+      "api": "（待补：怎么调）",
+      "when": "（待补：什么时候用）",
+      "status": "todo",
+      "since": "2026-10-22"
+    },
+    {
+      "id": "stores-confirm-ts",
+      "name": "（待补：中文名）",
+      "entry": "src/stores/confirm.ts",
+      "api": "（待补：怎么调）",
+      "when": "（待补：什么时候用）",
+      "status": "todo",
+      "since": "2026-10-22"
+    },
+    {
+      "id": "stores-free-panel-ts",
+      "name": "（待补：中文名）",
+      "entry": "src/stores/free-panel.ts",
+      "api": "（待补：怎么调）",
+      "when": "（待补：什么时候用）",
+      "status": "todo",
+      "since": "2026-10-22"
+    },
+    {
+      "id": "stores-loading-ts",
+      "name": "（待补：中文名）",
+      "entry": "src/stores/loading.ts",
+      "api": "（待补：怎么调）",
+      "when": "（待补：什么时候用）",
+      "status": "todo",
+      "since": "2026-10-22"
+    },
+    {
+      "id": "stores-nav-ts",
+      "name": "（待补：中文名）",
+      "entry": "src/stores/nav.ts",
+      "api": "（待补：怎么调）",
+      "when": "（待补：什么时候用）",
+      "status": "todo",
+      "since": "2026-10-22"
+    },
+    {
+      "id": "stores-rename-ts",
+      "name": "重命名预设读模型",
+      "entry": "src/stores/rename.ts",
+      "api": "useRenameStore() → preset / loading / error / degraded / load()；bindRenameData() 在 main.ts 装配",
+      "when": "重命名页读预设分组；写走 commands/rename.ts",
+      "status": "stable",
+      "since": "2026-10-22"
+    },
+    {
+      "id": "utils-build-info-ts",
+      "name": "（待补：中文名）",
+      "entry": "src/utils/build-info.ts",
+      "api": "（待补：怎么调）",
+      "when": "（待补：什么时候用）",
+      "status": "todo",
+      "since": "2026-10-22"
+    },
+    {
+      "id": "utils-clone-ts",
+      "name": "（待补：中文名）",
+      "entry": "src/utils/clone.ts",
+      "api": "（待补：怎么调）",
+      "when": "（待补：什么时候用）",
+      "status": "todo",
+      "since": "2026-10-22"
+    },
+    {
+      "id": "utils-number-ts",
+      "name": "（待补：中文名）",
+      "entry": "src/utils/number.ts",
+      "api": "（待补：怎么调）",
+      "when": "（待补：什么时候用）",
+      "status": "todo",
+      "since": "2026-10-22"
     }
   ]
 }

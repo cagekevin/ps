@@ -40,4 +40,6 @@ export const DATA_FILES = {
   actionLibrary: 'sj_dzStoreInfo.json',
   /** 自由面板：{ uid, btnId, obj:{version,type,list:Block[]} } */
   appFreePanel: 'sj_appFreePanel.json',
+  /** 重命名预设：[{ name, show, list:string[] }]；原版路径 key 是 `path.rename`（app.v4.js:5219） */
+  cmmRename: 'sj_cmmRename.ini',
 } as const

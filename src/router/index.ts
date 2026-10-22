@@ -31,6 +31,8 @@ const ActionPage = () => import('@/pages/action/index.vue')
 const FontSetPage = () => import('@/pages/fontSet/index.vue')
 /** 设置：先接云同步面板 */
 const SetPage = () => import('@/pages/set/index.vue')
+/** 重命名：表达式预设分组 + 批量重命名 + 图层颜色标记（原版 Rename.js） */
+const RenamePage = () => import('@/pages/rename/index.vue')
 
 /**
  * 路由表对齐 BUILD-SPEC/11-组件树.md 的 15 条。
@@ -86,7 +88,7 @@ export const routes: RouteRecordRaw[] = [
   {
     path: '/rename',
     name: 'Rename',
-    component: Placeholder,
+    component: RenamePage,
     meta: { title: '重命名', nav: true, icon: 'icon-nav_chongmingmingtuceng', glyph: '名' },
   },
   // @new-page

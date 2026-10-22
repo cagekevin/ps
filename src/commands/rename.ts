@@ -1,0 +1,202 @@
+import { openFile, saveFile } from '@/cep/dialog'
+import { renameRepo } from '@/cep/data/rename'
+import { readTextSmart, writeTextFile } from '@/cep/fs'
+import {
+  addGroupAt,
+  addItemAt,
+  changeItemAt,
+  checkExpression,
+  deleteGroupAt,
+  deleteItemAt,
+  parsePreset,
+  pushHistory,
+  renameGroupAt,
+  reorderGroup,
+  reorderItem,
+  serializePreset,
+  toggleGroupAt,
+} from '@/domain/rename'
+import { CepError } from '@/utils/errors'
+import { defineCommand } from './registry'
+import type { Command } from './types'
+
+/**
+ * 重命名域命令（`/rename`）。
+ *
+ * 分两类：
+ * - **改 PS 文档**：批量重命名、图层颜色标记 → 走 `ctx.jsx.rename`（`cmm_batchName` / `cmm_setLayerColor`）
+ * - **改本地预设**：组的增删改序、项的增删改序、导入导出 → 走 `data/rename` 仓库
+ *
+ * 规则都写在 `domain/rename.ts`；这里只做"校验 + 调一次"。
+ * 表达式**求值不在我们这边**：PS 的 `cmm_batchName` 负责，见 domain 里的 UNVERIFIED。
+ */
+export const renameCommands: Command<unknown>[] = [
+  defineCommand({
+    id: 'rename.batchName',
+    title: '重命名图层',
+    group: 'layer',
+    requires: 'layer',
+    // 图层多时 PS 侧要跑一会，原版用 $load 转圈（app.v4.js:57232）；我们走长任务 HUD
+    kind: 'long',
+    async run(ctx, { expression, filterChildren }) {
+      const message = checkExpression(expression)
+      if (message) throw new CepError('PARSE', message)
+
+      // 原版先 addHistory(表达式) 再执行（:57230），历史因此包含失败的那些——保持一致
+      await renameRepo.update((preset) => pushHistory(preset, expression))
+      await ctx.jsx.rename.batchName(expression, filterChildren)
+    },
+  }),
+
+  defineCommand({
+    id: 'rename.setLayerColor',
+    title: '设置图层颜色标记',
+    group: 'layer',
+    requires: 'layer',
+    kind: 'instant',
+    async run(ctx, { colorIndex }) {
+      if (!Number.isInteger(colorIndex) || colorIndex < 0 || colorIndex > 7) {
+        throw new CepError('PARSE', '颜色序号只能是 0-7')
+      }
+      await ctx.jsx.rename.setLayerColor(colorIndex)
+    },
+  }),
+
+  defineCommand({
+    id: 'rename.toggleGroup',
+    title: '展开/收起重命名分组',
+    group: 'system',
+    requires: 'none',
+    kind: 'instant',
+    async run(_ctx, { index }) {
+      await renameRepo.update((preset) => toggleGroupAt(preset, index))
+    },
+  }),
+
+  defineCommand({
+    id: 'rename.addGroup',
+    title: '新建重命名分组',
+    group: 'system',
+    requires: 'none',
+    kind: 'instant',
+    async run(_ctx, { name, afterIndex }) {
+      await renameRepo.update((preset) => addGroupAt(preset, name, afterIndex))
+    },
+  }),
+
+  defineCommand({
+    id: 'rename.renameGroup',
+    title: '重命名分组',
+    group: 'system',
+    requires: 'none',
+    kind: 'instant',
+    async run(_ctx, { index, name }) {
+      await renameRepo.update((preset) => renameGroupAt(preset, index, name))
+    },
+  }),
+
+  defineCommand({
+    id: 'rename.deleteGroup',
+    title: '删除重命名分组',
+    group: 'system',
+    requires: 'none',
+    kind: 'instant',
+    async run(_ctx, { index }) {
+      await renameRepo.update((preset) => deleteGroupAt(preset, index))
+    },
+  }),
+
+  defineCommand({
+    id: 'rename.addItem',
+    title: '添加重命名预设',
+    group: 'system',
+    requires: 'none',
+    kind: 'instant',
+    async run(_ctx, { groupIndex, text }) {
+      await renameRepo.update((preset) => addItemAt(preset, groupIndex, text))
+    },
+  }),
+
+  defineCommand({
+    id: 'rename.changeItem',
+    title: '修改重命名预设',
+    group: 'system',
+    requires: 'none',
+    kind: 'instant',
+    async run(_ctx, { groupIndex, itemIndex, text }) {
+      await renameRepo.update((preset) => changeItemAt(preset, groupIndex, itemIndex, text))
+    },
+  }),
+
+  defineCommand({
+    id: 'rename.deleteItem',
+    title: '删除重命名预设',
+    group: 'system',
+    requires: 'none',
+    kind: 'instant',
+    async run(_ctx, { groupIndex, itemIndex }) {
+      await renameRepo.update((preset) => deleteItemAt(preset, groupIndex, itemIndex))
+    },
+  }),
+
+  defineCommand({
+    id: 'rename.reorderGroup',
+    title: '调整重命名分组顺序',
+    group: 'system',
+    requires: 'none',
+    kind: 'instant',
+    async run(_ctx, { from, to }) {
+      await renameRepo.update((preset) => reorderGroup(preset, from, to))
+    },
+  }),
+
+  defineCommand({
+    id: 'rename.reorderItem',
+    title: '调整重命名预设顺序',
+    group: 'system',
+    requires: 'none',
+    kind: 'instant',
+    async run(_ctx, { fromGroup, fromIndex, toGroup, toIndex }) {
+      await renameRepo.update((preset) =>
+        reorderItem(preset, fromGroup, fromIndex, toGroup, toIndex),
+      )
+    },
+  }),
+
+  defineCommand({
+    id: 'rename.exportPreset',
+    title: '导出重命名预设',
+    group: 'file',
+    requires: 'none',
+    kind: 'instant',
+    async run() {
+      const read = await renameRepo.read()
+      if (read.degraded) throw new CepError('IO', read.degraded)
+
+      // 原版 saveFile("导出", ["cmm"], "重命名.cmm", "设计助理导出文件")（:57020）
+      const path = saveFile('导出', ['cmm'], '重命名.cmm')
+      if (!path) throw new CepError('PARSE', '取消操作')
+
+      writeTextFile(path, serializePreset(read.value))
+    },
+  }),
+
+  defineCommand({
+    id: 'rename.importPreset',
+    title: '导入重命名预设',
+    group: 'file',
+    requires: 'none',
+    kind: 'instant',
+    async run() {
+      // 原版 openFile("导入重命名预设", ["cmm"], "设计助理导入文件")（:57030）
+      const path = openFile('导入重命名预设', ['cmm'])
+      if (!path) throw new CepError('PARSE', '取消操作')
+
+      const text = await readTextSmart(path)
+      if (text === null) throw new CepError('IO', '导入失败，文件读取失败')
+
+      // JSON 优先、旧格式 `<z>`/`<>` 兜底，见 domain/rename.ts 的 parsePreset（原版 :57036-57045）
+      await renameRepo.write(parsePreset(text))
+    },
+  }),
+]

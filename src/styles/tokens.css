@@ -118,6 +118,26 @@
   --c-ok-a18: rgba(78, 201, 176, 0.18);
   --c-warn-a18: rgba(220, 220, 170, 0.18);
 
+  /* ---------- 重命名页（/rename）----------
+     色板是**数据**不是主题色：原版 colorData 七色（app.v4.js:56905），逐个图层颜色标记 */
+  --c-layer-1: #b0423f;
+  --c-layer-2: #a5620a;
+  --c-layer-3: #aa890a;
+  --c-layer-4: #5f823c;
+  --c-layer-5: #526f99;
+  --c-layer-6: #7155a0;
+  --c-layer-7: #6a6a6a;
+  /* 顶部分段条：原版 .top-switch{height:37px;background:#282828}
+     （scoped 块 data-v-2d612e86，对应 render app.v4.js:56483） */
+  --c-tabsbar: #282828;
+  --h-tabs: 37px;
+  /* 底部图标条：原版 .reanme-bottom{height:26px;background:#535353}（app.v4.js:56761） */
+  --c-footbar: #535353;
+  /* 清除色块描边：原版 .colorButton-lastOne{border:1px solid #535353}（app.v4.js:56741） */
+  --c-swatch-border: #535353;
+  /* 分组竖线：原版 .verline{height:13px;border-left:2px solid #006fff}（app.v4.js:56774） */
+  --h-verline: 13px;
+
   /* ---------- 间距阶梯 ---------- */
   --sp-1: 2px;
   --sp-2: 4px;

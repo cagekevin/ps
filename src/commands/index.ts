@@ -4,6 +4,7 @@ import { fontCommands } from './font'
 import { fontSetCommands } from './fontSet'
 import { freePanelCommands } from './freePanel'
 import { legacyCommands } from './legacy'
+import { renameCommands } from './rename'
 import { register } from './registry'
 
 /**
@@ -19,6 +20,7 @@ for (const command of [
   ...freePanelCommands,
   ...legacyCommands,
   ...cloudCommands,
+  ...renameCommands,
 ])
   register(command)
 

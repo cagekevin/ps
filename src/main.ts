@@ -12,6 +12,7 @@ import { bindFontData } from './stores/font'
 import { bindActionData } from './stores/action'
 import { bindFreePanelData } from './stores/free-panel'
 import { bindFontSetData } from './stores/font-set'
+import { bindRenameData } from './stores/rename'
 import { useTaskStore } from './stores/tasks'
 import { setProgressPort } from './commands/runtime'
 import { startSelectionWatch } from './selection'
@@ -35,6 +36,7 @@ bindFontData()
 bindActionData()
 bindFreePanelData()
 bindFontSetData()
+bindRenameData()
 
 // 长任务状态由 store 实现，命令层只依赖端口（commands 不许依赖 stores）
 setProgressPort({

@@ -127,5 +127,17 @@ export function createMockJsx(): JsxPort {
         return null
       },
     },
+
+    // 重命名域的表达式求值在 PS 侧，这里只能假装成功（返回 null，和真实实现一样不消费）
+    rename: {
+      batchName: async (expression, filterChildren) => {
+        log.info('mock', `批量重命名 ${expression}（过滤子图层=${filterChildren}）`)
+        return null
+      },
+      setLayerColor: async (colorIndex) => {
+        log.info('mock', `图层颜色标记 ${colorIndex}`)
+        return null
+      },
+    },
   }
 }
