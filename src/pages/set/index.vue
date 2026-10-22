@@ -2,6 +2,7 @@
 import { computed, onMounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import CheckBox from '@/components/CheckBox.vue'
+import EmptyState from '@/components/EmptyState.vue'
 import GButton from '@/components/GButton.vue'
 import GInput from '@/components/GInput.vue'
 import PageShell from '@/components/PageShell.vue'
@@ -21,6 +22,8 @@ const fontSet = useFontSetStore()
 const { status } = storeToRefs(cloud)
 const autoSyncCmd = useCommand('cloud.setAutoSync')
 const saveFontSettings = useCommand('fontSet.saveSettings')
+const copyShortcutScripts = useCommand('system.copyToScripts')
+const resetShortcutScripts = useCommand('system.resetQuickKeys')
 const buildTime = __BUILD_TIME__
 
 const navTips = usePersistedRef('nav.tips', true)
@@ -126,6 +129,20 @@ const unitIndex = computed({
   },
 })
 
+// 空态：快捷键分组与常用功能面板本版不提供配置项，脚本仍按原版 5 组模板生成（T-50）
+const SHORTCUT_GROUPS = ['左侧栏', '框架模板', '常用功能', '字体面板', '批量套版'] as const
+
+const copying = computed(() => copyShortcutScripts.running.value)
+const refreshing = computed(() => resetShortcutScripts.running.value)
+
+function copyScripts() {
+  void copyShortcutScripts.run({ groups: [...SHORTCUT_GROUPS] }, '已拷贝配置文件')
+}
+
+function refreshScripts() {
+  void resetShortcutScripts.run({ groups: [...SHORTCUT_GROUPS] }, '刷新成功')
+}
+
 onMounted(async () => {
   cloud.refresh()
   await fontSet.load()
@@ -167,17 +184,15 @@ onMounted(async () => {
     </SettingsSection>
 
     <SettingsSection title="快捷键设置 ?" default-open>
-      <SettingsSection title="左侧栏" variant="sub" />
-      <SettingsSection title="框架模板" variant="sub" />
-      <SettingsSection title="常用功能" variant="sub" />
-      <SettingsSection title="字体面板" variant="sub" />
-      <SettingsSection title="批量套版" variant="sub" />
+      <EmptyState compact>当前版本未提供快捷键配置，暂无快捷键可设置。</EmptyState>
 
-      <GButton block>手动拷贝配置文件</GButton>
-      <GButton type="text">刷新配置文件</GButton>
+      <GButton block :loading="copying" @click="copyScripts">手动拷贝配置文件</GButton>
+      <GButton type="text" :loading="refreshing" @click="refreshScripts"> 刷新配置文件 </GButton>
     </SettingsSection>
 
-    <SettingsSection title="常用功能面板" />
+    <SettingsSection title="常用功能面板">
+      <EmptyState compact>当前版本未提供常用功能面板配置。</EmptyState>
+    </SettingsSection>
 
     <SettingsSection title="字体面板">
       <GInput

@@ -59,6 +59,10 @@
   --c-font-btn: #535353;
   --c-font-btn-hover: #444;
   --c-font-editor-input: #111;
+  /* 自定义页（原版 .custom-svg{color:#ddd}，render app.v4.js:34924 / 34937） */
+  --c-custom-svg: #ddd;
+  /* 自定义页预览格（原版 .lie{background-color:#535353}，render app.v4.js:34796） */
+  --c-custom-lie: #535353;
 
   /* ---------- 自设计层（不再照抄原版）----------
      hover 统一用半透明白层，不逐组件定义颜色 */
@@ -247,6 +251,8 @@
   /* 输入框圆角：原版 .base-input{border-radius:5px} */
   --r-input: 5px;
   --r-lg: 6px;
+  /* 原版 .context-svg-wrap{border-radius:10px}（常用页 32×32 图标块，05-常用.md:142） */
+  --r-tile: 10px;
   --r-pill: 999px;
 
   /* ---------- 尺寸 ---------- */
@@ -256,6 +262,8 @@
   --h-control: 28px;
   --h-control-sm: 24px;
   --h-row: 26px;
+  /* 原版 .context-svg-wrap{width:32px;height:32px}（常用页图标块） */
+  --h-tile: 32px;
   /* 预览文案输入框（原版 .preview-text>input height:30px）
      搜索框也用它：原版 Search 组件内部是 G-UI Input（.base-input 30px / 圆角 5） */
   --h-field: 30px;
