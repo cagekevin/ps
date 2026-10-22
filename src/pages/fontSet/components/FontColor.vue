@@ -143,8 +143,8 @@ function togglePreset(index: number) {
   presetOpen.value[index] = !presetOpen.value[index]
 }
 
-function pickPreset(index: number, value: number, kind: 'size' | 'leading' | 'tracking') {
-  presetOpen.value[index] = false
+function pickPreset(value: number, kind: 'size' | 'leading' | 'tracking') {
+  // 字号/行距/字距的预设点完保持展开，不自动收起（用户要求）；关闭靠再点箭头 togglePreset
   if (kind === 'size') commitSize(value)
   else if (kind === 'leading') commitLeading(value)
   else commitTracking(value)
@@ -327,7 +327,7 @@ function applyLegacyLeading(factor: number) {
         :key="`size-${value}`"
         class="fontset-color__preset"
         type="button"
-        @click="pickPreset(0, value, 'size')"
+        @click="pickPreset(value, 'size')"
       >
         {{ value }}
       </button>
@@ -339,7 +339,7 @@ function applyLegacyLeading(factor: number) {
         :key="`leading-${value}`"
         class="fontset-color__preset"
         type="button"
-        @click="pickPreset(1, value, 'leading')"
+        @click="pickPreset(value, 'leading')"
       >
         {{ value }}
       </button>
@@ -387,7 +387,7 @@ function applyLegacyLeading(factor: number) {
         :key="`tracking-${value}`"
         class="fontset-color__preset"
         type="button"
-        @click="pickPreset(2, value, 'tracking')"
+        @click="pickPreset(value, 'tracking')"
       >
         {{ value }}
       </button>
