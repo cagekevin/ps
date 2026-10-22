@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import CepModal from '@/components/CepModal.vue'
 import EmptyState from '@/components/EmptyState.vue'
 import GButton from '@/components/GButton.vue'
@@ -8,6 +8,7 @@ import GTile from '@/components/GTile.vue'
 import Icon from '@/components/Icon.vue'
 import PageShell from '@/components/PageShell.vue'
 import { useCommand } from '@/components/command/useCommand'
+import { startDropImportWatch } from '@/commands/commonUse'
 import { useFreePanelAdd } from '@/composables/useFreePanelAdd'
 import { useLongPressDrag, type LongPressDragResult } from '@/composables/useLongPressDrag'
 import { usePersistedRef } from '@/composables/usePersisted'
@@ -175,7 +176,8 @@ async function runEmbed() {
 
 async function runImport() {
   // 原版「导入多图片」从 PS 抓拖入的图片（`docs/页面/05-常用.md:72`）。
-  // 拖入路径由 PS 侧事件带来，页面拿不到；命令层对空路径明确报错，不静默成功。
+  // 这条路径是手动点击，拿不到拖入路径；拖入自动导入走 `startDropImportWatch`（T-72），
+  // 由事件的 payload 带路径。命令层对空路径明确报错，不静默成功。
   await importCmd.run({ paths: [] }, '已导入多图片')
 }
 
@@ -349,9 +351,36 @@ function runFreePanelItem(blockId: number, item: { btnId: number; text: string }
   void freePanelExecuteCmd.run({ blockId, btnId: item.btnId }, `已执行「${item.text}」`)
 }
 
-onMounted(() => {
+// ---------- 拖入事件（T-72） ----------
+
+/**
+ * PS 拖文件进画布 → `commonUse.importMultipleImages`。
+ *
+ * 订阅在命令层（页面不许 import `@/cep/events`），这里只把 payload 里的路径交给 `useCommand`。
+ * UNVERIFIED(T-72): PS 是否真在拖入时回 `1349280544`，本机无法验证；事件不来时页面照常手点导入。
+ */
+let stopDropWatch: (() => void) | undefined
+let unmounted = false
+
+onMounted(async () => {
   // 自由面板区要用区域树；先读一次
   void freePanelStore.load()
+
+  const stop = await startDropImportWatch({
+    run: (paths) => void importCmd.run({ paths }, '已导入多图片'),
+  })
+  // 组件在 await 期间被卸载：立刻退订，别把监听留在页面外
+  if (unmounted) {
+    stop()
+    return
+  }
+  stopDropWatch = stop
+})
+
+onUnmounted(() => {
+  unmounted = true
+  stopDropWatch?.()
+  stopDropWatch = undefined
 })
 
 // ---------- 拖拽排序（原版 `am()`，见 `composables/useLongPressDrag`） ----------

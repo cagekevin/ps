@@ -8,19 +8,47 @@ import { log } from '@/utils/logger'
  * （app.v4.js:42473-42476）直接写死十进制。这里保持同一份值，
  * **不再经过 `charIDToTypeID` 之类的二次转换**。
  */
-export type HostEventName = 'selection' | 'transform' | 'make' | 'setd'
+export type HostEventName = 'selection' | 'transform' | 'make' | 'setd' | 'drop'
 
 /**
  * 样式页「快速吸色到组」（T-66）复用已有两个事件：
  * `setd`（1936028772）= 吸色完成、`selection`（1936483188）= 取消。
  * 这两个 stringID **已经在表里**，不能再以新名字加一遍：通道用 `idToName` 反查，
  * 同一个 ID 挂两个名字会互相覆盖，先注册的那条收不到事件。
+ * 这条约束有两处兜底：`tests/cep/events.test.ts` 的「value 不得重复」断言，
+ * 与 `register()` 里的 `describeEventIdConflict` 运行期拦截。
+ *
+ * UNVERIFIED(T-72): PS 是否在拖入文件时真回 `1349280544`，本机无法验证。
+ * 本表只接了一条链路「drop → commonUse.importMultipleImages」；
+ * 粘贴 / 剪贴蒙版 / 智能填色不在本表（台账 T-73，blocked）。
  */
 const EVENT_IDS: Record<HostEventName, string> = {
   selection: '1936483188', // slct
   transform: '1416785510', // Trnf
   make: '1298866208', // Mk
   setd: '1936028772', // setd
+  drop: '1349280544', // 拖入（`docs/页面/05-常用.md:43`，T-72）
+}
+
+/** 供测试断言「一个 ID 只能有一个语义名」；生产代码只经 `subscribeHostEvent` 访问 */
+export function listHostEventIds(): Array<[HostEventName, string]> {
+  return Object.entries(EVENT_IDS) as Array<[HostEventName, string]>
+}
+
+/**
+ * 反向表 `idToName` 是 1:1：一个 ID 挂两个名字时后注册者覆盖前者，前者静默收不到。
+ * 返回冲突说明供 `register()` 抛出；无冲突返回 null。
+ */
+export function describeEventIdConflict(
+  existing: HostEventName | undefined,
+  name: HostEventName,
+  typeId: string,
+): string | null {
+  if (!existing || existing === name) return null
+  return (
+    `PS 事件 ID ${typeId} 已由「${existing}」占用，不能再挂「${name}」：` +
+    `idToName 是 1:1，覆盖会让「${existing}」静默收不到事件`
+  )
 }
 
 /** 原版 `listedHandle` 的全局节流：100ms 内的事件直接丢弃 */
@@ -170,6 +198,11 @@ async function register(name: HostEventName): Promise<void> {
   const typeId = EVENT_IDS[name]
 
   ensureCallback()
+
+  // 先拦重复再落表：事后再发现只能丢日志，先注册那方已经静默失效了
+  const conflict = describeEventIdConflict(idToName.get(Number(typeId)), name, typeId)
+  if (conflict) throw new Error(conflict)
+
   idToName.set(Number(typeId), name)
 
   log.info('ps-event', '开始注册 PS 事件', { name, typeId, extensionId: extensionId() })

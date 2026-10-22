@@ -10,7 +10,9 @@ vi.mock('@/cep/transport', () => ({
 
 import {
   __resetEventsForTest,
+  describeEventIdConflict,
   hasCepEvents,
+  listHostEventIds,
   onPhotoshopCallback,
   parseEventData,
   registerPhotoshopEvent,
@@ -64,6 +66,56 @@ afterEach(() => {
   delete window.__adobe_cep__
   vi.useRealTimers()
   vi.clearAllMocks()
+})
+
+describe('EVENT_IDS 表结构', () => {
+  /**
+   * 一个 stringID 只能挂一个语义名。
+   *
+   * 为什么必须断言：`idToName` 是 `Map<number, HostEventName>`（1:1），反向映射后注册者覆盖前者，
+   * 先注册那方**从此静默收不到事件**——没有异常、没有日志，只有"功能不生效"。
+   * 类型层 `Record<语义名, stringID>` 不校验 value 唯一，`vue-tsc` 也不报，
+   * 所以这条只能做在测试里。样式页 T-66 与常用页 T-72 抢过 `1936028772`，就是这种撞法。
+   */
+  it('value（stringID）不得重复', () => {
+    const owner = new Map<string, string>()
+    const collisions: string[] = []
+
+    for (const [name, id] of listHostEventIds()) {
+      const first = owner.get(id)
+      if (first === undefined) {
+        owner.set(id, name)
+        continue
+      }
+      collisions.push(`「${first}」与「${name}」共用 stringID ${id}`)
+    }
+
+    expect(
+      collisions,
+      collisions.length === 0
+        ? ''
+        : `EVENT_IDS 有 ${collisions.length} 条撞车，先注册的那方会静默收不到事件：\n` +
+            collisions.map((line) => `  - ${line}`).join('\n') +
+            '\n一个 ID 只能挂一个语义名；要复用请直接用已有的语义名，不要加别名。',
+    ).toEqual([])
+  })
+
+  it('语义名到 ID 的映射不少于已有 5 条（防止有人删行换取断言变绿）', () => {
+    const names = listHostEventIds().map(([name]) => name)
+    expect(names).toEqual(
+      expect.arrayContaining(['selection', 'transform', 'make', 'setd', 'drop']),
+    )
+  })
+
+  it('describeEventIdConflict：同一 ID 换个名字才报冲突', () => {
+    expect(describeEventIdConflict(undefined, 'drop', '1349280544')).toBeNull()
+    expect(describeEventIdConflict('drop', 'drop', '1349280544')).toBeNull()
+
+    const message = describeEventIdConflict('setd', 'drop', '1936028772')
+    expect(message).toContain('1936028772')
+    expect(message).toContain('「setd」')
+    expect(message).toContain('「drop」')
+  })
 })
 
 describe('parseEventData', () => {

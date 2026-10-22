@@ -1,5 +1,7 @@
+import { subscribeHostEvent, type PhotoshopEventPayload } from '@/cep/events'
 import { CepError } from '@/utils/errors'
 import { assertJsxOk } from '@/utils/jsx-result'
+import { log } from '@/utils/logger'
 import { defineCommand } from './registry'
 import type { Command } from './types'
 
@@ -204,3 +206,108 @@ export const commonUseCommands: Command<unknown>[] = [
     },
   }),
 ]
+
+// ---------- 拖入事件（T-72） ----------
+
+/**
+ * 订阅后等待第一条拖入事件的上限。
+ *
+ * 原版没有这一步，**属有意偏离**：PS 是否真回 `1349280544` 本机无法验证（UNVERIFIED(T-72)），
+ * 不探测的话"接了但从没生效"和"工作正常"在日志里长得一样——这正是要防的静默失败。
+ */
+export const DROP_PROBE_MS = 60_000
+
+/**
+ * 拖入事件里可能带图片路径的字段名。
+ * UNVERIFIED(T-72): `1349280544` 的 `eventData` 结构没有一手证据，按候选键兜住。
+ */
+const DROP_PATH_KEYS = ['paths', 'files', 'fileList', 'path', 'file', 'url'] as const
+
+/**
+ * 从拖入事件的 payload 里取图片路径。
+ *
+ * 取不到就返回空数组，交给 `commonUse.importMultipleImages` 报「没有可导入的图片」——
+ * 不猜一个路径硬塞进去（宁可报错，也不静默导入错的文件）。
+ */
+export function parseDropPaths(payload: PhotoshopEventPayload | undefined): string[] {
+  const data = payload?.eventData
+  if (!data) return []
+
+  const out: string[] = []
+  for (const key of DROP_PATH_KEYS) {
+    const value = data[key]
+    if (typeof value === 'string') {
+      if (value) out.push(value)
+      continue
+    }
+    if (Array.isArray(value)) {
+      for (const item of value) if (typeof item === 'string' && item) out.push(item)
+    }
+  }
+  return out
+}
+
+export interface DropImportWatchOptions {
+  /** 收到拖入事件时调用；`paths` 可能为空（payload 未带路径，UNVERIFIED） */
+  run(paths: string[]): void
+  /** 探测窗口，默认 `DROP_PROBE_MS` */
+  probeMs?: number
+}
+
+/**
+ * 订阅 PS 拖入事件（T-72），把 payload 里的路径交给调用方去跑
+ * `commonUse.importMultipleImages`。
+ *
+ * 为什么在命令层而不是页面：`src/pages/**` 不允许 import `@/cep/events`（ADR-16 护栏）。
+ * 这里只做「事件 → 命令参数」的翻译，**不执行命令**——执行仍由页面经 `useCommand` 发起，
+ * 保持命令层不依赖视图层。
+ *
+ * 两种失败都不抛：非 CEP 环境 / 注册失败 → 返回 no-op + warn，页面照常手点导入。
+ */
+export async function startDropImportWatch({
+  run,
+  probeMs = DROP_PROBE_MS,
+}: DropImportWatchOptions): Promise<() => void> {
+  let probe: ReturnType<typeof setTimeout> | undefined
+  let received = false
+  const clearProbe = (): void => {
+    if (probe === undefined) return
+    clearTimeout(probe)
+    probe = undefined
+  }
+
+  let stop: () => void
+  try {
+    stop = await subscribeHostEvent('drop', (payload) => {
+      received = true
+      clearProbe()
+
+      const paths = parseDropPaths(payload)
+      if (!paths.length) {
+        // P0：payload 没路径不能静默——日志留痕，命令层还会再报一次「没有可导入的图片」
+        log.warn('commonUse', 'UNVERIFIED(T-72): 拖入事件未带可用图片路径', {
+          eventID: payload.eventID,
+        })
+      }
+      run(paths)
+    })
+  } catch (e) {
+    log.warn('commonUse', '拖入事件不可用，退回手动导入', e)
+    return () => {}
+  }
+
+  probe = setTimeout(() => {
+    probe = undefined
+    if (received) return
+    log.warn(
+      'commonUse',
+      `UNVERIFIED(T-72): ${probeMs}ms 内未收到拖入事件 1349280544` +
+        '（可能未注册成功，或 PS 不回该事件）',
+    )
+  }, probeMs)
+
+  return () => {
+    clearProbe()
+    stop()
+  }
+}

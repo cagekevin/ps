@@ -2,6 +2,7 @@ import { createCloudEngine } from '@/cloud/engine'
 import { cloudEntries } from './entries'
 import { isAutoSyncEnabled, isCloudConfigured } from './config'
 import { readCloudLedger, writeCloudLedger } from './ledger'
+import { clearPendingChanges, readPendingChanges, recordPendingChanges } from './pending'
 import { pullSnapshot, pushSnapshot } from './transport'
 
 /** 唯一装配点：engine 只依赖端口，具体 CEP 实现只在这里注入 */
@@ -17,6 +18,11 @@ export const cloudEngine = createCloudEngine({
   ledger: {
     read: readCloudLedger,
     write: writeCloudLedger,
+  },
+  pending: {
+    record: recordPendingChanges,
+    list: readPendingChanges,
+    clear: clearPendingChanges,
   },
   entries: cloudEntries,
 })

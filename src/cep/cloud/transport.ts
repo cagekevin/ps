@@ -1,3 +1,13 @@
+// 是什么：云同步的唯一网络出口——自建 GAS 网关的整包快照 push / pull
+// 唯一入口：云端读写只能经过这里；引擎经 CloudTransportPort 使用
+// 替代了什么：原版 `0425.js:3469-3579` 的 `pushFile` 家族（syncserver.pszhuli.com 文件 API）
+// 谁在用：cep/cloud/setup.ts 注入 engine
+// 禁止：这里不写业务判断；页面/组件不许 import
+//
+// UNVERIFIED(T-55/T-56)：真实网关行为未验——本机无云服务端、无原版 token，
+// 所有相关用例都是 mock HTTP（`vi.stubGlobal('fetch')`）。真实字段增减、限流、
+// 配额、并发写的胜者，只能等有可用部署后实测；不要据本文件宣称"同步能用"。
+
 import {
   CloudError,
   normalizeCloudPayload,
