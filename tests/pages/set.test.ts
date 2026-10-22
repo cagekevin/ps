@@ -1,14 +1,20 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
-import { reactive } from 'vue'
+import { reactive, ref } from 'vue'
 
 /**
  * 设置页空态（T-50）：快捷键与常用功能面板本版**不提供**配置项，
  * 页面必须显示诚实文案（不许写「暂无数据」让人误以为加载失败）。
  */
 vi.mock('@/stores/cloud', () => ({
-  useCloudStore: () => ({ refresh: vi.fn(), status: reactive({ autoSyncEnabled: false }) }),
+  // queuedUnits 是 T-74 新加的状态（队列里等自动同步的条数），页面会读它
+  useCloudStore: () => ({
+    refresh: vi.fn(),
+    refreshLive: vi.fn(),
+    status: reactive({ autoSyncEnabled: false, pendingItems: [] }),
+    queuedUnits: ref(0),
+  }),
 }))
 vi.mock('@/stores/font-set', () => ({
   useFontSetStore: () => ({

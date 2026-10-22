@@ -77,6 +77,14 @@ export interface CloudStatus {
   localHash: string
   /** 待同步的 unit 数（未配置 / 冲突 / 网络失败累计），0 表示没有痕迹 */
   pending: number
+  /**
+   * 上述痕迹的明细（每条带 reason，T-74）。
+   *
+   * 为什么把明细也放进来：`pending` 一个数字分不出"未配置"和"冲突"，
+   * 而这两件事用户该做的完全不同（去填地址 / 决定保留哪边）——文案必须能分开。
+   * 数量上限 32（`cep/cloud/pending.ts:13`），随状态一起读没有额外成本。
+   */
+  pendingItems: PendingChange[]
 }
 
 export interface UploadResult {

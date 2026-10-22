@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
-import { nextTick, reactive } from 'vue'
+import { nextTick, reactive, ref } from 'vue'
 
 /**
  * 设置页「字体面板」三组预设（T-68）：原来是三个只能存单值的输入框，
@@ -19,7 +19,13 @@ const settings = reactive({
 })
 
 vi.mock('@/stores/cloud', () => ({
-  useCloudStore: () => ({ refresh: vi.fn(), status: reactive({ autoSyncEnabled: false }) }),
+  // queuedUnits 是 T-74 新加的状态（队列里等自动同步的条数），页面会读它
+  useCloudStore: () => ({
+    refresh: vi.fn(),
+    refreshLive: vi.fn(),
+    status: reactive({ autoSyncEnabled: false, pendingItems: [] }),
+    queuedUnits: ref(0),
+  }),
 }))
 vi.mock('@/stores/font-set', () => ({
   useFontSetStore: () => ({ settings, load: vi.fn(async () => {}) }),

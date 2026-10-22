@@ -106,6 +106,7 @@ function unitHashes(units: Record<string, SyncUnit>): Record<string, string> {
 export function createCloudEngine(deps: CloudDeps): CloudEngine {
   function getStatus(): CloudStatus {
     const ledger = deps.ledger.read()
+    const pendingItems = deps.pending.list()
     return {
       configured: deps.config.isConfigured(),
       autoSyncEnabled: deps.config.isAutoSyncEnabled(),
@@ -113,7 +114,9 @@ export function createCloudEngine(deps: CloudDeps): CloudEngine {
       rev: ledger?.rev ?? 0,
       syncedAt: ledger?.syncedAt ?? 0,
       localHash: ledger?.localHash ?? '',
-      pending: deps.pending.list().length,
+      pending: pendingItems.length,
+      // 明细给 UI 分原因显示（T-74）：一个数字分不出"未配置"和"冲突"
+      pendingItems,
     }
   }
 

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import CheckBox from '@/components/CheckBox.vue'
 import EmptyState from '@/components/EmptyState.vue'
@@ -17,12 +17,15 @@ import { useFontSetStore } from '@/stores/font-set'
 import { useNavStore } from '@/stores/nav'
 import AddcomDialog from './components/AddcomDialog.vue'
 import ClearCacheDialog from './components/ClearCacheDialog.vue'
+import CloudPullDialog from './components/CloudPullDialog.vue'
+import { describeCloudStatus } from './cloud-status'
 
 const cloud = useCloudStore()
 const nav = useNavStore()
 const fontSet = useFontSetStore()
-const { status } = storeToRefs(cloud)
+const { status, queuedUnits } = storeToRefs(cloud)
 const autoSyncCmd = useCommand('cloud.setAutoSync')
+const downloadCmd = useCommand('cloud.download')
 const saveFontSettings = useCommand('fontSet.saveSettings')
 const copyShortcutScripts = useCommand('system.copyToScripts')
 const resetShortcutScripts = useCommand('system.resetQuickKeys')
@@ -135,9 +138,38 @@ function refreshScripts() {
   void resetShortcutScripts.run({ groups: [...SHORTCUT_GROUPS] }, '刷新成功')
 }
 
+/**
+ * 云同步三样状态（T-74）：上次同步 / 待推送（队列里等自动同步）/ 冲突（推失败且有分歧）。
+ * 数据来源分别是 ledger.syncedAt、队列内存脏集合、`cloud.pending` 里 reason==='conflict' 的条目——
+ * 一个数字分不出"未配置"和"冲突"，所以明细由 `cloud-status.ts` 分开措辞。
+ */
+const cloudView = computed(() =>
+  describeCloudStatus({ status: status.value, queuedUnits: queuedUnits.value }),
+)
+
+/** 「从云端拉取」（T-78）：确认框先问，确认后走 cloud.download（引擎内串行，不绕过队列） */
+const pullVisible = ref(false)
+const pulling = computed(() => downloadCmd.running.value)
+
+function confirmPull() {
+  // 覆盖本机已在确认框里说清，这里直接放行引擎层的冲突确认，不再二次弹窗
+  void downloadCmd.run({ onConfirm: async () => true }, '已从云端拉取').then((ok) => {
+    if (ok) cloud.refresh()
+  })
+}
+
+/** 队列脏数只活在内存里，5 秒刷一次就够；台账（上次同步）不参与，避免每次都读盘 */
+let liveTimer: ReturnType<typeof setInterval> | null = null
+
 onMounted(async () => {
   cloud.refresh()
+  liveTimer = setInterval(() => cloud.refreshLive(), 5000)
   await fontSet.load()
+})
+
+onUnmounted(() => {
+  if (liveTimer) clearInterval(liveTimer)
+  liveTimer = null
 })
 </script>
 
@@ -203,6 +235,24 @@ onMounted(async () => {
     <SettingsSection title="云同步设置">
       <p>最新更新：{{ buildTime }}</p>
       <CheckBox v-model="autoSync">开启云同步预设</CheckBox>
+
+      <!-- T-74：三样状态分开放，别合并成一个"同步失败" -->
+      <SettingsRow>
+        <span>上次同步</span>
+        <span class="set-cloud__value">{{ cloudView.syncedText }}</span>
+      </SettingsRow>
+      <SettingsRow>
+        <span>待推送</span>
+        <span class="set-cloud__value">{{ cloudView.queuedText }}</span>
+      </SettingsRow>
+
+      <p v-if="cloudView.failedText" class="set-cloud__fail">
+        没同步成功：{{ cloudView.failedText }}
+      </p>
+      <p v-if="cloudView.conflictText" class="set-cloud__conflict">{{ cloudView.conflictText }}</p>
+      <p v-if="cloudView.notice" class="set-cloud__notice">{{ cloudView.notice }}</p>
+
+      <GButton block :loading="pulling" @click="pullVisible = true">从云端拉取</GButton>
     </SettingsSection>
 
     <!-- 原版是设置页底部一条 `.clear_cache_bar`（`生成/页面规格/08-设置.md:91-98`） -->
@@ -215,6 +265,13 @@ onMounted(async () => {
       @submit="submitPreset"
     />
     <ClearCacheDialog v-model:visible="cacheVisible" />
+
+    <CloudPullDialog
+      v-model:visible="pullVisible"
+      :synced-text="cloudView.syncedText"
+      :queued-units="queuedUnits"
+      @ok="confirmPull"
+    />
   </PageShell>
 </template>
 
@@ -228,5 +285,26 @@ onMounted(async () => {
 
 .set-clear-cache {
   margin-top: var(--sp-2);
+}
+
+/* 云同步状态（T-74）：值靠右、三种提示各用自己的颜色 token */
+.set-cloud__value {
+  margin-left: auto;
+  color: var(--c-text-inverse);
+}
+
+.set-cloud__fail {
+  margin: 0;
+  color: var(--c-warn);
+}
+
+.set-cloud__conflict {
+  margin: 0;
+  color: var(--c-danger);
+}
+
+.set-cloud__notice {
+  margin: 0;
+  color: var(--c-text-faint);
 }
 </style>
