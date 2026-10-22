@@ -18,11 +18,18 @@ import type { CustomRequest } from '@/domain/custom'
 
 const selection = vi.hoisted(() => ({ hasSelection: true, typeNumber: 1 }))
 
+/**
+ * 四个 jsx 假实现。返回类型照 `jsx/types.ts` 的 `CustomJsx` 写 `Promise<unknown>`：
+ * 真实返回结构未实测（见上），命令层用 `utils/jsx-result` 兜形态，
+ * 所以用例可以喂 `{ err: 0 }` 也可以喂 `{ err: 1, msg }`，无需给 mock 放宽到 any。
+ */
 const custom = vi.hoisted(() => ({
-  checkStatus: vi.fn(async () => ({ err: 0 })),
-  checkMergeRectangles: vi.fn(async () => ({ err: 0 })),
-  mergeRectangles: vi.fn(async () => ({ err: 0 })),
-  generate: vi.fn(async () => ({ err: 0 })),
+  checkStatus: vi.fn<(request: CustomRequest) => Promise<unknown>>(async () => ({ err: 0 })),
+  checkMergeRectangles: vi.fn<(request: CustomRequest) => Promise<unknown>>(async () => ({
+    err: 0,
+  })),
+  mergeRectangles: vi.fn<(request: CustomRequest) => Promise<unknown>>(async () => ({ err: 0 })),
+  generate: vi.fn<(request: CustomRequest) => Promise<unknown>>(async () => ({ err: 0 })),
 }))
 
 vi.mock('@/selection', () => ({

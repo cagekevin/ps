@@ -1,5 +1,5 @@
 // 契约测试，非实机：sync 是假实现，仓库用内存实现，全程零网络
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
 import type { SyncOutcome } from '@/cloud/change-sync'
 
 /**
@@ -28,7 +28,8 @@ const fetchGuard = vi.fn(() => {
 const ok: SyncOutcome = { ok: true }
 
 type Queue = ReturnType<typeof createSyncQueue>
-let sync: ReturnType<typeof vi.fn>
+/** 队列只认这个签名（`cloud/change-sync.ts` 的 `sync`）；mock 也要按它标注 */
+let sync: Mock<(units: string[]) => Promise<SyncOutcome>>
 let queue: Queue
 
 beforeEach(async () => {
@@ -39,7 +40,7 @@ beforeEach(async () => {
   vi.spyOn(log, 'warn').mockImplementation(() => undefined)
   vi.spyOn(log, 'error').mockImplementation(() => undefined)
 
-  sync = vi.fn(async () => ok)
+  sync = vi.fn<(units: string[]) => Promise<SyncOutcome>>(async () => ok)
   queue = createSyncQueue({ sync })
   holder.queue = queue
 

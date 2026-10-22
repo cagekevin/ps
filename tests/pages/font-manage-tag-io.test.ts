@@ -1,4 +1,4 @@
-import { flushPromises, mount } from '@vue/test-utils'
+import { flushPromises, mount, type DOMWrapper } from '@vue/test-utils'
 import { createPinia, setActivePinia, type Pinia } from 'pinia'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
@@ -68,9 +68,11 @@ async function openMenu(wrapper: Awaited<ReturnType<typeof mountPage>>) {
   return wrapper.find('.g-menu').text()
 }
 
-/** 弹出的确认框（页面自己挂的 CepModal） */
-function ioModal(wrapper: Awaited<ReturnType<typeof mountPage>>) {
-  return wrapper.findAll('.modal').at(-1)
+/** 弹出的确认框（页面自己挂的 CepModal）；没弹出来就是用例失败，别让它变成后面的 TypeError */
+function ioModal(wrapper: Awaited<ReturnType<typeof mountPage>>): DOMWrapper<Element> {
+  const modal = wrapper.findAll('.modal').at(-1)
+  if (!modal) throw new Error('没有弹出确认框：找不到 .modal')
+  return modal
 }
 
 beforeEach(() => {

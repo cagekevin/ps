@@ -11,7 +11,8 @@ const fs = vi.hoisted(() => ({
     // .bak 之外的目标文件写成功后也算磁盘内容变了，但这两个用例不依赖细节
     if (!path.endsWith('.bak')) disk.text = text
   }),
-  writeTextFileAtomic: vi.fn((path: string, text: string) => {
+  // 路径形参只为对齐 `writeTextFileAtomic(absPath, text)` 的签名，用例不按路径分流
+  writeTextFileAtomic: vi.fn((_path: string, text: string) => {
     disk.text = text
     return true
   }),

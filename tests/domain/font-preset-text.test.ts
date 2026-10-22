@@ -6,12 +6,20 @@ import {
   formatPresetText,
   isPresetCountValid,
   parsePresetText,
+  type PresetTextIssue,
 } from '@/domain/font-preset-text'
 
 /**
  * 预设文本框的解析/格式化（`addcom` 的核心逻辑，T-68）。
  * 只断言返回值与文案，不碰 UI。
  */
+/** 失败分支才有 `issue`（`PresetTextResult` 是判别联合）：先窄化再断言，断言的仍是 issue 的具体值 */
+function issueOf(text: string): PresetTextIssue {
+  const result = parsePresetText(text)
+  if (result.ok) throw new Error(`期望解析失败，实际成功：${text}`)
+  return result.issue
+}
+
 describe('font-preset-text 解析', () => {
   it('个数 6 与 24 是边界内，5 与 25 报原版个数文案', () => {
     const six = Array.from({ length: 6 }, (_, i) => i + 1).join(',')
@@ -49,7 +57,7 @@ describe('font-preset-text 解析', () => {
       issue: 'empty',
       message: PRESET_EMPTY_MESSAGE,
     })
-    expect(parsePresetText(' , ,\n').issue).toBe('empty')
+    expect(issueOf(' , ,\n')).toBe('empty')
   })
 
   it('非数字报数字文案（`1,2,abc` / `1e3` 都不算数字）', () => {
@@ -58,7 +66,7 @@ describe('font-preset-text 解析', () => {
       issue: 'number',
       message: PRESET_NUMBER_MESSAGE,
     })
-    expect(parsePresetText('1e3,2,3,4,5,6').issue).toBe('number')
+    expect(issueOf('1e3,2,3,4,5,6')).toBe('number')
   })
 })
 

@@ -26,15 +26,28 @@ vi.mock('@/selection', async () => {
   }
 })
 
+/**
+ * 页面经 `run({ request })` 下发载荷。这里只声明断言会用到的字段；
+ * 其余字段不参与断言，也不放宽成 any —— 多余字段由页面自己负责。
+ */
+interface CustomRunPayload {
+  request: {
+    shapeIndex: number
+    rowSpacing: string
+    textSize1: string
+    lines: Array<{ text: string }>
+  }
+}
+
 /** 每个命令 id 一个 run；记录调用便于断言「走了哪条命令」 */
-const calls = vi.hoisted(() => [] as Array<{ id: string; payload: unknown }>)
+const calls = vi.hoisted(() => [] as Array<{ id: string; payload: CustomRunPayload }>)
 
 vi.mock('@/components/command/useCommand', () => ({
   useCommand: (id: string) => ({
     command: undefined,
     disabled: { value: false },
     running: { value: false },
-    run: async (payload: unknown) => {
+    run: async (payload: CustomRunPayload) => {
       calls.push({ id, payload })
       return true
     },
@@ -106,9 +119,7 @@ describe('/custom 页面', () => {
     expect(calls).toHaveLength(1)
     const { id, payload } = calls[0]
     expect(id).toBe('custom.generate')
-    expect((payload as { request: { lines: Array<{ text: string }> } }).request.lines[0].text).toBe(
-      '1:2',
-    )
+    expect(payload.request.lines[0].text).toBe('1:2')
     // 空间距按原版兜底 8px，空字号兜底 0
     expect(payload.request.rowSpacing).toBe('8px')
     expect(payload.request.textSize1).toBe('0')
@@ -130,7 +141,7 @@ describe('/custom 页面', () => {
     await wrapper.findAll('.g-segment__cell')[1].trigger('click')
     await wrapper.get('.custom__generate').trigger('click')
 
-    expect((calls[0].payload as { request: { shapeIndex: number } }).request.shapeIndex).toBe(1)
+    expect(calls[0].payload.request.shapeIndex).toBe(1)
   })
 
   it('「重置参数」把形状复位到矩形，但不删行', async () => {

@@ -1,0 +1,19 @@
+// tests 的类型检查项目。`npm run typecheck` 会依次跑 src 与 tests 两个项目。
+//
+// 为什么单独一个文件而不是把 `tests/**` 塞进 tsconfig.json：
+// `@types/node` 是**只能给 tests 用**的——`src/` 跑在 CEP 里，没有 Node 全局
+// （`window.require` 要 `--enable-nodejs`），一旦 `src/` 的文件能看见 `Buffer` / `process` /
+// `node:fs`，误用就不会被任何门禁拦住。TS 的 `types` 是**整个 program** 的，无法按文件
+// 收窄；所以要"只给 tests"，只能另开一个 program。
+//
+// `lib` 提到 ES2022：测试跑在 Node 22（`vite` 的 `build.target: esnext`），而 `.at()` /
+// `String.matchAll()` 是 ES2022 / ES2020。这里**只影响 tests 这个 program**，
+// `tsconfig.json`（src）仍是 `ES2019`，src 的可用 API 集合一点没放宽。
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": ["vite/client", "node"]
+  },
+  "include": ["src/**/*.d.ts", "tests/**/*.ts"]
+}

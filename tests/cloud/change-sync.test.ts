@@ -1,5 +1,5 @@
 // 契约测试，非实机：sync 是注入的假实现，全程零网络（fetch 被 stub 成"一调用就失败"）
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
 import {
   CLOUD_SYNC_BACKOFF_MS,
   CLOUD_SYNC_DEBOUNCE_MS,
@@ -136,7 +136,9 @@ describe('同步队列：防抖 / 最大等待 / 退避 / 串行（ADR-21）', (
 
   it('上一轮没回来不开第二轮，回来后再补一轮', async () => {
     let release: (outcome: SyncOutcome) => void = () => {}
-    const sync = vi.fn<(units: string[]) => Promise<SyncOutcome>>(() =>
+    // 显式标注：实现里读自己的 `mock.calls`，不标注就是自引用，TS 只给 `any`（TS7022）
+    type SyncFn = (units: string[]) => Promise<SyncOutcome>
+    const sync: Mock<SyncFn> = vi.fn<SyncFn>(() =>
       sync.mock.calls.length === 1
         ? new Promise<SyncOutcome>((resolve) => {
             release = resolve

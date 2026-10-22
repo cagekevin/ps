@@ -1,10 +1,11 @@
 // 契约测试，非实机：文件读写全部 mock，全程零网络
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
+/** 按 `cep/fs.ts` 的真实签名标注：用例要读 `mock.calls[0][1]`，不标就是空元组 `[]` */
 const fsMock = vi.hoisted(() => ({
-  readTextFile: vi.fn(),
-  writeTextFile: vi.fn(),
-  writeTextFileAtomic: vi.fn(() => true),
+  readTextFile: vi.fn<(absPath: string) => string | null>(),
+  writeTextFile: vi.fn<(absPath: string, text: string) => void>(),
+  writeTextFileAtomic: vi.fn<(absPath: string, text: string) => boolean>(() => true),
 }))
 
 vi.mock('@/cep/fs', async (importOriginal) => {

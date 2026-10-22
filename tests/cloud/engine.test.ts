@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
 import {
   buildSnapshot,
   unitHash,
@@ -6,6 +6,7 @@ import {
   type CloudLedger,
   type CloudSnapshotView,
   type SyncUnit,
+  type SyncUnitAdapter,
   type UnitPayload,
 } from '@/domain/cloud'
 import type { CloudDeps } from '@/cloud/types'
@@ -56,36 +57,38 @@ const fetchGuard = vi.fn(() => {
 })
 
 describe('cloud engine', () => {
-  let readA: ReturnType<typeof vi.fn>
-  let writeA: ReturnType<typeof vi.fn>
-  let readB: ReturnType<typeof vi.fn>
-  let writeB: ReturnType<typeof vi.fn>
-  let pull: ReturnType<typeof vi.fn>
-  let push: ReturnType<typeof vi.fn>
-  let ledgerRead: ReturnType<typeof vi.fn>
-  let ledgerWrite: ReturnType<typeof vi.fn>
-  let configured: ReturnType<typeof vi.fn>
-  let pendingRecord: ReturnType<typeof vi.fn>
-  let pendingList: ReturnType<typeof vi.fn>
-  let pendingClear: ReturnType<typeof vi.fn>
+  // mock 按端口签名逐个标注：`Mock<T>` 才是 T 的子类型，能直接塞进 `CloudDeps`；
+  // `ReturnType<typeof vi.fn>` 是 `Mock<Procedure | Constructable>`，与任何具体签名都不兼容
+  let readA: Mock<SyncUnitAdapter['read']>
+  let writeA: Mock<SyncUnitAdapter['write']>
+  let readB: Mock<SyncUnitAdapter['read']>
+  let writeB: Mock<SyncUnitAdapter['write']>
+  let pull: Mock<CloudDeps['transport']['pull']>
+  let push: Mock<CloudDeps['transport']['push']>
+  let ledgerRead: Mock<CloudDeps['ledger']['read']>
+  let ledgerWrite: Mock<CloudDeps['ledger']['write']>
+  let configured: Mock<CloudDeps['config']['isConfigured']>
+  let pendingRecord: Mock<CloudDeps['pending']['record']>
+  let pendingList: Mock<CloudDeps['pending']['list']>
+  let pendingClear: Mock<CloudDeps['pending']['clear']>
   let deps: CloudDeps
   let engine: ReturnType<typeof createCloudEngine>
 
   beforeEach(() => {
     vi.stubGlobal('fetch', fetchGuard)
     fetchGuard.mockClear()
-    readA = vi.fn().mockResolvedValue(payloadA)
-    writeA = vi.fn().mockResolvedValue({ ok: true })
-    readB = vi.fn().mockResolvedValue(payloadB)
-    writeB = vi.fn().mockResolvedValue({ ok: true })
-    pull = vi.fn().mockResolvedValue(null)
-    push = vi.fn().mockResolvedValue(undefined)
-    ledgerRead = vi.fn().mockReturnValue(null)
-    ledgerWrite = vi.fn()
-    configured = vi.fn().mockReturnValue(true)
-    pendingRecord = vi.fn()
-    pendingList = vi.fn(() => [])
-    pendingClear = vi.fn()
+    readA = vi.fn<SyncUnitAdapter['read']>().mockResolvedValue(payloadA)
+    writeA = vi.fn<SyncUnitAdapter['write']>().mockResolvedValue({ ok: true })
+    readB = vi.fn<SyncUnitAdapter['read']>().mockResolvedValue(payloadB)
+    writeB = vi.fn<SyncUnitAdapter['write']>().mockResolvedValue({ ok: true })
+    pull = vi.fn<CloudDeps['transport']['pull']>().mockResolvedValue(null)
+    push = vi.fn<CloudDeps['transport']['push']>().mockResolvedValue(undefined)
+    ledgerRead = vi.fn<CloudDeps['ledger']['read']>().mockReturnValue(null)
+    ledgerWrite = vi.fn<CloudDeps['ledger']['write']>()
+    configured = vi.fn<CloudDeps['config']['isConfigured']>().mockReturnValue(true)
+    pendingRecord = vi.fn<CloudDeps['pending']['record']>()
+    pendingList = vi.fn<CloudDeps['pending']['list']>(() => [])
+    pendingClear = vi.fn<CloudDeps['pending']['clear']>()
 
     deps = {
       config: { isConfigured: configured, isAutoSyncEnabled: () => false },
@@ -268,7 +271,7 @@ describe('cloud engine', () => {
 
     expect(result).toMatchObject({ ok: true, pushed: ['font.tags'], rev: 6 })
     const written = ledgerWrite.mock.calls[0][0]
-    expect(written.units['font.tags']).toBe(toUnit(payloadB).hash)
+    expect(written.units?.['font.tags']).toBe(toUnit(payloadB).hash)
   })
 
   it('T-76②：内容一致 skipped 时也把 per-unit 基线刷新到当前云端', async () => {
@@ -289,7 +292,7 @@ describe('cloud engine', () => {
     expect(push).not.toHaveBeenCalled()
     const written = ledgerWrite.mock.calls[0][0]
     expect(written.rev).toBe(5)
-    expect(written.units['font.tags']).toBe(toUnit(payloadB).hash)
+    expect(written.units?.['font.tags']).toBe(toUnit(payloadB).hash)
   })
 
   it('T-76③：一个 unit 读失败不拖死整批，失败的记 pending 其余照推', async () => {
@@ -343,7 +346,7 @@ describe('cloud engine', () => {
 
     expect(second).toMatchObject({ ok: true, skipped: true, count: 0 })
     expect(push).toHaveBeenCalledTimes(1)
-    expect(ledgerWrite.mock.calls[1][0].units['font.tags']).toBe(toUnit(payloadB).hash)
+    expect(ledgerWrite.mock.calls[1][0].units?.['font.tags']).toBe(toUnit(payloadB).hash)
   })
 
   it('两边都改过 → 无确认时取消，并留 pending 痕迹', async () => {

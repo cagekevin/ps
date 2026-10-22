@@ -1,4 +1,4 @@
-﻿# 给后续 AI / 开发者的规则
+# 给后续 AI / 开发者的规则
 
 这个文件是**硬约束**，不是建议。改代码前先读完。
 
@@ -218,7 +218,7 @@ grep -rn "export .*<概念词>" src  # 有哪些导出叫这个名字
 **这门禁缺什么，写清楚**（不要以为绿的就没问题）：
 
 - **没有一条命令会自动跑测试**（`check` / `build` / `deploy` 都不跑）。**测试是纪律，不是门禁**：交付前必须先 `npm test` 再 build，这一条靠人（和 AI）执行，脚本不管。
-- **`tests/` 从来没做过类型检查**。`tsconfig.json` 的 `include` 只有 `src/**`，`vue-tsc` 看不到测试。把 `tests/**` 加进去会冒出 **83 条** 类型错误（绝大多数是 `vi.fn()` 的 mock 签名，少数是真的：`.at()` 超出 `lib: ES2019`、`Buffer` 缺 `@types/node`）。已记在台账，**没修**。
+- **`tests/` 现在也做类型检查**（2026-10-23 起；原来那条「把 `tests/**` 加进去会冒出 83 条错误、没修」已清零）。`npm run typecheck` 依次跑两个 tsconfig：`tsconfig.json`（`src/**`，`lib: ES2019`，`types` 只有 `vite/client`）与 `tsconfig.tests.json`（`tests/**`，`lib: ES2022` + `@types/node`，并带上 `src/**/*.d.ts` 拿全局声明）。**分成两个文件不是绕路**：TS 的 `types` 是**整个 program** 的，没法按文件收窄；合成一个 program 就等于让 `Buffer` / `process` / `node:fs` 在 `src/` 里也能编译通过，而 `src/` 跑在 CEP 里没有 Node（`window.require` 要 `--enable-nodejs`），这类误用没有任何门禁能拦。注意 `npm run build` 里的 `vue-tsc` 仍只查 `src/**`——测试类型只由 `typecheck` 管，`check` / `deploy` 都不跑它。
 - **没有 CI**。没有 `.github/`，所有门禁都靠人工手动跑。
 
 ## 需要事实时再查（不是开工前通读）

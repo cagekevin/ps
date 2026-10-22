@@ -1,5 +1,5 @@
 // 契约测试，非实机：队列是真的，sync 是假实现，全程零网络
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
 import type { SyncOutcome } from '@/cloud/change-sync'
 
 const holder = vi.hoisted(() => ({ queue: undefined as unknown }))
@@ -25,7 +25,8 @@ const fetchGuard = vi.fn(() => {
 const ok: SyncOutcome = { ok: true }
 
 type Queue = ReturnType<typeof createSyncQueue>
-let sync: ReturnType<typeof vi.fn>
+/** 队列只认这个签名（`cloud/change-sync.ts` 的 `sync`）；mock 也要按它标注 */
+let sync: Mock<(units: string[]) => Promise<SyncOutcome>>
 let queue: Queue
 let visibility: 'visible' | 'hidden'
 
@@ -46,7 +47,7 @@ describe('启动装配：启动补偿 + 可见性信号，没有定时器（ADR-
       get: () => visibility,
     })
 
-    sync = vi.fn(async () => ok)
+    sync = vi.fn<(units: string[]) => Promise<SyncOutcome>>(async () => ok)
     queue = createSyncQueue({ sync })
     holder.queue = queue
   })
