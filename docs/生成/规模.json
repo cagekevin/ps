@@ -26,14 +26,14 @@
     }
   },
   "tests": {
-    "files": 91,
-    "cases": 778,
+    "files": 102,
+    "cases": 852,
     "eachSites": 0
   },
   "components": 30,
   "icons": 189,
   "pages": 9,
-  "hostEvents": 4,
+  "hostEvents": 5,
   "componentTableRows": {
     "fontManage": 33,
     "fontSet": 9,
@@ -51,7 +51,7 @@
     "commonUse": 112,
     "style": 5,
     "rename": 40,
-    "set": 10
+    "set": 8
   },
   "unconfirmed": {
     "fontManage": 0,
