@@ -64,7 +64,7 @@ app.mount('#app')
 //
 // 入口由 public/freePanel.html 显式声明（?panel=freePanel），不靠 hash 猜（D-34）：
 // 换入口方式（改路由、换 html 入口）时 hash 判断会静默失效。
-// UNVERIFIED: 独立面板在 PS 里是否仍被正确识别（CEP 双击面板窗口）——本机无法起 PS，未实测。
+// UNVERIFIED: 独立面板在 PS 里是否仍被正确识别（CEP 双击面板窗口）——未起真实 PS，未实测。
 const standalonePanel = new URLSearchParams(window.location.search).get('panel')
 const standaloneFreePanel = standalonePanel === 'freePanel'
 

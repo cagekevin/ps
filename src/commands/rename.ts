@@ -151,7 +151,7 @@ export const renameCommands: Command<unknown>[] = [
         if (from < 1 || to < 1) throw new CepError('PARSE', '第一个分组是固定组，不能拖动排序')
         const moved = applyListDrop(preset, from, to, position)
         // 照 `/style` 范本：被拖组随同一次写盘折叠。
-        // UNVERIFIED: 判据没有点名这条，本机无同版本原版源码可复核。
+        // UNVERIFIED: 判据没有点名这条，同版本原版源码是仓外路径，未复核。
         if (moved >= 0) preset[moved].show = false
       })
     },

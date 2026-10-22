@@ -37,7 +37,7 @@ const REASON_TEXT: Record<PendingReason, string> = {
   'no-cloud': '云端还没有数据',
   conflict: '云端和本地都改过',
   network: '网络失败，会在后台重试',
-  'collect-failed': '本机这项数据读不出来，没上传',
+  'collect-failed': '本地这项数据读不出来，没上传',
 }
 
 export interface CloudStatusView {
@@ -72,9 +72,9 @@ export function describeCloudStatus(input: {
   if (!status.configured) {
     notice = '没设置同步地址：云同步不会运行。'
   } else if (!status.hasLedger) {
-    notice = '本机还没有同步记录。先点「从云端拉取」建立记录；新设备不会自动上传，避免覆盖云端。'
+    notice = '本地还没有同步记录。先点「从云端拉取」建立记录；新设备不会自动上传，避免覆盖云端。'
   } else if (!status.autoSyncEnabled) {
-    notice = '自动同步已关闭：改动现在只存在本机，打开上面的开关才会推送。'
+    notice = '自动同步已关闭：改动现在只存在本地，打开上面的开关才会推送。'
   }
 
   return {
@@ -88,7 +88,7 @@ export function describeCloudStatus(input: {
       conflicts.length === 0
         ? ''
         : `${conflicts.length} 项 —— 云端和本地都改过，需要你决定保留哪边：` +
-          '想保留云端就点「从云端拉取」（本机这些改动会被覆盖）。',
+          '想保留云端就点「从云端拉取」（本地这些改动会被覆盖）。',
     notice,
     failedCount: failed.length,
     conflictCount: conflicts.length,

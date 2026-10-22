@@ -357,7 +357,7 @@ function runFreePanelItem(blockId: number, item: { btnId: number; text: string }
  * PS 拖文件进画布 → `commonUse.importMultipleImages`。
  *
  * 订阅在命令层（页面不许 import `@/cep/events`），这里只把 payload 里的路径交给 `useCommand`。
- * UNVERIFIED(T-72): PS 是否真在拖入时回 `1349280544`，本机无法验证；事件不来时页面照常手点导入。
+ * UNVERIFIED(T-72): PS 是否真在拖入时回 `1349280544`，未在真实环境验证；事件不来时页面照常手点导入。
  */
 let stopDropWatch: (() => void) | undefined
 let unmounted = false

@@ -88,7 +88,7 @@ describe('describeCloudStatus', () => {
   it('没台账 / 自动同步关 各有一句解释（用户要做的事不同）', () => {
     expect(
       describeCloudStatus({ status: status({ hasLedger: false }), queuedUnits: 0 }).notice,
-    ).toContain('本机还没有同步记录')
+    ).toContain('本地还没有同步记录')
     expect(
       describeCloudStatus({ status: status({ autoSyncEnabled: false }), queuedUnits: 2 }).notice,
     ).toContain('自动同步已关闭')

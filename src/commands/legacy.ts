@@ -23,7 +23,7 @@ export const legacyCommands: Command<unknown>[] = [
    * 差异只在**撤销粒度 / 历史面板里那一步叫什么**，落盘结果和用户数据都不受影响。
    *
    * 为什么不补历史包装：
-   * - `$cep.jsxHistory` 的实现本机取不到——`../reference/01-原版源码` 不在库；
+   * - `$cep.jsxHistory` 的实现未取到——`../reference/01-原版源码` 不在库；
    *   `public/lib/all.decrypted.js` 实际是 jsxbin（`@JSXBIN@` 开头，编码不可读），grep 不出函数体；
    *   所以"原版到底把 label 传进哪一层"没有一手证据，写出来的包装只能是猜。
    * - 自己包 `app.activeDocument.suspendHistory(label, script)` 对白名单里的 `cy_openDirectory`

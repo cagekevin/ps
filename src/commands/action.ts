@@ -224,7 +224,7 @@ export const actionCommands: Command<unknown>[] = [
         const moved = applyListDrop(list, from, to, position)
         if (moved < 0) return
         // 照 `/style` 范本：被拖组随同一次写盘折叠（`moveKuGroupTo` 里同样 `show = false`）。
-        // UNVERIFIED: 判据没有点名这条，本机无同版本原版源码可复核。
+        // UNVERIFIED: 判据没有点名这条，同版本原版源码是仓外路径，未复核。
         list[moved].show = false
       })
     },

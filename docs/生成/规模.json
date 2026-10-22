@@ -64,5 +64,47 @@
     "set": 111
   },
   "fontSetFreePanelIcons": 5,
-  "stylePageCases": 73
+  "stylePageCases": 73,
+  "layers": {
+    "cep": {
+      "files": 52,
+      "lines": 5347
+    },
+    "cloud": {
+      "files": 4,
+      "lines": 881
+    },
+    "commands": {
+      "files": 16,
+      "lines": 3997
+    },
+    "components": {
+      "files": 35,
+      "lines": 3169
+    },
+    "composables": {
+      "files": 10,
+      "lines": 918
+    },
+    "domain": {
+      "files": 22,
+      "lines": 2907
+    },
+    "pages": {
+      "files": 65,
+      "lines": 13272
+    },
+    "selection": {
+      "files": 2,
+      "lines": 292
+    },
+    "stores": {
+      "files": 13,
+      "lines": 803
+    },
+    "utils": {
+      "files": 10,
+      "lines": 505
+    }
+  }
 }

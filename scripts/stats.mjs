@@ -52,6 +52,24 @@ const PAGE_DOCS_DIR = join(root, 'docs/页面')
 const OUT_JSON = join(root, 'docs/生成/规模.json')
 const OUT_MD = join(root, 'docs/生成/规模.md')
 const PROGRESS = join(root, 'docs/状态/进度.md')
+const AGENTS = join(root, 'AGENTS.md')
+
+/**
+ * 各层文件数/行数 —— 只统计 .ts/.vue/.css。
+ * 存在的意义：AGENTS「资产地图」里那组数字以前是手写的，实测漂过（用例 777 → 884 没人发现）。
+ */
+const LAYER_DIRS = {
+  pages: 'src/pages',
+  cep: 'src/cep',
+  components: 'src/components',
+  domain: 'src/domain',
+  commands: 'src/commands',
+  composables: 'src/composables',
+  stores: 'src/stores',
+  utils: 'src/utils',
+  cloud: 'src/cloud',
+  selection: 'src/selection',
+}
 
 /** 非域文件：里面没有命令定义，不参与命令数统计 */
 const NON_DOMAIN_FILES = new Set([
@@ -109,7 +127,9 @@ function countTests() {
   for (const file of files) {
     const text = readFileSync(file, 'utf8')
     // \b(it|test)\s*\( 不会匹配 it.each( —— each 展开后是几条，本口径按 1 处计
-    cases += (text.match(/\b(?:it|test)\s*\(/g) ?? []).length
+    // 但会误匹配正则的 .test(：`/\bsize\s*=/.test(icon[0])` 真的是普通方法调用。
+    // 所以要排除前面带 `.` 的（对象方法）——否则数字会比 vitest 报的多 1。
+    cases += (text.match(/(?<![.\w$])(?:it|test)\s*\(/g) ?? []).length
     eachSites += (text.match(/\b(?:it|test)\.each/g) ?? []).length
   }
   return { files: files.length, cases, eachSites }
@@ -187,12 +207,38 @@ function countFontSetFreePanelIcons() {
   return (readFileSync(file, 'utf8').match(/^\s+openFreePanel\(/gm) ?? []).length
 }
 
+/** 各层文件数与行数（.ts/.vue/.css） */
+function countLayers() {
+  const out = {}
+  for (const name of Object.keys(LAYER_DIRS).sort()) {
+    const dir = join(root, LAYER_DIRS[name])
+    let files = 0
+    let lines = 0
+    const walk = (d) => {
+      if (!existsSync(d)) return
+      for (const entry of readdirSync(d, { withFileTypes: true })) {
+        const full = join(d, entry.name)
+        if (entry.isDirectory()) walk(full)
+        else if (/\.(ts|vue|css)$/.test(entry.name)) {
+          files += 1
+          const text = readFileSync(full, 'utf8').replace(/\r\n/g, '\n')
+          // 与 `wc -l` 对齐：按换行数算，末尾没有换行的最后一行也算一行
+          lines += (text.match(/\n/g) ?? []).length + (text !== '' && !text.endsWith('\n') ? 1 : 0)
+        }
+      }
+    }
+    walk(dir)
+    out[name] = { files, lines }
+  }
+  return out
+}
+
 /** 指定测试文件的用例数（it(/test( 调用点） */
 function casesInFiles(files) {
   let n = 0
   for (const file of files) {
     if (!existsSync(file)) continue
-    n += (readFileSync(file, 'utf8').match(/\b(?:it|test)\s*\(/g) ?? []).length
+    n += (readFileSync(file, 'utf8').match(/(?<![.\w$])(?:it|test)\s*\(/g) ?? []).length
   }
   return n
 }
@@ -230,6 +276,7 @@ function compute() {
     unconfirmed,
     fontSetFreePanelIcons: countFontSetFreePanelIcons(),
     stylePageCases: casesInFiles([join(TESTS_DIR, 'pages/style.test.ts')]),
+    layers: countLayers(),
   }
 }
 
@@ -289,6 +336,11 @@ function renderers(m) {
     r[`unconfirmed.${page}`] = `${n} 行`
   }
 
+  // 各层文件数/行数：`layers.<层>`
+  for (const [name, { files, lines }] of Object.entries(m.layers)) {
+    r[`layers.${name}`] = `${files} 文件 / ${lines} 行`
+  }
+
   // 字体面板页接到自由面板的顶部图标数
   r['fontSetFreePanelIcons'] = `${m.fontSetFreePanelIcons} 个`
 
@@ -330,6 +382,15 @@ const REQUIRED_BLOCKS = [
   'rows.custom',
   'rows.commonUse',
   'pending.rename',
+]
+
+/**
+ * 带注入块的文档。`required` 里的块缺失就报错；其余块出现才改写。
+ * AGENTS.md 只放各层规模，不要求全量 —— 主文档不被门禁绑死。
+ */
+const INJECT_TARGETS = [
+  { file: PROGRESS, label: 'docs/状态/进度.md', required: REQUIRED_BLOCKS },
+  { file: AGENTS, label: 'AGENTS.md', required: [] },
 ]
 
 function buildJson(m) {
@@ -424,7 +485,7 @@ function blocksIn(text) {
  * 改写注入块内容。返回 { text, problems }。
  * 同一个名字可以出现多次，全部改写；名字未注册 → 报错，不静默跳过。
  */
-function rewriteBlocks(text, rendered) {
+function rewriteBlocks(text, rendered, required = REQUIRED_BLOCKS) {
   const problems = []
   const seen = new Set()
   let next = text
@@ -447,7 +508,7 @@ function rewriteBlocks(text, rendered) {
   }
 
   // 必填块缺失 → 报错（标记被删掉不能静默放过）
-  for (const name of REQUIRED_BLOCKS) {
+  for (const name of required) {
     if (!seen.has(name)) {
       problems.push(
         `缺少必填注入块：stats:${name}（期望 \`<!-- stats:begin ${name} -->\` / \`<!-- stats:end ${name} -->\`）`,
@@ -467,19 +528,23 @@ function gen() {
   writeFileSync(OUT_MD, buildMd(m), 'utf8')
   console.log('[stats] 已写入 docs/生成/规模.md')
 
-  if (!existsSync(PROGRESS)) {
-    console.error('[stats] 找不到 docs/状态/进度.md')
-    process.exit(1)
+  for (const target of INJECT_TARGETS) {
+    if (!existsSync(target.file)) {
+      console.error(`[stats] 找不到 ${target.label}`)
+      process.exit(1)
+    }
+    const text = readFileSync(target.file, 'utf8')
+    const { text: next, problems } = rewriteBlocks(text, rendered, target.required)
+    if (problems.length) {
+      console.error(`[stats] ${target.label} 的注入块有错，未改写：`)
+      for (const p of problems) console.error(`  - ${p}`)
+      process.exit(1)
+    }
+    if (next !== text) {
+      writeFileSync(target.file, withBom(text, next), 'utf8')
+      console.log(`[stats] 已改写 ${target.label} 的注入块`)
+    }
   }
-  const text = readFileSync(PROGRESS, 'utf8')
-  const { text: next, problems } = rewriteBlocks(text, rendered)
-  if (problems.length) {
-    console.error('[stats] 注入块有错，未改写 docs/状态/进度.md：')
-    for (const p of problems) console.error(`  - ${p}`)
-    process.exit(1)
-  }
-  writeFileSync(PROGRESS, withBom(text, next), 'utf8')
-  console.log('[stats] 已改写 docs/状态/进度.md 的注入块')
   console.log(
     `[stats] 完成：命令 ${m.commands.total} / 用例 ${m.tests.cases}（静态计数）/ 组件 ${m.components} / 图标 ${m.icons} / 页面 ${m.pages} / 宿主事件 ${m.hostEvents}`,
   )
@@ -506,34 +571,35 @@ function check() {
     errors.push('docs/生成/规模.md 与源码真值不一致（跑 `npm run stats`）')
   }
 
-  // 3. 进度.md 的注入块
-  if (!existsSync(PROGRESS)) {
-    errors.push('docs/状态/进度.md 不存在')
-  } else {
-    const text = readFileSync(PROGRESS, 'utf8')
-    const blocks = blocksIn(text)
+  // 3. 各文档里的注入块
+  for (const target of INJECT_TARGETS) {
+    if (!existsSync(target.file)) {
+      errors.push(`${target.label} 不存在`)
+      continue
+    }
+    const text = readFileSync(target.file, 'utf8')
     const byName = new Map()
-    for (const b of blocks) {
+    for (const b of blocksIn(text)) {
       if (!byName.has(b.name)) byName.set(b.name, [])
       byName.get(b.name).push(b)
     }
     for (const [name, list] of byName) {
       if (!(name in rendered)) {
-        errors.push(`docs/状态/进度.md 里有未注册的注入块：stats:begin ${name}`)
+        errors.push(`${target.label} 里有未注册的注入块：stats:begin ${name}`)
         continue
       }
       for (const b of list) {
         if (b.inner !== rendered[name]) {
           errors.push(
-            `docs/状态/进度.md 注入块 ${name} 与真值不一致：\n    期望：${rendered[name]}\n    实际：${b.inner.trim()}`,
+            `${target.label} 注入块 ${name} 与真值不一致：\n    期望：${rendered[name]}\n    实际：${b.inner.trim()}`,
           )
         }
       }
     }
-    for (const name of REQUIRED_BLOCKS) {
+    for (const name of target.required) {
       if (!byName.has(name)) {
         errors.push(
-          `docs/状态/进度.md 缺少必填注入块：stats:${name}（期望 \`<!-- stats:begin ${name} -->\` / \`<!-- stats:end ${name} -->\`）`,
+          `${target.label} 缺少必填注入块：stats:${name}（期望 \`<!-- stats:begin ${name} -->\` / \`<!-- stats:end ${name} -->\`）`,
         )
       }
     }

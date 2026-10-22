@@ -4,7 +4,7 @@
 // 谁在用：cep/cloud/setup.ts 注入 engine
 // 禁止：这里不写业务判断；页面/组件不许 import
 //
-// UNVERIFIED(T-55/T-56)：真实网关行为未验——本机无云服务端、无原版 token，
+// UNVERIFIED(T-55/T-56)：真实网关行为未验——没有云服务端与 token，无法验证，
 // 所有相关用例都是 mock HTTP（`vi.stubGlobal('fetch')`）。真实字段增减、限流、
 // 配额、并发写的胜者，只能等有可用部署后实测；不要据本文件宣称"同步能用"。
 

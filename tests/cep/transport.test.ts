@@ -113,6 +113,15 @@ describe('jsxCall', () => {
     )
   })
 
+  it('参数里有 undefined 时提前报出是第几个，不让它变成 TypeError', async () => {
+    // JSON.stringify(undefined) 返回 undefined 而不是字符串，toJsxArg 里 .replace 会抛
+    // 「Cannot read properties of undefined」—— 报错完全指不到调用点。
+    setBridge((_script, cb) => cb('null'))
+    await expect(jsxCall('cy_distribute', [1, undefined], { label: '分布' })).rejects.toThrow(
+      '分布：第 2 个参数是 undefined',
+    )
+  })
+
   it('空串与 undefined 返回 undefined', async () => {
     setBridge((_script, cb) => cb(''))
     await expect(jsxCall('x')).resolves.toBeUndefined()

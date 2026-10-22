@@ -212,7 +212,7 @@ export const commonUseCommands: Command<unknown>[] = [
 /**
  * 订阅后等待第一条拖入事件的上限。
  *
- * 原版没有这一步，**属有意偏离**：PS 是否真回 `1349280544` 本机无法验证（UNVERIFIED(T-72)），
+ * 原版没有这一步，**属有意偏离**：PS 是否真回 `1349280544` 未在真实环境验证（UNVERIFIED(T-72)），
  * 不探测的话"接了但从没生效"和"工作正常"在日志里长得一样——这正是要防的静默失败。
  */
 export const DROP_PROBE_MS = 60_000

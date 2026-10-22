@@ -24,9 +24,10 @@
     "style:fix": "node scripts/style-guard.mjs --fix",
     "style:baseline": "node scripts/style-guard.mjs --update",
     "build": "node scripts/style-guard.mjs && vue-tsc --noEmit && vite build && node scripts/verify-dist.mjs",
-    "deploy": "npm run check && npm run build",
+    "deploy": "npm run check && npm test && npm run build",
     "build:fast": "vite build",
     "typecheck": "vue-tsc --noEmit",
+    "render:check": "node scripts/render-check.mjs",
     "preview": "vite preview"
   },
   "dependencies": {

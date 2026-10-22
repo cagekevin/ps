@@ -13,6 +13,7 @@
 import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { requireExternal } from './_env-guard.mjs'
 
 const root = fileURLToPath(new URL('..', import.meta.url))
 const REF = join(root, '..', 'reference', '02-组件文档')
@@ -28,6 +29,9 @@ const CSS_FILE = join(
   'css',
   'app.bf68b505.css',
 )
+
+requireExternal(TPL_DIR, '需要 ../reference/02-组件文档/08-模板（原版 render 模板）。')
+requireExternal(COMP_DIR, '需要 ../reference/02-组件文档/02-组件（组件方法/文案提取）。')
 const OUT_DIR = join(root, 'docs', '页面')
 
 /** 页面 → 根 class + 组件文档名 + 输出文件 */

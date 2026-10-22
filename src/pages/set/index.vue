@@ -152,7 +152,7 @@ const pullVisible = ref(false)
 const pulling = computed(() => downloadCmd.running.value)
 
 function confirmPull() {
-  // 覆盖本机已在确认框里说清，这里直接放行引擎层的冲突确认，不再二次弹窗
+  // 覆盖本地已在确认框里说清，这里直接放行引擎层的冲突确认，不再二次弹窗
   void downloadCmd.run({ onConfirm: async () => true }, '已从云端拉取').then((ok) => {
     if (ok) cloud.refresh()
   })

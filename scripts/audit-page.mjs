@@ -13,6 +13,7 @@ import { parse } from '@babel/parser'
 import { readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { requireExternal } from './_env-guard.mjs'
 
 const root = fileURLToPath(new URL('..', import.meta.url))
 
@@ -28,6 +29,7 @@ const FILE =
   src === '56d7'
     ? join(root, '..', 'archive', '源码还原', 'webcrack输出', 'app', '56d7.js')
     : join(root, '..', 'reference', '01-原版源码', 'panel', 'js', 'app.v4.js')
+requireExternal(FILE, '需要 ../reference/01-原版源码/panel/js/app.v4.js（美化版原版源码）。')
 const code = readFileSync(FILE, 'utf8')
 const ast = parse(code, {
   sourceType: 'script',

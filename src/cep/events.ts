@@ -18,7 +18,7 @@ export type HostEventName = 'selection' | 'transform' | 'make' | 'setd' | 'drop'
  * 这条约束有两处兜底：`tests/cep/events.test.ts` 的「value 不得重复」断言，
  * 与 `register()` 里的 `describeEventIdConflict` 运行期拦截。
  *
- * UNVERIFIED(T-72): PS 是否在拖入文件时真回 `1349280544`，本机无法验证。
+ * UNVERIFIED(T-72): PS 是否在拖入文件时真回 `1349280544`，未在真实环境验证。
  * 本表只接了一条链路「drop → commonUse.importMultipleImages」；
  * 粘贴 / 剪贴蒙版 / 智能填色不在本表（台账 T-73，blocked）。
  */

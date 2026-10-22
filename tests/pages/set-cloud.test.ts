@@ -10,7 +10,7 @@ import type { CloudStatus, PendingChange } from '@/cloud/types'
  * 钉住四件事：
  * 1. 三样状态都显示，且「待推送」与「冲突」不是一个数；
  * 2. 冲突与"没配置"的文案不一样；
- * 3. 按钮开确认框，确认框写明"覆盖本机 / 会丢"；
+ * 3. 按钮开确认框，确认框写明"覆盖本地 / 会丢"；
  * 4. 点确认才真的调 cloud.download（并且带 onConfirm，由确认框负责）。
  */
 const cloudState = vi.hoisted(() => ({
@@ -163,8 +163,8 @@ describe('设置页 · 从云端拉取（T-78）', () => {
 
     const body = document.body.textContent ?? ''
     expect(document.querySelector('.modal')).toBeTruthy()
-    expect(body).toContain('覆盖本机现有的同类数据')
-    expect(body).toContain('本机还没推上去的改动会被覆盖丢失')
+    expect(body).toContain('覆盖本地现有的同类数据')
+    expect(body).toContain('本地还没推上去的改动会被覆盖丢失')
     expect(body).toContain('2 项')
 
     // 还没确认：不许发请求

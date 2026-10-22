@@ -4,7 +4,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
  * 拖入事件（T-72）的**接线测试**。
  *
  * 能证明：事件到达时 run 被调用、payload 缺失不崩、事件不来有日志、订阅失败不拆页面。
- * 不能证明：PS 是否真会在拖入时回 `1349280544`——本机无法验证（UNVERIFIED(T-72)），
+ * 不能证明：PS 是否真会在拖入时回 `1349280544`——未在真实 PS 中验证（UNVERIFIED(T-72)），
  * 所以断言全部写在「收到事件之后」，测试名带 `wiring only`。
  */
 

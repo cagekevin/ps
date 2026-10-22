@@ -64,7 +64,7 @@ const EYEDROPPER_TIMEOUT = 60_000
  * 事件复用 `cep/events.ts` 已有的两个：`setd` = 吸色完成、`selection` = 取消
  * （原版用的两个 stringID 就是它们，表里已有，不能再加别名，见那里的注释）。
  *
- * UNVERIFIED: PS 是否真的会在这两个时机回事件，本机无法验证；若事件不来，60s 后按超时退出。
+ * UNVERIFIED: PS 是否真的会在这两个时机回事件，未在真实环境验证；若事件不来，60s 后按超时退出。
  */
 async function pickColorToGroup(ctx: CommandContext, groupIndex: number): Promise<void> {
   let settle: (result: 'done' | 'cancelled' | 'timeout') => void = () => {}

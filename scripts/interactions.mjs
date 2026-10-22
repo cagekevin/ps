@@ -12,10 +12,13 @@
 import { readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { requireExternal } from './_env-guard.mjs'
 
 const root = fileURLToPath(new URL('..', import.meta.url))
 const SRC_DIR = join(root, '..', 'archive', '源码还原', 'webcrack输出', 'app')
 const OUT = join(root, 'docs', '生成/交互清单.md')
+
+requireExternal(SRC_DIR, '需要 webcrack 还原出的原版 app 目录（仓库外）。')
 
 function walk(dir, out = []) {
   for (const n of readdirSync(dir)) {

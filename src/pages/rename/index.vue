@@ -706,7 +706,7 @@ onMounted(() => {
 }
 
 /* 组拖拽浮层皮肤 —— 照 `/style` 范本的 `.style-group--drag`（`pages/style/index.css`）。
-   UNVERIFIED: 重命名页这份 floatStyle 的具体值没有判据可依，本机无同版本原版源码可复核；
+   UNVERIFIED: 重命名页这份 floatStyle 的具体值没有判据可依，同版本原版源码是仓外路径，未复核；
    先沿用范本的 200×24、强调色、4px 圆角。
    `position/left/top/z-index` 由 `useLongPressDrag` 的 `follow()` 内联给，这里只写皮肤。 */
 .rename-group--drag {

@@ -5,7 +5,7 @@ import CepModal from '@/components/CepModal.vue'
  * 「从云端拉取」确认框（T-78）。
  *
  * 这是**会丢本地数据**的操作，所以确认框的首要职责是把话说死：
- * 云端整包覆盖本地，本机还没推上去的改动会没有。文案里不出现"同步"这种中性的词。
+ * 云端整包覆盖本地，本地还没推上去的改动会没有。文案里不出现"同步"这种中性的词。
  *
  * 只做确认，不自己发请求：确认后由设置页跑 `cloud.download`（走队列的 runSerial）。
  */
@@ -32,17 +32,17 @@ function onOk() {
   <CepModal
     :visible="visible"
     title="从云端拉取"
-    ok-text="覆盖本机"
+    ok-text="覆盖本地"
     cancel-text="取消"
     @ok="onOk"
     @update:visible="emit('update:visible', $event)"
   >
     <div class="cloud-pull">
       <p class="cloud-pull__line">
-        这会把云端预设整个写到本机，<strong>覆盖本机现有的同类数据</strong>
+        这会把云端预设整个写到本地，<strong>覆盖本地现有的同类数据</strong>
         （字体收藏 / 标签 / 字体设置 / 层级预设 / 动作库）。
       </p>
-      <p class="cloud-pull__danger">本机还没推上去的改动会被覆盖丢失。</p>
+      <p class="cloud-pull__danger">本地还没推上去的改动会被覆盖丢失。</p>
 
       <div class="cloud-pull__row">
         <span>上次同步</span>

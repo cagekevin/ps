@@ -440,7 +440,7 @@ export function createCloudEngine(deps: CloudDeps): CloudEngine {
 
     // UNVERIFIED(T-55/T-56)：云端为空时这里只推"被请求的 unit"，云端会是一份
     // 局部快照（其它 unit 缺席）。同一账号的另一台机器此时 download 会看到
-    // 缺项——真实客户端混用场景无法在本机验证，靠后续整包 upload 收敛。
+    // 缺项——真实客户端混用场景无法在本地验证，靠后续整包 upload 收敛。
     const merged: Record<string, SyncUnit> = { ...cloudUnits }
     for (const id of changed) merged[id] = localUnits[id]
 

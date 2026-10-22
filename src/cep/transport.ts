@@ -87,6 +87,19 @@ export async function jsxCall<T = unknown>(
   args: unknown[] = [],
   opts: { timeout?: number; label?: string } = {},
 ): Promise<T> {
+  // undefined 进不了 toJsxArg：JSON.stringify(undefined) 返回 undefined（不是字符串），
+  // 接着 .replace 会抛 TypeError，把「参数漏传」伪装成编译器内部错误。
+  // 这里提前拦，报出是第几个参数。
+  for (let i = 0; i < args.length; i++) {
+    if (args[i] === undefined) {
+      const where = opts.label ?? fn
+      throw new CepError(
+        'JSX',
+        `${where}：第 ${i + 1} 个参数是 undefined（jsx 侧收到的是字符串，漏传会静默变 null）`,
+      )
+    }
+  }
+
   const argStr = args.map(toJsxArg).join(', ')
   const script =
     `(function(){try{var __r = ${fn}(${argStr});` +

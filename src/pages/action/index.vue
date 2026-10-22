@@ -134,7 +134,7 @@ function onItemMouseDown(event: MouseEvent, groupIndex: number, itemIndex: numbe
     node: event.currentTarget as HTMLElement,
     axis: 'x',
     // UNVERIFIED: `ml: -40` 只按台账 T-67 判据③的原文「动作页项拖拽补 ml: -40」实现；
-    // 本机无同版本原版源码，无法复核它作用在哪个元素上。样式页判据明确没有这个偏移，不要加。
+    // 同版本原版源码是仓外路径，无法复核它作用在哪个元素上。样式页判据明确没有这个偏移，不要加。
     offsetX: -40,
     targets: () => {
       entries = itemTargets()

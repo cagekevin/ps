@@ -18,7 +18,7 @@ let bootTimer: ReturnType<typeof setTimeout> | null = null
  * 不阻止 `fetch`，那条判断的实际效果是"用户没盯着面板时永远不同步"，而 PS 里面板常驻后台是常态。
  * 现在改成两个方向各做一件事：
  * - 变隐藏：有脏立刻推一次（页面随时可能随 PS 一起被销毁）；
- * - 变可见：sweep 一次，补上"隐藏期间别的机器改了云端 / 本机有掉队的改动"。
+ * - 变可见：sweep 一次，补上"隐藏期间别的机器改了云端 / 本地有掉队的改动"。
  */
 function onVisibilityChange(): void {
   const hidden = typeof document !== 'undefined' && document.visibilityState === 'hidden'
