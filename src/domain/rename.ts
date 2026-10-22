@@ -85,7 +85,7 @@ export function buildReplaceExpression(replace: string, newtext: string): string
  * - `getGroupName` 写成 `if (t < 1 && t > this.info.length)`（:56881），`&&` 让守卫永远为假；
  * - `addItem/deleteItem/changeItem` 的守卫是 `!(t < 1) || !(t > len)`（:56841/:56846/:56851），
  *   恒为真，等于没守。原版实际靠 UI 隐藏组 0 的 ＋ 与右键菜单（:56687、:57058 `e != 0`）。
- * 我们统一用 `||` 并在模型层守着，单测盯住。
+ * 我们统一收敛到 `isGroupEditable`（`index >= 1 && index < length`）并在模型层守着，单测盯住。
  */
 export function isGroupEditable(index: number, length: number): boolean {
   return index >= 1 && index < length
