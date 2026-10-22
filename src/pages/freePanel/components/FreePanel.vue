@@ -8,7 +8,12 @@ import { useCommand } from '@/components/command/useCommand'
 import { useDismiss } from '@/composables/useDismiss'
 import { useLongPressDrag, type LongPressDragResult } from '@/composables/useLongPressDrag'
 import { useFreePanelStore } from '@/stores/free-panel'
-import { findBlock, type FreePanelItem } from '@/domain/free-panel'
+import {
+  findBlock,
+  walkBlocks,
+  type FreePanelBlock as Block,
+  type FreePanelItem,
+} from '@/domain/free-panel'
 import FreePanelBlock from './FreePanelBlock.vue'
 
 /**
@@ -38,9 +43,46 @@ const blockEdit = ref({
 
 const root = ref<HTMLElement | null>(null)
 const menuOpen = ref(false)
-const showNumber = computed(() => blocks.value[0]?.showNumber ?? 2)
-const showIcon = computed(() => blocks.value[0]?.showIcon === true)
-const showText = computed(() => blocks.value[0]?.showText !== false)
+
+// ---------- 显示设置的勾选态（D-32：口径是全局，勾选态必须如实反映"是否所有区域一致"）----------
+//
+// 命令一次写所有 block（有意简化，见 `commands/freePanel.ts` 的 `freePanel.setDisplay` 注释），
+// 但原版数据是**按区域存**的。所以不能拿 `blocks[0]` 的值冒充全局值——那样"各区域不一致"
+// 会显示成"已选"，用户点一下就以为只是保持原状。
+//
+// 列数是 2/3/4 三选一，"半选"没有唯一可落的行，不一致时三条都不打勾；
+// 图标 / 文字是单行布尔，不一致时显示「–」（半选）。
+
+/** 所有区域（含嵌套 children），与 `setDisplay` 写入的范围一致 */
+const allBlocks = computed(() => {
+  const out: Block[] = []
+  walkBlocks(blocks.value, (block) => {
+    out.push(block)
+  })
+  return out
+})
+
+/** 单行布尔的三态标记：全开 '✓' / 不一致 '–' / 全关 '' */
+function flagMark(values: boolean[]): string {
+  if (!values.length) return ''
+  if (values.every(Boolean)) return '✓'
+  if (values.every((value) => !value)) return ''
+  return '–'
+}
+
+const iconMark = computed(() => flagMark(allBlocks.value.map((block) => block.showIcon === true)))
+const textMark = computed(() => flagMark(allBlocks.value.map((block) => block.showText !== false)))
+
+/** 所有区域列数一致时才有勾选；不一致（或没有区域）时三条都不打勾 */
+const uniformColumns = computed(() => {
+  const numbers = allBlocks.value.map((block) => block.showNumber)
+  if (!numbers.length || numbers.some((value) => value !== numbers[0])) return 0
+  return numbers[0]
+})
+
+function columnMark(columns: number): string {
+  return uniformColumns.value === columns ? '✓' : ''
+}
 
 useDismiss(
   () => menuOpen.value,
@@ -53,14 +95,15 @@ function setColumns(columns: 2 | 3 | 4) {
   void displayCmd.run({ showNumber: columns })
 }
 
+/** 不一致时点一下 = 统一开启（再点一次才全部关闭）；不能拿第一个区域的值取反 */
 function toggleIcon() {
   menuOpen.value = false
-  void displayCmd.run({ showIcon: !showIcon.value })
+  void displayCmd.run({ showIcon: iconMark.value !== '✓' })
 }
 
 function toggleText() {
   menuOpen.value = false
-  void displayCmd.run({ showText: !showText.value })
+  void displayCmd.run({ showText: textMark.value !== '✓' })
 }
 
 function clearWorkspace() {
@@ -218,32 +261,32 @@ onMounted(() => {
       <ul v-if="menuOpen" class="free-panel__menu">
         <li>
           <button type="button" @click="setColumns(2)">
-            <span class="free-panel__check">{{ showNumber === 2 ? '✓' : '' }}</span
+            <span class="free-panel__check">{{ columnMark(2) }}</span
             >双列
           </button>
         </li>
         <li>
           <button type="button" @click="setColumns(3)">
-            <span class="free-panel__check">{{ showNumber === 3 ? '✓' : '' }}</span
+            <span class="free-panel__check">{{ columnMark(3) }}</span
             >三列
           </button>
         </li>
         <li>
           <button type="button" @click="setColumns(4)">
-            <span class="free-panel__check">{{ showNumber === 4 ? '✓' : '' }}</span
+            <span class="free-panel__check">{{ columnMark(4) }}</span
             >四列
           </button>
         </li>
         <li class="free-panel__menu-sep" />
         <li>
           <button type="button" @click="toggleIcon">
-            <span class="free-panel__check">{{ showIcon ? '✓' : '' }}</span
+            <span class="free-panel__check">{{ iconMark }}</span
             >显示图标
           </button>
         </li>
         <li>
           <button type="button" @click="toggleText">
-            <span class="free-panel__check">{{ showText ? '✓' : '' }}</span
+            <span class="free-panel__check">{{ textMark }}</span
             >显示文字
           </button>
         </li>

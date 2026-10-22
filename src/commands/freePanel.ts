@@ -138,6 +138,19 @@ export const freePanelCommands: Command<unknown>[] = [
     },
   }),
 
+  /**
+   * 显示设置是**全局**的：一次写所有 block（含嵌套 children）。这是有意简化，不是原版行为。
+   *
+   * 原版按 block 存：`showIcon` / `showNumber` 是 block 级字段（一手证据见 D-35 行：
+   * 实测 `sj_appFreePanel.json` 的 block 键含这两个字段，`cep/data/free-panel.ts:17-19` 有记录），
+   * 渲染也是按 block 取（`FreePanelBlock.vue` 的 `block.showNumber`）。
+   *
+   * 为什么此刻不做「按区域设置」：要能在每个区域的工具条里选列数/图标，等于新增控件
+   * （`docs/规范/新控件准入.md`：原版出处 + ASCII + 用户批准），又落在「已完成页面冻结」的
+   * `/freePanel` 上（`AGENTS.md:31-38`：只许修 bug / 数据错误 / 安全问题），撞条款。
+   * 所以口径定为全局，并把「不一致」如实暴露在页面的勾选态里（`FreePanel.vue`：列数看是否
+   * 所有 block 一致，图标/文字不一致显示半选），不再拿第一个 block 的值冒充全局（D-32）。
+   */
   defineCommand({
     id: 'freePanel.setDisplay',
     title: '设置自由面板显示',

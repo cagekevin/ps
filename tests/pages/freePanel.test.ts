@@ -30,7 +30,7 @@ await import('@/commands')
 const FreePanel = (await import('@/pages/freePanel/components/FreePanel.vue')).default
 const { execute } = await import('@/commands/registry')
 const { freePanelRepo } = await import('@/cep/data/free-panel')
-const { createEmptyFreePanel, findBlock } = await import('@/domain/free-panel')
+const { createEmptyFreePanel, findBlock, normalizeFreePanel } = await import('@/domain/free-panel')
 const { bindFreePanelData } = await import('@/stores/free-panel')
 
 // 生产里由 main.ts 装配；命令写库后页面投影要能刷新
@@ -87,6 +87,65 @@ describe('自由面板 · 拖拽', () => {
     const file = (await freePanelRepo.read()).value
     expect(findBlock(file.obj.list, 1)?.data.map((item) => item.text)).toEqual(['B'])
     expect(findBlock(file.obj.list, 2)?.data.map((item) => item.text)).toEqual(['X', 'A'])
+    wrapper.unmount()
+  })
+})
+
+/**
+ * D-32：显示设置的口径是全局（命令一次写所有区域），但原版数据是按区域存的。
+ * 这里钉的是"勾选态如实暴露不一致"，不是"点一下就统一"——后者由命令层用例钉。
+ */
+describe('自由面板 · 显示设置勾选态（D-32 全局口径）', () => {
+  /** 造出"两个区域不一致"的原版式数据：列数 3 vs 4、图标 开 vs 关 */
+  async function makeMixed() {
+    await freePanelRepo.update((file) => {
+      const next = normalizeFreePanel(file)
+      next.obj.list[0].showNumber = 3
+      next.obj.list[1].showNumber = 4
+      next.obj.list[0].showIcon = true
+      next.obj.list[1].showIcon = false
+      return next
+    })
+  }
+
+  async function openMenu() {
+    const wrapper = await mountPage()
+    await wrapper.find('.free-panel__menu-btn').trigger('click')
+    return wrapper
+  }
+
+  it('区域不一致时：列数三条都不打勾，图标显示半选「–」，文字仍打勾', async () => {
+    await makeMixed()
+    const wrapper = await openMenu()
+
+    const marks = wrapper.findAll('.free-panel__check').map((node) => node.text())
+    // 双列 / 三列 / 四列：没有任何一个能被当成"当前全局值"
+    expect(marks.slice(0, 3)).toEqual(['', '', ''])
+    // 图标：一半开一半关 → 半选，而不是拿第一个区域的值
+    expect(marks[3]).toBe('–')
+    // 文字：两个区域都是开 → 正常打勾
+    expect(marks[4]).toBe('✓')
+    wrapper.unmount()
+  })
+
+  it('显式点「四列」后两个区域一起变 4，勾选态回到一致', async () => {
+    await makeMixed()
+    const wrapper = await openMenu()
+
+    const four = wrapper
+      .findAll('.free-panel__menu button')
+      .find((button) => button.text().includes('四列'))
+    if (!four) throw new Error('四列 菜单项缺失')
+    await four.trigger('click')
+    await flushPromises()
+
+    const after = (await freePanelRepo.read()).value
+    expect(after.obj.list.map((block) => block.showNumber)).toEqual([4, 4])
+
+    // 重新打开菜单：现在只有「四列」打勾
+    await wrapper.find('.free-panel__menu-btn').trigger('click')
+    const marks = wrapper.findAll('.free-panel__check').map((node) => node.text())
+    expect(marks.slice(0, 3)).toEqual(['', '', '✓'])
     wrapper.unmount()
   })
 })

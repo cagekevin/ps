@@ -10,7 +10,7 @@ vi.mock('@/selection', () => ({
 await import('@/commands')
 const { execute } = await import('@/commands/registry')
 const { freePanelRepo } = await import('@/cep/data/free-panel')
-const { createEmptyFreePanel, findBlock } = await import('@/domain/free-panel')
+const { createEmptyFreePanel, findBlock, normalizeFreePanel } = await import('@/domain/free-panel')
 
 beforeEach(async () => {
   setActivePinia(createPinia())
@@ -79,6 +79,43 @@ describe('自由面板命令', () => {
     expect(block?.showNumber).toBe(4)
     expect(block?.showIcon).toBe(true)
     expect(block?.showText).toBe(false)
+  })
+
+  /**
+   * D-32 口径 = **全局**（有意简化，注释见 `commands/freePanel.ts` 的 `freePanel.setDisplay`）。
+   *
+   * 原版按 block 存，所以磁盘上完全可能出现"两个区域列数不同"。这里钉两条：
+   * ① 读路径不动数据（不静默抹平）；
+   * ② 只有用户显式点列数时才统一写所有区域（全局设置生效），写完全部一致。
+   */
+  it('两个区域列数不同时：读不抹平，显式设置为全局值后一致', async () => {
+    await execute('freePanel.addBlock', { type: 'norow' })
+
+    // 造出原版式数据：区域 1 三列、区域 2 两列
+    await freePanelRepo.update((file) => {
+      const next = normalizeFreePanel(file)
+      next.obj.list[0].showNumber = 3
+      next.obj.list[1].showNumber = 2
+      return next
+    })
+
+    const mixed = (await freePanelRepo.read()).value
+    expect(mixed.obj.list.map((block) => block.showNumber)).toEqual([3, 2])
+
+    // 显式点"四列" = 全局设置生效
+    await execute('freePanel.setDisplay', { showNumber: 4 })
+
+    const after = (await freePanelRepo.read()).value
+    expect(after.obj.list.map((block) => block.showNumber)).toEqual([4, 4])
+  })
+
+  it('setDisplay 也写嵌套子区域的显示字段（与页面勾选态扫描的范围一致）', async () => {
+    await execute('freePanel.addBlock', { parentId: 1, type: 'row' })
+    await execute('freePanel.setDisplay', { showIcon: true })
+
+    const file = (await freePanelRepo.read()).value
+    expect(file.obj.list[0].showIcon).toBe(true)
+    expect(file.obj.list[0].children[0]?.showIcon).toBe(true)
   })
 
   it('addBlock 新增根区域 / 子区域，removeBlock 删除', async () => {
