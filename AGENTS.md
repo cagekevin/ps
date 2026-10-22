@@ -204,7 +204,7 @@ grep -rn "export .*<概念词>" src  # 有哪些导出叫这个名字
 | --- | --- | --- |
 | `npm run check` | style-guard + ledger + stats --check + lint + format:check | ✅ **不含测试、不含 tests 类型检查** |
 | `npm test` | vitest run（`<!-- stats:begin tests -->**106 个文件、885 处用例**（静态计数 `it()`/`test()`；非通过数）<!-- stats:end tests -->`） | ✅ 单独一条，`check` 不调它 |
-| `npm run deploy` | check → test → build | ✅ 唯一跑全的入口 |
+| `npm run deploy` | check → build | ✅ 跑全的入口；**不含测试**，测试是流程不是脚本 |
 | `npm run build` | style-guard + vue-tsc + vite build + verify-dist | ✅ `vue-tsc` 只查 `src/**` |
 | `npm run stats` | 生成规模数字，改写 `进度.md` 与本文的注入块 | ✅ |
 | `npm run ledger` | 台账格式与依赖自洽 | ✅ |
@@ -217,7 +217,7 @@ grep -rn "export .*<概念词>" src  # 有哪些导出叫这个名字
 
 **这门禁缺什么，写清楚**（不要以为绿的就没问题）：
 
-- **`check` 不跑测试**。测试红了也不挡 `check`；只有 `deploy` 会跑。
+- **没有一条命令会自动跑测试**（`check` / `build` / `deploy` 都不跑）。**测试是纪律，不是门禁**：交付前必须先 `npm test` 再 build，这一条靠人（和 AI）执行，脚本不管。
 - **`tests/` 从来没做过类型检查**。`tsconfig.json` 的 `include` 只有 `src/**`，`vue-tsc` 看不到测试。把 `tests/**` 加进去会冒出 **83 条** 类型错误（绝大多数是 `vi.fn()` 的 mock 签名，少数是真的：`.at()` 超出 `lib: ES2019`、`Buffer` 缺 `@types/node`）。已记在台账，**没修**。
 - **没有 CI**。没有 `.github/`，所有门禁都靠人工手动跑。
 
