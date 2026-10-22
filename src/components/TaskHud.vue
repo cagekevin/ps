@@ -31,7 +31,10 @@ const store = useTaskStore()
           </GButton>
         </div>
         <div v-if="task.progress !== undefined" class="task-hud__bar">
-          <span class="task-hud__fill" :style="{ width: `${Math.round(task.progress * 100)}%` }" />
+          <span
+            class="task-hud__fill"
+            :style="{ '--task-progress': `${Math.round(task.progress * 100)}%` }"
+          />
         </div>
       </div>
     </div>
@@ -93,6 +96,7 @@ const store = useTaskStore()
 
 .task-hud__fill {
   display: block;
+  width: var(--task-progress, 0%);
   height: 100%;
   background: var(--c-accent);
   transition: width var(--dur-fast) var(--ease);

@@ -11,11 +11,10 @@ import {
   parsePreset,
   pushHistory,
   renameGroupAt,
-  reorderGroup,
-  reorderItem,
   serializePreset,
   toggleGroupAt,
 } from '@/domain/rename'
+import { applyItemDrop, applyListDrop } from '@/domain/reorder'
 import { CepError } from '@/utils/errors'
 import { defineCommand } from './registry'
 import type { Command } from './types'
@@ -145,8 +144,16 @@ export const renameCommands: Command<unknown>[] = [
     group: 'system',
     requires: 'none',
     kind: 'instant',
-    async run(_ctx, { from, to }) {
-      await renameRepo.update((preset) => reorderGroup(preset, from, to))
+    async run(_ctx, { from, to, position }) {
+      await renameRepo.update((preset) => {
+        if (from === to) return
+        // 台账 T-67 判据④：第 0 组（最近使用）固定，不参与排序
+        if (from < 1 || to < 1) throw new CepError('PARSE', '第一个分组是固定组，不能拖动排序')
+        const moved = applyListDrop(preset, from, to, position)
+        // 照 `/style` 范本：被拖组随同一次写盘折叠。
+        // UNVERIFIED: 判据没有点名这条，本机无同版本原版源码可复核。
+        if (moved >= 0) preset[moved].show = false
+      })
     },
   }),
 
@@ -156,10 +163,22 @@ export const renameCommands: Command<unknown>[] = [
     group: 'system',
     requires: 'none',
     kind: 'instant',
-    async run(_ctx, { fromGroup, fromIndex, toGroup, toIndex }) {
-      await renameRepo.update((preset) =>
-        reorderItem(preset, fromGroup, fromIndex, toGroup, toIndex),
-      )
+    async run(_ctx, { fromGroup, fromIndex, toGroup, toIndex, position }) {
+      await renameRepo.update((preset) => {
+        // 台账 T-67 判据④：源组和落点组都不能是第 0 组。
+        // UNVERIFIED: 判据只点名「第 0 组不可拖」，没有逐字说项拖拽的源/落点。
+        if (fromGroup === 0 || toGroup === 0) {
+          throw new CepError('PARSE', '第一个分组是固定组，不能拖动排序')
+        }
+        applyItemDrop(
+          preset.map((group) => group.list),
+          {
+            from: { group: fromGroup, index: fromIndex },
+            to: { group: toGroup, index: toIndex },
+            position,
+          },
+        )
+      })
     },
   }),
 

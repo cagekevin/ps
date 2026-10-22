@@ -311,6 +311,7 @@
   height: var(--sp-exact-5);
   margin-top: var(--sp-exact-1);
   border-radius: 50%;
+  background: var(--dot-color, transparent);
 }
 
 /* 原版 `.block-context{font-weight:700;font-size:14px;text-align:center;color:#fff;margin-top:2px}` */
@@ -319,6 +320,7 @@
   margin: var(--sp-1) 0 0;
   overflow: hidden;
   color: var(--c-text-inverse);
+  font-family: var(--sample-font, inherit);
   font-size: var(--fs-base);
   font-weight: 700;
   text-align: center;
@@ -332,6 +334,7 @@
   display: block;
   width: 100%;
   height: 100%;
+  background: var(--swatch-color, transparent);
 }
 
 /* 图片型渐变：原版直接 `<img class="color-block color-block-img">`（`app.v4.js:50558-50562`），
@@ -404,4 +407,68 @@
   align-items: center;
   gap: var(--sp-3);
   padding: var(--sp-4) 0;
+}
+
+/* 底栏「导入」「导出」菜单（契约 §3.5：底栏两个按钮，分别弹菜单）。
+   与动作页 `.action-io-menu` 同形；页面私有前缀 `style-`。 */
+.style-io-menu {
+  min-width: 120px;
+  margin: 0;
+  padding: var(--sp-2);
+  list-style: none;
+  border: 1px solid var(--c-border-strong);
+  border-radius: var(--r-md);
+  background: var(--c-float);
+  box-shadow: var(--shadow-pop);
+}
+
+.style-io-menu button {
+  width: 100%;
+  padding: var(--sp-2) var(--sp-3);
+  border: 0;
+  border-radius: var(--r-sm);
+  background: transparent;
+  color: var(--text);
+  font-size: var(--fs-sm);
+  text-align: left;
+  cursor: pointer;
+}
+
+.style-io-menu button:hover {
+  background: var(--c-surface-active);
+}
+
+/* ---------- 项 hover 浮层（T-60）----------
+   原版 `.describe`：width 190 / padding 5px 10px / 圆角 5 / 底 #000 / 字 #727272 / z-index 101。
+   这里用最近的两档 token（--c-sunken #222、--text-faint #8e8e8e），不新增 token；
+   宽度用 token 组合 192（8 × 24），与 190 差 2px。 */
+.style-describe {
+  position: fixed;
+  top: var(--floating-y, 0);
+  left: var(--floating-x, 0);
+  z-index: var(--z-dropdown);
+  width: max-content;
+  max-width: calc(var(--sp-7) * 8);
+  padding: var(--sp-exact-5) var(--sp-exact-10);
+  border-radius: var(--r-input);
+  background: var(--c-sunken);
+  box-shadow: var(--shadow-pop);
+  color: var(--text-faint);
+  font-size: var(--fs-base);
+  /* 浮层在项上方：让它不吃 hover，否则移入浮层会触发项的 mouseleave，闪一下就没 */
+  pointer-events: none;
+}
+
+.style-describe__name {
+  margin: 0;
+  overflow: hidden;
+  color: var(--text);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.style-describe__meta {
+  margin: 0;
+  color: var(--text-faint);
+  font-size: var(--fs-md);
 }

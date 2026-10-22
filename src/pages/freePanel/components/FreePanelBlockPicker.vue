@@ -17,7 +17,7 @@ function select() {
 </script>
 
 <template>
-  <div class="fp-pick-node" :style="{ paddingLeft: `${depth * 12}px` }">
+  <div class="fp-pick-node" :style="{ '--pick-indent': `${depth * 12}px` }">
     <button
       class="fp-pick-node__item"
       :class="{ 'is-selected': selected === block.id }"
@@ -42,6 +42,10 @@ function select() {
 </template>
 
 <style scoped>
+.fp-pick-node {
+  padding-left: var(--pick-indent, 0);
+}
+
 .fp-pick-node__item {
   display: flex;
   width: 100%;

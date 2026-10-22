@@ -92,6 +92,8 @@ export interface DeleteWarehousePayload {
 export interface ReorderGroupPayload {
   from: number
   to: number
+  /** `am()` 那个布尔：插在目标组前还是后（`domain/reorder.ts` 的 `DropPosition`） */
+  position: 'before' | 'after'
 }
 
 export interface ReorderItemPayload {
@@ -324,6 +326,7 @@ export interface RenameItemAddPayload {
 export interface RenameReorderGroupPayload {
   from: number
   to: number
+  position: 'before' | 'after'
 }
 
 export interface RenameReorderItemPayload {
@@ -331,6 +334,7 @@ export interface RenameReorderItemPayload {
   fromIndex: number
   toGroup: number
   toIndex: number
+  position: 'before' | 'after'
 }
 
 // ---------- 样式（/style 第 2 段）----------
@@ -552,6 +556,8 @@ export interface CommandPayloads {
   'style.addGradient': StyleAddGradientPayload
   'style.addFont': StyleAddFontPayload
   'style.addStyle': StyleAddStylePayload
+  /** 快速吸色到组（T-66）：切吸色工具 → 等吸色完成 → 把前景色加进该组；取消/超时各有提示 */
+  'style.pickColorToGroup': StyleGroupIndexPayload
   'style.addGroup': StyleAddGroupPayload
   'style.renameGroup': StyleRenameGroupPayload
   'style.deleteGroup': StyleGroupIndexPayload
@@ -579,6 +585,17 @@ export interface CommandPayloads {
   'style.renameWarehouse': StyleRenameWarehousePayload
   /** 删除仓库（原版 `N_.delete`，`:53329-53356`）：删索引项 + 修 `index`，磁盘文件移进回收目录 */
   'style.deleteWarehouse': StyleWarehouseIndexPayload
+
+  // 导入导出：底栏两个按钮分别弹「导入」「导出」菜单（契约 §3.5），本期只接 `.kux` 容器。
+  // 路径由文件对话框给，命令无参数。
+  /** 覆盖导入仓库（`.kux`）：先备份索引，再把旧库文件移进回收目录（契约 §3.4） */
+  'style.importKuReplace': void
+  /** 追加导入仓库（`.kux`）：只 push 仓库，本地文件不动（契约 §3.4） */
+  'style.importKuAppend': void
+  /** 导出所有仓库（`.kux`） */
+  'style.exportKuAll': void
+  /** 导出当前仓库（`.kux`，`store.index = 0`） */
+  'style.exportKuCurrent': void
 
   'legacy.call': LegacyCallPayload
   'cloud.setUrl': CloudSetUrlPayload

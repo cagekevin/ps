@@ -44,7 +44,6 @@ function referenceRect(reference: FloatingReference): FloatingRect {
  * 生命周期由 `usePopover` 或调用方负责。
  */
 export function useFloatingPosition(options: UseFloatingPositionOptions) {
-  const style = ref<Record<string, string>>({})
   const resolvedPlacement = ref<FloatingPlacement>(
     typeof options.placement === 'string' ? options.placement : 'bottom-start',
   )
@@ -67,12 +66,11 @@ export function useFloatingPosition(options: UseFloatingPositionOptions) {
     )
 
     resolvedPlacement.value = position.placement
-    style.value = {
-      position: 'fixed',
-      left: `${position.left}px`,
-      top: `${position.top}px`,
-    }
+    // 直接写元素上的 CSS 变量，模板不再出现 :style：
+    // 定位规则放在浮层自己的 <style> 里（D-22，模板内联样式会绕过 style-guard）。
+    floating.style.setProperty('--floating-x', `${position.left}px`)
+    floating.style.setProperty('--floating-y', `${position.top}px`)
   }
 
-  return { style, resolvedPlacement, update }
+  return { resolvedPlacement, update }
 }

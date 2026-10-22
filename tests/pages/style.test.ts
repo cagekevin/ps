@@ -68,7 +68,20 @@ vi.mock('@/cep/data/style-library-repo', () => ({
 
 // 图片型渐变的 src 要拼 <userDir>/Gradient/<fileName>；jsdom 里没有 Node，userDir() 会抛 NO_NODE
 const fsMock = vi.hoisted(() => ({ userDir: vi.fn(() => 'C:/Users/u/AppData/Roaming/SheJiZhuLi') }))
-vi.mock('@/cep/fs', () => ({ userDir: fsMock.userDir }))
+// 命令模块会加载 `cep/data/style-library-io`（导入导出），它要 base64 编解码；
+// 本文件不跑导入导出，给足符号即可，不模拟磁盘。
+vi.mock('@/cep/fs', () => ({
+  userDir: fsMock.userDir,
+  hasNode: () => true,
+  readTextSmart: async () => null,
+  writeTextFile: () => undefined,
+  writeTextFileAtomic: () => true,
+  readBase64File: () => null,
+  writeBase64File: () => true,
+  removeFile: () => true,
+  b64ToUtf8: (b64: string) => Buffer.from(b64, 'base64').toString('utf8'),
+  utf8ToB64: (text: string) => Buffer.from(text, 'utf8').toString('base64'),
+}))
 
 const jsx = vi.hoisted(() => ({
   action: { callAction: vi.fn(), getActionList: vi.fn() },
@@ -92,9 +105,18 @@ const jsx = vi.hoisted(() => ({
     getForegroundColor: vi.fn(),
     getGradientInfo: vi.fn(),
     addStyle: vi.fn(),
+    setTool: vi.fn(),
   },
 }))
 vi.mock('@/cep/jsx', () => ({ jsx }))
+
+// T-66：命令要等 PS 的「吸色完成」事件；页面测试里让 setd 立刻触发，避免 60s 超时
+vi.mock('@/cep/events', () => ({
+  subscribeHostEvent: async (name: string, listener: () => void) => {
+    if (name === 'setd') listener()
+    return () => {}
+  },
+}))
 
 const selection = vi.hoisted(() => ({ hasSelection: true, typeNumber: 2 }))
 vi.mock('@/selection', () => ({
@@ -182,8 +204,23 @@ describe('样式页三态', () => {
     const wrapper = mountPage()
     await flushPromises()
 
-    expect(wrapper.text()).toContain('样式库还是空的')
+    expect(wrapper.text()).toContain('四个库都还是空的')
     expect(wrapper.find('.style-warehouse').text()).toContain('我的样式仓库')
+  })
+
+  it('单库空态：按库给一句「该放什么」的文案（T-64）', async () => {
+    setPref('styleShowTab', [true, true, true, true])
+    repo.read.mockResolvedValue(snapshot({ font: [{ name: '等线字组', show: true, items: [] }] }))
+
+    const wrapper = mountPage()
+    await flushPromises()
+
+    // 字体库有分组 → 不显示空态；另外三库各显示自己的那句
+    expect(wrapper.text()).toContain('颜色库还是空的：常用颜色会存在这里')
+    expect(wrapper.text()).toContain('渐变库还是空的：常用渐变色会存在这里')
+    expect(wrapper.text()).toContain('样式库还是空的：常用图层样式会存在这里')
+    expect(wrapper.text()).not.toContain('字体库还是空的')
+    expect(wrapper.text()).not.toContain('四个库都还是空的')
   })
 
   it('读失败：抛错时内联显示错误 + 重试按钮', async () => {
@@ -204,7 +241,7 @@ describe('样式页三态', () => {
     await flushPromises()
 
     expect(wrapper.find('.style-error').text()).toContain('sj_kuCol1.ini 读取失败')
-    expect(wrapper.text()).not.toContain('样式库还是空的')
+    expect(wrapper.text()).not.toContain('四个库都还是空的')
   })
 
   it('重试：点重试重新读，成功后错误消失并显示库内容', async () => {
@@ -538,7 +575,7 @@ describe('底栏四个「添加×分组」（原版 :49776-49832 → addGroup :5
     return page
   }
 
-  it('四个按钮不再禁用，导入/导出仍是禁用态', async () => {
+  it('六个按钮都不再禁用；导入 / 导出各弹 2 项菜单（契约 §3.5）', async () => {
     repo.read.mockResolvedValue(snapshot())
 
     const page = mountPageInBody()
@@ -546,12 +583,27 @@ describe('底栏四个「添加×分组」（原版 :49776-49832 → addGroup :5
 
     const buttons = page.findAll('.g-bottom-bar__icon')
     expect(buttons).toHaveLength(6)
-    for (const index of [0, 1, 2, 3]) {
-      expect(buttons[index].attributes('disabled')).toBeUndefined()
+    for (const button of buttons) {
+      expect(button.attributes('disabled')).toBeUndefined()
     }
-    for (const index of [4, 5]) {
-      expect(buttons[index].attributes('disabled')).toBeDefined()
-    }
+
+    await buttons[4].trigger('click')
+    await flushPromises()
+    const importItems = page.findAll('.style-io-menu button').map((item) => item.text())
+    expect(importItems).toHaveLength(2)
+    expect(importItems[0]).toContain('导入预设仓库（覆盖）')
+    expect(importItems[1]).toContain('追加预设仓库')
+
+    await buttons[4].trigger('click')
+    await flushPromises()
+    expect(page.findAll('.style-io-menu')).toHaveLength(0)
+
+    await buttons[5].trigger('click')
+    await flushPromises()
+    const exportItems = page.findAll('.style-io-menu button').map((item) => item.text())
+    expect(exportItems).toHaveLength(2)
+    expect(exportItems[0]).toContain('导出所有仓库')
+    expect(exportItems[1]).toContain('导出当前仓库')
   })
 
   it('点「添加字体分组」→ 弹输入框 → 提交后 style.addGroup 追加到末尾（不带 afterIndex）', async () => {
@@ -874,6 +926,87 @@ describe('字体库 / 样式库的项内容（清单 #22 #24 #26）', () => {
   })
 })
 
+describe('项 hover 浮层（T-60）', () => {
+  function seedHover() {
+    repo.read.mockResolvedValue({
+      index: { index: 0, list: [{ name: 'W' }] },
+      libraries: {
+        color: [
+          {
+            name: '灰白',
+            show: true,
+            items: [{ name: '未命名', swatch: '#302F34' }],
+          },
+        ],
+        gradient: [{ name: '渐变默认分组', show: true, items: [] }],
+        font: [
+          {
+            name: '等线字组',
+            show: true,
+            items: [
+              {
+                name: '正文',
+                fontPreview: {
+                  count: 2,
+                  size: '20点',
+                  color: '',
+                  family: '等线',
+                  weight: 'Regular',
+                  scriptFamily: 'DengXian',
+                },
+              },
+            ],
+          },
+        ],
+        style: [{ name: '样式默认分组', show: true, items: [] }],
+      },
+      degraded: '',
+    })
+  }
+
+  it('hover 颜色项 → 浮层给项名 / 分组 / 库名 / 色值，移出后消失', async () => {
+    seedHover()
+
+    const wrapper = mountPage()
+    await flushPromises()
+
+    const item = wrapper.find('.style-lib--color .style-item[data-drag-item="0"]')
+    await item.trigger('mouseenter')
+    await flushPromises()
+
+    const tip = wrapper.find('.style-describe')
+    expect(tip.exists()).toBe(true)
+    expect(tip.text()).toContain('未命名')
+    expect(tip.text()).toContain('灰白')
+    expect(tip.text()).toContain('颜色库')
+    expect(tip.text()).toContain('#302F34')
+
+    await item.trigger('mouseleave')
+    await flushPromises()
+    expect(wrapper.find('.style-describe').exists()).toBe(false)
+  })
+
+  it('hover 字体项 → 只用已有字段（家族 / 字重 / 字号 / 字体数），不编 CMYK', async () => {
+    setPref('styleShowTab', [true, true, true, true])
+    seedHover()
+
+    const wrapper = mountPage()
+    await flushPromises()
+
+    await wrapper.find('.style-lib--font .style-item[data-drag-item="0"]').trigger('mouseenter')
+    await flushPromises()
+
+    const text = wrapper.find('.style-describe').text()
+    expect(text).toContain('正文')
+    expect(text).toContain('等线字组')
+    expect(text).toContain('字体库')
+    expect(text).toContain('等线')
+    expect(text).toContain('20点')
+    expect(text).toContain('2 个字体')
+    expect(text).not.toContain('CMYK')
+  })
+})
+
 describe('样式页右键菜单（清单 #31-51：四库各不一样）', () => {
   const mounted: Array<{ unmount(): void }> = []
 
@@ -1036,7 +1169,7 @@ describe('样式页右键菜单（清单 #31-51：四库各不一样）', () => 
 
   // ---------- 四库分组菜单：颜色 12 行（4 条分隔线），其余三库 7 行（2 条）----------
 
-  it('颜色库分组菜单：12 行，含色板两项与置灰的快速吸色（:50227-50322）', async () => {
+  it('颜色库分组菜单：12 行，含色板两项与快速吸色（:50227-50322）', async () => {
     seedAllLibs()
     const page = mountPageWithConfirm()
     await flushPromises()
@@ -1269,24 +1402,18 @@ describe('样式页右键菜单（清单 #31-51：四库各不一样）', () => 
     expect(repo.sendGroupToSwatch).not.toHaveBeenCalled()
   })
 
-  it('三项未实现的菜单项置灰不可点，title 写明台账编号', async () => {
+  it('两项未实现的仓库菜单置灰不可点，title 写明台账编号（T-65）', async () => {
     seedColorGroup()
     const page = mountPageWithConfirm()
     await flushPromises()
     await rightClickGroup(page)
 
-    // 快速吸色到组 = T-66（依赖 PS 事件 1936028772）；仓库两项 = T-65
-    const entries: Array<[string, string]> = [
-      ['快速吸色到组', 'T-66'],
-      ['发送到仓库...', 'T-65'],
-      ['移动到仓库...', 'T-65'],
-    ]
-    for (const [label, id] of entries) {
+    for (const label of ['发送到仓库...', '移动到仓库...']) {
       const entry = menuItem(label)!
       expect(entry.classList.contains('is-disabled')).toBe(true)
       expect(entry.getAttribute('aria-disabled')).toBe('true')
       expect(entry.getAttribute('title')).toContain('未实现')
-      expect(entry.getAttribute('title')).toContain(id)
+      expect(entry.getAttribute('title')).toContain('T-65')
       entry.click()
     }
     await flushPromises()
@@ -1301,7 +1428,31 @@ describe('样式页右键菜单（清单 #31-51：四库各不一样）', () => 
     expect(menuRoot()).not.toBeNull()
   })
 
-  it('右键位置：菜单落在鼠标点（fixed 定位，左上角对齐 clientX/clientY）', async () => {
+  it('快速吸色到组（T-66）可点：切吸色工具 → 吸色完成 → 加到该组', async () => {
+    seedColorGroup()
+    jsx.style.setTool.mockResolvedValue(null)
+    jsx.style.getForegroundColor.mockResolvedValue({
+      name: '未命名',
+      color: { hex: 'FF0000', c: 0, m: 100, y: 100, k: 0 },
+    })
+
+    const page = mountPageWithConfirm()
+    await flushPromises()
+    await rightClickGroup(page)
+
+    const entry = menuItem('快速吸色到组')!
+    expect(entry.classList.contains('is-disabled')).toBe(false)
+    entry.click()
+    await flushPromises()
+
+    expect(jsx.style.setTool).toHaveBeenCalledWith('eyedropperTool')
+    expect(repo.appendItem).toHaveBeenCalledWith('color', 0, {
+      name: '未命名',
+      color: { hex: 'FF0000', c: 0, m: 100, y: 100, k: 0 },
+    })
+  })
+
+  it('右键位置：菜单落在鼠标点（fixed 定位由 CSS 给，坐标走 --floating-x/y）', async () => {
     seedColorGroup()
     const page = mountPageWithConfirm()
     await flushPromises()
@@ -1310,9 +1461,9 @@ describe('样式页右键菜单（清单 #31-51：四库各不一样）', () => 
     await flushPromises()
 
     const root = menuRoot()!
-    expect(root.style.position).toBe('fixed')
-    expect(root.style.left).toBe('120px')
-    expect(root.style.top).toBe('80px')
+    // D-22：坐标不再写内联 left/top，改成 CSS 变量；position:fixed 在 StyleMenu 的样式块里
+    expect(root.style.getPropertyValue('--floating-x')).toBe('120px')
+    expect(root.style.getPropertyValue('--floating-y')).toBe('80px')
   })
 
   it('Esc 关闭菜单（useDismiss 统一处理）', async () => {

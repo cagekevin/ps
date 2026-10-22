@@ -10,6 +10,12 @@ import { log } from '@/utils/logger'
  */
 export type HostEventName = 'selection' | 'transform' | 'make' | 'setd'
 
+/**
+ * 样式页「快速吸色到组」（T-66）复用已有两个事件：
+ * `setd`（1936028772）= 吸色完成、`selection`（1936483188）= 取消。
+ * 这两个 stringID **已经在表里**，不能再以新名字加一遍：通道用 `idToName` 反查，
+ * 同一个 ID 挂两个名字会互相覆盖，先注册的那条收不到事件。
+ */
 const EVENT_IDS: Record<HostEventName, string> = {
   selection: '1936483188', // slct
   transform: '1416785510', // Trnf

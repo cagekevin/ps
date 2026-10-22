@@ -18,7 +18,7 @@ export function usePointPopover(options: {
   placement?: FloatingPlacement
 }) {
   const point = ref({ x: options.x(), y: options.y() })
-  const { style, update } = useFloatingPosition({
+  const { update } = useFloatingPosition({
     reference: point,
     floating: options.floating,
     placement: options.placement ?? 'bottom-start',
@@ -33,5 +33,5 @@ export function usePointPopover(options: {
     update()
   })
 
-  return { style }
+  return { update }
 }

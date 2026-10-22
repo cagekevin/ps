@@ -114,6 +114,20 @@ export function b64ToUtf8(base64: string): string {
   return new TextDecoder('utf-8').decode(bytes)
 }
 
+/**
+ * UTF-8 文本 → base64。与 `b64ToUtf8` 成对：库文件导出时 `data = base64(库文件 JSON 文本)`（契约 §1.1 ②）。
+ * 契约 §1.1 ② 的 `data` 就是这一层；不依赖 `cep.encoding`。
+ */
+export function utf8ToB64(text: string): string {
+  const bytes = new TextEncoder().encode(text)
+  let binary = ''
+  // 分块拼，避免 20 万字符级库文件逐字符追加时的长字符串开销
+  for (let i = 0; i < bytes.length; i += 0x8000) {
+    binary += String.fromCharCode(...bytes.subarray(i, i + 0x8000))
+  }
+  return btoa(binary)
+}
+
 /** 删除文件；文件不存在视为成功（原版 delete 同语义） */
 export function removeFile(absPath: string): boolean {
   if (!hasNode()) return false

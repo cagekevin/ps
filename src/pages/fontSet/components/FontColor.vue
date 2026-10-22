@@ -1,4 +1,4 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { computed, ref, watch } from 'vue'
 import CheckBox from '@/components/CheckBox.vue'
 import FontSetIcon from './FontSetIcon.vue'
@@ -67,9 +67,10 @@ const selectedFont = computed(
 const weightItems = computed(() => selectedFont.value?.weights ?? [])
 const fontIndex = computed(() => familyNames.value.indexOf(family.value))
 
-const colorStyle = computed(() => {
+// 色块颜色是运行时值，只写 CSS 变量；消费规则在样式块里（D-22）
+const swatchColor = computed(() => {
   const rgb = props.text?.color ?? { r: 255, g: 255, b: 255 }
-  return { background: `rgb(${rgb.r},${rgb.g},${rgb.b})` }
+  return `rgb(${rgb.r},${rgb.g},${rgb.b})`
 })
 
 const isOpticalKern = computed({
@@ -211,7 +212,7 @@ function applyLegacyLeading(factor: number) {
         class="fontset-color__swatch"
         type="button"
         title="设置颜色"
-        :style="colorStyle"
+        :style="{ '--swatch-color': swatchColor }"
         @click="emit('color')"
       />
     </div>
@@ -445,7 +446,7 @@ function applyLegacyLeading(factor: number) {
   width: 60px;
   height: var(--h-control-sm);
   border: 1px solid var(--c-sunken);
-  background: var(--c-color-swatch);
+  background: var(--swatch-color, var(--c-color-swatch));
   cursor: pointer;
 }
 

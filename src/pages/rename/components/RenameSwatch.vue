@@ -28,7 +28,7 @@ defineEmits<{ (e: 'pick'): void }>()
     :class="{ 'rename-swatch--clear': props.clear }"
     type="button"
     :title="props.title"
-    :style="props.color ? { backgroundColor: props.color } : undefined"
+    :style="{ '--swatch-color': props.color }"
     @click="$emit('pick')"
   >
     <Icon v-if="props.clear" name="#iconguanbi" size="2xs" />
@@ -48,6 +48,7 @@ defineEmits<{ (e: 'pick'): void }>()
   padding: 0;
   border: 0;
   border-radius: var(--r-input);
+  background: var(--swatch-color, transparent);
   cursor: pointer;
   transition: opacity var(--dur-fast) var(--ease);
 }

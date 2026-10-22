@@ -1,21 +1,29 @@
 <script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import BackTop from '@/components/BackTop.vue'
 import BaseGroup from '@/components/BaseGroup.vue'
 import CepModal from '@/components/CepModal.vue'
 import EmptyState from '@/components/EmptyState.vue'
 import GButton from '@/components/GButton.vue'
+import GDropdown from '@/components/GDropdown.vue'
 import GInput from '@/components/GInput.vue'
 import Icon from '@/components/Icon.vue'
 import MultiTabs from '@/components/MultiTabs.vue'
 import PageBottomBar from '@/components/PageBottomBar.vue'
 import { useCommand } from '@/components/command/useCommand'
 import { useDismiss } from '@/composables/useDismiss'
+import { useFloatingPosition } from '@/composables/useFloatingPosition'
 import { useLongPressDrag, type LongPressDragResult } from '@/composables/useLongPressDrag'
 import { usePersistedRef } from '@/composables/usePersisted'
 import { userDir } from '@/cep/fs'
-import { KU_KINDS, KU_TAB_LABELS, type KuFontPreview, type KuKind } from '@/domain/style-library'
+import {
+  KU_KINDS,
+  KU_TAB_LABELS,
+  type KuFontPreview,
+  type KuItem,
+  type KuKind,
+} from '@/domain/style-library'
 import { useConfirmStore } from '@/stores/confirm'
 import { useFeedbackStore } from '@/stores/feedback'
 import { useStyleLibraryStore } from '@/stores/style-library'
@@ -35,8 +43,9 @@ import StyleMenu, { type StyleMenuEntry } from './components/StyleMenu.vue'
  * 底栏四个「添加×分组」→ `style.addGroup`。
  * 第 5 段：项 / 组的拖拽排序 —— 原版 `am()` 那套长按机制（`composables/useLongPressDrag`），
  * 落点走 `style.moveItemTo` / `style.moveGroupTo`，一次拖拽只写一次盘。
- * 本期仍不做：吸色到组、拖图片取色、仓库发送/移动（菜单项已渲染但置灰，命令未实现）、
- * 库文件与 `.kux` 导入导出（见 commands/style.ts 头部）。
+ * 第 6 段：底栏「导入」「导出」两个按钮各弹菜单（契约 §3.5），
+ * 接到 `commands/style.ts` 第 6 段的 4 条 `.kux` 命令；导入成功后重读当前仓库。
+ * 本期仍不做：吸色到组、拖图片取色、仓库发送/移动（菜单项已渲染但置灰，命令未实现）。
  *
  * 两处**有意偏离原版**：
  * 1. 删除要二次确认（原版 `:50329-50332` / `:50245-50248` 直接删 + tips）：误删会写坏用户库，
@@ -73,6 +82,83 @@ const warehouseRoot = ref<HTMLElement | null>(null)
 /** 缩略图 `<id>.png` 加载失败的那几项：失败就不再画 `<img>`，只留原版那层 rgba(0,0,0,.3) 底 */
 const brokenThumbs = ref<Set<string>>(new Set())
 
+/**
+ * 项 hover 浮层（T-60）。
+ *
+ * 内容是**已有视图模型字段**（`KuItem.name` / `swatch` / `fontPreview` / `image` + 分组名 + 库名），
+ * 不新造数据结构；定位统一走 `composables/useFloatingPosition`（上方优先、贴顶翻转、右边界内收）。
+ * 原版 `.describe` 只在颜色 / 字体库出现，这里四库都有（信息量不同，见 `describeDetail`）。
+ */
+const describe = ref<{
+  kind: KuKind
+  groupIndex: number
+  itemIndex: number
+  el: HTMLElement
+} | null>(null)
+const describeRef = ref<HTMLElement | null>(null)
+
+const describeAnchor = computed(() => describe.value?.el ?? null)
+const { update: updateDescribe } = useFloatingPosition({
+  reference: describeAnchor,
+  floating: describeRef,
+  // 原版浮层在项上方；空间不够由 composable 翻到下方，右边越界由它夹回视口
+  placement: 'top-start',
+  offset: 6,
+  padding: 8,
+})
+
+/** 浮层里能显示什么，只用已有字段：颜色给色值、字体给家族/字重/字号、图片型渐变给标记 */
+function describeDetail(kind: KuKind, item: KuItem): string {
+  if (kind === 'color' && item.swatch) return `色值 ${item.swatch.toUpperCase()}`
+
+  if (kind === 'font' && item.fontPreview) {
+    const preview = item.fontPreview
+    const parts = [preview.family, preview.weight, preview.size].filter(Boolean)
+    if (preview.count > 1) parts.push(`${preview.count} 个字体`)
+    return parts.join(' · ')
+  }
+
+  if (kind === 'gradient' && item.image) return '图片型渐变'
+  return ''
+}
+
+const describeContent = computed(() => {
+  const target = describe.value
+  if (!target) return null
+
+  const group = libraries.value[target.kind][target.groupIndex]
+  const item = group?.items[target.itemIndex]
+  if (!group || !item) return null
+
+  return {
+    name: item.name,
+    subtitle: `${group.name} · ${KU_TAB_LABELS[KU_KINDS.indexOf(target.kind)]}库`,
+    detail: describeDetail(target.kind, item),
+  }
+})
+
+function showDescribe(event: MouseEvent, kind: KuKind, groupIndex: number, itemIndex: number) {
+  const el = event.currentTarget
+  if (!(el instanceof HTMLElement)) return
+
+  describe.value = { kind, groupIndex, itemIndex, el }
+  void nextTick(updateDescribe)
+}
+
+function hideDescribe() {
+  describe.value = null
+}
+
+// 浮层是 fixed 定位：滚动 / 改窗口大小都要重算，否则会飘在别处
+function bindDescribeViewport(on: boolean) {
+  const method = on ? 'addEventListener' : 'removeEventListener'
+  window[method]('resize', updateDescribe)
+  document[method]('scroll', updateDescribe, true)
+}
+
+watch(describe, (value) => bindDescribeViewport(!!value))
+onBeforeUnmount(() => bindDescribeViewport(false))
+
 const applyColorCmd = useCommand('style.applyColor')
 const applyGradientCmd = useCommand('style.applyGradient')
 const applyFontCmd = useCommand('style.applyFont')
@@ -81,6 +167,7 @@ const addColorCmd = useCommand('style.addColor')
 const addGradientCmd = useCommand('style.addGradient')
 const addFontCmd = useCommand('style.addFont')
 const addStyleCmd = useCommand('style.addStyle')
+const pickColorToGroupCmd = useCommand('style.pickColorToGroup')
 const toggleGroupShowCmd = useCommand('style.toggleGroupShow')
 const deleteItemCmd = useCommand('style.deleteItem')
 const renameItemCmd = useCommand('style.renameItem')
@@ -97,6 +184,35 @@ const selectWarehouseCmd = useCommand('style.selectWarehouse')
 const addWarehouseCmd = useCommand('style.addWarehouse')
 const renameWarehouseCmd = useCommand('style.renameWarehouse')
 const deleteWarehouseCmd = useCommand('style.deleteWarehouse')
+
+/**
+ * 底栏导入 / 导出菜单（契约 §3.5：底栏两个按钮，分别弹「导入」「导出」）。
+ * 本期菜单只有 `.kux` 容器的两项：导入追加 / 导入替换、导出全部 / 导出当前。
+ */
+const importMenu = ref(false)
+const exportMenu = ref(false)
+const importKuReplaceCmd = useCommand('style.importKuReplace')
+const importKuAppendCmd = useCommand('style.importKuAppend')
+const exportKuAllCmd = useCommand('style.exportKuAll')
+const exportKuCurrentCmd = useCommand('style.exportKuCurrent')
+
+/**
+ * 导入 / 导出入口。
+ *
+ * 先收起菜单再跑命令（菜单留着会挡住文件对话框关掉后的 toast）；
+ * 导入成功要 `store.load()`：覆盖导入会换掉索引，追加导入会多出仓库，页面必须重读。
+ * 失败 / 取消由 `useCommand` 统一提示，这里不写 try/catch。
+ */
+async function importArchive(append: boolean) {
+  importMenu.value = false
+  const ok = await (append ? importKuAppendCmd : importKuReplaceCmd).run()
+  if (ok) await store.load()
+}
+
+async function exportArchive(current: boolean) {
+  exportMenu.value = false
+  await (current ? exportKuCurrentCmd : exportKuAllCmd).run()
+}
 
 const visibleKinds = computed(() => KU_KINDS.filter((_, index) => !!showTabs.value[index]))
 
@@ -273,6 +389,11 @@ async function addKind(kind: KuKind, groupIndex: number): Promise<boolean> {
     case 'style':
       return addStyleCmd.run({ groupIndex }, '已保存图层样式')
   }
+}
+
+async function pickColorToGroup(kind: KuKind, groupIndex: number) {
+  const ok = await pickColorToGroupCmd.run({ kind, groupIndex }, '已添加到分组')
+  if (ok) await store.load()
 }
 
 async function addItem(kind: KuKind, groupIndex: number) {
@@ -483,10 +604,26 @@ const ITEM_NAME_LABEL: Record<KuKind, string> = {
 const WAREHOUSE_TITLE = '未实现（T-65）：仓库发送/移动命令还没实现'
 
 /**
- * 「快速吸色到组」：原版 `:50293-50304` 要 `Tool_set("eyedropperTool")` + PS 事件 `1936028772` /
- * 取消 `1936483188`（`:50222-50226`），命令层没有 → 渲染但置灰。台账 T-66。
+ * 「快速吸色到组」走 `style.pickColorToGroup`（T-66）：切吸色工具 → 等吸色完成 → 加到该组。
+ * 取消 / 超时由命令抛错、`useCommand` 统一提示。
  */
-const EYEDROPPER_TITLE = '未实现（T-66）：快速吸色到组依赖 PS 事件 1936028772'
+
+/**
+ * 四库空态文案（T-64 定案）。
+ *
+ * 原版四库没有空态文案（什么都不显示），所以这四条是自拟的；统一句式：
+ * `<库名>还是空的：<这一库存什么>，点组末的 + <怎么加第一项>。`
+ * 只描述"该放什么"，不写"暂无数据"这类同义反复。
+ */
+const EMPTY_LIB_TEXT: Record<KuKind, string> = {
+  color: '颜色库还是空的：常用颜色会存在这里，点组末的 + 取当前前景色。',
+  gradient: '渐变库还是空的：常用渐变色会存在这里，点组末的 + 取当前渐变。',
+  font: '字体库还是空的：常用字体属性会存在这里，点组末的 + 取当前文字图层。',
+  style: '样式库还是空的：常用图层样式会存在这里，点组末的 + 保存当前图层样式。',
+}
+
+/** 整页空态（可见库全空）：不重复四句，只给一个总入口 */
+const EMPTY_PAGE_TEXT = '四个库都还是空的：点各组末尾的 + 添加第一项。'
 
 /**
  * 右键菜单内容：**四库各不相同**，逐库照抄原版顺序与分隔线位置。
@@ -546,7 +683,7 @@ const menuItems = computed<StyleMenuEntry[]>(() => {
     { text: '发送到色板', action: () => void sendGroupToSwatch(kind, groupIndex) },
     { text: '追加到色板', action: () => void appendGroupToSwatch(kind, groupIndex) },
     { text: '', separator: true },
-    { text: '快速吸色到组', disabled: true, title: EYEDROPPER_TITLE },
+    { text: '快速吸色到组', action: () => void pickColorToGroup(kind, groupIndex) },
     { text: '', separator: true },
     ...warehouseEntries,
   ]
@@ -830,7 +967,7 @@ onMounted(() => {
         <GButton class="style-retry" size="small" @click="store.retry()">重试</GButton>
       </div>
 
-      <EmptyState v-else-if="isEmpty" compact text="样式库还是空的" />
+      <EmptyState v-else-if="isEmpty" compact :text="EMPTY_PAGE_TEXT" />
 
       <template v-else>
         <p v-if="!visibleKinds.length" class="style-hint">
@@ -844,7 +981,7 @@ onMounted(() => {
           :class="libClass(kind)"
           :title="dragTitle(kind)"
         >
-          <EmptyState v-if="!libraries[kind].length" compact text="该库还没有分组" />
+          <EmptyState v-if="!libraries[kind].length" compact :text="EMPTY_LIB_TEXT[kind]" />
 
           <!-- 组容器：原版 `.app-padding…mb4`（render `:49930` / `:50513` / `:50899` / `:51314`），
                组间距 4px + 左内边距 10px 都挂在这一层，不在 `.style-lib` 上。
@@ -874,10 +1011,11 @@ onMounted(() => {
                   :class="{
                     'style-item--image': kind === 'gradient' && !!gradientImageSrc(item.image),
                   }"
-                  :title="item.name"
                   :data-drag-kind="kind"
                   :data-item-group="index"
                   :data-drag-item="itemIndex"
+                  @mouseenter="showDescribe($event, kind, index, itemIndex)"
+                  @mouseleave="hideDescribe"
                   @mousedown="onItemMouseDown($event, kind, index, itemIndex)"
                   @click="applyItem(kind, index, itemIndex, $event)"
                   @contextmenu.prevent.stop="openItemMenu($event, kind, index, itemIndex)"
@@ -894,7 +1032,7 @@ onMounted(() => {
                     <span
                       v-else-if="item.swatch"
                       class="style-item__swatch"
-                      :style="{ background: item.swatch }"
+                      :style="{ '--swatch-color': item.swatch }"
                     />
                   </template>
 
@@ -906,12 +1044,12 @@ onMounted(() => {
                       <span
                         v-if="item.fontPreview.color"
                         class="style-item__font-dot"
-                        :style="{ backgroundColor: item.fontPreview.color }"
+                        :style="{ '--dot-color': item.fontPreview.color }"
                       />
                     </div>
                     <p
                       class="style-item__font-sample"
-                      :style="{ fontFamily: fontFamilyOf(item.fontPreview) }"
+                      :style="{ '--sample-font': fontFamilyOf(item.fontPreview) }"
                     >
                       中文字
                     </p>
@@ -952,6 +1090,13 @@ onMounted(() => {
     <!-- 右键菜单浮层（原版 `$menu`，`app.v4.js:278-433`）：项 3 项、分组 5 项，见 menuItems -->
     <StyleMenu v-model:visible="menu.visible" :x="menu.x" :y="menu.y" :items="menuItems" />
 
+    <!-- 项 hover 浮层（T-60）：定位走 `useFloatingPosition`，上方优先 / 贴顶翻转 / 右边界内收 -->
+    <div v-if="describeContent" ref="describeRef" class="style-describe">
+      <p class="style-describe__name">{{ describeContent.name }}</p>
+      <p class="style-describe__meta">{{ describeContent.subtitle }}</p>
+      <p v-if="describeContent.detail" class="style-describe__meta">{{ describeContent.detail }}</p>
+    </div>
+
     <!-- 原版 `$inputBox.show` 的重命名输入框；`CepModal` 是项目约定的弹窗外壳 -->
     <CepModal v-model:visible="prompt.visible" :title="prompt.title" @ok="submitPrompt">
       <GInput v-model="prompt.value" :placeholder="prompt.placeholder" @enter="submitPrompt" />
@@ -959,7 +1104,8 @@ onMounted(() => {
 
     <!-- 原版 .button-nav（`app.v4.js:49773-49832`）：添加分组 4 个 + 竖线 + 导入 / 导出。
          四个「添加×分组」= `addGroup("col"|"gradient"|"font"|"style")`（`:54873-54879`，弹输入框、追加到末尾）；
-         导入导出是文件 IO，本段仍 disabled（T-48）。
+         导入 / 导出是**两个按钮各弹菜单**（契约 §3.5），不是四个按钮；
+         菜单项与 `commands/style.ts` 第 6 段的 4 条 `.kux` 命令一一对应。
          图标不带 size：原版本页是 `.svg-18`（清单 #93），但底排图标守卫要求全项目 1em
          （`tests/components/page-bottom-bar.test.ts:155`），本页跟着守卫走，18px 待统一决定。 -->
     <PageBottomBar>
@@ -996,12 +1142,31 @@ onMounted(() => {
         <Icon name="#iconxinjianyangshifenzu" />
       </button>
       <span class="g-bottom-bar__divider" />
-      <button class="g-bottom-bar__icon" type="button" title="导入" disabled>
-        <Icon name="#icondaoru" />
-      </button>
-      <button class="g-bottom-bar__icon" type="button" title="导出" disabled>
-        <Icon name="#icondaochu" />
-      </button>
+      <GDropdown v-model:visible="importMenu" placement="top-start">
+        <template #trigger>
+          <button class="g-bottom-bar__icon" type="button" title="导入">
+            <Icon name="#icondaoru" />
+          </button>
+        </template>
+        <ul class="style-io-menu">
+          <li>
+            <button type="button" @click="importArchive(false)">导入预设仓库（覆盖）…</button>
+          </li>
+          <li><button type="button" @click="importArchive(true)">追加预设仓库…</button></li>
+        </ul>
+      </GDropdown>
+
+      <GDropdown v-model:visible="exportMenu" placement="top-start">
+        <template #trigger>
+          <button class="g-bottom-bar__icon" type="button" title="导出">
+            <Icon name="#icondaochu" />
+          </button>
+        </template>
+        <ul class="style-io-menu">
+          <li><button type="button" @click="exportArchive(false)">导出所有仓库…</button></li>
+          <li><button type="button" @click="exportArchive(true)">导出当前仓库…</button></li>
+        </ul>
+      </GDropdown>
     </PageBottomBar>
   </div>
 </template>

@@ -1,5 +1,5 @@
 // 是什么：重命名预设与表达式标记的纯逻辑（无 IO、无 Vue）
-// 唯一入口：标记插入/去重、组与项的增删改序、`.cmm` 解析，只在这里
+// 唯一入口：标记插入/去重、组与项的增删改、`.cmm` 解析，只在这里（拖拽落点见 `domain/reorder.ts`）
 // 替代了什么：原版 Rename 组件里与数据有关的方法（app.v4.js:56800-56895、56933-57280）
 // 谁在用：`commands/rename.ts`、`stores/rename.ts`、`tests/domain/rename.test.ts`
 // 禁止：不许在这里实现表达式求值，求值交给 PS 的 `cmm_batchName`（见下方 UNVERIFIED）
@@ -189,47 +189,6 @@ export function deleteItemAt(
   const next = clone(preset)
   if (next[groupIndex].list[itemIndex] === undefined) throw new CepError('PARSE', '预设不存在')
   next[groupIndex].list.splice(itemIndex, 1)
-  return next
-}
-
-/** 拖拽换组序（原版 `dragColorWrap` 的 Callback，:56974-56995；第 0 组不参与） */
-export function reorderGroup(preset: RenamePreset, from: number, to: number): RenamePreset {
-  if (from === to) return preset
-  if (from < 1 || to < 1) throw new CepError('PARSE', '第一个分组是固定组，不能拖动排序')
-  if (!preset[from] || !preset[to]) throw new CepError('PARSE', '分组不存在')
-
-  const next = clone(preset)
-  const [group] = next.splice(from, 1)
-  next.splice(to, 0, group)
-  return next
-}
-
-/**
- * 拖拽换预设顺序，可跨组（原版 `drag` 的 Callback，:56935-56962）。
- *
- * 落点语义沿用原版：拖到目标项上 = 排在它后面（原版 `n=false` 分支）；
- * 同组内往后拖时，因为先删了一位，目标下标要回退 1。
- */
-export function reorderItem(
-  preset: RenamePreset,
-  fromGroup: number,
-  fromIndex: number,
-  toGroup: number,
-  toIndex: number,
-): RenamePreset {
-  const source = preset[fromGroup]
-  const target = preset[toGroup]
-  if (!source?.list[fromIndex] || !target) throw new CepError('PARSE', '预设或分组不存在')
-  if (fromGroup === 0 || toGroup === 0) {
-    throw new CepError('PARSE', '第一个分组是固定组，不能拖动排序')
-  }
-  if (fromGroup === toGroup && fromIndex === toIndex) return preset
-
-  const next = clone(preset)
-  const [item] = next[fromGroup].list.splice(fromIndex, 1)
-  const sameGroup = fromGroup === toGroup
-  const at = sameGroup && fromIndex < toIndex ? toIndex : toIndex + 1
-  next[toGroup].list.splice(Math.max(0, Math.min(at, next[toGroup].list.length)), 0, item)
   return next
 }
 

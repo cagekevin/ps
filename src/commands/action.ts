@@ -7,6 +7,7 @@ import { addWarehouse, deleteWarehouse, renameWarehouse, selectWarehouse } from 
 import { setPref } from '@/cep/data/settings'
 import { extensionDir } from '@/cep/fs'
 import { openFile, saveFile } from '@/cep/dialog'
+import { applyItemDrop, applyListDrop } from '@/domain/reorder'
 import { CepError } from '@/utils/errors'
 import { defineCommand } from './registry'
 import type { Command } from './types'
@@ -217,11 +218,14 @@ export const actionCommands: Command<unknown>[] = [
     group: 'action',
     requires: 'none',
     kind: 'instant',
-    async run(ctx, { from, to }) {
+    async run(ctx, { from, to, position }) {
       await ctx.data.actionLibrary.update((list) => {
-        if (from === to || !list[from] || !list[to]) return
-        const [group] = list.splice(from, 1)
-        list.splice(to, 0, group)
+        // 四分支落点只在 `domain/reorder.ts` 一份；越界抛，不静默吞
+        const moved = applyListDrop(list, from, to, position)
+        if (moved < 0) return
+        // 照 `/style` 范本：被拖组随同一次写盘折叠（`moveKuGroupTo` 里同样 `show = false`）。
+        // UNVERIFIED: 判据没有点名这条，本机无同版本原版源码可复核。
+        list[moved].show = false
       })
     },
   }),
@@ -234,20 +238,14 @@ export const actionCommands: Command<unknown>[] = [
     kind: 'instant',
     async run(ctx, { fromGroup, fromIndex, toGroup, toIndex, position }) {
       await ctx.data.actionLibrary.update((list) => {
-        const source = list[fromGroup]
-        const target = list[toGroup]
-        if (!source?.list[fromIndex] || !target) {
-          throw new CepError('PARSE', '动作或分组不存在')
-        }
-
-        const [item] = source.list.splice(fromIndex, 1)
-        let insertAt = toIndex + (position === 'after' ? 1 : 0)
-
-        // 同组内移动：先删后插，目标下标要补偿
-        if (fromGroup === toGroup && fromIndex < toIndex) insertAt -= 1
-
-        insertAt = Math.max(0, Math.min(insertAt, target.list.length))
-        target.list.splice(insertAt, 0, item)
+        applyItemDrop(
+          list.map((group) => group.list),
+          {
+            from: { group: fromGroup, index: fromIndex },
+            to: { group: toGroup, index: toIndex },
+            position,
+          },
+        )
       })
     },
   }),

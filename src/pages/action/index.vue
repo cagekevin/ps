@@ -8,6 +8,7 @@ import Icon from '@/components/Icon.vue'
 import { useCommand } from '@/components/command/useCommand'
 import { useDismiss } from '@/composables/useDismiss'
 import { useFloatingPosition } from '@/composables/useFloatingPosition'
+import { useLongPressDrag, type LongPressDragResult } from '@/composables/useLongPressDrag'
 import { usePersistedRef } from '@/composables/usePersisted'
 import { useActionStore } from '@/stores/action'
 import { useFeedbackStore } from '@/stores/feedback'
@@ -69,92 +70,147 @@ function toggleGroup(index: number) {
   void toggleGroupCmd.run({ index })
 }
 
-// ---------- 拖拽排序 ----------
-type DragState =
+// ---------- 拖拽排序（`am()` 机制，见 `composables/useLongPressDrag`）----------
+//
+// 照 `/style` 范本接线：项 / 组容器各自 `mousedown` 起长按，落点候选是**所有可见项 /
+// 所有组容器**，所以项可以跨组拖；拖拽中只记落点，`mouseup` 才写一次盘。
+// 旧的 HTML5 DnD（`dragstart/dragover/drop` + `dataTransfer`）已删，T-67。
+
+type DragSlot =
   { kind: 'group'; groupIndex: number } | { kind: 'item'; groupIndex: number; itemIndex: number }
 
-const dragState = ref<DragState | null>(null)
-const dropTarget = ref<{
-  groupIndex: number
-  itemIndex: number
-  position: 'before' | 'after'
-} | null>(null)
-
-function clearDrag() {
-  dragState.value = null
-  dropTarget.value = null
+interface SlotTarget {
+  element: HTMLElement
+  slot: DragSlot
 }
 
-function onGroupDragStart(event: DragEvent, groupIndex: number) {
-  dragState.value = { kind: 'group', groupIndex }
-  event.dataTransfer?.setData('text/plain', 'action-group')
-  if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move'
-}
+const drag = useLongPressDrag()
+const pageRoot = ref<HTMLElement | null>(null)
+/** 组拖拽的纵向落点要加滚动容器 `scrollTop`（与 `/style` 范本的 `bodyRef` 同一做法） */
+const groupsRef = ref<HTMLElement | null>(null)
+/** 组拖拽期间折叠源组，照 `/style` 范本的 `dragCollapsed`；只影响视图 */
+const dragCollapsed = ref(-1)
+let dragSource: DragSlot | null = null
+let dragTarget: DragSlot | null = null
 
-function onItemDragStart(event: DragEvent, groupIndex: number, itemIndex: number) {
-  event.stopPropagation()
-  dragState.value = { kind: 'item', groupIndex, itemIndex }
-  event.dataTransfer?.setData('text/plain', 'action-item')
-  if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move'
-}
-
-function onItemDragOver(event: DragEvent, groupIndex: number, itemIndex: number) {
-  if (!dragState.value) return
-  event.preventDefault()
-  const rect = (event.currentTarget as HTMLElement).getBoundingClientRect()
-  const position = event.clientX > rect.left + rect.width / 2 ? 'after' : 'before'
-  dropTarget.value = { groupIndex, itemIndex, position }
-}
-
-async function onItemDrop(event: DragEvent, groupIndex: number, itemIndex: number) {
-  event.preventDefault()
-  event.stopPropagation()
-  const drag = dragState.value
-  const target = dropTarget.value
-  clearDrag()
-  if (!drag || !target) return
-
-  if (drag.kind === 'group') {
-    await reorderGroupCmd.run({ from: drag.groupIndex, to: groupIndex })
-    return
+/** 项落点：每个组容器里按 DOM 顺序取按钮，下标就是 `group.list` 的下标 */
+function itemTargets(): SlotTarget[] {
+  const root = pageRoot.value
+  if (!root) return []
+  const out: SlotTarget[] = []
+  for (const groupElement of root.querySelectorAll<HTMLElement>('[data-drag-group]')) {
+    const groupIndex = Number(groupElement.dataset.dragGroup)
+    if (!Number.isInteger(groupIndex)) continue
+    groupElement
+      .querySelectorAll<HTMLElement>('.action-item__run')
+      .forEach((element, itemIndex) => {
+        out.push({ element, slot: { kind: 'item', groupIndex, itemIndex } })
+      })
   }
+  return out
+}
+
+/** 组落点：每个 `section.action-group` */
+function groupTargets(): SlotTarget[] {
+  const root = pageRoot.value
+  if (!root) return []
+  const out: SlotTarget[] = []
+  for (const element of root.querySelectorAll<HTMLElement>('.action-group[data-drag-group]')) {
+    const groupIndex = Number(element.dataset.dragGroup)
+    if (Number.isInteger(groupIndex)) out.push({ element, slot: { kind: 'group', groupIndex } })
+  }
+  return out
+}
+
+function onItemMouseDown(event: MouseEvent, groupIndex: number, itemIndex: number) {
+  // 项的 mousedown 不许冒到组容器上，否则一次点项会同时起两条拖拽（与 `/style` 范本一致）
+  event.stopPropagation()
+  dragSource = { kind: 'item', groupIndex, itemIndex }
+  dragTarget = null
+
+  let entries: SlotTarget[] = []
+  const started = drag.start({
+    event,
+    node: event.currentTarget as HTMLElement,
+    axis: 'x',
+    // UNVERIFIED: `ml: -40` 只按台账 T-67 判据③的原文「动作页项拖拽补 ml: -40」实现；
+    // 本机无同版本原版源码，无法复核它作用在哪个元素上。样式页判据明确没有这个偏移，不要加。
+    offsetX: -40,
+    targets: () => {
+      entries = itemTargets()
+      return entries.map((entry) => entry.element)
+    },
+    onHover: (element) => {
+      dragTarget = entries.find((entry) => entry.element === element)?.slot ?? null
+    },
+    onEnd: (result) => void endItemDrag(result),
+  })
+
+  if (!started) dragSource = null
+}
+
+function onGroupMouseDown(event: MouseEvent, groupIndex: number) {
+  dragSource = { kind: 'group', groupIndex }
+  dragTarget = null
+
+  let entries: SlotTarget[] = []
+  const started = drag.start({
+    event,
+    node: event.currentTarget as HTMLElement,
+    axis: 'y',
+    scrollRoot: groupsRef.value,
+    floatClass: 'action-group--drag',
+    targets: () => {
+      entries = groupTargets()
+      return entries.map((entry) => entry.element)
+    },
+    before: () => {
+      dragCollapsed.value = groupIndex
+    },
+    onHover: (element) => {
+      dragTarget = entries.find((entry) => entry.element === element)?.slot ?? null
+    },
+    onEnd: (result) => void endGroupDrag(result),
+  })
+
+  if (!started) dragSource = null
+}
+
+/** 项拖拽落手：只有真的拖过、且落点不是原位才写盘 */
+async function endItemDrag(result: LongPressDragResult) {
+  const source = dragSource
+  const target = dragTarget
+  dragSource = null
+  dragTarget = null
+  if (!source || !target || !result.dragged) return
+  if (source.kind !== 'item' || target.kind !== 'item') return
+  if (source.groupIndex === target.groupIndex && source.itemIndex === target.itemIndex) return
 
   await reorderItemCmd.run({
-    fromGroup: drag.groupIndex,
-    fromIndex: drag.itemIndex,
-    toGroup: groupIndex,
-    toIndex: itemIndex,
-    position: target.position,
+    fromGroup: source.groupIndex,
+    fromIndex: source.itemIndex,
+    toGroup: target.groupIndex,
+    toIndex: target.itemIndex,
+    position: result.position,
   })
 }
 
-async function onGroupDrop(event: DragEvent, groupIndex: number) {
-  event.preventDefault()
-  const drag = dragState.value
-  clearDrag()
-  if (!drag) return
+/** 组拖拽落手：同组 = 原位，不写盘（与 `/style` 范本的 `endGroupDrag` 一致） */
+async function endGroupDrag(result: LongPressDragResult) {
+  const source = dragSource
+  const target = dragTarget
+  dragSource = null
+  dragTarget = null
+  dragCollapsed.value = -1
+  if (!source || !target || !result.dragged) return
+  if (source.kind !== 'group' || target.kind !== 'group') return
+  if (source.groupIndex === target.groupIndex) return
 
-  if (drag.kind === 'group') {
-    await reorderGroupCmd.run({ from: drag.groupIndex, to: groupIndex })
-    return
-  }
-
-  // 拖到分组空白处：追加到该组末尾
-  const target = groups.value[groupIndex]
-  if (!target) return
-  await reorderItemCmd.run({
-    fromGroup: drag.groupIndex,
-    fromIndex: drag.itemIndex,
-    toGroup: groupIndex,
-    toIndex: target.list.length,
-    position: 'before',
+  await reorderGroupCmd.run({
+    from: source.groupIndex,
+    to: target.groupIndex,
+    position: result.position,
   })
-}
-
-function dropClass(groupIndex: number, itemIndex: number): string {
-  const target = dropTarget.value
-  if (!target || target.groupIndex !== groupIndex || target.itemIndex !== itemIndex) return ''
-  return target.position === 'after' ? 'is-drop-after' : 'is-drop-before'
 }
 
 // ---------- 右键菜单 ----------
@@ -169,7 +225,7 @@ const menu = ref({
 })
 const menuRef = ref<HTMLElement | null>(null)
 const menuPoint = computed(() => ({ x: menu.value.x, y: menu.value.y }))
-const { style: menuStyle, update: updateMenuPosition } = useFloatingPosition({
+const { update: updateMenuPosition } = useFloatingPosition({
   reference: menuPoint,
   floating: menuRef,
   placement: 'bottom-start',
@@ -419,7 +475,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="action-page">
+  <div ref="pageRoot" class="action-page">
     <ActionWarehouse
       :data="warehouseData"
       @select="onWarehouseSelect"
@@ -430,7 +486,7 @@ onMounted(async () => {
 
     <p v-if="degraded" class="action-warning">{{ degraded }}，动作库可能不完整</p>
 
-    <div class="action-groups">
+    <div ref="groupsRef" class="action-groups">
       <EmptyState
         v-if="!groups.length"
         compact
@@ -442,15 +498,12 @@ onMounted(async () => {
         v-for="(group, groupIndex) in groups"
         :key="`${group.groupName}-${groupIndex}`"
         class="action-group"
-        draggable="true"
-        @dragstart="onGroupDragStart($event, groupIndex)"
-        @dragover.prevent
-        @drop="onGroupDrop($event, groupIndex)"
-        @dragend="clearDrag"
+        :data-drag-group="groupIndex"
+        @mousedown="onGroupMouseDown($event, groupIndex)"
       >
         <BaseGroup
           :text="group.groupName"
-          :value="group.show"
+          :value="group.show && dragCollapsed !== groupIndex"
           @change="toggleGroup(groupIndex)"
           @ctrl="openGroupFreePanel(groupIndex)"
           @menu="openMenu($event, 'group', groupIndex)"
@@ -469,14 +522,9 @@ onMounted(async () => {
           <ActionGrid
             :items="group.list"
             :columns="listType"
-            :draggable="true"
-            :item-class="(_item, index) => dropClass(groupIndex, index)"
             @run="runAction"
             @menu="(event, _item, index) => openMenu(event, 'item', groupIndex, index)"
-            @dragstart="(event, _item, index) => onItemDragStart(event, groupIndex, index)"
-            @dragover="(event, _item, index) => onItemDragOver(event, groupIndex, index)"
-            @drop="(event, _item, index) => onItemDrop(event, groupIndex, index)"
-            @dragend="clearDrag"
+            @mousedown="(event, _item, index) => onItemMouseDown(event, groupIndex, index)"
           />
           <EmptyState
             v-if="!group.list.length"
@@ -532,7 +580,7 @@ onMounted(async () => {
       </ul>
     </PageBottomBar>
 
-    <ul v-if="menu.visible" ref="menuRef" class="ctx-menu" :style="menuStyle">
+    <ul v-if="menu.visible" ref="menuRef" class="ctx-menu">
       <template v-if="menu.kind === 'group'">
         <li><button type="button" @click="openGroupCreate(menu.groupIndex)">创建新组</button></li>
         <li><button type="button" @click="openGroupRename">重命名</button></li>

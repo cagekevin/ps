@@ -19,25 +19,17 @@ const emit = defineEmits<{
   (e: 'remove-block', blockId: number): void
   (e: 'toggle-block', blockId: number): void
   (e: 'edit-block', blockId: number): void
-  (e: 'dragstart', event: DragEvent, blockId: number, item: FreePanelItem, index: number): void
-  (e: 'dragover', event: DragEvent, blockId: number, item: FreePanelItem, index: number): void
-  (e: 'drop', event: DragEvent, blockId: number, item: FreePanelItem, index: number): void
-  (e: 'dragend'): void
+  /** 拖拽起手：页面据此调 `useLongPressDrag`（T-67 起不再用 HTML5 DnD） */
+  (e: 'mousedown', event: MouseEvent, blockId: number, item: FreePanelItem, index: number): void
 }>()
-
-function styleOf(block: FreePanelBlock) {
-  return {
-    width: block.width,
-    height: block.height,
-  }
-}
 </script>
 
 <template>
   <div
     class="fp-block"
     :class="block.type === 'row' ? 'fp-block--row' : 'fp-block--col'"
-    :style="styleOf(block)"
+    :data-block-id="block.id"
+    :style="{ '--fp-block-width': block.width, '--fp-block-height': block.height }"
   >
     <div v-if="removableBlock" class="fp-block__tools">
       <button
@@ -75,6 +67,7 @@ function styleOf(block: FreePanelBlock) {
       @remove-block="(blockId) => emit('remove-block', blockId)"
       @toggle-block="(blockId) => emit('toggle-block', blockId)"
       @edit-block="(blockId) => emit('edit-block', blockId)"
+      @mousedown="(event, blockId, item, index) => emit('mousedown', event, blockId, item, index)"
     />
 
     <ActionGrid
@@ -82,18 +75,12 @@ function styleOf(block: FreePanelBlock) {
       :columns="block.showNumber || 2"
       :show-icon="block.showIcon"
       :show-text="block.showText !== false"
-      draggable
       removable
       @run="(item) => emit('execute', block.id, item as FreePanelItem)"
       @remove="(item) => emit('remove', block.id, item as FreePanelItem)"
-      @dragstart="
-        (event, item, index) => emit('dragstart', event, block.id, item as FreePanelItem, index)
+      @mousedown="
+        (event, item, index) => emit('mousedown', event, block.id, item as FreePanelItem, index)
       "
-      @dragover="
-        (event, item, index) => emit('dragover', event, block.id, item as FreePanelItem, index)
-      "
-      @drop="(event, item, index) => emit('drop', event, block.id, item as FreePanelItem, index)"
-      @dragend="emit('dragend')"
     />
   </div>
 </template>
@@ -102,6 +89,8 @@ function styleOf(block: FreePanelBlock) {
 .fp-block {
   position: relative;
   display: flex;
+  width: var(--fp-block-width, auto);
+  height: var(--fp-block-height, auto);
   min-width: 0;
   min-height: 0;
   gap: var(--sp-1);

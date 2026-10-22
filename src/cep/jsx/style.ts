@@ -46,5 +46,8 @@ export function createStyleJsx(): StyleJsx {
     // 原版 :51532-51536：{ delArr, groupId, envDir: "/SheJiZhuLi" }
     addStyle: ({ delArr, groupId, envDir }) =>
       write('ys_AddStyle', [{ delArr, groupId, envDir }], '保存图层样式'),
+
+    // 快速吸色到组：切工具本身不写文档，但原版走的是同一个 jsx 通道
+    setTool: (tool) => write('Tool_set', [tool], '切换工具'),
   }
 }

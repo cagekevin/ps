@@ -335,6 +335,7 @@
 /* 无预览模式：家族名用字体本身渲染（原版 __name--no-preview） */
 .family.is-name-only {
   color: var(--c-text-name);
+  font-family: var(--preview-family, inherit);
   font-size: var(--fs-name);
   line-height: var(--fs-name-lh);
   font-weight: 400;
@@ -382,6 +383,7 @@
   margin: 0;
   padding: var(--sp-3) 0;
   color: var(--c-text-preview);
+  font-family: var(--preview-family, inherit);
   white-space: nowrap;
   overflow: hidden;
   text-overflow: ellipsis;

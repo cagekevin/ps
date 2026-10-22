@@ -93,6 +93,27 @@ describe('动作页', () => {
     })
   })
 
+  it('长按拖动同组动作：插后落点补偿一位（旧内联 splice 最容易错的分支）', async () => {
+    const wrapper = await mountPage()
+    const buttons = wrapper.findAll('.action-item__run')
+    // 按钮顺序 = 修图：磨皮、锐化；新建：800
+    vi.useFakeTimers()
+    try {
+      await buttons[0].trigger('mousedown', { ctrlKey: true })
+      vi.advanceTimersByTime(350)
+      // jsdom 的 offsetWidth 是 0，指针在任意正坐标都算目标右半 → 插后
+      await buttons[1].trigger('mousemove', { clientX: 10 })
+      document.dispatchEvent(new MouseEvent('mouseup'))
+    } finally {
+      vi.useRealTimers()
+    }
+    await flushPromises()
+
+    const { value } = await actionLibraryRepo.read()
+    expect(value[0].list.map((item) => item.name)).toEqual(['锐化', '磨皮'])
+    wrapper.unmount()
+  })
+
   it('空库显示空态', async () => {
     await actionLibraryRepo.write([])
     const wrapper = await mountPage()

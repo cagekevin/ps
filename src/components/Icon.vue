@@ -40,7 +40,7 @@ watchEffect(() => {
   <svg
     class="psz-icon"
     :viewBox="symbol?.viewBox ?? '0 0 24 24'"
-    :style="{ width: px, height: px, color }"
+    :style="{ '--icon-size': px, '--icon-color': color }"
     :title="title"
     aria-hidden="true"
     v-html="symbol?.inner"
@@ -51,6 +51,9 @@ watchEffect(() => {
 .psz-icon {
   display: inline-block;
   flex: 0 0 auto;
+  width: var(--icon-size, 1em);
+  height: var(--icon-size, 1em);
+  color: var(--icon-color, currentColor);
   vertical-align: middle;
   fill: currentColor;
 }

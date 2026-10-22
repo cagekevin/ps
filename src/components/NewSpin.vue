@@ -13,7 +13,7 @@ withDefaults(
 
 <template>
   <div v-if="show" class="g-spin" :class="{ 'is-mask': mask }">
-    <span class="g-spin__ring" :style="{ width: `${size}px`, height: `${size}px` }" />
+    <span class="g-spin__ring" :style="{ '--spin-size': `${size}px` }" />
     <span v-if="tip" class="g-spin__tip">{{ tip }}</span>
   </div>
 </template>
@@ -38,6 +38,8 @@ withDefaults(
 
 .g-spin__ring {
   display: block;
+  width: var(--spin-size, 18px);
+  height: var(--spin-size, 18px);
   border: 2px solid var(--border);
   border-top-color: var(--accent);
   border-radius: 50%;

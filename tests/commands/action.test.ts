@@ -212,11 +212,12 @@ describe('仓库与排序', () => {
     expect(value.index).toBe(0)
   })
 
-  it('分组排序', async () => {
-    await execute('action.reorderGroup', { from: 0, to: 1 })
+  it('分组排序按落点插后，并把被拖组折叠（原版 before :56128）', async () => {
+    await execute('action.reorderGroup', { from: 0, to: 1, position: 'after' })
 
     const { value } = await actionLibraryRepo.read()
     expect(value.map((group) => group.groupName)).toEqual(['新建', '修图'])
+    expect(value[1].show).toBe(false)
   })
 
   it('动作组内排序 before / after', async () => {

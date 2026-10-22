@@ -14,8 +14,6 @@ import {
   parsePreset,
   pushHistory,
   renameGroupAt,
-  reorderGroup,
-  reorderItem,
   seedPreset,
   toggleGroupAt,
   type RenamePreset,
@@ -115,26 +113,6 @@ describe('分组与预设的序', () => {
 
   it('组名为空要报错', () => {
     expect(() => addGroupAt(preset(), '   ')).toThrow('请输入组名')
-  })
-
-  it('拖拽换组：组 0 不参与', () => {
-    expect(reorderGroup(preset(), 2, 1).map((g) => g.name)).toEqual(['最近使用', '第二组', '序列'])
-    expect(() => reorderGroup(preset(), 1, 0)).toThrow()
-  })
-
-  it('同组内往后拖：落在目标项之后（原版 n=false 分支，:56950）', () => {
-    const data = preset()
-    expect(reorderItem(data, 1, 0, 1, 1)[1].list).toEqual(['%%n', '%n'])
-  })
-
-  it('跨组拖动会移动条目', () => {
-    const data = preset()
-    expect(reorderItem(data, 2, 0, 1, 0)[1].list).toEqual(['%n', '收%nn', '%%n'])
-    expect(reorderItem(data, 2, 0, 1, 0)[2].list).toEqual([])
-  })
-
-  it('不允许把预设拖进组 0', () => {
-    expect(() => reorderItem(preset(), 1, 0, 0, 0)).toThrow()
   })
 })
 

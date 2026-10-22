@@ -168,6 +168,10 @@ export function createMockJsx(): JsxPort {
       getForegroundColor: () =>
         Promise.resolve({ name: '未命名', color: { hex: 'FF0000', c: 0, m: 100, y: 100, k: 0 } }),
       getGradientInfo: () => Promise.resolve({ err: 0, data: null }),
+      setTool: async (tool) => {
+        log.info('mock', 'Tool_set', tool)
+        return null
+      },
       addStyle: async (payload) => {
         log.info('mock', 'ys_AddStyle', payload)
         return { err: 0, data: null }

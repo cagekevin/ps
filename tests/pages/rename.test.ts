@@ -113,6 +113,29 @@ describe('重命名页 · 正常态', () => {
     expect(wrapper.text()).toContain('%n')
   })
 
+  it('第 0 组不可拖：长按不起浮层；第 1 组可以（台账 T-67 判据④）', async () => {
+    const wrapper = await mountPage()
+    const groups = wrapper.findAll('.rename-group')
+    vi.useFakeTimers()
+    try {
+      // 组 0：mousedown 在页面层就返回，300ms 后也不会进拖拽态
+      await groups[0].trigger('mousedown', { ctrlKey: true })
+      vi.advanceTimersByTime(350)
+      document.dispatchEvent(new MouseEvent('mousemove', { clientX: 10, clientY: 10 }))
+      expect((groups[0].element as HTMLElement).style.position).toBe('')
+
+      // 组 1：过了长按门槛，浮层跟手（position:absolute 由 useLongPressDrag 写）
+      await groups[1].trigger('mousedown', { ctrlKey: true })
+      vi.advanceTimersByTime(350)
+      document.dispatchEvent(new MouseEvent('mousemove', { clientX: 10, clientY: 10 }))
+      expect((groups[1].element as HTMLElement).style.position).toBe('absolute')
+      document.dispatchEvent(new MouseEvent('mouseup'))
+    } finally {
+      vi.useRealTimers()
+    }
+    wrapper.unmount()
+  })
+
   it('点预设发出批量重命名，表达式原样透传 + 默认过滤子图层', async () => {
     const wrapper = await mountPage()
 

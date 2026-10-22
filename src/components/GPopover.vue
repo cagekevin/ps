@@ -36,7 +36,7 @@ const open = defineModel<boolean>('open', { default: false })
 const triggerRef = ref<HTMLElement | null>(null)
 const panelRef = ref<HTMLElement | null>(null)
 
-const { style, close, toggle, onTriggerKeydown } = usePopover({
+const { close, toggle, onTriggerKeydown } = usePopover({
   open,
   placement: props.placement,
   offset: props.offset,
@@ -72,14 +72,7 @@ function onKeydown(event: KeyboardEvent) {
 
     <Teleport to="body">
       <transition name="slide-down">
-        <div
-          v-if="open"
-          ref="panelRef"
-          class="g-popover__panel"
-          :class="panelClass"
-          :role="role"
-          :style="style"
-        >
+        <div v-if="open" ref="panelRef" class="g-popover__panel" :class="panelClass" :role="role">
           <slot :close="close" />
         </div>
       </transition>
@@ -98,7 +91,12 @@ function onKeydown(event: KeyboardEvent) {
 }
 
 .g-popover__panel {
+  position: fixed;
+  top: var(--floating-y, 0);
+  left: var(--floating-x, 0);
   z-index: var(--z-dropdown);
+  width: var(--floating-width, auto);
+  min-width: var(--floating-min-width, auto);
   max-width: calc(100vw - var(--sp-4));
   max-height: calc(100vh - var(--sp-4));
   overflow: auto;

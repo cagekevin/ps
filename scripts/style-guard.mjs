@@ -107,12 +107,51 @@ function extractStyle(content) {
   return blocks.join('\n')
 }
 
+/** 只取模板部分：脚本里的 `:style` 字符串不算模板内联样式 */
+function templateOf(content) {
+  const start = content.indexOf('<template>')
+  const end = content.lastIndexOf('</template>')
+  if (start < 0 || end <= start) return ''
+  return content.slice(start + '<template>'.length, end)
+}
+
+/**
+ * 模板内联样式（D-22）：只放行 `:style="{ '--x': v }"` 这种纯 CSS 变量绑定。
+ *
+ * 颜色 / 尺寸字面值（`style="width:12px"`、`:style="{ width }"`）既绕过 token，
+ * 也绕过只扫 `<style>` 块的老规则，所以这里按「属性值必须是纯 -- 变量对象」判定。
+ * 定位类动态值由 composable 直接写元素上的 `--floating-x/y`，模板里不出现 :style。
+ */
+const INLINE_STYLE_RE = /(?::style|v-bind:style)\s*=\s*"([^"]*)"|(?<![:@\w-])style\s*=\s*"([^"]*)"/g
+const STYLE_KEY_RE = /(?:^\{|,)\s*(?:'([^']+)'|"([^"]+)"|([A-Za-z_$][\w$-]*))\s*:/g
+
+function isCssVarOnlyStyle(expr) {
+  const text = expr.trim()
+  if (!text.startsWith('{') || !text.endsWith('}')) return false
+  const keys = [...text.matchAll(STYLE_KEY_RE)].map((m) => m[1] ?? m[2] ?? m[3])
+  return keys.length > 0 && keys.every((key) => key.startsWith('--'))
+}
+
+function countInlineStyles(content) {
+  let count = 0
+  for (const match of templateOf(content).matchAll(INLINE_STYLE_RE)) {
+    // m[1] 是 :style 绑定表达式；字面量 style="..." 落到 m[2]，一律算违规
+    if (match[1] === undefined || !isCssVarOnlyStyle(match[1])) count++
+  }
+  return count
+}
+
 /** 模板规则（不只 <style>）：图标尺寸必须用预设名 */
 const TEMPLATE_RULES = [
   {
     id: 'icon-size',
     re: /<Icon\b[^>]*?:size="\d+"/g,
     hint: '图标尺寸用预设名：size="2xs|xs|sm|md|lg|xl|2xl"，见 docs/规范/视觉规范.md',
+  },
+  {
+    id: 'inline-style',
+    count: countInlineStyles,
+    hint: '模板内联样式只允许 CSS 变量：:style="{ \'--x\': v }" + <style> 里 var(--x)；颜色/尺寸字面值进 <style> 用 token。',
   },
 ]
 
@@ -136,6 +175,10 @@ function countTemplate(content) {
   const tpl = stripStyle(content)
   let count = 0
   for (const rule of TEMPLATE_RULES) {
+    if (rule.count) {
+      count += rule.count(tpl)
+      continue
+    }
     const hits = tpl.match(rule.re)
     if (hits) count += hits.length
   }
@@ -273,8 +316,10 @@ function collect() {
     if (ALLOW_FILES.has(rel)) continue
 
     const content = readFileSync(abs, 'utf8')
-    const css = abs.endsWith('.vue') ? extractStyle(content) : content
-    if (!css.trim()) continue
+    const isVue = abs.endsWith('.vue')
+    const css = isVue ? extractStyle(content) : content
+    // .vue 即使没有 <style> 块也要查模板：内联样式可能单独存在（D-22）
+    if (!isVue && !css.trim()) continue
 
     let count = countViolations(css)
     if (abs.endsWith('.vue')) count += countTemplate(content)

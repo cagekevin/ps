@@ -59,6 +59,31 @@ describe('computeFloatingPosition', () => {
     expect(result.top).toBe(416)
   })
 
+  it('上方优先：贴顶空间不够时翻到下方（T-60 的 .describe）', () => {
+    const result = computeFloatingPosition(
+      rect(20, 10, 26, 26),
+      { width: 190, height: 80 },
+      viewport,
+      { placement: 'top-start', offset: 6, padding: 8 },
+    )
+
+    expect(result.placement).toBe('bottom-start')
+    expect(result.top).toBe(42)
+  })
+
+  it('上方优先：右边界越界时内收，不翻到上方左侧', () => {
+    const result = computeFloatingPosition(
+      rect(300, 300, 26, 26),
+      { width: 190, height: 80 },
+      viewport,
+      { placement: 'top-start', offset: 6, padding: 8 },
+    )
+
+    expect(result.placement).toBe('top-end')
+    expect(result.left).toBe(136)
+    expect(result.top).toBe(214)
+  })
+
   it('翻转后仍超出时夹在视口内', () => {
     const result = computeFloatingPosition(
       rect(320, 10, 20, 20),

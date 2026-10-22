@@ -1,7 +1,7 @@
 // 是什么：拖拽落点纯函数 —— 把原版四分支 splice（`app.v4.js:50053-50065` 项 / `:50095-50107` 组）收敛成"先删后插"的下标计算
-// 替代了什么：无（新建）。`domain/rename.ts` 的 `reorderItem`/`reorderGroup` 与 `commands/action.ts:244-249` 的内联 splice
-//             做的是同一件事，本轮**不动**那两处（避免同时改三页），只让 `/style` 用这里；合并见台账 T-67
-// 谁在用：`cep/data/style-library-repo.ts`（`moveKuItemTo` / `moveKuGroupTo`）
+// 替代了什么：`domain/rename.ts` 的 `reorderItem`/`reorderGroup` 与 `commands/action.ts`/`commands/freePanel.ts` 的内联 splice
+//             （T-67 已合并，全项目只剩这一份落点计算）
+// 谁在用：`cep/data/style-library-repo.ts`、`commands/action.ts`、`commands/rename.ts`、`commands/freePanel.ts`
 // 禁止：不读文件、不认"库/页"、不兜底——下标越界一律抛，让调用方看见
 
 import { CepError } from '@/utils/errors'

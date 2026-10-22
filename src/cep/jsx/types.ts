@@ -144,6 +144,8 @@ export interface StyleJsx {
   getGradientInfo(): Promise<unknown>
   /** ys_AddStyle([{delArr, groupId, envDir}])（:51538）：保存图层样式 */
   addStyle(payload: { delArr: unknown; groupId: string; envDir: string }): Promise<unknown>
+  /** Tool_set(["eyedropperTool"])：切到吸色工具（T-66 快速吸色到组）；返回结构未实测 */
+  setTool(tool: string): Promise<unknown>
 }
 
 export interface JsxPort {

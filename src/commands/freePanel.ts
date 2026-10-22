@@ -6,6 +6,7 @@ import {
   type FreePanelFile,
 } from '@/domain/free-panel'
 import { adaptFreePanelItem } from '@/domain/free-panel-legacy'
+import { applyItemDrop } from '@/domain/reorder'
 import { CepError } from '@/utils/errors'
 import { defineCommand, execute, get } from './registry'
 import type { Command } from './types'
@@ -98,13 +99,17 @@ export const freePanelCommands: Command<unknown>[] = [
         const from = source.data.findIndex((item) => item.btnId === fromBtnId)
         const to = target.data.findIndex((item) => item.btnId === toBtnId)
         if (from < 0 || to < 0) throw new CepError('PARSE', '自由面板项不存在')
-        if (source === target && from === to) return
 
-        const [item] = source.data.splice(from, 1)
-        let insertAt = to + (position === 'after' ? 1 : 0)
-        if (source === target && from < to) insertAt -= 1
-        insertAt = Math.max(0, Math.min(insertAt, target.data.length))
-        target.data.splice(insertAt, 0, item)
+        // 落点只在 `domain/reorder.ts` 一份：同 block 传一条列表，跨 block 传两条
+        const moved = applyItemDrop(
+          source === target ? [source.data] : [source.data, target.data],
+          {
+            from: { group: 0, index: from },
+            to: { group: source === target ? 0 : 1, index: to },
+            position,
+          },
+        )
+        if (moved < 0) return
         commit(file, next)
       })
     },

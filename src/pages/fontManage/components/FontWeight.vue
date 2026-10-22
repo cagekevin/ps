@@ -46,7 +46,7 @@ function pick(index: number) {
           :key="ps"
           class="fw__glyph"
           :class="{ 'is-current': index === current }"
-          :style="{ fontFamily: `'${ps}', '${font.family}'` }"
+          :style="{ '--glyph-font': `'${ps}', '${font.family}'` }"
           @click.stop="pick(index)"
           >{{ glyph }}</pre>
       </div>
@@ -100,6 +100,7 @@ function pick(index: number) {
   border: 1px solid transparent;
   border-radius: var(--r-md);
   color: var(--c-text-chip);
+  font-family: var(--glyph-font, inherit);
   font-size: var(--fs-base);
   line-height: 1;
   cursor: pointer;

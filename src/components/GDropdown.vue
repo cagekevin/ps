@@ -19,7 +19,7 @@ const visible = defineModel<boolean>('visible', { default: false })
 const triggerRef = ref<HTMLElement | null>(null)
 const panelRef = ref<HTMLElement | null>(null)
 
-const { style, close, toggle, onTriggerKeydown } = usePopover({
+const { close, toggle, onTriggerKeydown } = usePopover({
   open: visible,
   placement: props.placement,
   matchWidth: 'min',
@@ -40,7 +40,7 @@ const { style, close, toggle, onTriggerKeydown } = usePopover({
       <slot name="trigger" :visible="visible" />
     </div>
     <transition name="slide-down">
-      <div v-if="visible" ref="panelRef" class="g-dropdown__panel" :style="style">
+      <div v-if="visible" ref="panelRef" class="g-dropdown__panel">
         <slot :close="close" />
       </div>
     </transition>
@@ -58,9 +58,12 @@ const { style, close, toggle, onTriggerKeydown } = usePopover({
 }
 
 .g-dropdown__panel {
+  position: fixed;
+  top: var(--floating-y, 0);
+  left: var(--floating-x, 0);
   z-index: var(--z-dropdown);
   /* 宽度出口：默认跟触发器同宽；页面需要更宽时设 --dropdown-width */
-  min-width: 100%;
+  min-width: var(--floating-min-width, auto);
   width: var(--dropdown-width, auto);
   max-width: var(--dropdown-max-width, none);
   max-height: calc(100vh - var(--sp-4));

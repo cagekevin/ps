@@ -51,7 +51,10 @@ describe('FontSetSelect 预览档位', () => {
     })
 
     await wrapper.get('.fontset-select__trigger').trigger('click')
-    expect(wrapper.get('.fontset-select__item').attributes('style')).toContain('font-size: 24px')
+    // D-22：字号走 CSS 变量，模板里不再出现 font-size 字面值
+    expect(wrapper.get('.fontset-select__item').attributes('style')).toContain(
+      '--select-item-font-size: 24px',
+    )
 
     const options = wrapper.findAll('.fontset-select__tags button')
     await options[1].trigger('click')

@@ -32,6 +32,11 @@ export function kuShapeOf(parsed: unknown): KuShape | null {
  */
 const KU_LIBRARY_NAME = /^sj_ku(?:Col|Gra|Fon|Sty|Fot)/
 
+/** 是否是库文件条目（不是 `kuStyle/*`、`Gradient/*` 旁路图）。导入导出改名分派也用它，别各写一份 */
+export function isKuLibraryFileName(name: string): boolean {
+  return KU_LIBRARY_NAME.test(name)
+}
+
 /**
  * 解 `data` 字段：**先判类型，再解码**。
  *
@@ -94,7 +99,7 @@ export function resolveKuGroups(
       entry &&
       typeof entry === 'object' &&
       typeof (entry as { name?: unknown }).name === 'string' &&
-      KU_LIBRARY_NAME.test((entry as { name: string }).name),
+      isKuLibraryFileName((entry as { name: string }).name),
   ) as { name: string; data?: unknown } | undefined
   if (!hit) return { groups: null, note: '容器里没有样式库文件' }
   const text = decodeKuData(hit.data, decode)

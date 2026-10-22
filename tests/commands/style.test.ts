@@ -35,6 +35,7 @@ const jsx = vi.hoisted(() => ({
     getForegroundColor: vi.fn(),
     getGradientInfo: vi.fn(),
     addStyle: vi.fn(),
+    setTool: vi.fn(),
   },
 }))
 
@@ -44,6 +45,18 @@ vi.mock('@/selection', () => ({
   selectionRef: { value: selection },
 }))
 vi.mock('@/cep/jsx', () => ({ jsx }))
+
+/**
+ * 快速吸色到组（T-66）要等 PS 事件。这里把订阅换成可手动触发的表：
+ * 测试先等命令订阅上，再按名字触发「吸色完成 / 取消」，或交给超时。
+ */
+const hostEvents = vi.hoisted(() => ({ listeners: new Map<string, () => void>() }))
+vi.mock('@/cep/events', () => ({
+  subscribeHostEvent: async (name: string, listener: () => void) => {
+    hostEvents.listeners.set(name, listener)
+    return () => hostEvents.listeners.delete(name)
+  },
+}))
 
 /** 样式库的磁盘读写：测试里换内存实现，命令与 jsx 都走真的 */
 const store = vi.hoisted(() => {
@@ -81,6 +94,7 @@ vi.mock('@/cep/fs', () => ({
     return true
   },
   b64ToUtf8: (b64: string) => Buffer.from(b64, 'base64').toString('utf8'),
+  utf8ToB64: (text: string) => Buffer.from(text, 'utf8').toString('base64'),
 }))
 
 await import('@/commands')
@@ -108,6 +122,7 @@ async function read(path: string): Promise<unknown> {
 beforeEach(async () => {
   setActivePinia(createPinia())
   vi.clearAllMocks()
+  hostEvents.listeners.clear()
   store.files.clear()
 
   await styleIndexRepo.write({
@@ -366,6 +381,71 @@ describe('style.addFont（原版 addFont：ys_getFontInfo 的 data 整份入库�
 
     const g = (await read(FONT_LIB)) as Array<{ list: unknown[] }>
     expect(g[0].list).toHaveLength(1)
+  })
+})
+
+describe('style.pickColorToGroup（T-66：切吸色工具 + 等 PS 事件）', () => {
+  it('吸色完成（setd）→ 读前景色并加进该组', async () => {
+    jsx.style.setTool.mockResolvedValue(null)
+    jsx.style.getForegroundColor.mockResolvedValue({
+      name: '未命名',
+      color: { hex: 'FF0000', c: 0, m: 100, y: 100, k: 0 },
+    })
+
+    const pending = execute('style.pickColorToGroup', { kind: 'color', groupIndex: 0 })
+
+    await vi.waitFor(() => expect(hostEvents.listeners.has('setd')).toBe(true))
+    expect(jsx.style.setTool).toHaveBeenCalledWith('eyedropperTool')
+
+    hostEvents.listeners.get('setd')?.()
+    await expect(pending).resolves.toMatchObject({ ok: true })
+
+    const groups = (await read(COLOR_LIB)) as Array<{ list: unknown[] }>
+    expect(groups[0].list).toHaveLength(2)
+    expect(groups[0].list[1]).toEqual({
+      name: '未命名',
+      color: { hex: 'FF0000', c: 0, m: 100, y: 100, k: 0 },
+    })
+    // 两个订阅都退掉，不留死监听
+    expect(hostEvents.listeners.size).toBe(0)
+  })
+
+  it('取消（selection）→ 提示「快速吸色到组已取消」，不写库', async () => {
+    const pending = execute('style.pickColorToGroup', { kind: 'color', groupIndex: 0 })
+
+    await vi.waitFor(() => expect(hostEvents.listeners.has('selection')).toBe(true))
+    hostEvents.listeners.get('selection')?.()
+
+    await expect(pending).resolves.toMatchObject({
+      ok: false,
+      reason: '快速吸色到组已取消',
+    })
+    const groups = (await read(COLOR_LIB)) as Array<{ list: unknown[] }>
+    expect(groups[0].list).toHaveLength(1)
+    expect(hostEvents.listeners.size).toBe(0)
+  })
+
+  it('事件不来 → 60s 后按超时失败，不永远挂着', async () => {
+    vi.useFakeTimers()
+    try {
+      const pending = execute('style.pickColorToGroup', { kind: 'color', groupIndex: 0 })
+      await vi.waitFor(() => expect(hostEvents.listeners.has('setd')).toBe(true))
+
+      await vi.advanceTimersByTimeAsync(60_000)
+      await expect(pending).resolves.toMatchObject({ ok: false })
+      const result = await pending
+      // TIMEOUT 的文案由 describeCepError 统一成这一句
+      expect(result.ok === false && result.reason).toContain('没有响应')
+    } finally {
+      vi.useRealTimers()
+    }
+  })
+
+  it('非颜色库直接拒绝，不切工具', async () => {
+    await expect(
+      execute('style.pickColorToGroup', { kind: 'font', groupIndex: 0 }),
+    ).resolves.toMatchObject({ ok: false })
+    expect(jsx.style.setTool).not.toHaveBeenCalled()
   })
 })
 

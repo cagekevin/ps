@@ -49,7 +49,7 @@ const menuRef = ref<HTMLElement | null>(null)
 const point = ref({ x: props.x, y: props.y })
 
 // offset 给 0：原版就是"鼠标点即左上角"；padding 4 是原版那个 `u = 4` 的视口边距
-const { style: positionStyle, update } = useFloatingPosition({
+const { update } = useFloatingPosition({
   reference: point,
   floating: menuRef,
   placement: 'bottom-start',
@@ -78,7 +78,7 @@ function pick(entry: StyleMenuEntry) {
 
 <template>
   <Teleport to="body">
-    <div v-if="visible" ref="menuRef" class="style-menu" role="menu" :style="positionStyle">
+    <div v-if="visible" ref="menuRef" class="style-menu" role="menu">
       <template v-for="(entry, index) in items" :key="index">
         <hr v-if="entry.separator" class="style-menu__hr" />
         <button
@@ -106,6 +106,8 @@ function pick(entry: StyleMenuEntry) {
    z-index：原版 1101 高于仓库下拉的 101；这里取 `--z-tooltip`（高于 `--z-dropdown`，仍低于 `--z-modal`）。 */
 .style-menu {
   position: fixed;
+  top: var(--floating-y, 0);
+  left: var(--floating-x, 0);
   z-index: var(--z-tooltip);
   min-width: 100px;
   padding: var(--sp-exact-5) 0;

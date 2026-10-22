@@ -18,6 +18,18 @@
   margin-bottom: var(--sp-1);
 }
 
+/* 组拖拽浮层皮肤 —— 照 `/style` 范本的 `.style-group--drag`（`pages/style/index.css`）。
+   UNVERIFIED: 动作页这份 floatStyle 的具体值没有判据可依，本机无同版本原版源码可复核；
+   先沿用范本的 200×24、强调色、4px 圆角。
+   `position/left/top/z-index` 由 `useLongPressDrag` 的 `follow()` 内联给，这里只写皮肤。 */
+.action-group--drag {
+  width: 200px;
+  height: var(--h-control-sm);
+  border-radius: var(--r-md);
+  background-color: var(--c-accent);
+  line-height: var(--h-control-sm);
+}
+
 .action-group__add {
   display: inline-flex;
   width: var(--h-control-sm);
@@ -61,6 +73,8 @@
 /* 右键菜单：fixed 跟随触发按钮 */
 .ctx-menu {
   position: fixed;
+  top: var(--floating-y, 0);
+  left: var(--floating-x, 0);
   z-index: var(--z-toast);
   min-width: 140px;
   margin: 0;

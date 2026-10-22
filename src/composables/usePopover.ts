@@ -29,11 +29,7 @@ export function usePopover(options: UsePopoverOptions = {}) {
   const closeOnOutside = options.closeOnOutside ?? true
   const closeOnEscape = options.closeOnEscape ?? true
 
-  const {
-    style,
-    resolvedPlacement,
-    update: updatePosition,
-  } = useFloatingPosition({
+  const { resolvedPlacement, update: updatePosition } = useFloatingPosition({
     reference: triggerRef as Ref<FloatingReference | null>,
     floating: panelRef,
     placement: options.placement,
@@ -46,12 +42,14 @@ export function usePopover(options: UsePopoverOptions = {}) {
   function update() {
     updatePosition()
     const trigger = triggerRef.value
-    if (!trigger || !options.matchWidth) return
+    const panel = panelRef.value
+    if (!trigger || !panel || !options.matchWidth) return
+    // 宽度同样走 CSS 变量：面板自己的 <style> 用 var(--floating-width) 消费。
     const width = `${Math.round(trigger.getBoundingClientRect().width)}px`
-    style.value = {
-      ...style.value,
-      ...(options.matchWidth === 'width' ? { width } : { minWidth: width }),
-    }
+    panel.style.setProperty(
+      options.matchWidth === 'width' ? '--floating-width' : '--floating-min-width',
+      width,
+    )
   }
 
   function close() {
@@ -131,7 +129,6 @@ export function usePopover(options: UsePopoverOptions = {}) {
     open,
     triggerRef,
     panelRef,
-    style,
     resolvedPlacement,
     close,
     toggle,

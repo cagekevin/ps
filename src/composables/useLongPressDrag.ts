@@ -1,6 +1,6 @@
 // 是什么：长按拖拽 —— 原版 `am()`（`app.v4.js:37402-37532`）的共用复刻：300ms 长按进入拖拽态 + 克隆占位 + 浮层跟手 + 落点前/后布尔
-// 替代了什么：无（新建）。动作页 / 重命名页 / 自由面板仍走 HTML5 DnD（`ActionGrid` 那套），两套并存，迁移见台账 T-67
-// 谁在用：`pages/style/index.vue`（四库的项拖拽 + 组拖拽）
+// 替代了什么：HTML5 DnD（`ActionGrid` 的 `draggable` / `dragstart` / `dragover` / `drop`）；T-67 起三页已迁完
+// 谁在用：`pages/style/index.vue`（四库项/组）、`pages/action/index.vue`（项/组）、`pages/rename/index.vue`（项/组）、`pages/freePanel/components/FreePanel.vue`（项，可跨 block）
 // 禁止：不要和 HTML5 DnD 混用（`mousedown/mousemove/mouseup` 与 `dragstart/dragover/drop` 是两条链）；不要在这里认页面、库、分组
 
 import { onBeforeUnmount } from 'vue'

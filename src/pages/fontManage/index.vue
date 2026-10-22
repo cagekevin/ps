@@ -449,7 +449,7 @@ async function apply(font: FontItem, variantIndex = currentWeight(font.family)) 
             <span
               class="family"
               :class="{ 'is-name-only': previewMode === 'none' }"
-              :style="previewMode === 'none' ? { fontFamily: previewFamily(font) } : undefined"
+              :style="{ '--preview-family': previewFamily(font) }"
               >{{ font.family }}</span
             >
             <FontLicense :family="font.family" :commercials="commercials" />
@@ -475,7 +475,7 @@ async function apply(font: FontItem, variantIndex = currentWeight(font.family)) 
             v-if="previewMode !== 'none'"
             class="preview"
             :class="`is-${previewMode}`"
-            :style="{ fontFamily: previewFamily(font) }"
+            :style="{ '--preview-family': previewFamily(font) }"
             >{{ sampleText(font) }}</pre>
 
           <FontWeight

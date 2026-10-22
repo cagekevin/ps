@@ -129,7 +129,7 @@ function choose(index: number) {
     <button
       class="fontset-select__trigger"
       :class="{ 'fontset-select__trigger--plain': plain }"
-      :style="plain ? undefined : { height }"
+      :style="{ '--select-trigger-height': height }"
       type="button"
       :disabled="disabled"
       @click="open = !open"
@@ -149,7 +149,7 @@ function choose(index: number) {
       v-if="open"
       class="fontset-select__panel"
       :class="{ 'fontset-select__panel--plain': plain }"
-      :style="{ maxHeight }"
+      :style="{ '--select-max-height': maxHeight }"
     >
       <div v-if="recent" class="fontset-select__tabs">
         <button
@@ -248,7 +248,7 @@ function choose(index: number) {
         :key="`${entry.index}-${entry.label}`"
         class="fontset-select__item"
         :class="{ 'is-active': entry.index === modelValue }"
-        :style="{ fontSize: previewSize ? `${previewSize}px` : undefined }"
+        :style="{ '--select-item-font-size': previewSize ? `${previewSize}px` : undefined }"
         type="button"
         @click="choose(entry.index)"
       >
@@ -293,7 +293,7 @@ function choose(index: number) {
 .fontset-select__trigger {
   display: flex;
   width: 100%;
-  height: var(--h-control-sm);
+  height: var(--select-trigger-height, var(--h-control-sm));
   align-items: center;
   justify-content: space-between;
   gap: var(--sp-2);
@@ -394,6 +394,7 @@ function choose(index: number) {
   left: 0;
   z-index: var(--z-dropdown);
   width: 100%;
+  max-height: var(--select-max-height, 220px);
   overflow-y: auto;
   margin-top: var(--sp-2);
   border: 1px solid var(--c-border-float);
@@ -425,7 +426,7 @@ function choose(index: number) {
   border: 0;
   background: transparent;
   color: var(--text);
-  font-size: var(--fs-md);
+  font-size: var(--select-item-font-size, var(--fs-md));
   text-align: left;
   cursor: pointer;
 }

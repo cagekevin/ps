@@ -116,6 +116,13 @@ async function currentLibPath(kind: KuKind): Promise<string> {
   return `${userDir()}/${fileName}`
 }
 
+/** 读任意一个库文件的原文（导出用：`.kux` 要按索引里的文件名逐个读，不只是当前仓库） */
+export async function readKuFileText(fileName: string): Promise<string | null> {
+  if (!fileName) return null
+  if (/[\\/]/.test(fileName)) throw new CepError('PARSE', `库文件名不合法：${fileName}`)
+  return readTextSmart(`${userDir()}/${fileName}`)
+}
+
 /** 读库文件里的原始组数组；读不到一律抛（不猜、不补默认） */
 async function readRawGroups(kind: KuKind): Promise<{ path: string; groups: KuRawGroup[] }> {
   const path = await currentLibPath(kind)
@@ -196,7 +203,7 @@ const KU_FILE_PREFIX: Record<KuKind, string> = {
  * 模板 `"xxxx4xxxyxxxxxxx"` 逐字符替换，`x` 取随机 hex、`y` 取 `n & 3 | 8`，最后 `toUpperCase`。
  * 模板里的字面量 `4` 原样留下（实测样本 `CB2946E8A25798FE` 第 5 位正是 `4`）。
  */
-function kuGuid(): string {
+export function kuGuid(): string {
   let stamp = Date.now()
   return 'xxxx4xxxyxxxxxxx'
     .replace(/[xy]/g, (ch) => {

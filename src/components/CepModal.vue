@@ -85,7 +85,7 @@ function onKeydown(event: KeyboardEvent) {
           aria-modal="true"
           :aria-label="title"
           tabindex="-1"
-          :style="{ width: `${props.width}px` }"
+          :style="{ '--modal-width': `${props.width}px` }"
           @keydown="onKeydown"
         >
           <header class="modal__header">
@@ -121,6 +121,7 @@ function onKeydown(event: KeyboardEvent) {
 }
 
 .modal {
+  width: var(--modal-width, 260px);
   max-width: calc(100vw - var(--sp-7));
   max-height: calc(100vh - var(--sp-7));
   display: flex;

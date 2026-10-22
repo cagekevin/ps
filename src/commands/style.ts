@@ -1,3 +1,5 @@
+import { openFile, saveFile } from '@/cep/dialog'
+import { exportKuArchive, importKuArchive, kuArchiveDefaultName } from '@/cep/data/style-library-io'
 import {
   addKuGroup,
   addKuItem,
@@ -21,11 +23,12 @@ import {
   sendKuItemToSwatch,
   setKuGroupShow,
 } from '@/cep/data/style-library-repo'
+import { subscribeHostEvent } from '@/cep/events'
 import { asJsxResult, assertJsxOk } from '@/utils/jsx-result'
 import { encodeText } from '@/domain/translate'
 import { CepError } from '@/utils/errors'
 import { defineCommand } from './registry'
-import type { Command } from './types'
+import type { Command, CommandContext } from './types'
 
 /**
  * 样式域命令（`/style` 第 2 段 + 第 3 段 + 第 5 段）。
@@ -41,13 +44,59 @@ import type { Command } from './types'
  *
  * 本期仍不做：吸色到组（`Tool_set("eyedropperTool")` + PS 事件 `1936028772`，`app.v4.js:50299-50302`，
  * 台账 T-66；菜单项已渲染但置灰）、
- * 拖图片取色（`exportCurrentLayerToImage`，`:54639`）、仓库发送/移动（T-65）、
- * 四类库与 `.kux` 的导入导出。项 / 组的拖拽排序走 `style.moveItemTo` / `style.moveGroupTo`
+ * 拖图片取色（`exportCurrentLayerToImage`，`:54639`）、仓库发送/移动（T-65）。
+ * 项 / 组的拖拽排序走 `style.moveItemTo` / `style.moveGroupTo`
  * （原版 `drag` / `dragColorWrap` 的 `Callback`，页面用 `composables/useLongPressDrag` 起拖）。
+ * 导入导出（第 6 段）：底栏两个按钮分别弹「导入」「导出」菜单（契约 §3.5）。
+ * 本期只接 `.kux` 容器的四条命令：导入追加 / 导入替换 / 导出全部 / 导出当前。
+ * 四类单库（`.kuc/.kug/.kuf/.kus`）的编解码在 `domain/ku-io.ts`，本期不单独接命令。
  *
  * **jsx 返回结构全部未实测**（jsxbin 是字节码，符号不可读）。每条命令的返回值语义标了 UNVERIFIED，
  * 因此：只判空、判 `err`，绝不读 `data` 里的具体字段。
  */
+
+/** 吸色等待上限：事件不来时不让命令永远挂着（原版没有超时，这是安全兜底） */
+const EYEDROPPER_TIMEOUT = 60_000
+
+/**
+ * 快速吸色到组（T-66）：切到吸色工具 → 等一次吸色完成 → 把当前前景色加进该颜色组。
+ *
+ * 事件复用 `cep/events.ts` 已有的两个：`setd` = 吸色完成、`selection` = 取消
+ * （原版用的两个 stringID 就是它们，表里已有，不能再加别名，见那里的注释）。
+ *
+ * UNVERIFIED: PS 是否真的会在这两个时机回事件，本机无法验证；若事件不来，60s 后按超时退出。
+ */
+async function pickColorToGroup(ctx: CommandContext, groupIndex: number): Promise<void> {
+  let settle: (result: 'done' | 'cancelled' | 'timeout') => void = () => {}
+  const finished = new Promise<'done' | 'cancelled' | 'timeout'>((resolve) => {
+    settle = resolve
+  })
+
+  const unsubscribers: Array<() => void> = []
+  let timer: ReturnType<typeof setTimeout> | undefined
+
+  try {
+    // 先订阅再切工具：切工具之后用户可能立刻吸色，晚订阅会漏事件
+    unsubscribers.push(await subscribeHostEvent('setd', () => settle('done')))
+    unsubscribers.push(await subscribeHostEvent('selection', () => settle('cancelled')))
+    timer = setTimeout(() => settle('timeout'), EYEDROPPER_TIMEOUT)
+
+    await ctx.jsx.style.setTool('eyedropperTool')
+
+    const result = await finished
+    if (result === 'cancelled') throw new CepError('PARSE', '快速吸色到组已取消')
+    if (result === 'timeout')
+      throw new CepError('TIMEOUT', '快速吸色到组已超时：没有收到 Photoshop 事件')
+  } finally {
+    if (timer) clearTimeout(timer)
+    for (const off of unsubscribers) off()
+  }
+
+  // 与 `style.addColor` 同一条路径：读前景色 → 追加到该组
+  const raw = await ctx.jsx.style.getForegroundColor()
+  if (raw === null || raw === undefined) throw new CepError('JSX', '读取前景色失败')
+  await addKuItem('color', groupIndex, raw)
+}
 
 /** 把 jsx 返回值归一成 `{ err, data }`；调用方只判 err 与 data 是否存在 */
 function check(raw: unknown, fallback: string): { ok: boolean; data?: unknown; msg: string } {
@@ -205,6 +254,18 @@ export const styleCommands: Command<unknown>[] = [
         throw new CepError('JSX', '保存图层样式失败：没有内容')
       }
       await addKuItem('style', groupIndex, result.data)
+    },
+  }),
+
+  defineCommand({
+    id: 'style.pickColorToGroup',
+    title: '快速吸色到组',
+    group: 'style',
+    requires: 'none',
+    kind: 'long',
+    async run(ctx, { kind, groupIndex }) {
+      if (kind !== 'color') throw new CepError('PARSE', '快速吸色只能加到颜色库')
+      await pickColorToGroup(ctx, groupIndex)
     },
   }),
 
@@ -458,6 +519,73 @@ export const styleCommands: Command<unknown>[] = [
       // 原版 `delete(t)`（`:53329-53356`）直接删磁盘文件；这里移进 `<用户目录>/.deleted-<时间戳>/`
       // （有意偏离，可恢复），回收目录由 repo 写进日志
       await deleteWarehouse(index)
+    },
+  }),
+
+  // ---------- 第 6 段：导入 / 导出（`.kux` 容器）----------
+  //
+  // 依据 `docs/生成/库文件格式契约.md`：
+  // §0.1 / §2.4 容器 `{arrFileData, store}`；§3.4 导出全部 / 导出当前 / 覆盖导入 / 追加导入；
+  // §3.5 06 页入口与导出文件命名；§5.2 导入前必须给内层文件名发新 id（否则覆盖本地）。
+  // 四类单库（`.kuc/.kug/.kuf/.kus`）的编解码在 `domain/ku-io.ts`，本期不单独接命令。
+  //
+  // 用户取消对话框沿用 action / rename 的既有口径：抛「取消操作」，由 `useCommand` 统一提示。
+
+  defineCommand({
+    id: 'style.importKuReplace',
+    title: '导入预设仓库（覆盖）',
+    group: 'style',
+    requires: 'none',
+    kind: 'long',
+    async run(ctx) {
+      const path = openFile('导入样式仓库', ['kux'])
+      if (!path) throw new CepError('PARSE', '取消操作')
+
+      await importKuArchive(false, path, (detail) => ctx.progress.update(undefined, detail))
+    },
+  }),
+
+  defineCommand({
+    id: 'style.importKuAppend',
+    title: '追加预设仓库',
+    group: 'style',
+    requires: 'none',
+    kind: 'long',
+    async run(ctx) {
+      const path = openFile('追加样式仓库', ['kux'])
+      if (!path) throw new CepError('PARSE', '取消操作')
+
+      await importKuArchive(true, path, (detail) => ctx.progress.update(undefined, detail))
+    },
+  }),
+
+  defineCommand({
+    id: 'style.exportKuAll',
+    title: '导出所有仓库',
+    group: 'style',
+    requires: 'none',
+    kind: 'long',
+    async run(ctx) {
+      const defaultName = await kuArchiveDefaultName(false)
+      const path = saveFile('导出所有仓库', ['kux'], defaultName)
+      if (!path) throw new CepError('PARSE', '取消操作')
+
+      await exportKuArchive(false, path, (detail) => ctx.progress.update(undefined, detail))
+    },
+  }),
+
+  defineCommand({
+    id: 'style.exportKuCurrent',
+    title: '导出当前仓库',
+    group: 'style',
+    requires: 'none',
+    kind: 'long',
+    async run(ctx) {
+      const defaultName = await kuArchiveDefaultName(true)
+      const path = saveFile('导出当前仓库', ['kux'], defaultName)
+      if (!path) throw new CepError('PARSE', '取消操作')
+
+      await exportKuArchive(true, path, (detail) => ctx.progress.update(undefined, detail))
     },
   }),
 ]

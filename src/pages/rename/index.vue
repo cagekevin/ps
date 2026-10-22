@@ -14,6 +14,7 @@ import PageShell from '@/components/PageShell.vue'
 import { useCommand } from '@/components/command/useCommand'
 import { useDismiss } from '@/composables/useDismiss'
 import { useFloatingPosition } from '@/composables/useFloatingPosition'
+import { useLongPressDrag, type LongPressDragResult } from '@/composables/useLongPressDrag'
 import { usePersistedRef } from '@/composables/usePersisted'
 import {
   RENAME_LAYER_COLORS,
@@ -115,7 +116,7 @@ function pickColor(colorIndex: number) {
 const exprMenu = ref({ visible: false, x: 0, y: 0 })
 const exprRef = ref<HTMLElement | null>(null)
 const exprPoint = ref({ x: 0, y: 0 })
-const { style: exprStyle, update: updateExprPosition } = useFloatingPosition({
+const { update: updateExprPosition } = useFloatingPosition({
   reference: exprPoint,
   floating: exprRef,
   placement: 'bottom-start',
@@ -162,7 +163,7 @@ const menu = ref({
 })
 const menuRef = ref<HTMLElement | null>(null)
 const menuPoint = ref({ x: 0, y: 0 })
-const { style: menuStyle, update: updateMenuPosition } = useFloatingPosition({
+const { update: updateMenuPosition } = useFloatingPosition({
   reference: menuPoint,
   floating: menuRef,
   placement: 'bottom-start',
@@ -265,45 +266,149 @@ async function onConfirmDelete() {
   await confirmState.value.run()
 }
 
-// ---------- 拖拽排序 ----------
+// ---------- 拖拽排序（`am()` 机制，见 `composables/useLongPressDrag`）----------
+//
+// 照 `/style` 范本接线；两处额外限制来自台账 T-67 判据④：
+// 「重命名页保留『第 0 组不可拖』……样式页没有这条，不要照搬」。
+// 第 0 组是「最近使用」，固定组，既不能拖、也不能作为项落点。
 
-const dragGroup = ref<number | null>(null)
-const dragItem = ref<{ groupIndex: number; itemIndex: number } | null>(null)
+type DragSlot =
+  { kind: 'group'; groupIndex: number } | { kind: 'item'; groupIndex: number; itemIndex: number }
 
-function onGroupDragStart(event: DragEvent, index: number) {
-  if (index === 0) return
-  dragGroup.value = index
-  event.dataTransfer?.setData('text/plain', `group:${index}`)
+interface SlotTarget {
+  element: HTMLElement
+  slot: DragSlot
 }
 
-function onGroupDrop(event: DragEvent, index: number) {
-  event.preventDefault()
-  const from = dragGroup.value
-  dragGroup.value = null
-  if (from === null || from === index) return
-  void reorderGroupCmd.run({ from, to: index })
+const drag = useLongPressDrag()
+/** 滚动容器 + 落点查询根：`.rename-body` 是 `u-scroll` */
+const bodyRef = ref<HTMLElement | null>(null)
+/** 组拖拽期间折叠源组，照 `/style` 范本的 `dragCollapsed`；只影响视图 */
+const dragCollapsed = ref(-1)
+let dragSource: DragSlot | null = null
+let dragTarget: DragSlot | null = null
+
+/** 组落点：第 0 组不参与（台账 T-67 判据④「第 0 组不可拖」） */
+function groupTargets(): SlotTarget[] {
+  const root = bodyRef.value
+  if (!root) return []
+  const out: SlotTarget[] = []
+  for (const element of root.querySelectorAll<HTMLElement>('.rename-group[data-drag-group]')) {
+    const groupIndex = Number(element.dataset.dragGroup)
+    if (Number.isInteger(groupIndex) && groupIndex > 0) {
+      out.push({ element, slot: { kind: 'group', groupIndex } })
+    }
+  }
+  return out
 }
 
-function onItemDragStart(event: DragEvent, groupIndex: number, itemIndex: number) {
-  // 第 0 组（最近使用）不参与拖动，与组一样固定
+/**
+ * 项落点：第 0 组不参与。
+ *
+ * UNVERIFIED: 判据④只点名「第 0 组不可拖」和「两处都判」，没有逐字说项拖拽的源/落点；
+ * 这里沿用迁移前页面的行为（项也不能进出第 0 组），依据是判据④的「第 0 组不可拖」。
+ */
+function itemTargets(): SlotTarget[] {
+  const root = bodyRef.value
+  if (!root) return []
+  const out: SlotTarget[] = []
+  for (const element of root.querySelectorAll<HTMLElement>('[data-drag-item]')) {
+    const groupIndex = Number(element.dataset.itemGroup)
+    const itemIndex = Number(element.dataset.dragItem)
+    if (!Number.isInteger(groupIndex) || groupIndex === 0 || !Number.isInteger(itemIndex)) continue
+    out.push({ element, slot: { kind: 'item', groupIndex, itemIndex } })
+  }
+  return out
+}
+
+function onGroupMouseDown(event: MouseEvent, groupIndex: number) {
+  // 第 0 组不可拖：连长按计时都不起（台账 T-67 判据④）
   if (groupIndex === 0) return
-  dragItem.value = { groupIndex, itemIndex }
-  event.stopPropagation()
-  event.dataTransfer?.setData('text/plain', `item:${groupIndex}:${itemIndex}`)
+  dragSource = { kind: 'group', groupIndex }
+  dragTarget = null
+
+  let entries: SlotTarget[] = []
+  const started = drag.start({
+    event,
+    node: event.currentTarget as HTMLElement,
+    axis: 'y',
+    scrollRoot: bodyRef.value,
+    floatClass: 'rename-group--drag',
+    targets: () => {
+      entries = groupTargets()
+      return entries.map((entry) => entry.element)
+    },
+    before: () => {
+      dragCollapsed.value = groupIndex
+    },
+    onHover: (element) => {
+      dragTarget = entries.find((entry) => entry.element === element)?.slot ?? null
+    },
+    onEnd: (result) => void endGroupDrag(result),
+  })
+
+  if (!started) dragSource = null
 }
 
-function onItemDrop(event: DragEvent, groupIndex: number, itemIndex: number) {
-  event.preventDefault()
+function onItemMouseDown(event: MouseEvent, groupIndex: number, itemIndex: number) {
   event.stopPropagation()
-  const from = dragItem.value
-  dragItem.value = null
-  if (!from || groupIndex === 0) return
-  if (from.groupIndex === groupIndex && from.itemIndex === itemIndex) return
-  void reorderItemCmd.run({
-    fromGroup: from.groupIndex,
-    fromIndex: from.itemIndex,
-    toGroup: groupIndex,
-    toIndex: itemIndex,
+  // 第 0 组的项也不可拖（UNVERIFIED: 依据台账 T-67 判据④的「第 0 组不可拖」）
+  if (groupIndex === 0) return
+  dragSource = { kind: 'item', groupIndex, itemIndex }
+  dragTarget = null
+
+  let entries: SlotTarget[] = []
+  const started = drag.start({
+    event,
+    node: event.currentTarget as HTMLElement,
+    axis: 'x',
+    targets: () => {
+      entries = itemTargets()
+      return entries.map((entry) => entry.element)
+    },
+    onHover: (element) => {
+      dragTarget = entries.find((entry) => entry.element === element)?.slot ?? null
+    },
+    onEnd: (result) => void endItemDrag(result),
+  })
+
+  if (!started) dragSource = null
+}
+
+async function endGroupDrag(result: LongPressDragResult) {
+  const source = dragSource
+  const target = dragTarget
+  dragSource = null
+  dragTarget = null
+  dragCollapsed.value = -1
+  if (!source || !target || !result.dragged) return
+  if (source.kind !== 'group' || target.kind !== 'group') return
+  if (source.groupIndex === target.groupIndex) return
+
+  await reorderGroupCmd.run({
+    from: source.groupIndex,
+    to: target.groupIndex,
+    position: result.position,
+  })
+}
+
+async function endItemDrag(result: LongPressDragResult) {
+  const source = dragSource
+  const target = dragTarget
+  dragSource = null
+  dragTarget = null
+  if (!source || !target || !result.dragged) return
+  if (source.kind !== 'item' || target.kind !== 'item') return
+  // 落点也不能是第 0 组（UNVERIFIED: 依据台账 T-67 判据④的「第 0 组不可拖」）
+  if (target.groupIndex === 0) return
+  if (source.groupIndex === target.groupIndex && source.itemIndex === target.itemIndex) return
+
+  await reorderItemCmd.run({
+    fromGroup: source.groupIndex,
+    fromIndex: source.itemIndex,
+    toGroup: target.groupIndex,
+    toIndex: target.itemIndex,
+    position: result.position,
   })
 }
 
@@ -343,7 +448,7 @@ onMounted(() => {
       </template>
     </RenameModeTabs>
 
-    <div class="rename-body u-fill u-scroll u-stack">
+    <div ref="bodyRef" class="rename-body u-fill u-scroll u-stack">
       <!-- 默认模式：一条表达式 + 应用按钮（原版 :56534-56579） -->
       <div
         v-if="switchIndex === 0"
@@ -395,14 +500,12 @@ onMounted(() => {
           v-for="(group, groupIndex) in preset"
           :key="`${group.name}-${groupIndex}`"
           class="rename-group"
-          :draggable="groupIndex > 0"
-          @dragstart="onGroupDragStart($event, groupIndex)"
-          @dragover.prevent
-          @drop="onGroupDrop($event, groupIndex)"
+          :data-drag-group="groupIndex"
+          @mousedown="onGroupMouseDown($event, groupIndex)"
         >
           <BaseGroup
             :text="group.name"
-            :value="group.show"
+            :value="group.show && dragCollapsed !== groupIndex"
             @change="toggleGroup(groupIndex)"
             @menu="onGroupMenu($event, groupIndex)"
           >
@@ -411,14 +514,13 @@ onMounted(() => {
                 v-for="(item, itemIndex) in group.list"
                 :key="`${item}-${itemIndex}`"
                 class="rename-chip"
-                :draggable="groupIndex > 0"
                 type="button"
                 :title="item"
+                :data-item-group="groupIndex"
+                :data-drag-item="itemIndex"
                 @click="applyPreset(item)"
                 @contextmenu.prevent="openMenu($event, 'item', groupIndex, itemIndex)"
-                @dragstart="onItemDragStart($event, groupIndex, itemIndex)"
-                @dragover.prevent
-                @drop="onItemDrop($event, groupIndex, itemIndex)"
+                @mousedown="onItemMouseDown($event, groupIndex, itemIndex)"
               >
                 {{ item }}
               </button>
@@ -476,7 +578,7 @@ onMounted(() => {
     </PageBottomBar>
 
     <!-- 表达式菜单（原版 $menu.show，:57094-57112） -->
-    <ul v-if="exprMenu.visible" ref="exprRef" class="rename-menu" :style="exprStyle">
+    <ul v-if="exprMenu.visible" ref="exprRef" class="rename-menu">
       <li v-for="option in RENAME_MARKS" :key="option.mark">
         <button class="rename-menu__item" type="button" @click="pickMark(option.mark)">
           {{ option.text }}
@@ -485,7 +587,7 @@ onMounted(() => {
     </ul>
 
     <!-- 组 / 预设项右键菜单（组 0 只有「创建新组」，原版 splice(1,3)，:57213） -->
-    <ul v-if="menu.visible" ref="menuRef" class="rename-menu" :style="menuStyle">
+    <ul v-if="menu.visible" ref="menuRef" class="rename-menu">
       <template v-if="menu.kind === 'group'">
         <li>
           <button
@@ -603,6 +705,18 @@ onMounted(() => {
   width: 100%;
 }
 
+/* 组拖拽浮层皮肤 —— 照 `/style` 范本的 `.style-group--drag`（`pages/style/index.css`）。
+   UNVERIFIED: 重命名页这份 floatStyle 的具体值没有判据可依，本机无同版本原版源码可复核；
+   先沿用范本的 200×24、强调色、4px 圆角。
+   `position/left/top/z-index` 由 `useLongPressDrag` 的 `follow()` 内联给，这里只写皮肤。 */
+.rename-group--drag {
+  width: 200px;
+  height: var(--h-control-sm);
+  border-radius: var(--r-md);
+  background-color: var(--c-accent);
+  line-height: var(--h-control-sm);
+}
+
 /* 原版 .btn-small{height:26px;line-height:26px;padding:0 6px;border-radius:5px}；
    项间距原版用 margin-right:6px/margin-bottom:5px，这里换成父级 gap */
 .rename-chips {
@@ -679,6 +793,8 @@ onMounted(() => {
 /* 浮动菜单：原版 $menu 的浮层外观（.dropDown-wrap background rgba(64,64,64,.95)） */
 .rename-menu {
   position: fixed;
+  top: var(--floating-y, 0);
+  left: var(--floating-x, 0);
   z-index: var(--z-dropdown);
   min-width: 168px;
   margin: 0;

@@ -26,7 +26,7 @@ const emit = defineEmits<{
 const triggerRef = ref<HTMLElement | null>(null)
 const panelRef = ref<HTMLElement | null>(null)
 
-const { open, style, close, toggle, onTriggerKeydown } = usePopover({
+const { open, close, toggle, onTriggerKeydown } = usePopover({
   placement: 'bottom-start',
   matchWidth: 'width',
   triggerRef,
@@ -57,7 +57,7 @@ function choose(index: number) {
       <Icon name="#iconxiala" size="2xs" />
     </button>
 
-    <div v-if="open" ref="panelRef" class="select-box__dropdown" :style="style">
+    <div v-if="open" ref="panelRef" class="select-box__dropdown">
       <button
         v-for="(option, index) in options"
         :key="option.id ?? index"
@@ -100,11 +100,11 @@ function choose(index: number) {
 }
 
 .select-box__dropdown {
-  position: absolute;
-  top: 0;
-  left: 0;
+  position: fixed;
+  top: var(--floating-y, 0);
+  left: var(--floating-x, 0);
   z-index: var(--z-toast);
-  width: 100%;
+  width: var(--floating-width, auto);
   overflow: hidden;
   border: 1px solid var(--c-border-strong);
   border-radius: var(--r-input);

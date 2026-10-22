@@ -25,7 +25,7 @@ function close() {
 }
 
 const menuRef = ref<HTMLElement | null>(null)
-const { style: positionStyle } = usePointPopover({
+usePointPopover({
   visible: () => props.visible,
   x: () => props.x,
   y: () => props.y,
@@ -46,7 +46,7 @@ function onRename() {
 
 <template>
   <Teleport to="body">
-    <div v-if="visible" ref="menuRef" class="font-manage__user-tag-overlay" :style="positionStyle">
+    <div v-if="visible" ref="menuRef" class="font-manage__user-tag-overlay">
       <div @click.stop="onRemove">删除</div>
       <div @click.stop="onRename">重命名</div>
     </div>
@@ -56,6 +56,10 @@ function onRename() {
 <style scoped>
 /* 原版 app.bf68b505.css: width:105px; padding:6px 12px; background:#3565ff */
 .font-manage__user-tag-overlay {
+  position: fixed;
+  top: var(--floating-y, 0);
+  left: var(--floating-x, 0);
+  z-index: var(--z-dropdown);
   width: 105px;
   padding: 6px 12px;
   background: var(--c-accent-solid);

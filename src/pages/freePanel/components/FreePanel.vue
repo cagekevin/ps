@@ -6,6 +6,7 @@ import CepModal from '@/components/CepModal.vue'
 import EmptyState from '@/components/EmptyState.vue'
 import { useCommand } from '@/components/command/useCommand'
 import { useDismiss } from '@/composables/useDismiss'
+import { useLongPressDrag, type LongPressDragResult } from '@/composables/useLongPressDrag'
 import { useFreePanelStore } from '@/stores/free-panel'
 import { findBlock, type FreePanelItem } from '@/domain/free-panel'
 import FreePanelBlock from './FreePanelBlock.vue'
@@ -114,33 +115,86 @@ function remove(blockId: number, item: FreePanelItem) {
   void removeCmd.run({ blockId, btnId: item.btnId }, `已移除「${item.text}」`)
 }
 
-const drag = ref<{ blockId: number; btnId: number } | null>(null)
+// ---------- 拖拽排序（`am()` 机制，见 `composables/useLongPressDrag`）----------
+//
+// 照 `/style` 范本接线。落点候选是**所有 block 里的所有项**，所以可以跨 block 移动；
+// 旧的 HTML5 DnD（`dragstart/dragover/drop`）已删，T-67。
 
-function onDragStart(event: DragEvent, blockId: number, item: FreePanelItem) {
-  drag.value = { blockId, btnId: item.btnId }
-  event.dataTransfer?.setData('text/plain', 'free-panel-item')
-  if (event.dataTransfer) event.dataTransfer.effectAllowed = 'move'
+interface DragSlot {
+  blockId: number
+  btnId: number
 }
 
-function onDragOver(event: DragEvent) {
-  if (!drag.value) return
-  event.preventDefault()
+interface SlotTarget {
+  element: HTMLElement
+  slot: DragSlot
 }
 
-async function onDrop(event: DragEvent, blockId: number, item: FreePanelItem) {
-  event.preventDefault()
-  const source = drag.value
-  drag.value = null
-  if (!source || source.btnId === item.btnId) return
+const drag = useLongPressDrag()
+let dragSource: DragSlot | null = null
+let dragTarget: DragSlot | null = null
 
-  const rect = (event.currentTarget as HTMLElement).getBoundingClientRect()
-  const position = event.clientX > rect.left + rect.width / 2 ? 'after' : 'before'
+/**
+ * 项落点：每个 block 只取**自己直属**的 `.action-buttons`（嵌套 block 的按钮不算父块的）。
+ * 下标就是 `block.data` 的下标，与 `ActionGrid` 的渲染顺序一致。
+ */
+function itemTargets(): SlotTarget[] {
+  const rootElement = root.value
+  if (!rootElement) return []
+  const out: SlotTarget[] = []
+  for (const blockElement of rootElement.querySelectorAll<HTMLElement>('[data-block-id]')) {
+    const blockId = Number(blockElement.dataset.blockId)
+    if (!Number.isInteger(blockId)) continue
+    const block = findBlock(blocks.value, blockId)
+    if (!block) continue
+    const grid = Array.from(blockElement.children).find((child) =>
+      child.classList.contains('action-buttons'),
+    )
+    if (!grid) continue
+    grid.querySelectorAll<HTMLElement>('.action-item__run').forEach((element, index) => {
+      const item = block.data[index]
+      if (item) out.push({ element, slot: { blockId, btnId: item.btnId } })
+    })
+  }
+  return out
+}
+
+function onItemMouseDown(event: MouseEvent, blockId: number, item: FreePanelItem) {
+  dragSource = { blockId, btnId: item.btnId }
+  dragTarget = null
+
+  let entries: SlotTarget[] = []
+  const started = drag.start({
+    event,
+    node: event.currentTarget as HTMLElement,
+    axis: 'x',
+    targets: () => {
+      entries = itemTargets()
+      return entries.map((entry) => entry.element)
+    },
+    onHover: (element) => {
+      dragTarget = entries.find((entry) => entry.element === element)?.slot ?? null
+    },
+    onEnd: (result) => void endItemDrag(result),
+  })
+
+  if (!started) dragSource = null
+}
+
+async function endItemDrag(result: LongPressDragResult) {
+  const source = dragSource
+  const target = dragTarget
+  dragSource = null
+  dragTarget = null
+  if (!source || !target || !result.dragged) return
+  if (source.blockId === target.blockId && source.btnId === target.btnId) return
+
   await reorderCmd.run({
     fromBlockId: source.blockId,
     fromBtnId: source.btnId,
-    toBlockId: blockId,
-    toBtnId: item.btnId,
-    position,
+    toBlockId: target.blockId,
+    toBtnId: target.btnId,
+    position: result.position,
   })
 }
 
@@ -221,10 +275,7 @@ onMounted(() => {
         @remove-block="removeBlock"
         @toggle-block="toggleBlock"
         @edit-block="editBlock"
-        @dragstart="onDragStart"
-        @dragover="onDragOver"
-        @drop="onDrop"
-        @dragend="drag = null"
+        @mousedown="onItemMouseDown"
       />
     </div>
 

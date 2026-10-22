@@ -30,7 +30,7 @@ const editValue = ref('')
 const triggerRef = ref<HTMLElement | null>(null)
 const panelRef = ref<HTMLElement | null>(null)
 
-const { open, style, close, toggle, onTriggerKeydown } = usePopover({
+const { open, close, toggle, onTriggerKeydown } = usePopover({
   placement: 'bottom-start',
   matchWidth: 'width',
   triggerRef,
@@ -87,7 +87,7 @@ function commitRename() {
       />
     </button>
 
-    <div v-if="open" ref="panelRef" class="action-warehouse__down" :style="style">
+    <div v-if="open" ref="panelRef" class="action-warehouse__down">
       <div class="action-warehouse__list">
         <div
           v-for="(item, index) in data.list"
@@ -174,11 +174,11 @@ function commitRename() {
 }
 
 .action-warehouse__down {
-  position: absolute;
-  top: 100%;
-  left: 0;
+  position: fixed;
+  top: var(--floating-y, 0);
+  left: var(--floating-x, 0);
   z-index: var(--z-toast);
-  width: 100%;
+  width: var(--floating-width, auto);
   padding: var(--sp-2) 0;
   border-radius: var(--r-input);
   background: var(--c-float);

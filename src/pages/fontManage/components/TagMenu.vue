@@ -32,7 +32,7 @@ function close() {
 }
 
 const boxRef = ref<HTMLElement | null>(null)
-const { style: positionStyle } = usePointPopover({
+usePointPopover({
   visible: () => props.visible,
   x: () => props.x,
   y: () => props.y,
@@ -59,7 +59,7 @@ watch(
 
 <template>
   <Teleport to="body">
-    <div v-if="visible" ref="boxRef" class="tm" :style="positionStyle">
+    <div v-if="visible" ref="boxRef" class="tm">
       <div class="tm__title">标签</div>
 
       <div class="tm__field">
@@ -113,6 +113,8 @@ watch(
 <style scoped>
 .tm {
   position: fixed;
+  top: var(--floating-y, 0);
+  left: var(--floating-x, 0);
   z-index: var(--z-dropdown);
   width: 180px;
   padding: var(--sp-4);

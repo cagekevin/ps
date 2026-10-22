@@ -20,15 +20,11 @@ const props = withDefaults(
     showIcon?: boolean
     showText?: boolean
     removable?: boolean
-    draggable?: boolean
-    itemClass?: (item: GridItem, index: number) => string
   }>(),
   {
     showIcon: false,
     showText: true,
     removable: false,
-    draggable: false,
-    itemClass: undefined,
   },
 )
 
@@ -36,27 +32,14 @@ defineEmits<{
   (e: 'run', item: GridItem, event: MouseEvent): void
   (e: 'menu', event: MouseEvent, item: GridItem, index: number): void
   (e: 'remove', item: GridItem, index: number): void
-  (e: 'dragstart', event: DragEvent, item: GridItem, index: number): void
-  (e: 'dragover', event: DragEvent, item: GridItem, index: number): void
-  (e: 'drop', event: DragEvent, item: GridItem, index: number): void
-  (e: 'dragend'): void
+  /** 拖拽起手：页面据此调 `useLongPressDrag`（T-67 起不再用 HTML5 DnD） */
+  (e: 'mousedown', event: MouseEvent, item: GridItem, index: number): void
 }>()
 
 const columnCount = computed(() => Math.min(4, Math.max(1, props.columns)) as 1 | 2 | 3 | 4)
 
 function label(item: GridItem): string {
   return item.alias || item.text || item.name || ''
-}
-
-function itemClasses(item: GridItem, index: number): string {
-  return props.itemClass?.(item, index) ?? ''
-}
-
-function dropSide(item: GridItem, index: number): 'before' | 'after' | undefined {
-  const classes = itemClasses(item, index)
-  if (classes.includes('is-drop-before')) return 'before'
-  if (classes.includes('is-drop-after')) return 'after'
-  return undefined
 }
 </script>
 
@@ -67,17 +50,12 @@ function dropSide(item: GridItem, index: number): 'before' | 'after' | undefined
       :key="item.btnId ?? `${label(item)}-${index}`"
       grid
       :columns="columnCount"
-      :drop="dropSide(item, index)"
       :removable="removable"
-      :class="['action-btn', 'action-item__run', itemClasses(item, index)]"
-      :draggable="draggable"
+      :class="['action-btn', 'action-item__run']"
       :title="label(item)"
       @click="$emit('run', item, $event)"
       @contextmenu.prevent.stop="$emit('menu', $event, item, index)"
-      @dragstart.stop="$emit('dragstart', $event, item, index)"
-      @dragover="$emit('dragover', $event, item, index)"
-      @drop="$emit('drop', $event, item, index)"
-      @dragend="$emit('dragend')"
+      @mousedown="$emit('mousedown', $event, item, index)"
       @remove="$emit('remove', item, index)"
     >
       <Icon v-if="showIcon && item.icon" class="action-btn__icon" :name="item.icon" size="2xs" />
