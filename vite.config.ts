@@ -68,8 +68,12 @@ export default defineConfig({
   build: {
     outDir,
     emptyOutDir: safeToEmpty,
-    // CEP 12 = Chromium 99，留一点余量
-    target: 'chrome91',
+    // 为什么不是 chrome91：本机 esbuild 0.28.2 在 Windows 上删除自己的临时目录必失败
+    // （`remove ...esbuild-<hash>: Access is denied`），只有产物级的 vite:esbuild-transpile
+    // 会触发；该插件仅在 target !== 'esnext' 时运行，所以提到 esnext 直接跳过这一步。
+    // 代价：不再向 chrome91 降级语法。CEP 12 = Chromium 99，现代语法支持足够。
+    // 详见 docs/架构/决策记录.md ADR-18（换机器或升级 esbuild 后应回到 chrome91 复核）。
+    target: 'esnext',
     minify: false,
     sourcemap: true,
     rollupOptions: {
