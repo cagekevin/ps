@@ -1,4 +1,5 @@
 import { flushPromises, mount } from '@vue/test-utils'
+import { nextTick } from 'vue'
 import { createPinia, setActivePinia, type Pinia } from 'pinia'
 import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
@@ -35,6 +36,8 @@ const repo = vi.hoisted(() => ({
   addWarehouse: vi.fn(),
   renameWarehouse: vi.fn(),
   deleteWarehouse: vi.fn(),
+  moveItemTo: vi.fn(),
+  moveGroupTo: vi.fn(),
   indexRepo: { read: vi.fn() },
 }))
 
@@ -58,6 +61,8 @@ vi.mock('@/cep/data/style-library-repo', () => ({
   addWarehouse: repo.addWarehouse,
   renameWarehouse: repo.renameWarehouse,
   deleteWarehouse: repo.deleteWarehouse,
+  moveKuItemTo: repo.moveItemTo,
+  moveKuGroupTo: repo.moveGroupTo,
   styleIndexRepo: repo.indexRepo,
 }))
 
@@ -148,6 +153,8 @@ beforeEach(() => {
   repo.addWarehouse.mockResolvedValue(undefined)
   repo.renameWarehouse.mockResolvedValue(undefined)
   repo.deleteWarehouse.mockResolvedValue(undefined)
+  repo.moveItemTo.mockResolvedValue(undefined)
+  repo.moveGroupTo.mockResolvedValue(undefined)
   // 命令层与 store 都会读索引；不返回真索引会走"读失败"分支，渲染不出库
   repo.indexRepo.read.mockResolvedValue({
     value: { index: 0, list: [{ name: '我的样式仓库' }] },
@@ -1577,5 +1584,186 @@ describe('样式页第 5 段：仓库下拉', () => {
     await flushPromises()
 
     expect(page.find('.style-warehouse__down').exists()).toBe(false)
+  })
+})
+
+// ---------- 拖拽排序（原版 am() 机制，见 composables/useLongPressDrag）----------
+
+/** jsdom 没有布局：落点判定要用的 offsetWidth/Height/Left/Top 全部假造 */
+function setGeometry(
+  element: HTMLElement,
+  box: { left?: number; top?: number; width?: number; height?: number },
+): void {
+  Object.defineProperty(element, 'offsetLeft', { configurable: true, value: box.left ?? 0 })
+  Object.defineProperty(element, 'offsetTop', { configurable: true, value: box.top ?? 0 })
+  Object.defineProperty(element, 'offsetWidth', { configurable: true, value: box.width ?? 0 })
+  Object.defineProperty(element, 'offsetHeight', { configurable: true, value: box.height ?? 0 })
+}
+
+/** 颜色库两组各两项：c00 c01 / c10 c11 */
+function twoGroups() {
+  return snapshot({
+    color: [
+      { name: '组一', show: true, items: [{ name: 'c00' }, { name: 'c01' }] },
+      { name: '组二', show: true, items: [{ name: 'c10' }, { name: 'c11' }] },
+    ],
+  })
+}
+
+async function mountTwoGroups() {
+  repo.read.mockResolvedValue(twoGroups())
+  const page = mountPage()
+  await flushPromises()
+  return page
+}
+
+/**
+ * 一次完整的长按拖拽：`mousedown` → 300ms（`before`）→ 50ms（建克隆、挂判定）→ 落到目标 → 抬起。
+ *
+ * 假时钟只在拖拽这一段用：`flushPromises` 自己靠 `setTimeout(0)`，全程假时钟会挂住，
+ * 所以挂载阶段用真时钟，拖完再切回来。
+ */
+async function longPressDrag(
+  from: HTMLElement,
+  to: HTMLElement,
+  options: { ctrlKey?: boolean; clientX?: number; clientY?: number } = {},
+): Promise<void> {
+  const { ctrlKey = true, clientX = 20, clientY = 20 } = options
+  from.dispatchEvent(new MouseEvent('mousedown', { ctrlKey, bubbles: true }))
+  vi.advanceTimersByTime(300)
+  await nextTick()
+  vi.advanceTimersByTime(50)
+  to.dispatchEvent(new MouseEvent('mousemove', { clientX, clientY, bubbles: true }))
+  document.dispatchEvent(new MouseEvent('mouseup'))
+  vi.useRealTimers()
+  await flushPromises()
+}
+
+describe('样式页拖拽排序', () => {
+  it('项拖拽：ctrl 长按后拖到同组下一项之后，只写一次盘（原版 drag Callback :50052-50069）', async () => {
+    const page = await mountTwoGroups()
+    const items = page.findAll('.style-item[data-drag-item]')
+    expect(items).toHaveLength(4)
+
+    const from = items[0].element as HTMLElement
+    const to = items[1].element as HTMLElement
+    setGeometry(from, { width: 25, height: 25 })
+    setGeometry(to, { width: 25, height: 25 })
+
+    vi.useFakeTimers()
+    await longPressDrag(from, to)
+
+    expect(repo.moveItemTo).toHaveBeenCalledTimes(1)
+    expect(repo.moveItemTo).toHaveBeenCalledWith('color', {
+      from: { group: 0, index: 0 },
+      to: { group: 0, index: 1 },
+      position: 'after',
+    })
+  })
+
+  it('项拖拽跨组：落点带目标组下标，插在目标项之前（指针在左半）', async () => {
+    const page = await mountTwoGroups()
+    const items = page.findAll('.style-item[data-drag-item]')
+    const from = items[0].element as HTMLElement
+    const to = items[3].element as HTMLElement
+    setGeometry(from, { width: 25, height: 25 })
+    setGeometry(to, { width: 25, height: 25 })
+
+    vi.useFakeTimers()
+    // clientX = 0 且中线 12.5 → 左半 = 插前
+    await longPressDrag(from, to, { clientX: 0 })
+
+    expect(repo.moveItemTo).toHaveBeenCalledTimes(1)
+    expect(repo.moveItemTo).toHaveBeenCalledWith('color', {
+      from: { group: 0, index: 0 },
+      to: { group: 1, index: 1 },
+      position: 'before',
+    })
+  })
+
+  it('没按 ctrl/meta：长按再久也不起拖、不写盘（原版 am() 闸门 :37418）', async () => {
+    const page = await mountTwoGroups()
+    const items = page.findAll('.style-item[data-drag-item]')
+    const from = items[0].element as HTMLElement
+    const to = items[1].element as HTMLElement
+    setGeometry(from, { width: 25, height: 25 })
+    setGeometry(to, { width: 25, height: 25 })
+
+    vi.useFakeTimers()
+    await longPressDrag(from, to, { ctrlKey: false })
+
+    expect(document.querySelector('.drag-hidden')).toBeNull()
+    expect(repo.moveItemTo).not.toHaveBeenCalled()
+  })
+
+  it('组拖拽：起拖时该组折叠（原版 before() :50086-50088），落到另一组后只写一次盘', async () => {
+    const page = await mountTwoGroups()
+    const groups = page.findAll('.style-group')
+    expect(groups).toHaveLength(2)
+
+    const from = groups[0].element as HTMLElement
+    const to = groups[1].element as HTMLElement
+    setGeometry(from, { width: 200, height: 22 })
+    setGeometry(to, { width: 200, height: 22, top: 100 })
+
+    vi.useFakeTimers()
+    from.dispatchEvent(new MouseEvent('mousedown', { ctrlKey: true, bubbles: true }))
+
+    // 300ms：before() 折叠被拖的组 → 它的项从 DOM 里消失
+    vi.advanceTimersByTime(300)
+    await nextTick()
+    expect(groups[0].find('.style-items').exists()).toBe(false)
+    expect(groups[1].find('.style-items').exists()).toBe(true)
+
+    // 50ms：进入拖拽态；指针落在第二组下半 → 插到它后面
+    vi.advanceTimersByTime(50)
+    to.dispatchEvent(new MouseEvent('mousemove', { clientX: 0, clientY: 120, bubbles: true }))
+    document.dispatchEvent(new MouseEvent('mouseup'))
+    vi.useRealTimers()
+    await flushPromises()
+
+    expect(repo.moveGroupTo).toHaveBeenCalledTimes(1)
+    expect(repo.moveGroupTo).toHaveBeenCalledWith('color', 0, 1, 'after')
+  })
+
+  it('组拖拽落回自己：不写盘（原版 if (t != moveEndIndex) :50095）', async () => {
+    const page = await mountTwoGroups()
+    const groups = page.findAll('.style-group')
+    const from = groups[0].element as HTMLElement
+    setGeometry(from, { width: 200, height: 22 })
+
+    vi.useFakeTimers()
+    await longPressDrag(from, from, { clientY: 20 })
+
+    expect(repo.moveGroupTo).not.toHaveBeenCalled()
+    // 折叠只是拖拽期的视图状态，没写盘就要还原
+    await flushPromises()
+    expect(groups[0].find('.style-items').exists()).toBe(true)
+  })
+
+  it('拖拽提示：颜色库内容区带 shift/alt/ctrl 说明，样式库挂在组容器上（原版 :49955 / :51316）', async () => {
+    repo.read.mockResolvedValue(
+      snapshot({
+        color: [{ name: '组一', show: true, items: [{ name: 'c00' }] }],
+        style: [{ name: '样式组', show: true, items: [{ name: 's0' }] }],
+      }),
+    )
+    const page = mountPage()
+    await flushPromises()
+
+    // 颜色库：整库一层 + 内容区一层（内容区那句带 shift / alt）
+    expect(page.find('.style-lib--color').attributes('title')).toBe('按住ctrl拖拽位置')
+    expect(page.find('.style-lib--color .style-items').attributes('title')).toBe(
+      'shift+点击设置描边，alt+点击更改颜色，按住ctrl拖拽位置',
+    )
+    // 颜色库的组容器不重复挂
+    expect(page.find('.style-lib--color .style-group').attributes('title')).toBeUndefined()
+
+    await page.findAll('.g-tabs__label')[3].trigger('click')
+    await flushPromises()
+
+    // 样式库没有"整库外层"，提示挂在组容器上
+    expect(page.find('.style-lib--style').attributes('title')).toBeUndefined()
+    expect(page.find('.style-lib--style .style-group').attributes('title')).toBe('按住ctrl拖拽位置')
   })
 })

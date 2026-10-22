@@ -12,6 +12,7 @@ import MultiTabs from '@/components/MultiTabs.vue'
 import PageBottomBar from '@/components/PageBottomBar.vue'
 import { useCommand } from '@/components/command/useCommand'
 import { useDismiss } from '@/composables/useDismiss'
+import { useLongPressDrag, type LongPressDragResult } from '@/composables/useLongPressDrag'
 import { usePersistedRef } from '@/composables/usePersisted'
 import { userDir } from '@/cep/fs'
 import { KU_KINDS, KU_TAB_LABELS, type KuFontPreview, type KuKind } from '@/domain/style-library'
@@ -32,6 +33,8 @@ import StyleMenu, { type StyleMenuEntry } from './components/StyleMenu.vue'
  * 新建组走 `style.addGroup`，发送到色板走 `style.sendToSwatch`。
  * 第 4 段：组头 `ctrl+点击` → `style.toggleGroupShow`（`only`），普通点击折叠/展开也走同一条命令写库；
  * 底栏四个「添加×分组」→ `style.addGroup`。
+ * 第 5 段：项 / 组的拖拽排序 —— 原版 `am()` 那套长按机制（`composables/useLongPressDrag`），
+ * 落点走 `style.moveItemTo` / `style.moveGroupTo`，一次拖拽只写一次盘。
  * 本期仍不做：吸色到组、拖图片取色、仓库发送/移动（菜单项已渲染但置灰，命令未实现）、
  * 库文件与 `.kux` 导入导出（见 commands/style.ts 头部）。
  *
@@ -88,6 +91,8 @@ const appendGroupToSwatchCmd = useCommand('style.appendGroupToSwatch')
 const addGroupCmd = useCommand('style.addGroup')
 const deleteGroupCmd = useCommand('style.deleteGroup')
 const renameGroupCmd = useCommand('style.renameGroup')
+const moveItemToCmd = useCommand('style.moveItemTo')
+const moveGroupToCmd = useCommand('style.moveGroupTo')
 const selectWarehouseCmd = useCommand('style.selectWarehouse')
 const addWarehouseCmd = useCommand('style.addWarehouse')
 const renameWarehouseCmd = useCommand('style.renameWarehouse')
@@ -117,6 +122,27 @@ async function setGroupShow(kind: KuKind, groupIndex: number, only: boolean) {
 /** 四类库的项尺寸各不同（CSS 按这个类分派，见 index.css 的实测依据） */
 function libClass(kind: string): string {
   return `style-lib--${kind}`
+}
+
+/**
+ * 「按住ctrl拖拽位置」提示挂哪一层：原版颜色 `:49925` / 渐变 `:50508` / 字体 `:50894` 挂在
+ * "所有组"外面那一层，样式库没有那一层，挂在每个组容器上（`:51316`）。`undefined` = 不渲染 title。
+ */
+function dragTitle(kind: KuKind): string | undefined {
+  return kind === 'style' ? undefined : '按住ctrl拖拽位置'
+}
+
+/** 样式库的提示挂在每个组容器上（原版 `:51316`）；另外三库已经在整库外层挂了，组容器上不重复 */
+function groupTitle(kind: KuKind): string | undefined {
+  return kind === 'style' ? '按住ctrl拖拽位置' : undefined
+}
+
+/**
+ * 颜色库内容区的完整提示（原版 render `:49955`，挂在 `.f-baseX.f-br` 容器上，即我们的 `.style-items`）：
+ * 只有颜色库这一句带 shift / alt 的说明，另外三库没有。
+ */
+function itemsTitle(kind: KuKind): string | undefined {
+  return kind === 'color' ? 'shift+点击设置描边，alt+点击更改颜色，按住ctrl拖拽位置' : undefined
 }
 
 /**
@@ -251,6 +277,160 @@ async function addKind(kind: KuKind, groupIndex: number): Promise<boolean> {
 
 async function addItem(kind: KuKind, groupIndex: number) {
   if (await addKind(kind, groupIndex)) await store.load()
+}
+
+// ---------- 拖拽排序（原版 `am()` 机制，见 `composables/useLongPressDrag`）----------
+//
+// 原版四库各两处接线，逐库同构（颜色 `:49932-49937` / `:49979-49985`，渐变 `:50515-50520` /
+// `:50542-50548`，字体 `:50901-50906` / `:50930-50936`，样式 `:51319-51324` / `:51366-51372`）：
+// **组**：组容器的 `mousedown → dragColorWrap`、`mousemove → dragColorWrapDrop`；
+// **项**：项的 `mousedown → drag`（先 `stopPropagation`）、`mousemove → drop`。
+//
+// 落点候选（原版 `classval`）：项是 `.drag-color` / `.drag-gradients` / `.drag-font` / `.drag-style`
+// —— 即**同一个库里所有组的项**，所以项可以跨组拖；组是 `.drag-color-wrap` 等，同一库里所有组容器。
+// 我们不用原版那些类名，改用 `data-drag-*` 数据集（页面上没有第二个消费者，不需要全局类名）。
+
+const drag = useLongPressDrag()
+const pageRoot = ref<HTMLElement | null>(null)
+/** 滚动容器：原版组拖拽的 `scrollTopClass = ".Style-vueScroll"`（`:50090`），纵向判定要加它的 `scrollTop` */
+const bodyRef = ref<HTMLElement | null>(null)
+
+/** 正在拖的源。组拖拽 `itemIndex = -1`（对应原版 `isTopDrag` 的两种模式） */
+type DragSlot = { kind: KuKind; groupIndex: number; itemIndex: number }
+let dragSource: DragSlot | null = null
+/** 最后落到的候选（原版 `moveEndIndex`） */
+let dragTarget: DragSlot | null = null
+/**
+ * 组拖拽期间被折叠的组 `"<库>-<组下标>"`。
+ *
+ * 原版 `before()` 把该组 `show=false`（`:50086-50088`），折叠状态最终随 `updata()` 一起落盘。
+ * 我们不让它走 `setGroupShow`（那是写库命令，一次拖拽就变成两次写盘），只折叠视图；
+ * 落盘由拖动结束那一次 `style.moveGroupTo` 一并完成（repo 里同时把被移动的组置 `show=false`）。
+ */
+const dragCollapsed = ref('')
+
+function groupKey(kind: KuKind, groupIndex: number): string {
+  return `${kind}-${groupIndex}`
+}
+
+/** 落点候选：同一库里所有项 / 所有组容器（原版 `classval` 的等价物） */
+function targetElements(kind: KuKind, attr: 'item' | 'group'): HTMLElement[] {
+  const root = pageRoot.value
+  if (!root) return []
+  return Array.from(
+    root.querySelectorAll<HTMLElement>(`[data-drag-kind="${kind}"][data-drag-${attr}]`),
+  )
+}
+
+/** 从项的 `data-*` 读回落点 */
+function itemSlotOf(element: HTMLElement): { groupIndex: number; itemIndex: number } | null {
+  const groupIndex = Number(element.dataset.itemGroup)
+  const itemIndex = Number(element.dataset.dragItem)
+  if (!Number.isInteger(groupIndex) || !Number.isInteger(itemIndex)) return null
+  return { groupIndex, itemIndex }
+}
+
+/** 从组容器的 `data-*` 读回落点 */
+function groupSlotOf(element: HTMLElement): number | null {
+  const groupIndex = Number(element.dataset.dragGroup)
+  return Number.isInteger(groupIndex) ? groupIndex : null
+}
+
+/**
+ * 项拖拽起手（原版 `drag(t, e, n)`，`:50045-50071`）。
+ *
+ * 原版 `mousedown` 先 `stopPropagation`（render `:49980`）：项的 mousedown 不许冒到组容器上，
+ * 否则一次点项会同时起两条拖拽。
+ */
+function onItemMouseDown(event: MouseEvent, kind: KuKind, groupIndex: number, itemIndex: number) {
+  event.stopPropagation()
+  dragSource = { kind, groupIndex, itemIndex }
+  dragTarget = null
+
+  const started = drag.start({
+    event,
+    node: event.currentTarget as HTMLElement,
+    axis: 'x',
+    // 原版样式页的项拖拽**没有** `ml`（`:50050-50070` 只传 classval/Callback）；
+    // `ml: -40` 是动作页 `drag` 的（`:56091`），本页照样式页，偏移取 0。
+    targets: () => targetElements(kind, 'item'),
+    onHover: (element) => {
+      const slot = itemSlotOf(element)
+      dragTarget = slot ? { kind, ...slot } : null
+    },
+    onEnd: (result) => void endItemDrag(result),
+  })
+
+  if (!started) dragSource = null
+}
+
+/** 项拖拽落手：只有真的拖过、且落点换了位置才写盘（原版外层判 `:50053`） */
+async function endItemDrag(result: LongPressDragResult) {
+  const source = dragSource
+  const target = dragTarget
+  dragSource = null
+  dragTarget = null
+  if (!source || !target || !result.dragged) return
+  if (source.groupIndex === target.groupIndex && source.itemIndex === target.itemIndex) return
+
+  const ok = await moveItemToCmd.run({
+    kind: source.kind,
+    fromGroup: source.groupIndex,
+    fromIndex: source.itemIndex,
+    toGroup: target.groupIndex,
+    toIndex: target.itemIndex,
+    position: result.position,
+  })
+  if (ok) await store.load()
+}
+
+/**
+ * 组拖拽起手（原版 `dragColorWrap(t, e, n)`，`:50077-50114`）。
+ *
+ * 原版这里自己再判一次 `ft.f()`（`:50079`），因为它在 `$nextTick` 里调 `am()`，
+ * 那时全局 `window.event` 已经没了、`am()` 的闸门恒过。我们的闸门就在 `drag.start` 里，判一次够。
+ */
+function onGroupMouseDown(event: MouseEvent, kind: KuKind, groupIndex: number) {
+  dragSource = { kind, groupIndex, itemIndex: -1 }
+  dragTarget = null
+
+  const started = drag.start({
+    event,
+    node: event.currentTarget as HTMLElement,
+    axis: 'y',
+    scrollRoot: bodyRef.value,
+    floatClass: 'style-group--drag',
+    targets: () => targetElements(kind, 'group'),
+    before: () => {
+      dragCollapsed.value = groupKey(kind, groupIndex)
+    },
+    onHover: (element) => {
+      const index = groupSlotOf(element)
+      dragTarget = index === null ? null : { kind, groupIndex: index, itemIndex: -1 }
+    },
+    onEnd: (result) => void endGroupDrag(result),
+  })
+
+  if (!started) dragSource = null
+}
+
+/** 组拖拽落手：同组 = 原位，不写盘（原版 `if (t != moveEndIndex)`，`:50095`） */
+async function endGroupDrag(result: LongPressDragResult) {
+  const source = dragSource
+  const target = dragTarget
+  dragSource = null
+  dragTarget = null
+  dragCollapsed.value = ''
+  if (!source || !target || !result.dragged) return
+  if (source.groupIndex === target.groupIndex) return
+
+  const ok = await moveGroupToCmd.run({
+    kind: source.kind,
+    from: source.groupIndex,
+    to: target.groupIndex,
+    position: result.position,
+  })
+  if (ok) await store.load()
 }
 
 // ---------- 右键菜单（原版 showItemMenu / showGroupMenu）----------
@@ -571,7 +751,7 @@ onMounted(() => {
 </script>
 
 <template>
-  <div class="style-page">
+  <div ref="pageRoot" class="style-page">
     <!-- 原版 warehouse 组件（`app.v4.js:53747-53909`）：行内 16×16 图标 + 蓝色仓库名 + 10×10 箭头，
          点开是仓库列表（索引 `sj_kuStoreInfo.ini`）。整行点击 = 开合下拉（`:53750-53784`）。 -->
     <div ref="warehouseRoot" class="style-warehouse">
@@ -642,7 +822,7 @@ onMounted(() => {
       <MultiTabs v-model="showTabs" :labels="KU_TAB_LABELS" />
     </div>
 
-    <div id="style-scroll" class="style-body">
+    <div id="style-scroll" ref="bodyRef" class="style-body">
       <p v-if="loading" class="style-hint style-loading">正在读取样式库…</p>
 
       <div v-else-if="error" class="style-error">
@@ -657,24 +837,36 @@ onMounted(() => {
           四个库都已隐藏，ctrl+点击任一标签可显示
         </p>
 
-        <section v-for="kind in visibleKinds" :key="kind" class="style-lib" :class="libClass(kind)">
+        <section
+          v-for="kind in visibleKinds"
+          :key="kind"
+          class="style-lib"
+          :class="libClass(kind)"
+          :title="dragTitle(kind)"
+        >
           <EmptyState v-if="!libraries[kind].length" compact text="该库还没有分组" />
 
           <!-- 组容器：原版 `.app-padding…mb4`（render `:49930` / `:50513` / `:50899` / `:51314`），
-               组间距 4px + 左内边距 10px 都挂在这一层，不在 `.style-lib` 上 -->
+               组间距 4px + 左内边距 10px 都挂在这一层，不在 `.style-lib` 上。
+               `mousedown` 起组拖拽（原版 `dragColorWrap`，`:49932` 等四处）；项的 `mousedown`
+               会先 `stopPropagation`，所以点项不会连带起组拖拽。 -->
           <div
             v-for="(group, index) in libraries[kind]"
             :key="`${kind}-${index}`"
             class="style-group"
+            :data-drag-kind="kind"
+            :data-drag-group="index"
+            :title="groupTitle(kind)"
+            @mousedown="onGroupMouseDown($event, kind, index)"
           >
             <BaseGroup
               :text="group.name"
-              :value="group.show"
+              :value="group.show && dragCollapsed !== groupKey(kind, index)"
               @change="setGroupShow(kind, index, false)"
               @ctrl="setGroupShow(kind, index, true)"
               @menu="openGroupMenu($event, kind, index)"
             >
-              <div class="style-items">
+              <div class="style-items" :title="itemsTitle(kind)">
                 <div
                   v-for="(item, itemIndex) in group.items"
                   :key="itemIndex"
@@ -683,6 +875,10 @@ onMounted(() => {
                     'style-item--image': kind === 'gradient' && !!gradientImageSrc(item.image),
                   }"
                   :title="item.name"
+                  :data-drag-kind="kind"
+                  :data-item-group="index"
+                  :data-drag-item="itemIndex"
+                  @mousedown="onItemMouseDown($event, kind, index, itemIndex)"
                   @click="applyItem(kind, index, itemIndex, $event)"
                   @contextmenu.prevent.stop="openItemMenu($event, kind, index, itemIndex)"
                 >

@@ -16,6 +16,7 @@ import {
   writeTextFile,
   writeTextFileAtomic,
 } from '@/cep/fs'
+import { applyItemDrop, applyListDrop, type DropMove, type DropPosition } from '@/domain/reorder'
 import {
   defaultStyleIndex,
   readKuGroups,
@@ -326,6 +327,11 @@ async function updateKuGroups(kind: KuKind, mutate: (groups: KuRawGroup[]) => vo
 
   mutate(groups)
   const text = JSON.stringify(groups)
+
+  // 内容没变就不落盘：原版 `updata()` 只在真的改过时调（`drag` 的 `Callback` 外面那层
+  // `if (t != moveEndIndex[0] || e != moveEndIndex[1])`，`app.v4.js:50053`；组同构在 `:50095`）。
+  // 拖到自己身上这类空操作不该刷掉一份 `.bak`。
+  if (text === previous) return
 
   // 备份先落盘：备份失败就抛（写文件会抛 NO_NODE），绝不在没有退路的情况下覆盖原件
   if (previous) writeTextFile(`${target.path}.bak`, previous)
@@ -725,6 +731,44 @@ export function moveKuItem(
       }
       const [item] = list.splice(itemIndex, 1)
       list.splice(to, 0, item)
+    }),
+  )
+}
+
+/**
+ * 拖拽落点移动一项（可跨组）。原版 `drag` 的 `Callback`（`app.v4.js:50052-50069`）：
+ * 先 `splice` 取出源项，再按落点插到目标前/后；四个分支收敛在 `domain/reorder.ts`。
+ *
+ * **一次调用 = 一次落盘**：整条走 `enqueue` + `updateKuGroups`（一次读 → 一次改 → 一次写 + 一次 `.bak`）。
+ * 拖拽过程中页面不许调它，只在 `mouseup` 后调一次（原版也是 `Callback` 里才 `updata()`）。
+ */
+export function moveKuItemTo(kind: KuKind, move: DropMove): Promise<void> {
+  return enqueue(() =>
+    updateKuGroups(kind, (groups) => {
+      const lists = groups.map((group, index) => itemList(group, index))
+      applyItemDrop(lists, move)
+    }),
+  )
+}
+
+/**
+ * 组排序（组头拖拽）。原版 `dragColorWrap` 的 `Callback`（`app.v4.js:50094-50111`）：同一张四分支表。
+ *
+ * 顺带把被移动的组折叠（`show = false`）：原版 `before()`（`:50086-50088`）在起拖时就把它折叠了，
+ * `Callback` 里的 `updata()` 一次写盘写的是**整份** `data.info`，折叠状态跟着一起落盘。
+ * 所以这里放进同一次 `updateKuGroups`，不是第二次写盘。
+ */
+export function moveKuGroupTo(
+  kind: KuKind,
+  from: number,
+  to: number,
+  position: DropPosition,
+): Promise<void> {
+  return enqueue(() =>
+    updateKuGroups(kind, (groups) => {
+      const moved = applyListDrop(groups, from, to, position)
+      if (moved < 0) return
+      groups[moved].show = false
     }),
   )
 }

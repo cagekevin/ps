@@ -6,6 +6,7 @@ import type {
 import type { QuickFont } from '@/cep/data/font-extra'
 import type { FontItem } from '@/cep/types'
 import type { KuKind } from '@/domain/style-library'
+import type { DropPosition } from '@/domain/reorder'
 
 /**
  * 命令 id → payload 类型的**唯一映射**。
@@ -431,6 +432,26 @@ export interface StyleReorderItemPayload extends StyleItemRefPayload {
   direction: 'up' | 'down'
 }
 
+/**
+ * 拖拽落点移动一项（可跨组）。原版 `drag` 的 `Callback`（`app.v4.js:50052-50069`）：
+ * 落点由 `am()` 那个布尔决定"插在目标前还是后"，四分支见 `domain/reorder.ts`。
+ * 一次调用 = 一次落盘。
+ */
+export interface StyleMoveItemPayload extends StyleKuKindPayload {
+  fromGroup: number
+  fromIndex: number
+  toGroup: number
+  toIndex: number
+  position: DropPosition
+}
+
+/** 组头拖拽排序。原版 `dragColorWrap` 的 `Callback`（`app.v4.js:50094-50111`）：同一张四分支表 */
+export interface StyleMoveGroupPayload extends StyleKuKindPayload {
+  from: number
+  to: number
+  position: DropPosition
+}
+
 // ---------- 样式（/style 第 5 段：仓库切换 / 新建 / 改名 / 删除）----------
 
 /**
@@ -539,6 +560,10 @@ export interface CommandPayloads {
   'style.renameItem': StyleRenameItemPayload
   'style.deleteItem': StyleItemRefPayload
   'style.reorderItem': StyleReorderItemPayload
+  /** 拖拽落点移动一项（可跨组，原版 `drag` 的 `Callback` `:50052-50069`）：一次调用一次写盘 */
+  'style.moveItemTo': StyleMoveItemPayload
+  /** 组头拖拽排序（原版 `dragColorWrap` 的 `Callback` `:50094-50111`）：一次调用一次写盘 */
+  'style.moveGroupTo': StyleMoveGroupPayload
   'style.sendToSwatch': StyleItemRefPayload
   /** 追加到色板（原版 `app.v4.js:50356-50364`）：读回 seBan → push 该项 → 写回 */
   'style.appendItemToSwatch': StyleItemRefPayload

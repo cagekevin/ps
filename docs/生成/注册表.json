@@ -821,6 +821,24 @@
       "when": "把「颜色看 color.hex、渐变看 gradient.gradient.colors、字体看 fonts[0]、样式只有 {name,id,layerId}」从页面里收进一处。谁在用：`cep/data/style-library-repo.ts`、`pages/style`。禁止在此读写文件；未知键原样保留（契约 §2.2/§2.3）",
       "status": "stable",
       "since": "2026-10-22"
+    },
+    {
+      "id": "cep-jsx-style-ts",
+      "name": "样式域 jsx 封装",
+      "entry": "src/cep/jsx/style.ts",
+      "api": "createStyleJsx() → applyColor / applyGradient / applyStyle / addColor / addGradient / addStyle / useShapeFill / setBorderColor / changeStyleColor / useStyleColor / getForegroundColor / getFontInfo 等，全部经 utils/jsx 统一封装",
+      "when": "样式页命令层调 jsx 时；页面不许直接 import（ADR-16）",
+      "status": "stable",
+      "since": "2026-10-22"
+    },
+    {
+      "id": "composables-uselongpressdrag-ts",
+      "name": "长按拖拽（复刻原版 am()）",
+      "entry": "src/composables/useLongPressDrag.ts",
+      "api": "useLongPressDrag() → start({ event, node, targets, axis, scrollRoot, time=300, offsetX, offsetY, floatClass, before, onHover, onEnd }) 与 cancel()；onEnd 收到 { dragged, target, position }",
+      "when": "列表项或分组要原版那套拖拽时（300ms 长按才启动、克隆占位、浮层跟手、落点前/后布尔）；禁止另写 HTML5 DnD",
+      "status": "stable",
+      "since": "2026-10-22"
     }
   ]
 }

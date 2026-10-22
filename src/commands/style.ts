@@ -7,7 +7,9 @@ import {
   deleteKuGroup,
   deleteKuItem,
   deleteWarehouse,
+  moveKuGroupTo,
   moveKuItem,
+  moveKuItemTo,
   readKuGroupId,
   readKuItem,
   renameKuGroup,
@@ -40,7 +42,8 @@ import type { Command } from './types'
  * 本期仍不做：吸色到组（`Tool_set("eyedropperTool")` + PS 事件 `1936028772`，`app.v4.js:50299-50302`，
  * 台账 T-66；菜单项已渲染但置灰）、
  * 拖图片取色（`exportCurrentLayerToImage`，`:54639`）、仓库发送/移动（T-65）、
- * 四类库与 `.kux` 的导入导出、项拖拽排序（右键菜单只做上移/下移）。
+ * 四类库与 `.kux` 的导入导出。项 / 组的拖拽排序走 `style.moveItemTo` / `style.moveGroupTo`
+ * （原版 `drag` / `dragColorWrap` 的 `Callback`，页面用 `composables/useLongPressDrag` 起拖）。
  *
  * **jsx 返回结构全部未实测**（jsxbin 是字节码，符号不可读）。每条命令的返回值语义标了 UNVERIFIED，
  * 因此：只判空、判 `err`，绝不读 `data` 里的具体字段。
@@ -321,6 +324,37 @@ export const styleCommands: Command<unknown>[] = [
     async run(_ctx, { kind, groupIndex, itemIndex, direction }) {
       // 原版只有拖拽（`app.v4.js:50040-50070`），没有上下移菜单；这里按同一 splice 语义挪一格
       await moveKuItem(kind, groupIndex, itemIndex, direction)
+    },
+  }),
+
+  defineCommand({
+    id: 'style.moveItemTo',
+    title: '拖拽移动项',
+    group: 'style',
+    requires: 'none',
+    kind: 'instant',
+    async run(_ctx, { kind, fromGroup, fromIndex, toGroup, toIndex, position }) {
+      // 原版 `drag` 的 `Callback`（`app.v4.js:50052-50069`）：跨组 / 同组向后 / 同组向前
+      // 三种情况由 `position`（那个布尔）决定插前还是插后，四分支在 `domain/reorder.ts`。
+      // 一次调用一次写盘：拖拽过程中页面不调它，只在 `mouseup` 后调一次。
+      await moveKuItemTo(kind, {
+        from: { group: fromGroup, index: fromIndex },
+        to: { group: toGroup, index: toIndex },
+        position,
+      })
+    },
+  }),
+
+  defineCommand({
+    id: 'style.moveGroupTo',
+    title: '拖拽排序分组',
+    group: 'style',
+    requires: 'none',
+    kind: 'instant',
+    async run(_ctx, { kind, from, to, position }) {
+      // 原版 `dragColorWrap` 的 `Callback`（`app.v4.js:50094-50111`）；被拖组会顺带折叠，
+      // 与原版 `before()` + 同一次 `updata()` 落盘的结果一致（见 repo 里的注释）
+      await moveKuGroupTo(kind, from, to, position)
     },
   }),
 

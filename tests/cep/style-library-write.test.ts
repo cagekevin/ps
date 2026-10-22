@@ -14,6 +14,8 @@ const fsMock = vi.hoisted(() => ({
   files: new Map<string, string>(),
   /** 让 `writeTextFileAtomic` 返回 false，模拟磁盘写失败 */
   failAtomic: false,
+  /** 每次原子写落的路径 —— 用来证明"一次拖拽只写一次盘" */
+  atomicWrites: [] as string[],
 }))
 
 vi.mock('@/cep/fs', () => ({
@@ -22,6 +24,7 @@ vi.mock('@/cep/fs', () => ({
   readTextSmart: async (path: string) => fsMock.files.get(path) ?? null,
   writeTextFileAtomic: (path: string, text: string) => {
     if (fsMock.failAtomic) return false
+    fsMock.atomicWrites.push(path)
     fsMock.files.set(path, text)
     return true
   },
@@ -54,6 +57,8 @@ const {
   addWarehouse,
   renameWarehouse,
   deleteWarehouse,
+  moveKuItemTo,
+  moveKuGroupTo,
 } = await import('@/cep/data/style-library-repo')
 
 const USER = 'ROAM/SheJiZhuLi'
@@ -79,6 +84,7 @@ function seedLib(text = JSON.stringify([{ name: '灰白', show: true, list: [] }
 beforeEach(() => {
   fsMock.files.clear()
   fsMock.failAtomic = false
+  fsMock.atomicWrites.length = 0
 })
 
 describe('备份（ADR-12）', () => {
@@ -418,5 +424,103 @@ describe('删除仓库（原版 delete，:53329-53356）', () => {
     await expect(deleteWarehouse(9)).rejects.toThrow('仓库 9 不存在')
 
     expect((await styleIndexRepo.read()).value.list).toHaveLength(2)
+  })
+})
+
+describe('拖拽落点（moveKuItemTo / moveKuGroupTo）', () => {
+  const twoGroups = JSON.stringify([
+    { name: '组一', show: true, list: [{ name: 'a0' }, { name: 'a1' }] },
+    { name: '组二', show: true, list: [{ name: 'b0' }] },
+  ])
+
+  function groupsOf(path = COLOR_LIB): Array<{ name: string; show: boolean; list: unknown[] }> {
+    return JSON.parse(fsMock.files.get(path) ?? '[]')
+  }
+
+  it('项跨组移动：一次调用 = 一次原子写 + 一份 .bak', async () => {
+    seedLib(twoGroups)
+    await styleIndexRepo.write(INDEX_VALUE)
+    fsMock.atomicWrites.length = 0
+
+    await moveKuItemTo('color', {
+      from: { group: 0, index: 1 },
+      to: { group: 1, index: 0 },
+      position: 'after',
+    })
+
+    // 只有库文件那一次；索引没被动过
+    expect(fsMock.atomicWrites).toEqual([COLOR_LIB])
+    expect(fsMock.files.get(`${COLOR_LIB}.bak`)).toBe(twoGroups)
+
+    const groups = groupsOf()
+    expect(groups[0].list).toEqual([{ name: 'a0' }])
+    expect(groups[1].list).toEqual([{ name: 'b0' }, { name: 'a1' }])
+  })
+
+  it('项同组向后插前：目标在源前面，插入下标不受删除影响（原版 :50055-50057）', async () => {
+    seedLib(twoGroups)
+    await styleIndexRepo.write(INDEX_VALUE)
+
+    await moveKuItemTo('color', {
+      from: { group: 0, index: 1 },
+      to: { group: 0, index: 0 },
+      position: 'before',
+    })
+
+    expect(groupsOf()[0].list).toEqual([{ name: 'a1' }, { name: 'a0' }])
+  })
+
+  it('原位不写盘：库文件与 .bak 都不变', async () => {
+    seedLib(twoGroups)
+    await styleIndexRepo.write(INDEX_VALUE)
+    fsMock.atomicWrites.length = 0
+
+    await moveKuItemTo('color', {
+      from: { group: 0, index: 0 },
+      to: { group: 0, index: 0 },
+      position: 'after',
+    })
+
+    expect(fsMock.atomicWrites).toEqual([])
+    expect(fsMock.files.has(`${COLOR_LIB}.bak`)).toBe(false)
+  })
+
+  it('组排序：一次原子写，且被移动的组顺带折叠（原版 before() + 同一次 updata()）', async () => {
+    seedLib(twoGroups)
+    await styleIndexRepo.write(INDEX_VALUE)
+    fsMock.atomicWrites.length = 0
+
+    await moveKuGroupTo('color', 0, 1, 'after')
+
+    expect(fsMock.atomicWrites).toEqual([COLOR_LIB])
+    const groups = groupsOf()
+    expect(groups.map((g) => g.name)).toEqual(['组二', '组一'])
+    expect(groups[1].show).toBe(false)
+    expect(groups[0].show).toBe(true)
+  })
+
+  it('组排序落回自己：不写盘', async () => {
+    seedLib(twoGroups)
+    await styleIndexRepo.write(INDEX_VALUE)
+    fsMock.atomicWrites.length = 0
+
+    await moveKuGroupTo('color', 1, 1, 'before')
+
+    expect(fsMock.atomicWrites).toEqual([])
+  })
+
+  it('越界落点抛错，库文件一个字节都不动', async () => {
+    seedLib(twoGroups)
+    await styleIndexRepo.write(INDEX_VALUE)
+
+    await expect(
+      moveKuItemTo('color', {
+        from: { group: 0, index: 0 },
+        to: { group: 0, index: 5 },
+        position: 'after',
+      }),
+    ).rejects.toThrow('不存在')
+
+    expect(fsMock.files.get(COLOR_LIB)).toBe(twoGroups)
   })
 })

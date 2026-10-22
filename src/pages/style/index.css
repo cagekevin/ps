@@ -175,6 +175,19 @@
   padding: 0 var(--sp-exact-10);
 }
 
+/* 组拖拽的浮层皮肤 —— 原版 `floatStyle`
+   （`app.v4.js:50093`：`background-color:#006FFF;width:200px;height:24px;line-height:24px;border-radius:4px`）。
+   `position/left/top/z-index` 由 `useLongPressDrag` 的 `follow()` 内联给（原版 `A()` 也是内联），
+   所以这里只写皮肤。左内边距沿用 `.style-group` 的 10px：原版浮层节点就是同一个组容器，
+   `app-padding-wrap` 的 10px 也还在。 */
+.style-group--drag {
+  width: 200px;
+  height: var(--h-control-sm);
+  border-radius: var(--r-md);
+  background-color: var(--c-accent);
+  line-height: var(--h-control-sm);
+}
+
 /* 原版 `.f-baseX.f-br` 自己没有 gap / padding，间距全在项上：`margin-right` 逐库 5px
    （样式库是 `mr6` = 6px，`:51350`）+ `margin-top` 逐库不同（颜色 `.mt6`、渐变/字体 `.mt5`、样式 `.mt7`）。
    这里用 gap 表达横向、row-gap 表达行距，首行上距用 padding-top 补同一个值。 */
