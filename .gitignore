@@ -6,3 +6,5 @@ Thumbs.db
 *.local
 .vscode/*
 !.vscode/extensions.json
+.tmp-*/
+probe-*
