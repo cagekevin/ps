@@ -1,6 +1,6 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { ref } from 'vue'
-import GAnchorGrid, { type AnchorId } from '@/components/GAnchorGrid.vue'
+import GAnchorGrid from '@/components/GAnchorGrid.vue'
 import GButton from '@/components/GButton.vue'
 import GInput from '@/components/GInput.vue'
 import SettingsRow from '@/components/SettingsRow.vue'
@@ -11,31 +11,33 @@ import SettingsRow from '@/components/SettingsRow.vue'
  * → hr → 一行两个 50% 按钮（`:36253-36265`）。
  * TODO(T-88): 6 个输入与锚点选择应可保存（`getOption()`），本轮只做界面。
  */
-const number = ref('1')
-const angle = ref('0')
-const leftRight = ref('0px')
-const topBottom = ref('0px')
-const pointIndex = ref('0')
-const scale = ref('100')
-const anchor = ref<AnchorId | ''>('')
+// 官方 data 六项（pp.v4.js:36316-36323：number / scale / leftRigth / topBottom / angle / opacity）
+const number = ref('')
+const scale = ref('')
+const leftRight = ref('')
+const topBottom = ref('')
+const angle = ref('')
+const opacity = ref('')
+/** 锚点下标（官方 pointIdex，默认 0 = 第一个） */
+const anchorIndex = ref(0)
 </script>
 
 <template>
   <div class="panel-custom">
     <SettingsRow>
       <GInput v-model="number" class="u-fill" size="small" />
-      <GInput v-model="angle" class="u-fill" size="small" />
+      <GInput v-model="scale" class="u-fill" size="small" />
     </SettingsRow>
     <SettingsRow>
       <GInput v-model="leftRight" class="u-fill" size="small" />
       <GInput v-model="topBottom" class="u-fill" size="small" />
     </SettingsRow>
     <SettingsRow>
-      <GInput v-model="pointIndex" class="u-fill" size="small" />
-      <GInput v-model="scale" class="u-fill" size="small" />
+      <GInput v-model="angle" class="u-fill" size="small" />
+      <GInput v-model="opacity" class="u-fill" size="small" />
     </SettingsRow>
 
-    <GAnchorGrid v-model="anchor" class="panel-custom__anchors" />
+    <GAnchorGrid v-model="anchorIndex" class="panel-custom__anchors" />
 
     <hr class="panel-custom__rule" />
 

@@ -11,10 +11,10 @@ import PanelImport from '@/pages/commonUse/components/PanelImport.vue'
  */
 
 describe('GAnchorGrid 的分组是数据', () => {
-  it('九宫格分成 3 + 6 两组，合计 9 个锚点', () => {
-    expect(ANCHOR_ROWS.map((row) => row.length)).toEqual([3, 6])
-    expect(ANCHOR_ROWS.flat()).toHaveLength(9)
-    // 9 个锚点不重复（防止改分组时抄重）
+  it('锚点分两行、每行 6 个，共 12 个（官方 svgOne/svgTwo 各 6 项，:36278-36315）', () => {
+    expect(ANCHOR_ROWS.map((row) => row.length)).toEqual([6, 6])
+    expect(ANCHOR_ROWS.flat()).toHaveLength(12)
+    // 官方 svgTwo 后四项重复 weizhi9，所以去重后是 9 种图标（照抄官方，不是抄错）
     expect(new Set(ANCHOR_ROWS.flat()).size).toBe(9)
   })
 
@@ -23,15 +23,16 @@ describe('GAnchorGrid 的分组是数据', () => {
 
     const rows = wrapper.findAll('.g-anchor-grid__row')
     expect(rows).toHaveLength(2)
-    expect(rows[0].findAll('.g-anchor-grid__cell')).toHaveLength(3)
+    expect(rows[0].findAll('.g-anchor-grid__cell')).toHaveLength(6)
     expect(rows[1].findAll('.g-anchor-grid__cell')).toHaveLength(6)
 
+    // 第二行第 3 格 = 展平下标 8
     await rows[1].findAll('.g-anchor-grid__cell')[2].trigger('click')
-    expect(wrapper.emitted('update:modelValue')?.at(-1)).toEqual(['right'])
+    expect(wrapper.emitted('update:modelValue')?.at(-1)).toEqual([8])
   })
 
   it('传自定义 rows 时排法完全由数据决定（组件里没有写死的两段）', () => {
-    const wrapper = mount(GAnchorGrid, { props: { rows: [['top'], ['left', 'right']] } })
+    const wrapper = mount(GAnchorGrid, { props: { rows: [['iconA'], ['iconB', 'iconC']] } })
 
     expect(wrapper.findAll('.g-anchor-grid__row')).toHaveLength(2)
     expect(wrapper.findAll('.g-anchor-grid__cell')).toHaveLength(3)

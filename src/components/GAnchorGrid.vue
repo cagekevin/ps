@@ -1,63 +1,77 @@
 <script lang="ts">
 /**
- * 九宫格锚点的**分组**：分组即数据，`GAnchorGrid` 内部只 `v-for rows`。
+ * 锚点（"变换点"）分组：分组即数据，组件内部只 `v-for rows`。
  *
- * 官方 `comcustomChange` 的两段容器 `.svg-wrap-one` / `.svg-wrap-two`（`app.v4.js:36198` / `:36223`），
- * 每段是 v-for，**每段几颗由数据长度决定、源码读不到** → 这里按"九宫格 = 9 个锚点"定为 `[3, 6]`，
- * 与两段容器一致；**仍是 `UNVERIFIED`**（真机若为 3×3 方阵，只改这个常量，组件与页面都不动）。
+ * 官方 `comcustomChange` 的**两段** v-for 容器 `.svg-wrap-one` / `.svg-wrap-two`（`app.v4.js:36199` / `:36224`），
+ * 数据是 `svgOne`（6 项，`:36278-36296`）与 `svgTwo`（6 项，`:36297-36315`）→ **两行、每行 6 个、共 12 个**。
+ * `svgTwo` 第 3 项起官方自己重复用 `weizhi9`（`:36304-36314`，资源只有 9 张图）——照抄，不猜成 10/11/12。
+ * 选中是**下标**（官方 `pointIdex`，`:36277`）。
  *
- * 为什么是常量而不是 prop：见 `docs/组件库/页面契约.md` 的「防错」——页面只传 `rows`，
- * 组件没有 columns / rowsCount 之类能改排法的入口，所以"第三种排法"写不出来。
+ * 为什么是常量而不是 prop：页面只传 `rows`，组件没有 columns / rowsCount 之类能改排法的入口，
+ * 所以"第三种排法"写不出来；真要改分组只改这一个常量。
  */
 export const ANCHOR_ROWS = [
-  ['topLeft', 'top', 'topRight'],
-  ['left', 'center', 'right', 'bottomLeft', 'bottom', 'bottomRight'],
+  [
+    'iconmaodianbianhuandianweizhi1',
+    'iconmaodianbianhuandianweizhi2',
+    'iconmaodianbianhuandianweizhi3',
+    'iconmaodianbianhuandianweizhi4',
+    'iconmaodianbianhuandianweizhi5',
+    'iconmaodianbianhuandianweizhi6',
+  ],
+  [
+    'iconmaodianbianhuandianweizhi7',
+    'iconmaodianbianhuandianweizhi8',
+    'iconmaodianbianhuandianweizhi9',
+    'iconmaodianbianhuandianweizhi9',
+    'iconmaodianbianhuandianweizhi9',
+    'iconmaodianbianhuandianweizhi9',
+  ],
 ] as const
-</script>
 
-<script setup lang="ts">
-export type AnchorId = (typeof ANCHOR_ROWS)[number][number]
-
-withDefaults(
-  defineProps<{
-    /** 当前选中的锚点；空字符串 = 未选 */
-    modelValue?: AnchorId | ''
-    rows?: ReadonlyArray<ReadonlyArray<AnchorId>>
-  }>(),
-  { modelValue: '', rows: () => ANCHOR_ROWS },
-)
-
-defineEmits<{ (e: 'update:modelValue', value: AnchorId): void }>()
-
-/** 锚点在九宫格里的位置提示（官方无文案，悬停标题是我们的可达性补充） */
-const LABELS: Record<AnchorId, string> = {
-  topLeft: '左上',
-  top: '上',
-  topRight: '右上',
-  left: '左',
-  center: '中',
-  right: '右',
-  bottomLeft: '左下',
-  bottom: '下',
-  bottomRight: '右下',
+/** 行/列 → 展平后的全局下标（官方 `pointIdex` 就是这个序号） */
+export function flatIndex(
+  rows: ReadonlyArray<ReadonlyArray<unknown>>,
+  rowIndex: number,
+  cellIndex: number,
+): number {
+  let base = 0
+  for (let i = 0; i < rowIndex; i += 1) base += rows[i].length
+  return base + cellIndex
 }
 </script>
 
+<script setup lang="ts">
+import Icon from '@/components/Icon.vue'
+
+withDefaults(
+  defineProps<{
+    /** 选中的锚点下标（官方 `pointIdex`）；-1 = 未选 */
+    modelValue?: number
+    rows?: ReadonlyArray<ReadonlyArray<string>>
+  }>(),
+  { modelValue: -1, rows: () => ANCHOR_ROWS },
+)
+
+defineEmits<{ (e: 'update:modelValue', index: number): void }>()
+</script>
+
 <template>
-  <div class="g-anchor-grid" role="radiogroup" aria-label="锚点">
+  <div class="g-anchor-grid" role="radiogroup" aria-label="变换锚点">
     <div v-for="(row, rowIndex) in rows" :key="rowIndex" class="g-anchor-grid__row">
       <button
-        v-for="anchor in row"
-        :key="anchor"
+        v-for="(icon, cellIndex) in row"
+        :key="`${rowIndex}-${cellIndex}`"
         class="g-anchor-grid__cell"
-        :class="{ 'is-active': anchor === modelValue }"
+        :class="{ 'is-active': flatIndex(rows, rowIndex, cellIndex) === modelValue }"
         type="button"
         role="radio"
-        :aria-checked="anchor === modelValue"
-        :title="LABELS[anchor]"
-        :aria-label="LABELS[anchor]"
-        @click="$emit('update:modelValue', anchor)"
-      />
+        :aria-checked="flatIndex(rows, rowIndex, cellIndex) === modelValue"
+        :aria-label="`锚点 ${flatIndex(rows, rowIndex, cellIndex) + 1}`"
+        @click="$emit('update:modelValue', flatIndex(rows, rowIndex, cellIndex))"
+      >
+        <Icon :name="`#${icon}`" size="lg" />
+      </button>
     </div>
   </div>
 </template>
@@ -76,17 +90,22 @@ const LABELS: Record<AnchorId, string> = {
 }
 
 .g-anchor-grid__cell {
+  display: flex;
   width: var(--g-anchor-size, 18px);
   height: var(--g-anchor-size, 18px);
+  align-items: center;
+  justify-content: center;
   padding: 0;
   border: 1px solid var(--border-strong);
   border-radius: var(--r-sm);
   background: var(--c-sunken);
+  color: var(--text);
   cursor: pointer;
 }
 
 .g-anchor-grid__cell.is-active {
   border-color: var(--accent);
   background: var(--accent);
+  color: var(--c-text-inverse);
 }
 </style>

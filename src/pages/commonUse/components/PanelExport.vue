@@ -71,7 +71,7 @@ const openAfterSave = ref(false)
 
     <hr class="panel-export__rule" />
 
-    <GCollapse variant="plain" title="导出选项">
+    <GCollapse variant="plain" title="压缩尺寸 & 加水印">
       <SettingsRow>
         <GInput size="small" class="u-fill" />
         <GInput size="small" class="u-fill" />
@@ -82,7 +82,7 @@ const openAfterSave = ref(false)
 
     <hr class="panel-export__rule" />
 
-    <GCollapse variant="plain" title="打开目录">
+    <GCollapse variant="plain" title="所在目录设置">
       <SettingsRow>
         <GButton type="primary" width="full">打开所在目录</GButton>
       </SettingsRow>
@@ -91,7 +91,7 @@ const openAfterSave = ref(false)
 
     <hr class="panel-export__rule" />
 
-    <GCollapse variant="plain" title="批量导出">
+    <GCollapse variant="plain" title="批量导出功能">
       <SettingsRow>
         <GButton width="half">导出一级图层</GButton>
         <GButton width="half">导出二级图层</GButton>
