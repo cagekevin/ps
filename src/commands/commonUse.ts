@@ -1,6 +1,8 @@
 import { buildOptionPatch, FLIP_DIRECTIONS, type FlipDirection } from '@/domain/common-use'
 import { CepError } from '@/utils/errors'
 import { assertJsxOk } from '@/utils/jsx-result'
+import { describeCepError } from '@/utils/error-text'
+import { log } from '@/utils/logger'
 import { commonUseRepo } from '@/cep/data/common-use'
 import { readCommonUseOptions } from '@/cep/data/legacy-settings'
 import { subscribeHostEvent, type HostEventName } from '@/cep/events'
@@ -542,7 +544,13 @@ export const commonUseCommands: Command<unknown>[] = [
  * 开关不勾时官方**不注册**（`setEvent`，`:37743-37749`）；我方订阅一次、回调里按开关分流。
  */
 export interface PlaceImageDeps {
-  readOptions: () => Record<string, unknown>
+  /**
+   * 读当前设置。**必须是异步**：数据层 `readCommonUseOptions()` 是 `Promise`，
+   * 且返回 `{ value, degraded }` 而不是裸对象。
+   * 这里写同步签名会让实现方被迫 `as unknown as` 把 Promise 当对象用（T-97-8 真机 bug 就是这么来的），
+   * 而 `as` 能过编译、过测试、运行时静默返回 `'none'`。
+   */
+  readOptions: () => Promise<Record<string, unknown>>
   embedImage: (options: { path: string; bLink2: unknown; bDelete: unknown }) => Promise<unknown>
   relinkToFile: (path: string) => Promise<unknown>
 }
@@ -580,7 +588,7 @@ export async function dispatchPlaceImage(
   payload: unknown,
   deps: PlaceImageDeps,
 ): Promise<'relink' | 'embed' | 'none'> {
-  const options = deps.readOptions()
+  const options = await deps.readOptions()
   const action = placeImageAction(name, options)
   if (action === 'relink') {
     await deps.relinkToFile(placeImagePath(payload))
@@ -606,14 +614,23 @@ export async function startPlaceImageWatch(ctx: {
 }): Promise<void> {
   if (stopPlaceImage) return
   const deps: PlaceImageDeps = {
-    readOptions: () => readCommonUseOptions() as unknown as Record<string, unknown>,
+    // `readCommonUseOptions()` 是 async 且返回 `{ value, degraded }`：**必须 await 再取 `.value`**。
+    // 少任何一个都会让 `placeImageAction` 读到 `undefined` → 静默走 `'none'`（T-97-8 的真因）。
+    readOptions: async () =>
+      (await readCommonUseOptions()).value as unknown as Record<string, unknown>,
     embedImage: (options) => ctx.jsx.commonUse.embedImage(options),
     relinkToFile: (path) => ctx.jsx.commonUse.relinkToFile(path),
   }
   const names: HostEventName[] = ['placeImage', 'pasteImage', 'clipMask']
   stopPlaceImage = await Promise.all(
     names.map((name) =>
-      subscribeHostEvent(name, (payload) => void dispatchPlaceImage(name, payload, deps)),
+      subscribeHostEvent(name, (payload) => {
+        // 事件回调是"发出去就没人接"的路径：这里抛错不会有 `useCommand.run` 接住，
+        // 所以必须自己落日志（`设置页 → 打开日志` 能看到），不许再 `void` 静默吞掉。
+        void dispatchPlaceImage(name, payload, deps).catch((e: unknown) => {
+          log.warn('commonUse.placeImage', `${name} 处理失败：${describeCepError(e)}`)
+        })
+      }),
     ),
   )
 }
