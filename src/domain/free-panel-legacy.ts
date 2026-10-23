@@ -104,7 +104,7 @@ export function adaptFreePanelItem(item: FreePanelItem): LegacyCommand | null {
       }
 
     case 'cy_optimizeDoc':
-      return { id: 'commonUse.optimizeDoc', payload: { options: asRecord(option) } }
+      return { id: 'commonUse.optimizeOnce', payload: { options: asRecord(option) } }
 
     case 'zdy_customBuildTransform': {
       // 官方 option 是 7 个具名字段，按定序拼成数组（`:17165`；顺序见 `05-常用.md:57`）

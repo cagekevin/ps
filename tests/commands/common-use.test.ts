@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+﻿import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 vi.mock('@/selection', () => ({
   refresh: async () => ({ hasSelection: true, typeNumber: 1 }),
@@ -19,7 +19,8 @@ const commonUse = vi.hoisted(() => ({
   referenceGuide: vi.fn(async () => null),
   referenceSlice: vi.fn(async () => null),
   distribute: vi.fn(async () => null),
-  getPsdList: vi.fn(async () => []),
+  getPsdList: vi.fn(async () => [] as unknown),
+  exportPsdImage: vi.fn(async () => null),
 }))
 
 const legacy = vi.hoisted(() => ({ call: vi.fn(async () => null) }))
@@ -32,6 +33,7 @@ const { execute } = await import('@/commands/registry')
 beforeEach(() => {
   for (const fn of Object.values(commonUse)) fn.mockClear()
   commonUse.getImagePath.mockResolvedValue(-1)
+  commonUse.getPsdList.mockResolvedValue([])
   legacy.call.mockClear()
 })
 
@@ -102,10 +104,9 @@ describe('常用页命令', () => {
     })
   })
 
-  it('optimizeDoc 是单文档优化：走 optimizeOnce 并上报进度', async () => {
-    const result = await execute('commonUse.optimizeDoc', {
+  it('optimizeOnce 是单文档优化：走 cy_optimizeDoc', async () => {
+    const result = await execute('commonUse.optimizeOnce', {
       options: { optimizeAll: true, deleteAllEmpty: false, deleteAllHide: true },
-      total: 3,
     })
 
     expect(result).toMatchObject({ ok: true })
@@ -116,6 +117,83 @@ describe('常用页命令', () => {
     })
   })
 
+  it('optimizeFolder：列表由 cy_getPsdForFolder 取，逐张调、全成才 ok', async () => {
+    commonUse.getPsdList.mockResolvedValueOnce(['a.psd', 'b.psd'])
+
+    const result = await execute('commonUse.optimizeFolder', { options: { optimizeAll: true } })
+
+    expect(result).toMatchObject({ ok: true })
+    expect(commonUse.optimizeFolder).toHaveBeenCalledTimes(2)
+    expect(commonUse.optimizeFolder).toHaveBeenNthCalledWith(1, { optimizeAll: true }, 'a.psd')
+    expect(commonUse.optimizeFolder).toHaveBeenNthCalledWith(2, { optimizeAll: true }, 'b.psd')
+  })
+
+  it('optimizeFolder 全败：一个 ok:true 都不给，文案带比例', async () => {
+    commonUse.getPsdList.mockResolvedValueOnce(['a.psd', 'b.psd'])
+    commonUse.optimizeFolder.mockRejectedValue(new Error('锁文件'))
+
+    const result = await execute('commonUse.optimizeFolder', { options: {} })
+
+    expect(result).toMatchObject({ ok: false })
+    expect((result as { reason: string }).reason).toContain('成功 0/2')
+    expect((result as { reason: string }).reason).toContain('失败 2 张')
+    // 一个失败不中断：两张都试过
+    expect(commonUse.optimizeFolder).toHaveBeenCalledTimes(2)
+  })
+
+  it('optimizeFolder 一半成功：抛错并写清成功 2/3、失败 1 张', async () => {
+    commonUse.getPsdList.mockResolvedValueOnce(['a.psd', 'b.psd', 'c.psd'])
+    commonUse.optimizeFolder
+      .mockResolvedValueOnce(null)
+      .mockRejectedValueOnce(new Error('文件损坏'))
+      .mockResolvedValueOnce(null)
+
+    const result = await execute('commonUse.optimizeFolder', { options: {} })
+
+    expect(result).toMatchObject({ ok: false })
+    const reason = (result as { reason: string }).reason
+    expect(reason).toContain('成功 2/3')
+    expect(reason).toContain('失败 1 张')
+    expect(reason).toContain('b.psd')
+  })
+
+  it('optimizeFolder 列表为空时直接报「文件夹内没有PSD文件」', async () => {
+    commonUse.getPsdList.mockResolvedValueOnce([])
+
+    const result = await execute('commonUse.optimizeFolder', { options: {} })
+
+    expect(result).toMatchObject({ ok: false })
+    expect((result as { reason: string }).reason).toContain('文件夹内没有PSD文件')
+    expect(commonUse.optimizeFolder).not.toHaveBeenCalled()
+  })
+
+  it('exportPsdFolder：>30 张未确认时抛，确认后逐张导出', async () => {
+    const files = Array.from({ length: 31 }, (_, i) => `f${i}.psd`)
+    commonUse.getPsdList.mockResolvedValue(files)
+
+    const blocked = await execute('commonUse.exportPsdFolder', { options: { a: 1 } })
+    expect(blocked).toMatchObject({ ok: false })
+    expect((blocked as { reason: string }).reason).toContain('文件夹内超过30个psd')
+    expect(commonUse.exportPsdImage).not.toHaveBeenCalled()
+
+    const confirmed = await execute('commonUse.exportPsdFolder', {
+      options: { a: 1 },
+      confirmed: true,
+    })
+    expect(confirmed).toMatchObject({ ok: true })
+    expect(commonUse.exportPsdImage).toHaveBeenCalledTimes(31)
+    expect(commonUse.exportPsdImage).toHaveBeenNthCalledWith(1, 'f0.psd', { a: 1 })
+  })
+
+  it('exportPsdFolder 部分成功同样不许吞', async () => {
+    commonUse.getPsdList.mockResolvedValueOnce(['a.psd', 'b.psd'])
+    commonUse.exportPsdImage.mockResolvedValueOnce(null).mockRejectedValueOnce(new Error('炸了'))
+
+    const result = await execute('commonUse.exportPsdFolder', { options: {} })
+
+    expect(result).toMatchObject({ ok: false })
+    expect((result as { reason: string }).reason).toContain('成功 1/2')
+  })
   it('transform 参数数量必须是 7（原版参数顺序）', async () => {
     const short = await execute('commonUse.transform', {
       params: [1, 0, '0px', '0px', 0, 100, 0].slice(0, 6) as never,

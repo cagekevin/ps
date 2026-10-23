@@ -228,8 +228,12 @@ export function createMockJsx(): JsxPort {
         log.info('mock', 'cy_distributedByPitch', options)
         return null
       },
-      getPsdList: async (folder) => {
-        log.info('mock', 'cy_getPsdForFolder', folder)
+      exportPsdImage: async (file, options) => {
+        log.info('mock', 'cy_BacthExportPsdToImage', { file, options })
+        return null
+      },
+      getPsdList: async () => {
+        log.info('mock', 'cy_getPsdForFolder', null)
         return []
       },
     },

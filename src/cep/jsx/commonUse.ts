@@ -1,4 +1,4 @@
-import { jsxCall } from '@/cep/transport'
+﻿import { jsxCall } from '@/cep/transport'
 import type { CommonUseJsx } from './types'
 
 // 是什么：常用页（/commonUse）域 jsx 的**唯一实现**
@@ -81,8 +81,15 @@ export function createCommonUseJsx(): CommonUseJsx {
     distribute: (options: unknown) =>
       jsxCall('cy_distributedByPitch', [options], { label: '按间距分布', timeout: WRITE }),
 
-    // 文件夹里的 PSD 列表：`cy_getPsdForFolder([目录])`（A/B 档锚点，返回有数据）
-    getPsdList: (folder: string) =>
-      jsxCall('cy_getPsdForFolder', [folder], { label: '读取文件夹', timeout: READ }),
+    // 文件夹里的 PSD 列表：`cy_getPsdForFolder()` **无参**（jsx 自己弹选目录，`:17119` / `:36025`）
+    getPsdList: () => jsxCall('cy_getPsdForFolder', [], { label: '读取文件夹', timeout: READ }),
+
+    // 单个 PSD 导图：`cy_BacthExportPsdToImage([file, option])`（`:17139`）。
+    // 官方名字里 `Bacth` 是拼错的，照抄不改——改了就调不到
+    exportPsdImage: (file: string, options: unknown) =>
+      jsxCall('cy_BacthExportPsdToImage', [file, options], {
+        label: '批量导出PSD图片',
+        timeout: LONG,
+      }),
   }
 }

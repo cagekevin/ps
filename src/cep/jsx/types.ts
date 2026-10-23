@@ -189,8 +189,16 @@ export interface CommonUseJsx {
   referenceSlice(options?: unknown): Promise<unknown>
   /** cy_distributedByPitch([option])：按间距分布（`:17173`） */
   distribute(options: unknown): Promise<unknown>
-  /** cy_getPsdForFolder([目录])：文件夹里的 PSD 列表（返回有数据） */
-  getPsdList(folder: string): Promise<unknown>
+  /**
+   * cy_getPsdForFolder()：**无参**，文件夹由 jsx 自己弹选（官方 `jsxNoCheck("cy_getPsdForFolder")`，
+   * `:17119` 与 `:36025`）。返回列表（B/A 档"有数据"，具体形状未实测）。
+   */
+  getPsdList(): Promise<unknown>
+  /**
+   * cy_BacthExportPsdToImage([file, option])：单个 PSD 导图（`jsxHistoryNoCheck`，`:17139`）。
+   * **官方名字里 `Bacth` 是拼错的**（不是 Batch），照抄不改——改了就调不到。
+   */
+  exportPsdImage(file: string, options: unknown): Promise<unknown>
 }
 
 export interface JsxPort {

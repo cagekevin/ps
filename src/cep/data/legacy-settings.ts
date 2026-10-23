@@ -1,10 +1,11 @@
-// 是什么：原面板 sj_set.json 的字体面板字段（读 + 局部写）
+﻿// 是什么：原面板 sj_set.json 的字体面板字段（读 + 局部写）
 // 唯一入口：只有这里读写 sj_set.json；命令层 import 这里的函数，不拼路径
 // 替代了什么：原版 `V.a.info`（全局设置对象，app.v4.js:65835-65866）
 // 谁在用：commands/fontSet.ts、stores/font-set.ts
 // 禁止：整文件覆写成只含本页字段的对象——原面板还有几十个键，写前必须保留未知键
 
 import { DATA_FILES } from '@/cep/env'
+import { CepError } from '@/utils/errors'
 import { readTextSmart, userDir } from '@/cep/fs'
 import { FONT_SET_DEFAULTS, type FontSetSettings } from '@/domain/font-set-config'
 import { pick } from './pick'
@@ -124,4 +125,84 @@ export async function patchFontSetSettings(
     Object.assign(all, patch)
   })
   return mergeFontSetSettings(next)
+}
+
+/**
+ * 常用页在 `sj_set.json` 里的 8 个键。
+ *
+ * 来源：原版各子面板调 `getKey("cy…")` 的实参（`cyAutoFillColor` / `cyDeleteNext` / `cyExport` /
+ * `cyImportToLinkObject` / `cyLinkObject` / `cyOptimizeAll` / `cyOptimizeDeleteAllEmpty` /
+ * `cyOptimizeDeleteAllHide`）。`cyExport` 里存的是导出配置，**形状由面板自己决定，这里不解释**。
+ */
+export const COMMON_USE_SETTING_KEYS = [
+  'cyAutoFillColor',
+  'cyDeleteNext',
+  'cyExport',
+  'cyImportToLinkObject',
+  'cyLinkObject',
+  'cyOptimizeAll',
+  'cyOptimizeDeleteAllEmpty',
+  'cyOptimizeDeleteAllHide',
+] as const
+
+export type CommonUseSettingKey = (typeof COMMON_USE_SETTING_KEYS)[number]
+export type CommonUseOptions = Record<CommonUseSettingKey, unknown>
+
+function isPlainRecord(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
+}
+
+/**
+ * 深合并：**递归到叶子**，数组**整体替换**，深对象**绝不整块替换**。
+ *
+ * 为什么不能 `Object.assign`：`cyExport` / `cyAutoFillColor` 这类是嵌套对象，
+ * 整块替换等于把用户没改的分支删掉（原版是 `deepmerge` 语义，见 `:37619-37624` 的写入侧）。
+ */
+function assignDeep(target: Record<string, unknown>, patch: Record<string, unknown>): void {
+  for (const [key, next] of Object.entries(patch)) {
+    if (next === undefined) continue
+    const current = target[key]
+    if (isPlainRecord(next) && isPlainRecord(current)) {
+      assignDeep(current, next)
+    } else {
+      target[key] = next
+    }
+  }
+}
+
+/** 读常用页那 8 个键；文件里没有的键**不补默认值**（缺 = 官方默认，由面板决定） */
+export async function readCommonUseOptions(): Promise<{
+  value: Partial<CommonUseOptions>
+  /** 非空表示读到的是坏文件（UI 要提示），与 RepoRead 同义 */
+  degraded?: string
+}> {
+  const { value, degraded } = await legacySettingsRepo.read()
+  const picked: Partial<CommonUseOptions> = {}
+  for (const key of COMMON_USE_SETTING_KEYS) {
+    if (value && key in value) picked[key] = value[key]
+  }
+  return { value: picked, degraded }
+}
+
+/**
+ * 只写这 8 个键；其余键（原面板还有几十个）原样保留。
+ * 未知键直接拒绝——写进去就是污染别人的设置文件。
+ */
+export async function updateCommonUseOptions(
+  patch: Partial<CommonUseOptions>,
+): Promise<Partial<CommonUseOptions>> {
+  const unknown = Object.keys(patch).filter(
+    (key) => !COMMON_USE_SETTING_KEYS.includes(key as CommonUseSettingKey),
+  )
+  if (unknown.length) {
+    throw new CepError('PARSE', `不认识的常用页设置键：${unknown.join('、')}`)
+  }
+  const next = await legacySettingsRepo.update((all) => {
+    assignDeep(all, patch as Record<string, unknown>)
+  })
+  const picked: Partial<CommonUseOptions> = {}
+  for (const key of COMMON_USE_SETTING_KEYS) {
+    if (key in next) picked[key] = next[key]
+  }
+  return picked
 }

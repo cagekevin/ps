@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+﻿import { describe, expect, it } from 'vitest'
 import { adaptFreePanelItem, LEGACY_KEY_ALIASES } from '@/domain/free-panel-legacy'
 import type { FreePanelItem } from '@/domain/free-panel'
 import { get } from '@/commands/registry'
@@ -138,7 +138,7 @@ describe('旧自造 key 的别名表', () => {
   it('旧 key 仍能解析出命令（不然用户机器上的旧项会变成「key 未适配」）', () => {
     const mapped = adaptFreePanelItem(item('commonUse.optimization', { optimizeAll: true }))
     expect(mapped).toEqual({
-      id: 'commonUse.optimizeDoc',
+      id: 'commonUse.optimizeOnce',
       payload: { options: { optimizeAll: true } },
     })
   })
