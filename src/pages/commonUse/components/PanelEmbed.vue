@@ -1,9 +1,9 @@
-<script setup lang="ts">
-import { ref } from 'vue'
+﻿<script setup lang="ts">
 import CheckBox from '@/components/CheckBox.vue'
 import GButton from '@/components/GButton.vue'
 import GRadio from '@/components/GRadio.vue'
 import SettingsRow from '@/components/SettingsRow.vue'
+import { useOptionRef } from '../useCommonUseOptions'
 
 /**
  * ① 嵌入图片（官方 `comembed`，render `up()` `app.v4.js:35732`）。
@@ -13,12 +13,12 @@ import SettingsRow from '@/components/SettingsRow.vue'
  * `cyClipMaskAutoEmbed` / `cyLinkObject` / `cyDeleteNext` / `cyOpenDranInToLinkObject`
  * （官方 watch 见 `:37602-37616`），本轮只做界面、值先留在组件内（命令尚未提供）。
  */
-const dragInAutoEmbed = ref(true)
-const pasteAutoEmbed = ref(true)
-const clipMaskAutoEmbed = ref(false)
-const linkMode = ref<'none' | 'original' | 'sameFolder'>('none')
-const deleteNextLayer = ref(false)
-const dragInToLink = ref(false)
+const dragInAutoEmbed = useOptionRef('cyDragInAutoEmbed', true)
+const pasteAutoEmbed = useOptionRef('cyPasetImageAutoEmbed', true)
+const clipMaskAutoEmbed = useOptionRef('cyClipMaskAutoEmbed', false)
+const linkMode = useOptionRef<string>('cyLinkObject', 'none')
+const deleteNextLayer = useOptionRef('cyDeleteNext', false)
+const dragInToLink = useOptionRef('cyOpenDranInToLinkObject', false)
 </script>
 
 <template>

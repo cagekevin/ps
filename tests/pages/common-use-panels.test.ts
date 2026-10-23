@@ -1,6 +1,16 @@
-﻿import { describe, expect, it } from 'vitest'
+﻿import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { ref, type Ref } from 'vue'
+import { createPinia, setActivePinia } from 'pinia'
 import { mount } from '@vue/test-utils'
 import GAnchorGrid, { ANCHOR_ROWS } from '@/components/GAnchorGrid.vue'
+/** pinia setup store 形态：状态是 ref，storeToRefs 才拿得到 */
+let fakeStore: { options: Ref<Record<string, unknown>>; loadOptions: () => Promise<void> }
+
+vi.mock('@/stores/common-use', () => ({ useCommonUseStore: () => fakeStore }))
+
+vi.mock('@/components/command/useCommand', () => ({
+  useCommand: () => ({ run: vi.fn(async () => true), disabled: false, running: false }),
+}))
 import GRadio from '@/components/GRadio.vue'
 import PanelExport from '@/pages/commonUse/components/PanelExport.vue'
 import PanelCustomChange from '@/pages/commonUse/components/PanelCustomChange.vue'
@@ -77,6 +87,11 @@ describe('GRadio', () => {
 })
 
 describe('面板形态', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    fakeStore = { options: ref({}), loadOptions: vi.fn(async () => {}) }
+  })
+
   it('comexport 有 3 个折叠区，且缺省全部收起（没有 default-open）', () => {
     const wrapper = mount(PanelExport)
 

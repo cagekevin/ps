@@ -1,9 +1,10 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { ref } from 'vue'
 import GAnchorGrid from '@/components/GAnchorGrid.vue'
 import GButton from '@/components/GButton.vue'
 import GInput from '@/components/GInput.vue'
 import SettingsRow from '@/components/SettingsRow.vue'
+import { useCommand } from '@/components/command/useCommand'
 
 /**
  * ⑧ 自定义变换（官方 `comcustomChange`，render `Ip()` `app.v4.js:36062`）。
@@ -20,6 +21,33 @@ const angle = ref('')
 const opacity = ref('')
 /** 锚点下标（官方 pointIdex，默认 0 = 第一个） */
 const anchorIndex = ref(0)
+
+const transformCmd = useCommand('commonUse.transform')
+
+/** 官方 getCustomBuildTransformOption()：[数量, 缩放, 左右, 上下, 角度, 不透明度, 锚点下标]（顺序取自 data 声明 :36316-36323） */
+function runTransform() {
+  void transformCmd.run({
+    params: [
+      Number(number.value) || 0,
+      Number(scale.value) || 100,
+      leftRight.value,
+      topBottom.value,
+      Number(angle.value) || 0,
+      Number(opacity.value) || 100,
+      anchorIndex.value,
+    ],
+  })
+}
+
+function resetParams() {
+  number.value = ''
+  scale.value = ''
+  leftRight.value = ''
+  topBottom.value = ''
+  angle.value = ''
+  opacity.value = ''
+  anchorIndex.value = 0
+}
 </script>
 
 <template>
@@ -42,8 +70,8 @@ const anchorIndex = ref(0)
     <hr class="panel-custom__rule" />
 
     <SettingsRow>
-      <GButton width="half">生成变换</GButton>
-      <GButton width="half">重置参数</GButton>
+      <GButton width="half" @click="runTransform">生成变换</GButton>
+      <GButton width="half" @click="resetParams">重置参数</GButton>
     </SettingsRow>
   </div>
 </template>

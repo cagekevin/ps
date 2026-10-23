@@ -1,6 +1,11 @@
-﻿import { FLIP_DIRECTIONS, type FlipDirection } from '@/domain/common-use'
+﻿import { buildOptionPatch, FLIP_DIRECTIONS, type FlipDirection } from '@/domain/common-use'
 import { CepError } from '@/utils/errors'
 import { assertJsxOk } from '@/utils/jsx-result'
+import {
+  COMMON_USE_SETTING_KEYS,
+  updateCommonUseOptions,
+  type CommonUseSettingKey,
+} from '@/cep/data/legacy-settings'
 import { getCommonUseCollapsed, setCommonUseCollapsed } from '@/cep/data/settings'
 import { defineCommand } from './registry'
 import type { Command } from './types'
@@ -263,6 +268,24 @@ export const commonUseCommands: Command<unknown>[] = [
     },
   }),
 
+  // ---------- 子面板参数（写 sj_set.json，官方 12 个 cy* 键） ----------
+
+  defineCommand({
+    id: 'commonUse.setOption',
+    title: '保存常用页设置',
+    group: 'system',
+    requires: 'none',
+    kind: 'instant',
+    async run(_ctx, { path, value }) {
+      const root = path.split('.')[0]
+      // 白名单：只认官方那 12 个键（`COMMON_USE_SETTING_KEYS`），其余拒绝——写进去就是污染别人的设置文件
+      if (!COMMON_USE_SETTING_KEYS.includes(root as CommonUseSettingKey)) {
+        throw new CepError('PARSE', `不认识的常用页设置项：${path}`)
+      }
+      // 嵌套补丁 + `assignDeep`：改 `cyExport.ext` 时 `compress` 等兄弟键逐字节不变（靶点⑤）
+      await updateCommonUseOptions(buildOptionPatch(path, value))
+    },
+  }),
   // ---------- 折叠态（我们自己的偏好，不写官方 sj_set.json） ----------
 
   defineCommand({

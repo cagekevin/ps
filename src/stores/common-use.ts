@@ -1,5 +1,6 @@
 ﻿import { defineStore } from 'pinia'
 import { ref } from 'vue'
+import { readCommonUseOptions } from '@/cep/data/legacy-settings'
 import { getCommonUseCollapsed } from '@/cep/data/settings'
 import { toTiles, type CommonUseFile, type CommonUseTile } from '@/domain/common-use'
 import { describeCepError } from '@/utils/error-text'
@@ -40,6 +41,8 @@ function requireSource(): CommonUseSource {
 export const useCommonUseStore = defineStore('common-use', () => {
   const tiles = ref<CommonUseTile[]>([])
   const collapsed = ref<Record<string, boolean>>({})
+  /** 子面板参数投影（sj_set.json 的 12 个 cy* 键）；写走 commonUse.setOption */
+  const options = ref<Record<string, unknown>>({})
   const loading = ref(false)
   /** 非空表示读失败；页面内联显示 + 重试按钮 */
   const error = ref('')
@@ -48,6 +51,12 @@ export const useCommonUseStore = defineStore('common-use', () => {
 
   function applyFile(file: CommonUseFile | null) {
     tiles.value = toTiles(file)
+  }
+
+  /** 读子面板参数（`sj_set.json` 的 12 个 cy* 键）；命令写成功后由页面重读一次 */
+  async function loadOptions() {
+    const read = await readCommonUseOptions()
+    options.value = read.value as Record<string, unknown>
   }
 
   /** 折叠态是同步偏好（`sj_v5_ui.json`），不参与 loading/error */
@@ -71,5 +80,5 @@ export const useCommonUseStore = defineStore('common-use', () => {
     }
   }
 
-  return { tiles, collapsed, loading, error, degraded, load, loadCollapsed }
+  return { tiles, collapsed, options, loading, error, degraded, load, loadOptions, loadCollapsed }
 })

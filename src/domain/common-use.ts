@@ -1,4 +1,4 @@
-﻿// 是什么：常用页（`/commonUse`）的落盘结构、官方种子与「落盘 → 页面视图」的纯函数
+// 是什么：常用页（`/commonUse`）的落盘结构、官方种子与「落盘 → 页面视图」的纯函数
 // 替代了什么：原版 `V.a.info` 数组上的就地读写（app.v4.js:11088-11261 的存储类与 configReset）
 // 谁在用：`cep/data/common-use.ts`（仓库）、后续 `stores/common-use.ts`（只读投影，T-87）
 // 禁止：不读文件、不调 jsx、不 import Vue；不在这里判断"要不要写"（那是命令层的事）
@@ -297,3 +297,22 @@ export const NARROW_PRESETS = [95, 90, 80, 50] as const
 
 /** 整体缩小预设（`:42`：`[99,98,97,70,60,50,33,25,20,10]`） */
 export const NARROW_ALL_PRESETS = [99, 98, 97, 70, 60, 50, 33, 25, 20, 10] as const
+// ---------- 常用页设置项的写入补丁（纯函数，命令层用它落 sj_set.json） ----------
+
+/**
+ * 把点路径 + 值变成**嵌套**补丁：`('cyExport.ext', 'PNG')` → `{ cyExport: { ext: 'PNG' } }`。
+ *
+ * 为什么必须是嵌套对象而不是整块：`legacy-settings.ts` 的 `assignDeep` 递归到叶子，
+ * 传 `{ cyExport: {...} }` 会与磁盘上已有的 `compress` 等子键合并；传扁平同名键就会整块替换。
+ * 依据：原版写入侧是 `deepmerge`（`app.v4.js:37619-37624`）。
+ */
+export function buildOptionPatch(path: string, value: unknown): Record<string, unknown> {
+  const segments = path.split('.').map((s) => s.trim())
+  if (!segments.length || segments.some((s) => !s)) {
+    throw new Error(`设置项路径非法：${path}`)
+  }
+  return segments.reduceRight<Record<string, unknown>>(
+    (inner, segment) => ({ [segment]: inner }),
+    value as never,
+  )
+}

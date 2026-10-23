@@ -1,8 +1,8 @@
 ﻿<script setup lang="ts">
-import { ref } from 'vue'
 import CheckBox from '@/components/CheckBox.vue'
 import GButton from '@/components/GButton.vue'
 import SettingsRow from '@/components/SettingsRow.vue'
+import { useOptionRef } from '../useCommonUseOptions'
 import { useCommand } from '@/components/command/useCommand'
 
 /**
@@ -11,9 +11,9 @@ import { useCommand } from '@/components/command/useCommand'
  * 官方**只有这一个按钮**（没有「优化当前文档」，见契约文案台账）。
  * TODO(T-88): 3 个勾选应落 `cyOptimizeAll` / `cyOptimizeDeleteAllEmpty` / `cyOptimizeDeleteAllHide`。
  */
-const optimizeAll = ref(true)
-const deleteAllEmpty = ref(false)
-const deleteAllHide = ref(false)
+const optimizeAll = useOptionRef('cyOptimizeAll', true)
+const deleteAllEmpty = useOptionRef('cyOptimizeDeleteAllEmpty', false)
+const deleteAllHide = useOptionRef('cyOptimizeDeleteAllHide', false)
 const optimizeFolderCmd = useCommand('commonUse.optimizeFolder')
 </script>
 

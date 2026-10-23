@@ -67,17 +67,21 @@ describe('读那 8 个键', () => {
     expect(value).toEqual({})
   })
 
-  it('白名单就是那 8 个键', () => {
-    expect(COMMON_USE_SETTING_KEYS).toHaveLength(8)
+  it('白名单就是那 12 个键（T-88b2 补上 4 个自动嵌入开关）', () => {
+    expect(COMMON_USE_SETTING_KEYS).toHaveLength(12)
     expect([...COMMON_USE_SETTING_KEYS]).toEqual([
       'cyAutoFillColor',
+      'cyClipMaskAutoEmbed',
       'cyDeleteNext',
+      'cyDragInAutoEmbed',
       'cyExport',
       'cyImportToLinkObject',
       'cyLinkObject',
+      'cyOpenDranInToLinkObject',
       'cyOptimizeAll',
       'cyOptimizeDeleteAllEmpty',
       'cyOptimizeDeleteAllHide',
+      'cyPasetImageAutoEmbed',
     ])
   })
 })

@@ -24,6 +24,7 @@ interface FakeStore {
   error: Ref<string>
   degraded: Ref<string>
   load: () => Promise<void>
+  loadOptions: () => Promise<void>
   loadCollapsed: () => void
 }
 
@@ -72,7 +73,9 @@ beforeEach(() => {
     loading: ref(false),
     error: ref(''),
     degraded: ref(''),
+    options: ref({}),
     load: vi.fn(async () => {}),
+    loadOptions: vi.fn(async () => {}),
     loadCollapsed: vi.fn(),
   }
   commands.zoom.mockClear()

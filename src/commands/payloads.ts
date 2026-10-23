@@ -1,4 +1,4 @@
-﻿import type {
+import type {
   CreateButtonConfig,
   FontSetSettings,
   PasteFontConfig,
@@ -395,6 +395,12 @@ export interface CommonUseCollapsePayload {
   collapsed: boolean
 }
 
+/** 子面板设置项写入：`path` 是点路径（最多两段），值原样交给 `assignDeep` */
+export interface CommonUseSetOptionPayload {
+  path: string
+  value: unknown
+}
+
 /** 导出图片：first = 一级图层，second = 二级图层，image = 单张导出 */
 export interface CommonUseExportPayload {
   mode: 'image' | 'first' | 'second'
@@ -740,6 +746,7 @@ export interface CommandPayloads {
   'commonUse.optimizeFolder': CommonUseOptimizePayload
   'commonUse.exportPsdFolder': CommonUseExportPsdFolderPayload
   'commonUse.setCollapsed': CommonUseCollapsePayload
+  'commonUse.setOption': CommonUseSetOptionPayload
   'commonUse.transform': CommonUseTransformPayload
   'commonUse.referenceGuide': CommonUseReferenceGuidePayload
   'commonUse.referenceSlice': CommonUseReferenceSlicePayload

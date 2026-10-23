@@ -8,6 +8,8 @@ import Icon from '@/components/Icon.vue'
 import NewSpin from '@/components/NewSpin.vue'
 import SettingsRow from '@/components/SettingsRow.vue'
 import { useCommand } from '@/components/command/useCommand'
+import { useFeedbackStore } from '@/stores/feedback'
+import { useFreePanelStore } from '@/stores/free-panel'
 import {
   ENLARGE_PRESETS,
   FLIP_DIRECTIONS,
@@ -42,6 +44,9 @@ const { tiles, collapsed, loading, error, degraded } = storeToRefs(store)
 const zoomCmd = useCommand('commonUse.zoom')
 const flipCmd = useCommand('commonUse.flip')
 const setCollapsedCmd = useCommand('commonUse.setCollapsed')
+const addToPanelCmd = useCommand('freePanel.add')
+const feedback = useFeedbackStore()
+const freePanel = useFreePanelStore()
 
 /**
  * 官方 6 向翻转的图标与提示（`app.v4.js:37567-37591`，18×18，`.svg-18` CSS 位置见规格 35620）。
@@ -65,6 +70,46 @@ const flipItems = FLIP_DIRECTIONS.map((text) => ({ text, ...FLIP_ICONS[text] }))
 const GRID_COLUMNS = 3
 
 /** 每行 3 格；面板插在该格所在行的**下一行行首**（官方 `splice(n*3+3, 0, {created})`，`:38209`） */
+/**
+ * 格子右键 = 加入自由面板（官方 `fpFunction`，`app.v4.js:37657`）。
+ *
+ * 官方三条分支（`:37674` 的 name→key 表）：自动填充颜色 →「不支持添加自定义面板」(`:37698`)；
+ * 自定义变换 / 参考线工具 / 按间距分布 →「请添加展开后的功能」(`:37700`)；其余按 key 加进自由面板。
+ */
+const PANEL_KEYS: Record<string, string> = {
+  嵌入图片: 'cy_embedImage',
+  嵌入多图片: 'cy_embedMultipleImage',
+  导入多图片: 'cy_importMultipleImage',
+  修正模糊: 'cy_coorectBlur',
+  填充线框互换: 'cy_swapWireframeFill',
+  优化文档: 'cy_optimizeDoc',
+  导出图片: 'cy_exportImage',
+  元素替换: 'cy_layerReplace',
+  位置对换: 'cy_locationTrade',
+  图层颜色互换: 'cy_exchangeLayerColor',
+}
+
+function onGridContextMenu(tile: CommonUseTile) {
+  if (tile.name === '自动填充颜色') {
+    feedback.warn('不支持添加自定义面板')
+    return
+  }
+  if (tile.comName) {
+    feedback.warn('请添加展开后的功能')
+    return
+  }
+  const key = PANEL_KEYS[tile.name]
+  const blockId = freePanel.blocks[0]?.id
+  // 官方 `$freePanelBox.show(...)` 会让人选区域；我们没有那个弹层（D-45）
+  if (!key || blockId === undefined) {
+    feedback.warn('自由面板还没有可添加的区域')
+    return
+  }
+  void addToPanelCmd.run({
+    blockId,
+    items: [{ text: tile.name, key, icon: tile.icon.rest.replace(/^#/, '') }],
+  })
+}
 const gridRows = computed(() => {
   const rows: CommonUseTile[][] = []
   for (const tile of tiles.value) {
@@ -106,6 +151,7 @@ const ready = computed(() => !loading.value && !error.value)
 
 onMounted(async () => {
   await store.load()
+  await store.loadOptions()
   store.loadCollapsed()
   // 缺省收起；文件里显式记过 `collapsed:false` 的那一格恢复展开（同时只开一个，取第一个）
   const open = tiles.value.find((tile) => tile.comName && collapsed.value[tile.id] === false)
@@ -183,7 +229,13 @@ function flip(direction: FlipDirection) {
       <div v-if="tiles.length" class="page-common-use__grid">
         <template v-for="(row, rowIndex) in gridRows" :key="rowIndex">
           <div class="page-common-use__grid-row">
-            <UseGridItem v-for="tile in row" :key="tile.id" :tile="tile" @click="toggle(tile)" />
+            <UseGridItem
+              v-for="tile in row"
+              :key="tile.id"
+              :tile="tile"
+              @click="toggle(tile)"
+              @contextmenu="onGridContextMenu(tile)"
+            />
             <span
               v-for="pad in GRID_COLUMNS - row.length"
               :key="pad"

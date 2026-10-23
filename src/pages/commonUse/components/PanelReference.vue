@@ -4,6 +4,7 @@ import CheckBox from '@/components/CheckBox.vue'
 import GButton from '@/components/GButton.vue'
 import GInput from '@/components/GInput.vue'
 import SettingsRow from '@/components/SettingsRow.vue'
+import { useCommand } from '@/components/command/useCommand'
 
 /**
  * ⑪ 参考线工具（官方 `comreference`，render `Bp()` `app.v4.js:37097`）。
@@ -12,6 +13,12 @@ import SettingsRow from '@/components/SettingsRow.vue'
  */
 const smartReference = ref(false)
 const width = ref('20')
+
+const guideCmd = useCommand('commonUse.referenceGuide')
+const sliceCmd = useCommand('commonUse.referenceSlice')
+const applyGuide = () => void guideCmd.run({})
+const clearGuide = () => void sliceCmd.run({ options: { mode: 'clear' } })
+const makeSlice = () => void sliceCmd.run({ options: { mode: 'slice' } })
 </script>
 
 <template>
@@ -21,14 +28,14 @@ const width = ref('20')
     >
     <SettingsRow>
       <GInput v-model="width" size="small" class="u-fill" />
-      <GButton>应用</GButton>
+      <GButton @click="applyGuide">应用</GButton>
     </SettingsRow>
 
     <hr class="panel-reference__rule" />
 
     <SettingsRow>
-      <GButton width="half">清除参考线</GButton>
-      <GButton width="half">基于参考线切片</GButton>
+      <GButton width="half" @click="clearGuide">清除参考线</GButton>
+      <GButton width="half" @click="makeSlice">基于参考线切片</GButton>
     </SettingsRow>
   </div>
 </template>

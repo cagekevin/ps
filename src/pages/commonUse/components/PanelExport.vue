@@ -1,5 +1,4 @@
-﻿<script setup lang="ts">
-import { ref } from 'vue'
+<script setup lang="ts">
 import CheckBox from '@/components/CheckBox.vue'
 import GButton from '@/components/GButton.vue'
 import GCollapse from '@/components/GCollapse.vue'
@@ -7,6 +6,7 @@ import GInput from '@/components/GInput.vue'
 import GRadio from '@/components/GRadio.vue'
 import GSegment from '@/components/GSegment.vue'
 import SettingsRow from '@/components/SettingsRow.vue'
+import { useOptionRef } from '../useCommonUseOptions'
 
 /**
  * ⑨ 导出图片（官方 `comexport`，render `Lp()` `app.v4.js:36435`）。
@@ -19,17 +19,18 @@ import SettingsRow from '@/components/SettingsRow.vue'
  * 默认全部收起（`UNVERIFIED`：官方 `baseOpen` 的默认 state 未提取，截图是整页收起态）。
  * TODO(T-88): 参数应落 `cyExport`（官方 `getExportImage()`，`:37967`），本轮只做界面。
  */
-const format = ref<'JPG' | 'PNG'>('JPG')
-const quality = ref('100')
-const saveTo = ref('')
-const saveMode = ref<'desktop' | 'sameFolder'>('desktop')
-const fileName = ref('')
-const useLayerName = ref(false)
-const autoNumber = ref(false)
-const exportMode = ref<'web' | 'saveAs'>('web')
+// 全部落 sj_set.json 的 cyExport（子键名按官方 render 的绑定：compress.exportOriginalGraph :36747、utoOpenFolder :36777）
+const format = useOptionRef<string>('cyExport.ext', 'JPG')
+const quality = useOptionRef<string>('cyExport.quality', '100')
+const saveTo = useOptionRef<string>('cyExport.path', '')
+const saveMode = useOptionRef<string>('cyExport.saveMode', 'desktop')
+const fileName = useOptionRef<string>('cyExport.name', '')
+const useLayerName = useOptionRef('cyExport.userLayerName', false)
+const autoNumber = useOptionRef('cyExport.autoNumber', false)
+const exportMode = useOptionRef<string>('cyExport.mode', 'web')
 // 折叠区里的两个勾选（本轮只做界面，持久化见 TODO(T-88)）
-const exportOriginal = ref(false)
-const openAfterSave = ref(false)
+const exportOriginal = useOptionRef('cyExport.compress.exportOriginalGraph', false)
+const openAfterSave = useOptionRef('cyExport.autoOpenFolder', false)
 </script>
 
 <template>

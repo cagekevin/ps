@@ -5,6 +5,7 @@ import GInput from '@/components/GInput.vue'
 import GRadio from '@/components/GRadio.vue'
 import Icon from '@/components/Icon.vue'
 import SettingsRow from '@/components/SettingsRow.vue'
+import { useCommand } from '@/components/command/useCommand'
 
 /**
  * ⑬ 按间距分布（官方 `comspacing`，render `Wp()` `app.v4.js:37240`）。
@@ -12,7 +13,14 @@ import SettingsRow from '@/components/SettingsRow.vue'
  * 官方两个图标按钮的作用未提取（`baseIcon` 的 name 在 render 里是变量）→ 用通用图标 + `UNVERIFIED`。
  */
 const gap = ref('10')
-const sortBy = ref<'layer' | 'coordinate'>('layer')
+const sortBy = ref<string>('layer')
+
+const distributeCmd = useCommand('commonUse.distribute')
+/** 两颗图标按钮 = 官方 handle(1) / handle(2)（:37282、:37298）；[t, 间距, 排序模式] */
+const distribute = (t: number) =>
+  void distributeCmd.run({
+    params: [t, Number(gap.value) || 0, sortBy.value === 'layer' ? 1 : 2],
+  })
 </script>
 
 <template>
@@ -20,10 +28,10 @@ const sortBy = ref<'layer' | 'coordinate'>('layer')
     <SettingsRow>
       <GInput v-model="gap" size="small" class="u-fill" />
       <!-- 两颗按钮的图标名与行为：`#iconshuipingjuzhongfenbu` → handle(1)、`#iconchuizhijuzhongfenbu` → handle(2)（app.v4.js:37275 / :37291） -->
-      <GButton type="text" size="small" aria-label="按间距水平分布">
+      <GButton type="text" size="small" aria-label="按间距水平分布" @click="distribute(1)">
         <Icon name="#iconshuipingjuzhongfenbu" size="lg" />
       </GButton>
-      <GButton type="text" size="small" aria-label="按间距垂直分布">
+      <GButton type="text" size="small" aria-label="按间距垂直分布" @click="distribute(2)">
         <Icon name="#iconchuizhijuzhongfenbu" size="lg" />
       </GButton>
     </SettingsRow>

@@ -136,13 +136,17 @@ export async function patchFontSetSettings(
  */
 export const COMMON_USE_SETTING_KEYS = [
   'cyAutoFillColor',
+  'cyClipMaskAutoEmbed',
   'cyDeleteNext',
+  'cyDragInAutoEmbed',
   'cyExport',
   'cyImportToLinkObject',
   'cyLinkObject',
+  'cyOpenDranInToLinkObject',
   'cyOptimizeAll',
   'cyOptimizeDeleteAllEmpty',
   'cyOptimizeDeleteAllHide',
+  'cyPasetImageAutoEmbed',
 ] as const
 
 export type CommonUseSettingKey = (typeof COMMON_USE_SETTING_KEYS)[number]
