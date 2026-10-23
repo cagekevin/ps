@@ -1,0 +1,11 @@
+{
+  "src/cep/data/common-use.ts": 1,
+  "src/cep/dialog.ts": 1,
+  "src/cep/fs.ts": 3,
+  "src/cep/http.ts": 1,
+  "src/cep/mock.ts": 1,
+  "src/cep/transport.ts": 1,
+  "src/commands/commonUse.ts": 1,
+  "src/commands/registry.ts": 2,
+  "src/utils/logger.ts": 1
+}
