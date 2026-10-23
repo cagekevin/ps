@@ -1,4 +1,4 @@
-import { createRouter, createWebHashHistory, type RouteRecordRaw } from 'vue-router'
+﻿import { createRouter, createWebHashHistory, type RouteRecordRaw } from 'vue-router'
 
 declare module 'vue-router' {
   interface RouteMeta {
@@ -19,6 +19,7 @@ declare module 'vue-router' {
 }
 
 const Placeholder = () => import('@/pages/_placeholder/index.vue')
+const CommonUsePage = () => import('@/pages/commonUse/index.vue')
 /** 字体管理：我的字体列表 + 标签 + 预览（原版 font-manage.js） */
 const FontManagePage = () => import('@/pages/fontManage/index.vue')
 /** 自由面板：独立 CEP 面板窗口 */
@@ -52,7 +53,7 @@ export const routes: RouteRecordRaw[] = [
   {
     path: '/commonUse',
     name: 'CommonUse',
-    component: Placeholder,
+    component: CommonUsePage,
     meta: { title: '常用', nav: true, icon: 'icon-nav_changyonggongneng', glyph: '常' },
   },
   {
