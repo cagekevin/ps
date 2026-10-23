@@ -1,4 +1,4 @@
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+﻿import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const transport = vi.hoisted(() => ({
   hasCep: vi.fn(() => true),
@@ -100,21 +100,19 @@ describe('EVENT_IDS 表结构', () => {
     ).toEqual([])
   })
 
-  it('语义名到 ID 的映射不少于已有 5 条（防止有人删行换取断言变绿）', () => {
+  it('语义名到 ID 的映射不少于已有 4 条（防止有人删行换取断言变绿）', () => {
     const names = listHostEventIds().map(([name]) => name)
-    expect(names).toEqual(
-      expect.arrayContaining(['selection', 'transform', 'make', 'setd', 'drop']),
-    )
+    expect(names).toEqual(expect.arrayContaining(['selection', 'transform', 'make', 'setd']))
   })
 
   it('describeEventIdConflict：同一 ID 换个名字才报冲突', () => {
-    expect(describeEventIdConflict(undefined, 'drop', '1349280544')).toBeNull()
-    expect(describeEventIdConflict('drop', 'drop', '1349280544')).toBeNull()
+    expect(describeEventIdConflict(undefined, 'setd', '1936028772')).toBeNull()
+    expect(describeEventIdConflict('setd', 'setd', '1936028772')).toBeNull()
 
-    const message = describeEventIdConflict('setd', 'drop', '1936028772')
-    expect(message).toContain('1936028772')
+    const message = describeEventIdConflict('selection', 'setd', '1936483188')
+    expect(message).toContain('1936483188')
+    expect(message).toContain('「selection」')
     expect(message).toContain('「setd」')
-    expect(message).toContain('「drop」')
   })
 })
 

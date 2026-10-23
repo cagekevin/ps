@@ -1,0 +1,133 @@
+# 模板 · anon_app.v4_L51410
+
+> 来源：`app.v4.js` render 函数 `o_`（行 51300）
+> 结构：**带层级**，缩进表示嵌套
+
+## 结构树
+
+```jsx
+<div class="export-wrap" @mousedown />
+```
+
+## 动态渲染（需人工对照）
+
+| 类型 | 处数 | 对应 |
+|---|---|---|
+| `_l()` 列表渲染 | 2 | `v-for` |
+
+> 这些在 render 函数里是**控制流**，不是节点属性，无法自动转成 `v-if` / `v-for`。
+> 重写时看下面的 render 源码，按 `_l(数组, function(item){...})` 还原列表，按 `if (条件) { return ... }` 还原条件。
+
+## render 源码
+
+```js
+{
+      var t = this;
+      var e = t.$createElement;
+      var n = t._self._c || e;
+      return n("div", {
+        staticClass: "export-wrap",
+        on: {
+          mousedown: function (t) {
+            t.stopPropagation();
+          }
+        }
+      }, t._l(t.data.info, function (e, a) {
+        return n("div", {
+          key: "ys-style" + a,
+          staticClass: "app-padding mb4 drag-style-wrap",
+          attrs: {
+            title: "按住ctrl拖拽位置"
+          },
+          on: {
+            mousedown: function (e) {
+              return t.dragColorWrap(a, ".drag-style-wrap", ".Style-vueScroll");
+            },
+            mousemove: function (e) {
+              return t.dragColorWrapDrop(a);
+            }
+          }
+        }, [n("baseGroup", {
+          attrs: {
+            text: e.name,
+            value: e.show
+          },
+          on: {
+            menu: function (e) {
+              return t.showGroupMenu(e, a);
+            },
+            change: function (e) {
+              return t.setShowStatus(e, a);
+            }
+          }
+        }, [n("div", {
+          directives: [{
+            name: "show",
+            rawName: "v-show",
+            value: e.show,
+            expression: "site.show"
+          }],
+          staticClass: "f-baseX f-br"
+        }, [t._l(e.list, function (e, i) {
+          return n("img", {
+            key: "ys-style1" + i,
+            staticClass: "mt7 style-img drag-style mr6",
+            attrs: {
+              src: t.isMac + t.urlData + "/kuStyle/" + e.id + ".png"
+            },
+            on: {
+              click: function (n) {
+                return t.useStyle(e, a);
+              },
+              contextmenu: function (e) {
+                e.preventDefault();
+                e.stopPropagation();
+                return t.showItemMenu(e, a, i);
+              },
+              dragstart: function (t) {
+                t.preventDefault();
+              },
+              mousedown: function (e) {
+                e.stopPropagation();
+                return t.drag(a, i, ".drag-style");
+              },
+              mousemove: function (e) {
+                return t.drop(a, i);
+              }
+            }
+          });
+        }), n("div", {
+          staticClass: "mt7 img-add f-center cursor mr6",
+          attrs: {
+            title: "添加样式"
+          },
+          on: {
+            click: function (e) {
+              return t.addStyle(a);
+            }
+          }
+        }, [n("svg", {
+          staticClass: "icon",
+          attrs: {
+            "aria-hidden": "true"
+          },
+          on: {
+            click: function (e) {
+              e.stopPropagation();
+              return t.addStyle(a);
+            }
+          }
+        }, [n("use", {
+          attrs: {
+            "xlink:href": "#iconchuangjian"
+          },
+          on: {
+            click: function (e) {
+              e.stopPropagation();
+              return t.addStyle(a);
+            }
+          }
+        })])])], 2)])], 1);
+      }), 0);
+    }
+```

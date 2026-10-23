@@ -1,0 +1,46 @@
+# 模板 · input-search
+
+> 来源：`app.v4.js` render 函数 `Ha`（行 18285）
+> 结构：**带层级**，缩进表示嵌套
+
+## 结构树
+
+```jsx
+<Input />
+```
+
+## render 源码
+
+```js
+{
+      var t = this;
+      var e = t.$createElement;
+      var n = t._self._c || e;
+      return n("Input", t._g(t._b({
+        ref: "input",
+        staticClass: "search",
+        attrs: {
+          placeholder: t.placeholder,
+          allowClear: ""
+        },
+        on: {
+          pressEnter: t.onSearch
+        },
+        scopedSlots: t._u([{
+          key: "suffix",
+          fn: function () {
+            return [n("Icon", {
+              staticClass: "search-icon",
+              attrs: {
+                type: "search"
+              },
+              on: {
+                click: t.onSearch
+              }
+            })];
+          },
+          proxy: true
+        }])
+      }, "Input", t.$attrs, false), t.listeners));
+    }
+```

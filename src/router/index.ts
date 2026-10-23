@@ -19,12 +19,8 @@ declare module 'vue-router' {
 }
 
 const Placeholder = () => import('@/pages/_placeholder/index.vue')
-/** 自定义：框架生成（原版 Custom，app.v4.js:34774 `np()`） */
-const CustomPage = () => import('@/pages/custom/index.vue')
 /** 字体管理：我的字体列表 + 标签 + 预览（原版 font-manage.js） */
 const FontManagePage = () => import('@/pages/fontManage/index.vue')
-/** 常用：主体待实现 */
-const CommonUsePage = () => import('@/pages/commonUse/index.vue')
 /** 自由面板：独立 CEP 面板窗口 */
 const FreePanelPage = () => import('@/pages/freePanel/index.vue')
 /** 动作管理：仓库 → 分组 → 动作（原版 Action.js） */
@@ -50,13 +46,13 @@ export const routes: RouteRecordRaw[] = [
   {
     path: '/custom',
     name: 'Custom',
-    component: CustomPage,
+    component: Placeholder,
     meta: { title: '自定义', nav: true, icon: 'icon-nav_zidingyikuangjia', glyph: '自' },
   },
   {
     path: '/commonUse',
     name: 'CommonUse',
-    component: CommonUsePage,
+    component: Placeholder,
     meta: { title: '常用', nav: true, icon: 'icon-nav_changyonggongneng', glyph: '常' },
   },
   {

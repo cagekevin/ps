@@ -1,0 +1,519 @@
+{
+      components: {
+        translateCom: xm,
+        split: Tm,
+        btnCom: Mm,
+        pasteFont: Rm,
+        fontSetQuick: fv,
+        fontSetHierarych: rv,
+        fontSetColor: Dv,
+        distributed: Gm
+      },
+      data: function () {
+        return {
+          setFontSvgOne: ["#iconfanyi", "#iconchaifen", "#iconanniu"],
+          setFontSvgTwo: ["#iconfuzhiwenziyangshi", "#iconniantiewenziyangshi", "#icongenggaiwenbenfangxiang"],
+          bottomSvgOne: ["#iconzuoduiqi", "#iconchuizhiduiqi", "#iconyouduiqi", "#iconchuizhijuzhongfenbu"],
+          bottomSvgTwo: ["#iconbeijingchuizhiduiqi", "#iconchuizhifenbu"],
+          bottomSvgTherr: ["#icondingbuduiqi", "#iconshuipingduiqi", "#icondibuduiqi", "#iconshuipingjuzhongfenbu"],
+          bottomSvgFour: ["#iconbeijingshuipingduiqi-", "#iconshuipingfenbu"],
+          btnTitleOne: ["翻译", "拆分文本", "创建按钮"],
+          btnTitleTwo: ["复制文字属性", "粘贴文字属性", "调整文本方向"],
+          bottomTitleOne: ["左对齐", "居中对齐", "右对齐", "水平居中分布"],
+          bottomTitleTwo: ["与背景水平对齐", "垂直分布元素"],
+          bottomTitleTherr: ["顶对齐", "居中对齐", "底对齐", "垂直平均分布"],
+          bottomTitleFour: ["与背景垂直对齐", "水平分布元素"],
+          setFontShow: null,
+          copyFont: null,
+          tranCounter: Jv,
+          showDistribution: 0,
+          distributedTitle: "按间距水平分布",
+          testVal: "ee",
+          testA: true,
+          testB: false
+        };
+      },
+      created: function () {
+        var t = this;
+        tv.$on("ctrlClickFun", function () {
+          t.setFontShow = -1;
+        });
+        this.$appBus.on("ztTranslate", function () {
+          t.translate();
+        });
+        this.$appBus.on("fp_zt_translate", this.translate);
+        this.$appBus.on("fp_zt_pasteFontInfo", this.pasteFontInfo);
+        this.$appBus.on("fp_zt_setLeftRightAlign", this.setLeftRightAlign);
+        this.$appBus.on("fp_zt_setUpDownAlignn", this.setUpDownAlign);
+        this.$appBus.on("fp_zt_setBackgroudAlign", this.setUpDownAlign);
+        this.$appBus.on("ztCreateBtn", function () {
+          t.handle(2);
+        });
+        this.$appBus.on("ztCopyFont", function () {
+          t.handle2(0);
+        });
+        this.$appBus.on("ztPasteFont", function () {
+          t.handle2(1);
+        });
+        this.$appBus.on("ztAlign0", this.eventSetLeftRightAlign);
+        this.$appBus.on("ztAlign1", this.eventSetLeftRightAlign);
+        this.$appBus.on("ztAlign2", this.eventSetLeftRightAlign);
+        this.$appBus.on("ztAlign3", this.eventSetLeftRightAlign);
+        this.$appBus.on("ztAlign4", this.eventSetUpDownAlign);
+        this.$appBus.on("ztAlign5", this.eventSetUpDownAlign);
+        this.$appBus.on("ztAlign6", this.eventSetUpDownAlign);
+        this.$appBus.on("ztAlign7", this.eventSetUpDownAlign);
+        this.$appBus.on("ztVertical", this.eventSetAlignHandle);
+        this.$appBus.on("ztLevel", this.eventSetAlignHandle);
+        this.$appBus.on("ztAlign8", this.eventSetAlignHandle);
+        this.$appBus.on("ztAlign9", this.eventSetAlignHandle);
+        this.$appBus.on("ztAlignHorizontal", function () {
+          t.$cep.jsxHistory("zt_alignHorizontal", [], "水平垂直居中对齐");
+        });
+      },
+      methods: {
+        testFunc: function (t) {
+          alert(Object(ft.f)());
+          alert(t);
+        },
+        fpSetBackgroudAlign: function (t) {
+          if (Object(ft.f)()) {
+            if (t == 0) {
+              this.$freePanelBox.show("与背景水平对齐", "zt_setBackgroudAlign", 3, "iconbeijingchuizhiduiqi");
+            } else if (t == 2) {
+              this.$freePanelBox.show("与背景垂直对齐", "zt_setBackgroudAlign", 4, "iconbeijingshuipingduiqi-");
+            }
+          }
+        },
+        fpSetUpDownAlign: function (t) {
+          if (Object(ft.f)()) {
+            this.$freePanelBox.show(this.bottomTitleTherr[t], "zt_setUpDownAlign", t, this.bottomSvgTherr[t]);
+          }
+        },
+        fpSetLeftRightAlign: function (t) {
+          if (Object(ft.f)()) {
+            this.$freePanelBox.show(this.bottomTitleOne[t], "zt_setLeftRightAlign", t, this.bottomSvgOne[t]);
+          }
+        },
+        eventSetLeftRightAlign: function (t) {
+          var e = {
+            ztAlign0: 0,
+            ztAlign1: 1,
+            ztAlign2: 2,
+            ztAlign3: 3
+          };
+          this.setLeftRightAlign(e[t]);
+        },
+        eventSetUpDownAlign: function (t) {
+          var e = {
+            ztAlign4: 0,
+            ztAlign5: 1,
+            ztAlign6: 2,
+            ztAlign7: 3
+          };
+          this.setUpDownAlign(e[t]);
+        },
+        eventSetAlignHandle: function (t) {
+          var e = {
+            ztVertical: 3,
+            ztLevel: 1,
+            ztAlign8: 0,
+            ztAlign9: 2
+          };
+          this.$tips.show(e[t]);
+          this.setAlignHandle(e[t]);
+        },
+        changeFont: function () {
+          this.$refs.refFontSet.selectLayer();
+        },
+        ctrlMysvgOne: function (t) {
+          if (Object(ft.f)()) {
+            if (t == 0) {
+              this.$freePanelBox.show("翻译", "zt_translate", V.a.info.ztTranslate, "iconfanyi");
+            } else if (t == 2) {
+              this.$freePanelBox.show("生成按钮", "zt_createButton", V.a.info.ztCreateButton, "iconanniu");
+            }
+          } else if (this.setFontShow == "one" + t) {
+            this.setFontShow = null;
+          } else {
+            this.setFontShow = "one" + t;
+          }
+        },
+        ctrlMysvgTwo: function (t) {
+          if (Object(ft.f)()) {
+            if (t == 0) {
+              this.$freePanelBox.show("复制文本", "zt_copyFontInfo", null, "iconfuzhiwenziyangshi");
+            } else if (t == 1) {
+              this.$freePanelBox.show("粘贴文本", "zt_pasteFontInfo", V.a.info.ztPasteFont, "iconniantiewenziyangshi");
+            } else {
+              this.$freePanelBox.show("切换文本方向", "zt_switchFontDirection", null, "icongenggaiwenbenfangxiang");
+            }
+          } else if (this.setFontShow == "two" + t) {
+            this.setFontShow = null;
+          } else {
+            this.setFontShow = "two" + t;
+          }
+        },
+        ctrlClick: function () {
+          tv.$emit("ctrlClickFun");
+        },
+        distributedHangle: function (t, e) {
+          this.$cep.jsxHistory("cy_distributedByPitch", [this.showDistribution, t, 2, V.a.info.ztDistributionFilter], this.distributedTitle);
+          if (e !== false) {
+            this.showDistribution = 0;
+          }
+        },
+        setAlignHandle: function (t) {
+          var e = false;
+          try {
+            e = Object(ft.f)();
+          } catch (a) {}
+          var n = ["与背景水平对齐", "垂直分布元素", "与背景垂直对齐", "水平分布元素"];
+          switch (t) {
+            case 0:
+              this.$cep.jsxHistory("zt_setBackrgoudAlign", [e ? 1 : 3], n[t]);
+              break;
+            case 1:
+              this.showDistribution = 1;
+              this.distributedTitle = n[t];
+              break;
+            case 2:
+              this.$cep.jsxHistory("zt_setBackrgoudAlign", [e ? 2 : 4], n[t]);
+              break;
+            case 3:
+              this.showDistribution = 2;
+              this.distributedTitle = n[t];
+              break;
+          }
+        },
+        setLeftRightAlign: function (t) {
+          var e = this;
+          return Object(d.a)(regeneratorRuntime.mark(function n() {
+            var a;
+            var i;
+            return regeneratorRuntime.wrap(function (n) {
+              while (1) {
+                switch (n.prev = n.next) {
+                  case 0:
+                    a = ["左对齐", "居中对齐", "右对齐", "水平居中分布"];
+                    if (t != 3) {
+                      n.next = 8;
+                      break;
+                    }
+                    n.next = 4;
+                    return e.$cep.jsx("zt_setHorizontalCenters", [4], a[t]);
+                  case 4:
+                    i = n.sent;
+                    if (i.err == 1) {
+                      e.$msg.showErr(i.msg);
+                    }
+                    n.next = 9;
+                    break;
+                  case 8:
+                    e.$cep.jsxHistory("zt_setTextAlignment", [t], a[t]);
+                  case 9:
+                    e.$bp.add("zt_02" + t);
+                  case 10:
+                  case "end":
+                    return n.stop();
+                }
+              }
+            }, n);
+          }))();
+        },
+        setUpDownAlign: function (t) {
+          var e = this;
+          return Object(d.a)(regeneratorRuntime.mark(function n() {
+            var a;
+            var i;
+            return regeneratorRuntime.wrap(function (n) {
+              while (1) {
+                switch (n.prev = n.next) {
+                  case 0:
+                    a = ["顶对齐", "居中对齐", "底对齐", "垂直平均分布"];
+                    if (t != 3) {
+                      n.next = 8;
+                      break;
+                    }
+                    n.next = 4;
+                    return e.$cep.jsx("zt_verticalCenter", [5], a[t]);
+                  case 4:
+                    i = n.sent;
+                    if (i.err == 1) {
+                      e.$msg.showErr(i.msg);
+                    }
+                    n.next = 9;
+                    break;
+                  case 8:
+                    e.$cep.jsxHistory("zt_setUpDownAlign", [t], a[t]);
+                  case 9:
+                    e.$bp.add("zt_03" + t);
+                  case 10:
+                  case "end":
+                    return n.stop();
+                }
+              }
+            }, n);
+          }))();
+        },
+        handle: function (t) {
+          var e = this;
+          return Object(d.a)(regeneratorRuntime.mark(function n() {
+            return regeneratorRuntime.wrap(function (n) {
+              while (1) {
+                switch (n.prev = n.next) {
+                  case 0:
+                    n.t0 = t;
+                    n.next = n.t0 === 0 ? 3 : n.t0 === 1 ? 5 : n.t0 === 2 ? 8 : 11;
+                    break;
+                  case 3:
+                    e.translate();
+                    return n.abrupt("break", 11);
+                  case 5:
+                    e.ctrlMysvgOne(t);
+                    e.$bp.add("zt_005");
+                    return n.abrupt("break", 11);
+                  case 8:
+                    e.$cep.jsxHistory("zt_createButton", [V.a.info.ztCreateButton], "生成按钮");
+                    e.$bp.add("zt_004");
+                    return n.abrupt("break", 11);
+                  case 11:
+                  case "end":
+                    return n.stop();
+                }
+              }
+            }, n);
+          }))();
+        },
+        translate: function (t) {
+          var e = this;
+          return Object(d.a)(regeneratorRuntime.mark(function n() {
+            var a;
+            var i;
+            var r;
+            var s;
+            var o;
+            var c;
+            var l;
+            var u;
+            var d;
+            var f;
+            var p;
+            return regeneratorRuntime.wrap(function (n) {
+              while (1) {
+                switch (n.prev = n.next) {
+                  case 0:
+                    e.$tracker.buttonClick({
+                      button_source: "字体面板页",
+                      button_name: "翻译"
+                    });
+                    a = 1000;
+                    if (e.tranCounter.getStatus() != 0) {
+                      n.next = 4;
+                      break;
+                    }
+                    return n.abrupt("return", e.$msg.showErr("每天最多使用" + e.tranCounter.getMax() + "次翻译功能"));
+                  case 4:
+                    i = typeof t != "undefined" ? t : V.a.info.ztTranslate;
+                    n.next = 7;
+                    return e.$cep.jsx("zt_getCurrentText");
+                  case 7:
+                    r = n.sent;
+                    if (r.err != 1) {
+                      n.next = 10;
+                      break;
+                    }
+                    return n.abrupt("return", e.$msg.showErr(r.msg));
+                  case 10:
+                    if (!(r.data.length > a)) {
+                      n.next = 12;
+                      break;
+                    }
+                    return n.abrupt("return", e.$msg.showErr("文本长度不能超过" + a + "个字符"));
+                  case 12:
+                    e.$load.show("正在翻译...");
+                    s = Object(T.a)(r.data);
+                    n.prev = 14;
+                    s.s();
+                  case 16:
+                    if ((o = s.n()).done) {
+                      n.next = 38;
+                      break;
+                    }
+                    c = o.value;
+                    if (!(c.text.length > a)) {
+                      n.next = 21;
+                      break;
+                    }
+                    e.$load.hide();
+                    return n.abrupt("return", e.$msg.showErr("文本长度不能超过" + a + "个字符"));
+                  case 21:
+                    l = undefined;
+                    u = undefined;
+                    n.next = 24;
+                    return Object(Pt.a)(Vv({
+                      value: qv(c.text),
+                      starLang: i.from,
+                      endLang: i.to
+                    }));
+                  case 24:
+                    d = n.sent;
+                    f = Object(h.a)(d, 2);
+                    l = f[0];
+                    u = f[1];
+                    if (!l) {
+                      n.next = 32;
+                      break;
+                    }
+                    e.$load.hide();
+                    e.$msg.show("连接服务器失败");
+                    return n.abrupt("return");
+                  case 32:
+                    if (typeof u.trans_result[0].dst != "undefined") {
+                      n.next = 34;
+                      break;
+                    }
+                    return n.abrupt("return", e.$msg.showErr("翻译失败"));
+                  case 34:
+                    p = u.trans_result[0].dst;
+                    c.dst = Xv(p);
+                  case 36:
+                    n.next = 16;
+                    break;
+                  case 38:
+                    n.next = 43;
+                    break;
+                  case 40:
+                    n.prev = 40;
+                    n.t0 = n.catch(14);
+                    s.e(n.t0);
+                  case 43:
+                    n.prev = 43;
+                    s.f();
+                    return n.finish(43);
+                  case 46:
+                    e.$load.hide();
+                    n.next = 49;
+                    return e.$cep.jsxHistory("zt_setTranslateText", [r.data, i.delete], "翻译文本");
+                  case 49:
+                    e.tranCounter.add();
+                    e.$tracker.functionApply({
+                      function_source: "字体面板页",
+                      function_name: "翻译"
+                    });
+                    e.$bp.add("zt_003");
+                  case 52:
+                  case "end":
+                    return n.stop();
+                }
+              }
+            }, n, null, [[14, 40, 43, 46]]);
+          }))();
+        },
+        handle2: function (t) {
+          var e = this;
+          return Object(d.a)(regeneratorRuntime.mark(function n() {
+            var a;
+            var i;
+            return regeneratorRuntime.wrap(function (n) {
+              while (1) {
+                switch (n.prev = n.next) {
+                  case 0:
+                    n.t0 = t;
+                    n.next = n.t0 === 0 ? 3 : n.t0 === 1 ? 9 : n.t0 === 2 ? 14 : 17;
+                    break;
+                  case 3:
+                    n.next = 5;
+                    return e.$cep.jsx("ys_getFontInfo");
+                  case 5:
+                    a = n.sent;
+                    if (a.err == 0) {
+                      e.$tips.show("复制成功");
+                      e.copyFont = a.data;
+                    } else {
+                      e.$tips.show(a.msg);
+                    }
+                    e.$bp.add("zt_006");
+                    return n.abrupt("break", 17);
+                  case 9:
+                    if (e.copyFont != null) {
+                      n.next = 11;
+                      break;
+                    }
+                    return n.abrupt("return", e.$tips.show("请先复制字体样式"));
+                  case 11:
+                    i = V.a.info.ztPasteFont;
+                    e.pasteFontInfo(i);
+                    return n.abrupt("break", 17);
+                  case 14:
+                    e.$cep.jsx("zt_switchFontDirection");
+                    e.$bp.add("zt_008");
+                    return n.abrupt("break", 17);
+                  case 17:
+                  case "end":
+                    return n.stop();
+                }
+              }
+            }, n);
+          }))();
+        },
+        pasteFontInfo: function (t) {
+          var e = this;
+          return Object(d.a)(regeneratorRuntime.mark(function n() {
+            var a;
+            var i;
+            var r;
+            var s;
+            var o;
+            var c;
+            var l;
+            return regeneratorRuntime.wrap(function (n) {
+              while (1) {
+                switch (n.prev = n.next) {
+                  case 0:
+                    a = Object(ft.c)(e.copyFont);
+                    for (i in t) {
+                      if (t[i] == 0) {
+                        r = Object(T.a)(a.fonts);
+                        try {
+                          for (r.s(); !(s = r.n()).done;) {
+                            o = s.value;
+                            o[i] = null;
+                          }
+                        } catch (u) {
+                          r.e(u);
+                        } finally {
+                          r.f();
+                        }
+                      }
+                    }
+                    c = Xv(JSON.stringify(a));
+                    n.next = 5;
+                    return e.$cep.jsx("ys_checkUseFont", [c]);
+                  case 5:
+                    l = n.sent;
+                    if (l.err != 1) {
+                      n.next = 8;
+                      break;
+                    }
+                    return n.abrupt("return", e.$msg.showErr(l.msg));
+                  case 8:
+                    e.$load.show("正在应用字体设置...");
+                    n.next = 11;
+                    return e.$cep.jsxHistory("ys_useFont", [c], "应用字体设置");
+                  case 11:
+                    e.$load.hide();
+                    e.$bp.add("zt_007");
+                  case 13:
+                  case "end":
+                    return n.stop();
+                }
+              }
+            }, n);
+          }))();
+        }
+      },
+      mounted: function () {
+        this.$log.push("fontset");
+      }
+    }

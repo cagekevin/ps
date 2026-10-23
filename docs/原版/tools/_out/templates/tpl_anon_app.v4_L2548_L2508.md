@@ -1,0 +1,59 @@
+# 模板 · anon_app.v4_L2548
+
+> 来源：`app.v4.js` render 函数 `oe`（行 2508）
+> 结构：**带层级**，缩进表示嵌套
+
+## 结构树
+
+```jsx
+<label class="base-radio f-baseX" @click>
+  <div @click />
+  <svg class="icon" @click>
+    <use @click />
+  </svg>
+</label>
+```
+
+## render 源码
+
+```js
+{
+      var t = this;
+      var e = t.$createElement;
+      var n = t._self._c || e;
+      return n("label", {
+        staticClass: "base-radio f-baseX",
+        on: {
+          click: t.clickHandle
+        }
+      }, [t.value != t.label ? n("div", {
+        on: {
+          click: function (e) {
+            e.stopPropagation();
+            return t.clickHandle.apply(null, arguments);
+          }
+        }
+      }) : n("svg", {
+        staticClass: "icon",
+        attrs: {
+          "aria-hidden": "true"
+        },
+        on: {
+          click: function (e) {
+            e.stopPropagation();
+            return t.clickHandle.apply(null, arguments);
+          }
+        }
+      }, [n("use", {
+        attrs: {
+          "xlink:href": "#icondanxuan"
+        },
+        on: {
+          click: function (e) {
+            e.stopPropagation();
+            return t.clickHandle.apply(null, arguments);
+          }
+        }
+      })]), t._t("default")], 2);
+    }
+```

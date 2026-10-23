@@ -1,0 +1,148 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<ExtensionManifest xmlns:xsi="" ExtensionBundleId="ps.sf.SheJiZhuLi" ExtensionBundleVersion="2.0" Version="6.0">
+    <!-- MAJOR-VERSION-UPDATE-MARKER -->
+    <ExtensionList>
+        <Extension Id="ps.sf.SheJiZhuLi" Version="2.7"/>
+        <Extension Id="ps.sf.SheJiZhuLi.freePanel" Version="1.0"/>
+        <Extension Id="ps.sf.SheJiZhuLi.seban" Version="1.5"/>
+    </ExtensionList>
+    <ExecutionEnvironment>
+        <HostList>
+            <Host Name="PHXS" Version="[11.0,99.9]"/>
+            <!-- <Host Name="ILST" Version="[11.0,99.9]"/> -->
+            <!-- <Host Name="PHSP" Version="[11.0,99.9]"/> -->
+        </HostList>
+        <LocaleList>
+            <Locale Code="All"/>
+        </LocaleList>
+        <RequiredRuntimeList>
+            <RequiredRuntime Name="CSXS" Version="7.0"/>
+            <!-- MAJOR-VERSION-UPDATE-MARKER -->
+        </RequiredRuntimeList>
+    </ExecutionEnvironment>
+    <DispatchInfoList>
+        <Extension Id="ps.sf.SheJiZhuLi">
+            <DispatchInfo>
+                <Resources>
+                    <MainPath>./index.html</MainPath>
+                    <CEFCommandLine>
+                        <Parameter>--disable-features=SameSiteByDefaultCookies,CookiesWithoutSameSiteMustBeSecure,NetworkService</Parameter>
+                        <Parameter>--disable-site-isolation-trials</Parameter>
+                        <Parameter>--enable-nodejs</Parameter>
+                        <Parameter>--mixed-context</Parameter>
+                    </CEFCommandLine>
+                </Resources>
+                <Lifecycle>
+                    <AutoVisible>true</AutoVisible>
+                    <StartOn>
+                        <Event>com.gaoding.cep.events.invoke.CEP001</Event>
+                    </StartOn>
+                </Lifecycle>
+                <UI>
+                    <Type>Panel</Type>
+                    <Menu>稿定-PS设计助理</Menu>
+                    <Geometry>
+                        <Size>
+                            <Height>650</Height>
+                            <Width>280</Width>
+                        </Size>
+                        <MaxSize>
+                            <Height>4000</Height>
+                            <Width>600</Width>
+                        </MaxSize>
+                        <MinSize>
+                            <Height>450</Height>
+                            <Width>280</Width>
+                        </MinSize>
+                    </Geometry>
+                    <Icons>
+                        <Icon Type="Normal">./img/Light.png</Icon>
+                        <Icon Type="RollOver">./img/Light.png</Icon>
+                        <Icon Type="DarkNormal">./img/Dark.png</Icon>
+                        <Icon Type="DarkRollOver">./img/Dark.png</Icon>
+                    </Icons>
+                </UI>
+            </DispatchInfo>
+        </Extension>
+        <Extension Id="ps.sf.SheJiZhuLi.freePanel">
+            <DispatchInfo>
+                <Resources>
+                    <MainPath>./freePanelIndex.html</MainPath>
+                    <CEFCommandLine>
+                        <Parameter>--disable-features=SameSiteByDefaultCookies,CookiesWithoutSameSiteMustBeSecure,NetworkService</Parameter>
+                        <Parameter>--disable-site-isolation-trials</Parameter>
+                        <Parameter>--enable-nodejs</Parameter>
+                        <Parameter>--mixed-context</Parameter>
+                    </CEFCommandLine>
+                </Resources>
+                <Lifecycle>
+                    <AutoVisible>true</AutoVisible>
+                </Lifecycle>
+                <UI>
+                    <Type>Panel</Type>
+                    <Menu>稿定-PS设计助理-自由面板</Menu>
+                    <Geometry>
+                        <Size>
+                            <Height>650</Height>
+                            <Width>280</Width>
+                        </Size>
+                        <MaxSize>
+                            <Height>4080</Height>
+                            <Width>2160</Width>
+                        </MaxSize>
+                        <MinSize>
+                            <Height>20</Height>
+                            <Width>20</Width>
+                        </MinSize>
+                    </Geometry>
+                    <Icons>
+                        <Icon Type="Normal">./img/fpLight.png</Icon>
+                        <Icon Type="RollOver">./img/fpLight.png</Icon>
+                        <Icon Type="DarkNormal">./img/fpDark.png</Icon>
+                        <Icon Type="DarkRollOver">./img/fpDark.png</Icon>
+                    </Icons>
+                </UI>
+            </DispatchInfo>
+        </Extension>
+        <Extension Id="ps.sf.SheJiZhuLi.seban">
+            <DispatchInfo>
+                <Resources>
+                    <MainPath>./seBanIndex.html</MainPath>
+                    <CEFCommandLine>
+                        <Parameter>--disable-features=SameSiteByDefaultCookies,CookiesWithoutSameSiteMustBeSecure,NetworkService</Parameter>
+                        <Parameter>--disable-site-isolation-trials</Parameter>
+                        <Parameter>--enable-nodejs</Parameter>
+                        <Parameter>--mixed-context</Parameter>
+                    </CEFCommandLine>
+                </Resources>
+                <Lifecycle>
+                    <AutoVisible>true</AutoVisible>
+                </Lifecycle>
+                <UI>
+                    <Type>Panel</Type>
+                    <Menu>稿定-PS设计助理-色板工具</Menu>
+                    <Geometry>
+                        <Size>
+                            <Height>650</Height>
+                            <Width>280</Width>
+                        </Size>
+                        <MaxSize>
+                            <Height>4080</Height>
+                            <Width>2160</Width>
+                        </MaxSize>
+                        <MinSize>
+                            <Height>20</Height>
+                            <Width>20</Width>
+                        </MinSize>
+                    </Geometry>
+                    <Icons>
+                        <Icon Type="Normal">./img/sbLight.png</Icon>
+                        <Icon Type="RollOver">./img/sbLight.png</Icon>
+                        <Icon Type="DarkNormal">./img/sbDark.png</Icon>
+                        <Icon Type="DarkRollOver">./img/sbDark.png</Icon>
+                    </Icons>
+                </UI>
+            </DispatchInfo>
+        </Extension>
+    </DispatchInfoList>
+</ExtensionManifest>

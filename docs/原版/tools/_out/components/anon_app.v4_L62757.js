@@ -1,0 +1,168 @@
+{
+      components: {
+        GSelect: AT.a,
+        GSelectOption: AT.a.Option,
+        Icon: Jt.a,
+        CepModal: Yt
+      },
+      props: {
+        encryptedFileSize: {
+          type: Number,
+          default: 0
+        }
+      },
+      data: function () {
+        return {
+          cacheCapacityOptions: vn,
+          isShowSetCacheDropdownList: false,
+          currentSelectIndex: 1
+        };
+      },
+      computed: {
+        showCacheSize: function () {
+          return Rr(this.encryptedFileSize);
+        }
+      },
+      mounted: function () {
+        var t = this;
+        return Object(d.a)(regeneratorRuntime.mark(function e() {
+          return regeneratorRuntime.wrap(function (e) {
+            while (1) {
+              switch (e.prev = e.next) {
+                case 0:
+                  e.next = 2;
+                  return t.getThreshold();
+                case 2:
+                case "end":
+                  return e.stop();
+              }
+            }
+          }, e);
+        }))();
+      },
+      methods: {
+        getThreshold: function () {
+          var t = this;
+          return Object(d.a)(regeneratorRuntime.mark(function e() {
+            var n;
+            return regeneratorRuntime.wrap(function (e) {
+              while (1) {
+                switch (e.prev = e.next) {
+                  case 0:
+                    e.next = 2;
+                    return gn();
+                  case 2:
+                    n = e.sent;
+                    t.currentSelectIndex = t.cacheCapacityOptions.findIndex(function (t) {
+                      return t.value === n.value;
+                    });
+                  case 4:
+                  case "end":
+                    return e.stop();
+                }
+              }
+            }, e);
+          }))();
+        },
+        handleSelectDropdownItem: function (t) {
+          var e = this;
+          return Object(d.a)(regeneratorRuntime.mark(function n() {
+            var a;
+            return regeneratorRuntime.wrap(function (n) {
+              while (1) {
+                switch (n.prev = n.next) {
+                  case 0:
+                    e.currentSelectIndex = t;
+                    e.isShowSetCacheDropdownList = false;
+                    a = JSON.stringify(e.cacheCapacityOptions[t]);
+                    n.next = 5;
+                    return bn(a);
+                  case 5:
+                  case "end":
+                    return n.stop();
+                }
+              }
+            }, n);
+          }))();
+        },
+        clearCache: function () {
+          var t = this;
+          return Object(d.a)(regeneratorRuntime.mark(function e() {
+            var n;
+            var a;
+            var i;
+            var r;
+            var s;
+            var o;
+            var c;
+            return regeneratorRuntime.wrap(function (e) {
+              while (1) {
+                switch (e.prev = e.next) {
+                  case 0:
+                    if (t.encryptedFileSize) {
+                      e.next = 2;
+                      break;
+                    }
+                    return e.abrupt("return");
+                  case 2:
+                    n = t.$temp.getDefaultFolderPath() + ln.oldCacheTemplateCenterPsdPath;
+                    a = t.$temp.getDefaultFolderPath() + ln.oldCacheTemplateCenterJsonPath;
+                    i = [n, a];
+                    r = [];
+                    s = function (t) {
+                      var e = i[t];
+                      var n = undefined;
+                      try {
+                        n = jT.readdirSync(e);
+                      } catch (a) {
+                        return "continue";
+                      }
+                      n.forEach(function (t) {
+                        var n = e + "/" + t;
+                        var a = jT.statSync(n);
+                        if (a.isFile()) {
+                          r.push(n);
+                        }
+                      });
+                    };
+                    o = 0;
+                  case 8:
+                    if (!(o < i.length)) {
+                      e.next = 15;
+                      break;
+                    }
+                    c = s(o);
+                    if (c !== "continue") {
+                      e.next = 12;
+                      break;
+                    }
+                    return e.abrupt("continue", 12);
+                  case 12:
+                    o++;
+                    e.next = 8;
+                    break;
+                  case 15:
+                    e.next = 17;
+                    return yn(r);
+                  case 17:
+                    e.next = 19;
+                    return Ca.cleanUp();
+                  case 19:
+                    t.$emit("readEncryptedFileSize");
+                    G.a.success("缓存已清理");
+                  case 21:
+                  case "end":
+                    return e.stop();
+                }
+              }
+            }, e);
+          }))();
+        },
+        handleShowSetCacheDropdownList: function (t) {
+          this.isShowSetCacheDropdownList = t;
+          var e = this.$el.getElementsByClassName("dropdown_list")[0];
+          var n = this.currentSelectIndex || this.currentSelectIndex === 0 ? this.currentSelectIndex : 1;
+          e.style.marginTop = "-" + n * 28 + "px";
+        }
+      }
+    }

@@ -1,0 +1,213 @@
+{
+      components: {
+        Score: Pl,
+        TagsButton: Vl
+      },
+      props: {
+        select: Array
+      },
+      data: function () {
+        return {
+          score: 0,
+          tags: [],
+          status: true,
+          condition: Math.floor(Math.random() * 10000000)
+        };
+      },
+      watch: {
+        "$store.state.showMenu": function () {
+          if (this.$store.state.showMenu == this.condition) {
+            this.score = this.$temp.getIndexStar(this.select);
+            this.tags = this.$temp.getTags(this.select);
+            this.init();
+          }
+        },
+        select: function () {
+          if (this.$store.state.showMenu != -1) {
+            this.score = this.$temp.getIndexStar(this.select);
+            this.tags = this.$temp.getTags(this.select);
+            this.init();
+          }
+        }
+      },
+      methods: {
+        open: function () {
+          this.$store.state.showMenu = this.condition;
+        },
+        moveToFolder: function () {
+          this.$emit("setAddTemplateType", false);
+          this.$emit("showMoveFile");
+          this.$bp.add("mb_023");
+        },
+        addToFolder: function () {
+          this.$emit("setAddTemplateType", true);
+          this.$emit("showMoveFile");
+        },
+        refreshFolderInfo: function () {
+          var t = this;
+          this.$load.show("正在更新当前文件夹配置信息...");
+          setTimeout(function () {
+            t.$temp.refreshFolderInfo(t.$temp.folderId);
+            t.$load.hide();
+            t.$tips.show("更新成功");
+            t.$emit("updataPreview");
+          }, 10);
+        },
+        init: function () {
+          if (this.select.length != 1) {
+            return false;
+          }
+          this.status = this.$temp.checkShowListIndexFileExist(this.select[0]);
+        },
+        close: function () {
+          this.$store.state.showMenu = -1;
+          this.$emit("close");
+        },
+        openFile: function () {
+          this.$temp.openPsd(this.select[0]);
+          this.$bp.add("mb_020");
+        },
+        getFileInfo: function () {
+          return this.$temp.showList[this.select[0]];
+        },
+        renameFile: function () {
+          var t = this;
+          var e = this.getFileInfo().name;
+          this.$inputBox.show(function (n) {
+            if (n == e) {
+              return false;
+            }
+            if (Wl.test(n)) {
+              t.$temp.renameIndexFile(t.select[0], n);
+              t.$bp.add("mb_021");
+              t.$emit("updataName");
+            } else {
+              var a = `*${Jl.b}`;
+              t.$inputBox.update({
+                err: a
+              });
+            }
+          }, "重命名", e);
+        },
+        openFileFolder: function () {
+          this.$temp.openFileFolder(this.getFileInfo().id);
+          this.$bp.add("mb_024");
+        },
+        copyNewDoc: function () {
+          var t = this.$temp.getFilePsdPath(this.getFileInfo().id);
+          this.$cep.jsxNoCheck("mb_copyTemplatePsd", [t, this.getFileInfo().name]);
+          this.$tracker.functionApply({
+            function_source: "模板库页_个人模板",
+            function_name: "新建设计稿"
+          });
+        },
+        updataPreview: function () {
+          var t = this;
+          return Object(d.a)(regeneratorRuntime.mark(function e() {
+            var n;
+            var a;
+            var i;
+            return regeneratorRuntime.wrap(function (e) {
+              while (1) {
+                switch (e.prev = e.next) {
+                  case 0:
+                    n = t.$temp.getIndexFileInfo(t.select);
+                    a = regeneratorRuntime.mark(function e(a) {
+                      var i;
+                      var r;
+                      return regeneratorRuntime.wrap(function (e) {
+                        while (1) {
+                          switch (e.prev = e.next) {
+                            case 0:
+                              t.$load.show("正在修复预览图：" + (a + 1) + "/" + n.length);
+                              i = n[a];
+                              r = t.$temp.getFileIdPath(i.id);
+                              e.next = 5;
+                              return t.$cep.jsxHistoryNoCheck("mb_amendPreview", [r, i.name, i.ext]);
+                            case 5:
+                              setTimeout(function () {
+                                var e = t.$temp.showList[t.select[a]];
+                                var n = t.$temp.getFilePreviewImgPath(e.id, e.name) + "?t=" + Math.random();
+                                t.$emit("changePreviewImg", n, t.select[a]);
+                              }, 100);
+                            case 6:
+                            case "end":
+                              return e.stop();
+                          }
+                        }
+                      }, e);
+                    });
+                    i = 0;
+                  case 3:
+                    if (!(i < n.length)) {
+                      e.next = 8;
+                      break;
+                    }
+                    return e.delegateYield(a(i), "t0", 5);
+                  case 5:
+                    i++;
+                    e.next = 3;
+                    break;
+                  case 8:
+                    t.$load.hide();
+                    t.$bp.add("mb_028");
+                  case 10:
+                  case "end":
+                    return e.stop();
+                }
+              }
+            }, e);
+          }))();
+        },
+        deleteFile: function () {
+          var t = this;
+          return Object(d.a)(regeneratorRuntime.mark(function e() {
+            var n;
+            return regeneratorRuntime.wrap(function (e) {
+              while (1) {
+                switch (e.prev = e.next) {
+                  case 0:
+                    t.$emit("setIsShowDeleteTemLoading", true);
+                    t.$emit("setHandleTemplateLoadingText", "正在移入");
+                    n = t.$temp.getIndexFileInfo(t.select).map(function (t) {
+                      return t.id;
+                    });
+                    eu.removeTemplatesInFiltersCache(n);
+                    e.next = 6;
+                    return t.$temp.deleteIndexFile(t.select, function (e, n) {
+                      t.$emit("setHandleTemplateLoadingText", "正在移入 " + e + "/" + n);
+                    });
+                  case 6:
+                    setTimeout(function () {
+                      t.$emit("setIsShowDeleteTemLoading", false);
+                      G.a.success("已移入");
+                    }, 150);
+                    t.$emit("updataPreview", "delete");
+                    t.$bp.add("mb_029");
+                  case 9:
+                  case "end":
+                    return e.stop();
+                }
+              }
+            }, e);
+          }))();
+        },
+        setScore: function (t) {
+          t += 1;
+          this.score = t == this.score ? 0 : t;
+          this.$temp.setIndexStar(this.select, this.score);
+          this.$bp.add("mb_028");
+        },
+        showTags: function () {
+          this.$emit("showTags");
+          this.close();
+          this.$bp.add("mb_025");
+        },
+        removeTags: function (t) {
+          this.$temp.removeTagsFileId(this.select, t);
+        },
+        useTempInCurrentDoc: function () {
+          this.$emit("useTempInCurrentDoc", this.select[0]);
+        }
+      }
+    }

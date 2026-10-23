@@ -1,0 +1,273 @@
+{
+      components: {},
+      data: function () {
+        return {
+          switchval: ["JPG", "PNG"],
+          switIndex: V.a.info.cyExport.ext == "JPG" ? 0 : 1,
+          switchInputContext: ["PNG-24", "PNG-8"],
+          switchInputOpen: false,
+          mode: 1,
+          set: V.a.info
+        };
+      },
+      created: function () {
+        this.$emit("changesvg", this.switIndex);
+        this.setEvent();
+      },
+      watch: {
+        "set.cyExport.layerName": function (t) {
+          this.setEvent();
+        }
+      },
+      computed: {
+        switchInputIndex: function () {
+          if (this.set.cyExport.png8 == 1) {
+            return 1;
+          } else {
+            return 0;
+          }
+        }
+      },
+      methods: {
+        checkPath: function () {
+          this.set.cyExport.path = this.set.cyExport.path.replace(/\\/g, "/");
+        },
+        fpBacthExportPsdToImage: function () {
+          if (Object(ft.f)()) {
+            var t = V.a.getKey("cyExport");
+            var e = Object(ft.c)(t);
+            e.path = "";
+            e.pathType = 2;
+            e.autoOpenFolder = false;
+            this.$freePanelBox.show("批量导出文件夹PSD", "cy_bacthExportPsdToImage", e);
+          }
+        },
+        fpBatchExportSecondLayer: function () {
+          if (Object(ft.f)()) {
+            var t = this.getExportImageOption();
+            if (t == null) {
+              return;
+            }
+            this.$freePanelBox.show("导出二级图片", "cy_batchExportSecondLayer", t);
+          }
+        },
+        getExportImageOption: function () {
+          var t = V.a.getKey("cyExport");
+          if (t.path != "" && D.a.isFolder(t.path + "/") == 0) {
+            this.$msg.show("自定义目录不存在，请检查设置");
+            return null;
+          } else {
+            return t;
+          }
+        },
+        fpBatchExportLayer: function () {
+          if (Object(ft.f)()) {
+            var t = this.getExportImageOption();
+            if (t == null) {
+              return;
+            }
+            this.$freePanelBox.show("导出一级图片", "cy_batchExportLayer", t);
+          }
+        },
+        fpOpenFolder: function () {
+          if (Object(ft.f)()) {
+            this.$freePanelBox.show("打开所在目录", "cy_exportOpenFolder");
+          }
+        },
+        checkQuality: function () {
+          if (typeof this.set.cyExport.quality == "string") {
+            this.set.cyExport.quality = this.set.cyExport.quality.replace(/[^\d]/g, "");
+          }
+          if (this.set.cyExport.quality <= 0 || this.set.cyExport.quality > 100) {
+            this.set.cyExport.quality = 100;
+            this.$tips.show("品质只能设置成1-100");
+          }
+        },
+        setEvent: function () {
+          if (this.set.cyExport.layerName) {
+            this.$psEvent.add("1936483188", "cyUpdataLayerName", this.updataLayerName);
+            this.updataLayerName();
+          } else {
+            this.$psEvent.remove("1936483188", "cyUpdataLayerName");
+            this.set.cyExport.name = "";
+          }
+        },
+        updataLayerName: function () {
+          this.set.cyExport.name = E.layer.name;
+        },
+        batchExportLayer: function () {
+          var t = this;
+          return Object(d.a)(regeneratorRuntime.mark(function e() {
+            return regeneratorRuntime.wrap(function (e) {
+              while (1) {
+                switch (e.prev = e.next) {
+                  case 0:
+                    t.$emit("batchExportLayer");
+                  case 1:
+                  case "end":
+                    return e.stop();
+                }
+              }
+            }, e);
+          }))();
+        },
+        batchExportSecondLayer: function () {
+          var t = this;
+          return Object(d.a)(regeneratorRuntime.mark(function e() {
+            return regeneratorRuntime.wrap(function (e) {
+              while (1) {
+                switch (e.prev = e.next) {
+                  case 0:
+                    t.$emit("batchExportSecondLayer");
+                  case 1:
+                  case "end":
+                    return e.stop();
+                }
+              }
+            }, e);
+          }))();
+        },
+        bacthExportPsdToImage: function () {
+          var t = this;
+          return Object(d.a)(regeneratorRuntime.mark(function e() {
+            var n;
+            var a;
+            return regeneratorRuntime.wrap(function (e) {
+              while (1) {
+                switch (e.prev = e.next) {
+                  case 0:
+                    t.$load.show("不要乱选根目录，不然加载时间会很久哦");
+                    e.next = 3;
+                    return t.$cep.jsxNoCheck("cy_getPsdForFolder");
+                  case 3:
+                    n = e.sent;
+                    t.$load.hide();
+                    a = function () {
+                      var e = Object(d.a)(regeneratorRuntime.mark(function e() {
+                        var a;
+                        var i;
+                        var r;
+                        return regeneratorRuntime.wrap(function (e) {
+                          while (1) {
+                            switch (e.prev = e.next) {
+                              case 0:
+                                t.$load.show("正在导出...");
+                                a = V.a.getKey("cyExport");
+                                i = Object(ft.c)(a);
+                                i.path = "";
+                                i.pathType = 2;
+                                i.autoOpenFolder = false;
+                                r = 0;
+                              case 7:
+                                if (!(r < n.length)) {
+                                  e.next = 14;
+                                  break;
+                                }
+                                t.$load.show("正在导出: " + n.length + "/" + (r + 1));
+                                e.next = 11;
+                                return t.$cep.jsxHistoryNoCheck("cy_BacthExportPsdToImage", [n[r], i], "批量导出PSD图片");
+                              case 11:
+                                r++;
+                                e.next = 7;
+                                break;
+                              case 14:
+                                t.$load.hide();
+                              case 15:
+                              case "end":
+                                return e.stop();
+                            }
+                          }
+                        }, e);
+                      }));
+                      return function () {
+                        return e.apply(this, arguments);
+                      };
+                    }();
+                    if (n.length > 30) {
+                      t.$msg.confirm("提示", "文件夹内超过30个psd，导出时间较长是否继续？", a);
+                    } else {
+                      a();
+                    }
+                    t.$bp.add("zdy_023");
+                  case 8:
+                  case "end":
+                    return e.stop();
+                }
+              }
+            }, e);
+          }))();
+        },
+        openFolder: function () {
+          this.$cep.jsxNoCheck("cy_openDirectory");
+        },
+        chenckUnit: function (t) {
+          this.set.cyExport.compress[t] = Object(ft.b)(this.set.cyExport.compress[t]);
+        },
+        getPath: function () {
+          var t = this;
+          return Object(d.a)(regeneratorRuntime.mark(function e() {
+            var n;
+            return regeneratorRuntime.wrap(function (e) {
+              while (1) {
+                switch (e.prev = e.next) {
+                  case 0:
+                    e.next = 2;
+                    return t.$cep.jsxNoCheck("Fs_selectFolder");
+                  case 2:
+                    n = e.sent;
+                    t.$log.push("getPath " + n);
+                    if (n != -1) {
+                      e.next = 6;
+                      break;
+                    }
+                    return e.abrupt("return", t.$tips.show("取消操作"));
+                  case 6:
+                    t.set.cyExport.path = n;
+                  case 7:
+                  case "end":
+                    return e.stop();
+                }
+              }
+            }, e);
+          }))();
+        },
+        getWatermarkPath: function () {
+          var t = this;
+          return Object(d.a)(regeneratorRuntime.mark(function e() {
+            var n;
+            return regeneratorRuntime.wrap(function (e) {
+              while (1) {
+                switch (e.prev = e.next) {
+                  case 0:
+                    e.next = 2;
+                    return t.$cep.jsxNoCheck("File_openImage");
+                  case 2:
+                    n = e.sent;
+                    if (n != -1) {
+                      e.next = 6;
+                      break;
+                    }
+                    t.set.cyExport.compress.watermark = "";
+                    return e.abrupt("return", t.$tips.show("取消选择"));
+                  case 6:
+                    t.set.cyExport.compress.watermark = D.a.conversionPath(n);
+                  case 7:
+                  case "end":
+                    return e.stop();
+                }
+              }
+            }, e);
+          }))();
+        },
+        updataPath: function () {
+          this.set.cyExport.compress.watermark = D.a.conversionPath(this.set.cyExport.compress.watermark);
+        },
+        setExt: function (t) {
+          this.set.cyExport.ext = this.switchval[t];
+          this.switIndex = t;
+        },
+        switchOpen: function () {
+          this.switchInputOpen = !this.switchInputOpen;
+        }
+      }
+    }

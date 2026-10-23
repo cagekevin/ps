@@ -1,0 +1,279 @@
+{
+      components: {},
+      props: {
+        data: {
+          type: Object,
+          default: function () {
+            return {};
+          }
+        }
+      },
+      data: function () {
+        return {
+          mousemoveBlock: -1,
+          moveEndIndex: null,
+          isTopDrag: false,
+          isDown: false
+        };
+      },
+      created: function () {},
+      methods: {
+        drop: function (t, e) {
+          if (!this.isTopDrag) {
+            this.moveEndIndex = [t, e];
+          }
+        },
+        drag: function (t, e, n) {
+          var a = this;
+          this.isTopDrag = false;
+          this.isDown = true;
+          var i = this.data.info[t].list[e];
+          this.moveEndIndex = [t, e];
+          am({
+            classval: n,
+            Callback: function (n) {
+              a.isDown = false;
+              if (t != a.moveEndIndex[0] || e != a.moveEndIndex[1]) {
+                a.data.info[t].list.splice(e, 1);
+                if (e > a.moveEndIndex[1] || t != a.moveEndIndex[0]) {
+                  if (n) {
+                    a.data.info[a.moveEndIndex[0]].list.splice(a.moveEndIndex[1], 0, i);
+                  } else {
+                    a.data.info[a.moveEndIndex[0]].list.splice(a.moveEndIndex[1] + 1, 0, i);
+                  }
+                } else if (n) {
+                  a.data.info[a.moveEndIndex[0]].list.splice(a.moveEndIndex[1] - 1, 0, i);
+                } else {
+                  a.data.info[a.moveEndIndex[0]].list.splice(a.moveEndIndex[1], 0, i);
+                }
+                a.data.updata();
+              }
+            }
+          });
+        },
+        dragColorWrapDrop: function (t) {
+          if (this.isTopDrag) {
+            this.moveEndIndex = t;
+          }
+        },
+        dragColorWrap: function (t, e, n) {
+          var a = this;
+          if (Object(ft.f)()) {
+            var i = event.currentTarget;
+            this.isTopDrag = true;
+            var r = this.data.info[t];
+            this.moveEndIndex = t;
+            this.$nextTick(function () {
+              am({
+                before: function () {
+                  a.data.info[t].show = false;
+                },
+                floatStyle: "background-color:#006FFF;width:200px;height: 24px;line-height: 24px;border-radius: 4px;",
+                floatNode: i,
+                classval: e,
+                scrollTopClass: n,
+                isTop: true,
+                Callback: function (e) {
+                  if (t != a.moveEndIndex) {
+                    a.data.info.splice(t, 1);
+                    if (t > a.moveEndIndex) {
+                      if (e) {
+                        a.data.info.splice(a.moveEndIndex, 0, r);
+                      } else {
+                        a.data.info.splice(a.moveEndIndex + 1, 0, r);
+                      }
+                    } else if (e) {
+                      a.data.info.splice(a.moveEndIndex - 1, 0, r);
+                    } else {
+                      a.data.info.splice(a.moveEndIndex, 0, r);
+                    }
+                    a.data.updata();
+                  }
+                }
+              });
+            });
+          }
+        },
+        changGroupStatus: function (t, e) {
+          this.data.changeGroupShowStatus(e, t.ctrl);
+        },
+        showItemMenu: function (t, e, n) {
+          var a = this;
+          var i = [{
+            text: "删除",
+            callback: function (t, i) {
+              var r = a.data.deleteItem(e, n);
+              a.$tips.show(r ? "删除成功" : "删除失败");
+              a.$emit("updataSync");
+            }
+          }, {
+            text: "重命名",
+            callback: function (t, i) {
+              a.$inputBox.show(function (t) {
+                a.data.renameItem(t, e, n);
+                a.$tips.show("重命名成功");
+                a.$emit("updataSync");
+              }, "请输入字体名称");
+            }
+          }];
+          this.$menu.show(i, true, t);
+        },
+        showGroupMenu: function (t, e) {
+          var n = this;
+          var a = [{
+            text: "创建新组",
+            svg: "#iconchuangjian",
+            index: e,
+            callback: function (t, a) {
+              n.$inputBox.show(function (t) {
+                n.data.addGroup(t, e);
+                n.$emit("updataSync");
+              }, "请输入组名");
+            }
+          }, {
+            text: "fg"
+          }, {
+            text: "删除",
+            index: e,
+            callback: function (t, e) {
+              var a = n.data.deleteGroup(e.index);
+              n.$tips.show(a ? "删除成功" : "删除失败");
+              n.$emit("updataSync");
+            }
+          }, {
+            text: "重命名",
+            index: e,
+            callback: function (t, e) {
+              n.$inputBox.show(function (t) {
+                n.data.renameGroup(t, e.index);
+                n.$emit("updataSync");
+              }, "请输入组名", n.data.getGroupName(e.index));
+            }
+          }, {
+            text: "fg"
+          }, {
+            text: "发送到仓库...",
+            index: e,
+            callback: function (t, e) {
+              n.$emit("sendWarehouse", n.data.info[e.index]);
+              n.$bp.add("ysFon_001");
+            }
+          }, {
+            text: "移动到仓库...",
+            index: e,
+            callback: function (t, e) {
+              n.$emit("moveWarehouse", n.data.info[e.index], e.index);
+              n.$bp.add("ysFon_002");
+            }
+          }];
+          this.$menu.show(a, true, t.event);
+        },
+        useFont: function (t) {
+          var e = this;
+          return Object(d.a)(regeneratorRuntime.mark(function n() {
+            var a;
+            var i;
+            return regeneratorRuntime.wrap(function (n) {
+              while (1) {
+                switch (n.prev = n.next) {
+                  case 0:
+                    e.$tracker.buttonClick({
+                      button_source: "样式面板页",
+                      button_name: "应用字体"
+                    });
+                    a = Xv(JSON.stringify(t));
+                    n.next = 4;
+                    return e.$cep.jsx("ys_checkUseFont", [a]);
+                  case 4:
+                    i = n.sent;
+                    if (i.err != 1) {
+                      n.next = 7;
+                      break;
+                    }
+                    return n.abrupt("return", e.$msg.showErr(i.msg));
+                  case 7:
+                    if (t.fonts.length > 1) {
+                      e.$load.show("正在应用字体设置...");
+                    }
+                    n.next = 10;
+                    return e.$cep.jsxHistory("ys_useFont", [a], "应用字体设置");
+                  case 10:
+                    e.$tracker.functionApply({
+                      function_source: "样式面板页",
+                      function_name: "应用字体"
+                    });
+                    e.$load.hide();
+                  case 12:
+                  case "end":
+                    return n.stop();
+                }
+              }
+            }, n);
+          }))();
+        },
+        addFont: function (t) {
+          var e = this;
+          return Object(d.a)(regeneratorRuntime.mark(function n() {
+            var a;
+            return regeneratorRuntime.wrap(function (n) {
+              while (1) {
+                switch (n.prev = n.next) {
+                  case 0:
+                    e.$tracker.buttonClick({
+                      button_source: "样式面板页",
+                      button_name: "添加字体"
+                    });
+                    n.next = 3;
+                    return e.$cep.jsx("ys_getFontInfo");
+                  case 3:
+                    a = n.sent;
+                    if (a !== false) {
+                      n.next = 6;
+                      break;
+                    }
+                    return n.abrupt("return", false);
+                  case 6:
+                    if (a.err != 1) {
+                      n.next = 8;
+                      break;
+                    }
+                    return n.abrupt("return", e.$msg.showErr(a.msg));
+                  case 8:
+                    if (a.err != 0 || a.data.fonts.length != 0) {
+                      n.next = 10;
+                      break;
+                    }
+                    return n.abrupt("return", e.$msg.showErr("读取字体属性失败"));
+                  case 10:
+                    e.data.addItem(t, a.data);
+                    e.$tracker.functionApply({
+                      function_source: "样式面板页",
+                      function_name: "添加字体"
+                    });
+                    e.$emit("updataSync");
+                  case 13:
+                  case "end":
+                    return n.stop();
+                }
+              }
+            }, n);
+          }))();
+        },
+        moveBlock: function (t, e, n) {
+          var a = this;
+          if (!this.isDown) {
+            this.mousemoveBlock = "str" + t + e;
+            var i = document.body.offsetWidth - 10;
+            var r = n.currentTarget.parentNode;
+            this.$nextTick(function () {
+              var t = a.$refs.describe[0];
+              if (i - r.offsetLeft < 190) {
+                var e = i - (r.offsetLeft + r.offsetWidth);
+                t.style.right = -e + "px";
+              }
+            });
+          }
+        }
+      },
+      mounted: function () {}
+    }

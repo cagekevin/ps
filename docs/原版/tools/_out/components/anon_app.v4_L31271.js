@@ -1,0 +1,71 @@
+{
+      components: {
+        GInput: $a.a,
+        GButton: Wt.a,
+        Icon: ie.a
+      },
+      data: function () {
+        return {
+          val: "",
+          err: ""
+        };
+      },
+      methods: {
+        ok: function () {
+          var t = this;
+          return Object(d.a)(regeneratorRuntime.mark(function e() {
+            var n;
+            var a;
+            return regeneratorRuntime.wrap(function (e) {
+              while (1) {
+                switch (e.prev = e.next) {
+                  case 0:
+                    t.val = Object(ft.d)(t.val);
+                    if (t.val != "") {
+                      e.next = 3;
+                      break;
+                    }
+                    return e.abrupt("return", t.err = "*请先输入名称");
+                  case 3:
+                    if (Wl.test(t.val)) {
+                      e.next = 5;
+                      break;
+                    }
+                    return e.abrupt("return", t.err = `*${Jl.b}`);
+                  case 5:
+                    e.next = 7;
+                    return t.$cep.jsxNoCheck("Fs_selectFolder");
+                  case 7:
+                    n = e.sent;
+                    if (n != -1) {
+                      e.next = 10;
+                      break;
+                    }
+                    return e.abrupt("return");
+                  case 10:
+                    a = n + "/" + t.val + ".pszhuli";
+                    if (!D.a.isFolder(a)) {
+                      e.next = 13;
+                      break;
+                    }
+                    return e.abrupt("return", t.err = "*已存在同名资源库，请更改路径或名称");
+                  case 13:
+                    t.$emit("ok", a);
+                  case 14:
+                  case "end":
+                    return e.stop();
+                }
+              }
+            }, e);
+          }))();
+        },
+        close: function () {
+          this.$emit("close");
+        }
+      },
+      watch: {
+        val: function () {
+          this.err = "";
+        }
+      }
+    }

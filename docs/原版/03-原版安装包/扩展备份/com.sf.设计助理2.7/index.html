@@ -1,0 +1,80 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>设计助理 · 本地模式</title>
+<style>
+  html,body{margin:0;padding:0;width:100%;height:100%;background:#535353;}
+  #tip{display:flex;flex-direction:column;align-items:center;justify-content:center;
+       height:100%;font:13px/1.9 "Microsoft YaHei",sans-serif;color:#ddd;text-align:center;}
+  #sub{font-size:11px;color:#8a8a8a;margin-top:4px;}
+  code{color:#7fb2ff;font-size:11px;}
+</style>
+</head>
+<body>
+<div id="tip">正在连接设计助理…<div id="sub"></div></div>
+<script>
+(function () {
+  var URL = 'http://127.0.0.1:8899/';
+  var DIR = "C:\\Users\\xinye\\Downloads\\稿定设计助理-本地模式\\本地模式工具";
+  var NODE = "C:\\Program Files\\nodejs\\node.exe";
+  var tried = 0, spawned = false;
+  var tip = document.getElementById('tip');
+  var sub = document.getElementById('sub');
+
+  function setTip(main, s) {
+    tip.firstChild.nodeValue = main;
+    sub.innerHTML = s || '';
+  }
+
+  function ping() {
+    return fetch(URL + '__local/status', { cache: 'no-store' }).then(function (r) {
+      if (!r.ok) throw new Error('bad status');
+      return r.json();
+    });
+  }
+
+  function spawnServer() {
+    if (spawned) return;
+    spawned = true;
+    try {
+      var req = (window.cep_node && window.cep_node.require) || window.require;
+      if (!req) throw new Error('CEP node 不可用');
+      var cp = req('child_process');
+      var child = cp.spawn(NODE, ['server.js'], {
+        cwd: DIR,
+        detached: true,
+        stdio: 'ignore',
+        windowsHide: true
+      });
+      child.unref();
+    } catch (e) {
+      setTip('本地服务启动失败', '请手动运行 <code>start-local-panel.cmd</code>');
+      console.error(e);
+    }
+  }
+
+  function loop() {
+    ping().then(function () {
+      location.replace(URL);
+    }).catch(function () {
+      tried++;
+      if (tried > 25) {
+        setTip('本地服务未响应', '请手动运行 <code>start-local-panel.cmd</code>');
+        return;
+      }
+      if (tried === 1) {
+        setTip('正在启动本地服务…', '首次启动约需 1~2 秒');
+        spawnServer();
+      } else {
+        setTip('正在启动本地服务…', '第 ' + tried + ' 次尝试');
+      }
+      setTimeout(loop, 400);
+    });
+  }
+
+  loop();
+})();
+</script>
+</body>
+</html>

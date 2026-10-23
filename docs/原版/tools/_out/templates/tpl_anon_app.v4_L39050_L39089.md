@@ -1,0 +1,108 @@
+# 模板 · anon_app.v4_L39050
+
+> 来源：`app.v4.js` render 函数 `Lm`（行 39089）
+> 结构：**带层级**，缩进表示嵌套
+
+## 结构树
+
+```jsx
+<div class="pasteFont">
+  <div class="f-alignNone">
+    <baseCheck v-model="set.ztPasteFont.scriptFamily">
+      字体
+    </baseCheck>
+    <baseCheck v-model="set.ztPasteFont.color">
+      颜色
+    </baseCheck>
+    <baseCheck v-model="set.ztPasteFont.opacity">
+      透明度
+    </baseCheck>
+  </div>
+  <div class="f-alignNone mt10">
+    <baseCheck v-model="set.ztPasteFont.size">
+      字号
+    </baseCheck>
+    <baseCheck v-model="set.ztPasteFont.leading">
+      行距
+    </baseCheck>
+    <baseCheck v-model="set.ztPasteFont.tracking">
+      字间距
+    </baseCheck>
+  </div>
+  <button class="btn-1 mt10 mb0" @click>
+    恢复默认
+  </button>
+</div>
+```
+
+## render 源码
+
+```js
+{
+      var t = this;
+      var e = t.$createElement;
+      var n = t._self._c || e;
+      return n("div", {
+        staticClass: "pasteFont"
+      }, [n("div", {
+        staticClass: "f-alignNone"
+      }, [n("baseCheck", {
+        model: {
+          value: t.set.ztPasteFont.scriptFamily,
+          callback: function (e) {
+            t.$set(t.set.ztPasteFont, "scriptFamily", e);
+          },
+          expression: "set.ztPasteFont.scriptFamily"
+        }
+      }, [t._v("字体")]), n("baseCheck", {
+        model: {
+          value: t.set.ztPasteFont.color,
+          callback: function (e) {
+            t.$set(t.set.ztPasteFont, "color", e);
+          },
+          expression: "set.ztPasteFont.color"
+        }
+      }, [t._v("颜色")]), n("baseCheck", {
+        model: {
+          value: t.set.ztPasteFont.opacity,
+          callback: function (e) {
+            t.$set(t.set.ztPasteFont, "opacity", e);
+          },
+          expression: "set.ztPasteFont.opacity"
+        }
+      }, [t._v("透明度")])], 1), n("div", {
+        staticClass: "f-alignNone mt10"
+      }, [n("baseCheck", {
+        model: {
+          value: t.set.ztPasteFont.size,
+          callback: function (e) {
+            t.$set(t.set.ztPasteFont, "size", e);
+          },
+          expression: "set.ztPasteFont.size"
+        }
+      }, [t._v("字号")]), n("baseCheck", {
+        model: {
+          value: t.set.ztPasteFont.leading,
+          callback: function (e) {
+            t.$set(t.set.ztPasteFont, "leading", e);
+          },
+          expression: "set.ztPasteFont.leading"
+        }
+      }, [t._v("行距")]), n("baseCheck", {
+        model: {
+          value: t.set.ztPasteFont.tracking,
+          callback: function (e) {
+            t.$set(t.set.ztPasteFont, "tracking", e);
+          },
+          expression: "set.ztPasteFont.tracking"
+        }
+      }, [t._v("字间距")])], 1), n("button", {
+        staticClass: "btn-1 mt10 mb0",
+        on: {
+          click: function (e) {
+            return t.reset();
+          }
+        }
+      }, [t._v("恢复默认")])]);
+    }
+```

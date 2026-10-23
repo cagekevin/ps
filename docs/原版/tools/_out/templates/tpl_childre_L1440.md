@@ -1,0 +1,118 @@
+# 模板 · childre
+
+> 来源：`app.v4.js` render 函数 `pt`（行 1440）
+> 结构：**带层级**，缩进表示嵌套
+
+## 结构树
+
+```jsx
+<basePopup @close>
+  <span>
+    请选择区域
+  </span>
+  <div class="fp-region mt10">
+    <layout @selectId />
+  </div>
+  <input class="mt15 input" @input v-show="!batch" v-model="value" type="text" />
+  <p class="col-black mt15" v-show="batch" />
+  <p class="input-box-err" />
+  <div class="w100 f-center mt10">
+    <button class="theme-btn btn-1" @click>
+      确定
+    </button>
+  </div>
+</basePopup>
+```
+
+## 动态渲染（需人工对照）
+
+| 类型 | 处数 | 对应 |
+|---|---|---|
+| `if` 条件分支 | 3 | `v-if` / `v-else` |
+
+> 这些在 render 函数里是**控制流**，不是节点属性，无法自动转成 `v-if` / `v-for`。
+> 重写时看下面的 render 源码，按 `_l(数组, function(item){...})` 还原列表，按 `if (条件) { return ... }` 还原条件。
+
+## render 源码
+
+```js
+{
+      var t = this;
+      var e = t.$createElement;
+      var n = t._self._c || e;
+      if (t.isShow) {
+        return n("basePopup", {
+          on: {
+            close: t.cancel
+          }
+        }, [n("span", [t._v("请选择区域")]), n("div", {
+          staticClass: "fp-region mt10"
+        }, [t.isShow ? n("layout", {
+          on: {
+            selectId: function (e) {
+              return t.updataId(e);
+            }
+          }
+        }) : t._e()], 1), n("input", {
+          directives: [{
+            name: "show",
+            rawName: "v-show",
+            value: !t.batch,
+            expression: "!batch"
+          }, {
+            name: "model",
+            rawName: "v-model",
+            value: t.value,
+            expression: "value"
+          }],
+          ref: "inputbox",
+          staticClass: "mt15 input",
+          attrs: {
+            placeholder: "请输入名称",
+            type: "text"
+          },
+          domProps: {
+            value: t.value
+          },
+          on: {
+            input: [function (e) {
+              if (!e.target.composing) {
+                t.value = e.target.value;
+              }
+            }, function (e) {
+              t.err = "";
+            }],
+            keyup: function (e) {
+              if (!e.type.indexOf("key") && t._k(e.keyCode, "enter", 13, e.key, "Enter")) {
+                return null;
+              } else {
+                return t.ok();
+              }
+            },
+            focus: t.select
+          }
+        }), n("p", {
+          directives: [{
+            name: "show",
+            rawName: "v-show",
+            value: t.batch,
+            expression: "batch"
+          }],
+          staticClass: "col-black mt15"
+        }, [t._v(t._s(t.content))]), t.err != "" ? n("p", {
+          staticClass: "input-box-err"
+        }, [t._v(t._s(t.err))]) : t._e(), n("div", {
+          staticClass: "w100 f-center mt10"
+        }, [n("button", {
+          staticClass: "theme-btn btn-1",
+          on: {
+            click: function (e) {
+              return t.ok();
+            }
+          }
+        }, [t._v("确定")])])]);
+      } else {
+        return t._e();
+      }
+    }
+```

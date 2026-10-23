@@ -1,0 +1,177 @@
+# 模板 · input-search
+
+> 来源：`app.v4.js` render 函数 `Na`（行 18155）
+> 结构：**带层级**，缩进表示嵌套
+
+## 结构树
+
+```jsx
+<section class="template-center">
+  <div>
+    <div class="input-search-top">
+      <InputSearch class="input" @search />
+      <OtherFilters @filterColor />
+      <div class="divider" />
+      <DownloadManagement />
+    </div>
+    <div class="input-search-bottom">
+      <LibCategoryFilter @filter />
+    </div>
+  </div>
+  <div>
+    <NewSpin class="initila-loading" v-show="initialLoading" />
+    <Empty class="empty" v-show="!initialLoading && !list.length" />
+    <div class="list-container-inner">
+      <div class="list-header">
+        <span />
+        <DownloadCountTips class="download-count-text" @showTryLimitDialog />
+      </div>
+      <div class="list-wrapper">
+        <TemplateList class="list" @expose />
+        <BackTop class="back-top">
+          <span class="back-top-icon">
+            <Icon type="thin_up" />
+          </span>
+        </BackTop>
+        <div class="loading-next-page">
+          加载中…
+        </div>
+      </div>
+    </div>
+  </div>
+  <LibListBottom @handleSort />
+  <Limite30Dialog @close />
+  <NoMemoryDialog @handleIsShowNoMemeryDialog />
+</section>
+```
+
+## render 源码
+
+```js
+{
+      var t = this;
+      var e = t.$createElement;
+      var n = t._self._c || e;
+      return n("section", {
+        staticClass: "template-center"
+      }, [n("div", [n("div", {
+        staticClass: "input-search-top"
+      }, [n("InputSearch", {
+        staticClass: "input",
+        attrs: {
+          size: "small"
+        },
+        on: {
+          search: t.onSearch
+        }
+      }), n("OtherFilters", {
+        attrs: {
+          colorOptions: t.colorOptions,
+          formatOptions: t.formatOptions,
+          ratios: t.ratios,
+          colors: t.colors
+        },
+        on: {
+          filterColor: t.handleColorFilter,
+          filterFormat: t.handleFormatFilter
+        }
+      }), n("div", {
+        staticClass: "divider"
+      }), n("DownloadManagement")], 1), n("div", {
+        staticClass: "input-search-bottom"
+      }, [n("LibCategoryFilter", {
+        attrs: {
+          categoryOptions: t.categoryOptions,
+          filter_id: t.filter_id
+        },
+        on: {
+          filter: t.handleCategoryFilter
+        }
+      })], 1)]), n("div", {
+        class: ["list-container", {
+          "list-container--initial-loading": t.initialLoading,
+          "list-container--empty": !t.initialLoading && !t.list.length
+        }]
+      }, [n("NewSpin", {
+        directives: [{
+          name: "show",
+          rawName: "v-show",
+          value: t.initialLoading,
+          expression: "initialLoading"
+        }],
+        staticClass: "initila-loading",
+        attrs: {
+          tip: "正在加载…"
+        }
+      }), n("Empty", {
+        directives: [{
+          name: "show",
+          rawName: "v-show",
+          value: !t.initialLoading && !t.list.length,
+          expression: "!initialLoading && !list.length"
+        }],
+        staticClass: "empty"
+      }), !t.initialLoading && t.list.length ? n("div", {
+        staticClass: "list-container-inner"
+      }, [n("div", {
+        staticClass: "list-header"
+      }, [n("span", [t._v(t._s(t.totalText) + " (" + t._s(t.pageInfo ? t.pageInfo.total : "") + ")")]), n("DownloadCountTips", {
+        staticClass: "download-count-text",
+        on: {
+          showTryLimitDialog: t.showTryLimitDialog
+        }
+      })], 1), n("div", {
+        staticClass: "list-wrapper"
+      }, [n("TemplateList", {
+        ref: "list",
+        staticClass: "list",
+        attrs: {
+          materials: t.list,
+          columns: t.columns,
+          visible: t.visible && !t.initialLoading,
+          loading: t.loadingNextPage,
+          loadedAll: t.loadedAll,
+          nextPage: t.nextPage,
+          updater: t.updater
+        },
+        on: {
+          expose: t.expose,
+          scroll: function (e) {
+            return t.$emit("scroll", e);
+          }
+        }
+      }), n("BackTop", {
+        staticClass: "back-top",
+        attrs: {
+          target: t.getBackTopTarget
+        }
+      }, [n("span", {
+        staticClass: "back-top-icon"
+      }, [n("Icon", {
+        attrs: {
+          type: "thin_up"
+        }
+      })], 1)]), t.loadingNextPage ? n("div", {
+        staticClass: "loading-next-page"
+      }, [t._v("加载中…")]) : t._e()], 1)]) : t._e()], 1), n("LibListBottom", {
+        attrs: {
+          sortOptions: t.sortOptions,
+          sort: t.sort,
+          columns: t.columns
+        },
+        on: {
+          handleSort: t.handleSort,
+          handleColumnChange: t.handleColumnChange
+        }
+      }), t.isTryLimitShown ? n("Limite30Dialog", {
+        on: {
+          close: t.closeTryLimitDialog,
+          handleTrack: t.handleComponentTracker
+        }
+      }) : t._e(), t.isShowNoMemoryDialog ? n("NoMemoryDialog", {
+        on: {
+          handleIsShowNoMemeryDialog: t.handleIsShowNoMemeryDialog
+        }
+      }) : t._e()], 1);
+    }
+```

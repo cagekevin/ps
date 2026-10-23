@@ -1,0 +1,239 @@
+# 模板 · anon_app.v4_L31271
+
+> 来源：`app.v4.js` render 函数 `cd`（行 31053）
+> 结构：**带层级**，缩进表示嵌套
+
+## 结构树
+
+```jsx
+<div>
+  <div class="template-menu" v-show="$store.state.showMenu == condition">
+    <div class="f-baseX svg-wrap history_item active_history_item">
+      <IconFont class="checked_icon" type="a-colorselect" />
+      <i class="history_circle_icon history_circle_icon_active" />
+      <p class="ff1 overflow-text mr3" />
+    </div>
+    <div class="f-baseX svg-wrap history_item" @click>
+      <i class="history_circle_icon" />
+      <p class="overflow-text" />
+    </div>
+    <hr class="line" />
+    <div class="f-baseX svg-wrap" @click>
+      <IconFont class="menu-icon" type="folder" />
+      <p>
+        打开其他模板库
+      </p>
+    </div>
+    <div class="f-baseX svg-wrap" @click>
+      <IconFont class="menu-icon f-size16" type="plus" />
+      <p>
+        新建模板库
+      </p>
+    </div>
+    <hr class="line" />
+    <div class="f-baseX svg-wrap" @click>
+      <IconFont class="menu-icon" type="tag_outline" />
+      <p>
+        标签管理
+      </p>
+    </div>
+    <hr class="line" />
+    <div class="f-baseX svg-wrap" @click>
+      <IconFont class="menu-icon f-size16" type="download_outline" />
+      <p>
+        导入文件夹
+      </p>
+    </div>
+    <div class="f-baseX svg-wrap" @click>
+      <IconFont class="menu-icon f-size16" type="download_outline" />
+      <p>
+        导入素材包(.pszlpack)
+      </p>
+    </div>
+    <hr class="line" />
+    <div class="f-baseX svg-wrap" @click>
+      <IconFont class="menu-icon" type="folder" />
+      <p>
+        打开所在目录
+      </p>
+    </div>
+    <hr class="line" />
+    <div class="baseCheck_box" @click>
+      <baseCheck class="black-check" v-model="set.mbMultiMode">
+        <p>
+          多人同时共用模板库
+        </p>
+      </baseCheck>
+    </div>
+  </div>
+  <CreateNewLibrary @close />
+</div>
+```
+
+## 动态渲染（需人工对照）
+
+| 类型 | 处数 | 对应 |
+|---|---|---|
+| `_l()` 列表渲染 | 1 | `v-for` |
+
+> 这些在 render 函数里是**控制流**，不是节点属性，无法自动转成 `v-if` / `v-for`。
+> 重写时看下面的 render 源码，按 `_l(数组, function(item){...})` 还原列表，按 `if (条件) { return ... }` 还原条件。
+
+## render 源码
+
+```js
+{
+      var t = this;
+      var e = t.$createElement;
+      var n = t._self._c || e;
+      return n("div", [n("div", {
+        directives: [{
+          name: "show",
+          rawName: "v-show",
+          value: t.$store.state.showMenu == t.condition,
+          expression: "$store.state.showMenu == condition"
+        }],
+        staticClass: "template-menu"
+      }, [n("div", {
+        staticClass: "f-baseX svg-wrap history_item active_history_item"
+      }, [n("IconFont", {
+        staticClass: "checked_icon",
+        attrs: {
+          type: "a-colorselect"
+        }
+      }), n("i", {
+        staticClass: "history_circle_icon history_circle_icon_active"
+      }), n("p", {
+        staticClass: "ff1 overflow-text mr3"
+      }, [t._v(t._s(t.data.name))])], 1), t._l(t.historyRecords, function (e, a) {
+        return n("div", {
+          key: "mb-menu" + a,
+          staticClass: "f-baseX svg-wrap history_item",
+          attrs: {
+            title: e.path
+          },
+          on: {
+            click: function (n) {
+              return t.openHistory(e.path);
+            }
+          }
+        }, [n("i", {
+          staticClass: "history_circle_icon"
+        }), n("p", {
+          staticClass: "overflow-text"
+        }, [t._v(t._s(e.name))])]);
+      }), n("hr", {
+        staticClass: "line"
+      }), n("div", {
+        staticClass: "f-baseX svg-wrap",
+        on: {
+          click: function (e) {
+            return t.openTemplate();
+          }
+        }
+      }, [n("IconFont", {
+        staticClass: "menu-icon",
+        attrs: {
+          type: "folder"
+        }
+      }), n("p", [t._v("打开其他模板库")])], 1), n("div", {
+        staticClass: "f-baseX svg-wrap",
+        on: {
+          click: function (e) {
+            return t.createNewTemplate();
+          }
+        }
+      }, [n("IconFont", {
+        staticClass: "menu-icon f-size16",
+        attrs: {
+          type: "plus"
+        }
+      }), n("p", [t._v("新建模板库")])], 1), n("hr", {
+        staticClass: "line"
+      }), n("div", {
+        staticClass: "f-baseX svg-wrap",
+        on: {
+          click: function (e) {
+            return t.openLabelManage();
+          }
+        }
+      }, [n("IconFont", {
+        staticClass: "menu-icon",
+        attrs: {
+          type: "tag_outline"
+        }
+      }), n("p", [t._v("标签管理")])], 1), n("hr", {
+        staticClass: "line"
+      }), n("div", {
+        staticClass: "f-baseX svg-wrap",
+        on: {
+          click: function (e) {
+            return t.importFolder();
+          }
+        }
+      }, [n("IconFont", {
+        staticClass: "menu-icon f-size16",
+        attrs: {
+          type: "download_outline"
+        }
+      }), n("p", [t._v("导入文件夹")])], 1), n("div", {
+        staticClass: "f-baseX svg-wrap",
+        on: {
+          click: function (e) {
+            return t.importPack();
+          }
+        }
+      }, [n("IconFont", {
+        staticClass: "menu-icon f-size16",
+        attrs: {
+          type: "download_outline"
+        }
+      }), n("p", [t._v("导入素材包(.pszlpack)")])], 1), n("hr", {
+        staticClass: "line"
+      }), n("div", {
+        staticClass: "f-baseX svg-wrap",
+        on: {
+          click: function (e) {
+            return t.openFolder();
+          }
+        }
+      }, [n("IconFont", {
+        staticClass: "menu-icon",
+        attrs: {
+          type: "folder"
+        }
+      }), n("p", [t._v("打开所在目录")])], 1), n("hr", {
+        staticClass: "line"
+      }), n("div", {
+        staticClass: "baseCheck_box",
+        on: {
+          click: function (t) {
+            t.stopPropagation();
+          }
+        }
+      }, [n("baseCheck", {
+        staticClass: "black-check",
+        nativeOn: {
+          click: function (e) {
+            return t.addMultiMode();
+          }
+        },
+        model: {
+          value: t.set.mbMultiMode,
+          callback: function (e) {
+            t.$set(t.set, "mbMultiMode", e);
+          },
+          expression: "set.mbMultiMode"
+        }
+      }, [n("p", [t._v("多人同时共用模板库")])])], 1)], 2), t.showCreateNewTemp ? n("CreateNewLibrary", {
+        on: {
+          close: function (e) {
+            t.showCreateNewTemp = false;
+          },
+          ok: function (e) {
+            return t.createNewTempHandle(e);
+          }
+        }
+      }) : t._e()], 1);
+    }
+```

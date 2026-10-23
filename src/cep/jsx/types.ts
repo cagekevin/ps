@@ -149,35 +149,6 @@ export interface StyleJsx {
 }
 
 /**
- * 自定义域（`/custom`）。
- *
- * UNVERIFIED: 四个函数的参数形状与返回结构**全部未实测**。
- * jsxbin 是字节码，符号不可读；`docs/页面/04-自定义.md:60-62` 明确记
- * 「四个签名与返回结构都未提取」。依据只到"调用侧存在这四个名字"这一级：
- * `zdy_checkStatus` / `zdy_checkMergeRectangles`（`04-自定义.md:16-17`）、
- * `zdy_mergeRectangles`（`:113`）、`zdy_generate`（`:195`）。
- *
- * 按 C-7 定案：签名按调用侧推断并全部标 UNVERIFIED，返回按最宽松联合兜（`unknown`），
- * 命令层只经 `utils/jsx-result` 判成败，不读任何字段。
- */
-
-/** 一次生成请求的结构定义在 `domain/custom.ts`（页面不能 import cep/*，所以类型放公共层） */
-export type { CustomLine, CustomRequest } from '@/domain/custom'
-
-import type { CustomRequest } from '@/domain/custom'
-
-export interface CustomJsx {
-  /** zdy_checkStatus：生成前的状态检查 */
-  checkStatus(request: CustomRequest): Promise<unknown>
-  /** zdy_checkMergeRectangles：合并矩形前的检查 */
-  checkMergeRectangles(request: CustomRequest): Promise<unknown>
-  /** zdy_mergeRectangles：合并矩形 */
-  mergeRectangles(request: CustomRequest): Promise<unknown>
-  /** zdy_generate：生成框架 */
-  generate(request: CustomRequest): Promise<unknown>
-}
-
-/**
  * 常用页域（`/commonUse`）。
  *
  * UNVERIFIED: 本域函数的**参数形状与返回结构基本未实测**。
@@ -220,6 +191,5 @@ export interface JsxPort {
   legacy: LegacyJsx
   rename: RenameJsx
   style: StyleJsx
-  custom: CustomJsx
   commonUse: CommonUseJsx
 }

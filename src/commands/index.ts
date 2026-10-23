@@ -1,7 +1,6 @@
 import { actionCommands } from './action'
 import { cloudCommands } from './cloud'
 import { commonUseCommands } from './commonUse'
-import { customCommands } from './custom'
 import { fontCommands } from './font'
 import { fontSetCommands } from './fontSet'
 import { freePanelCommands } from './freePanel'
@@ -27,7 +26,6 @@ for (const command of [
   ...renameCommands,
   ...styleCommands,
   ...systemCommands,
-  ...customCommands,
   ...commonUseCommands,
 ])
   register(command)

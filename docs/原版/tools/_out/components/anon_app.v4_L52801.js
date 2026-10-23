@@ -1,0 +1,155 @@
+{
+      components: {},
+      props: {
+        colors: {
+          type: Array,
+          default: function () {
+            return [];
+          }
+        }
+      },
+      data: function () {
+        return {
+          arrGrads: [],
+          arrCol: []
+        };
+      },
+      computed: {
+        grads: function () {
+          var t;
+          var e = [];
+          var n = Object(T.a)(this.arrGrads);
+          try {
+            for (n.s(); !(t = n.n()).done;) {
+              var a = t.value;
+              var i = {
+                background: "linear-gradient(98deg," + a[0] + " 0%," + a[1] + " 100%)"
+              };
+              e.push(i);
+            }
+          } catch (r) {
+            n.e(r);
+          } finally {
+            n.f();
+          }
+          return e;
+        }
+      },
+      watch: {
+        colors: {
+          handler: function (t, e) {
+            this.arrCol = this.colors.slice(0, this.colors.length);
+            this.arrGrads = [];
+            var n;
+            var a = this.colors.slice(0, 6);
+            var i = Object(T.a)(a);
+            try {
+              for (i.s(); !(n = i.n()).done;) {
+                var r;
+                var s = n.value;
+                var o = Object(T.a)(a);
+                try {
+                  for (o.s(); !(r = o.n()).done;) {
+                    var c = r.value;
+                    if (s != c) {
+                      var l = [s, c];
+                      this.arrGrads.push(l);
+                    }
+                  }
+                } catch (u) {
+                  o.e(u);
+                } finally {
+                  o.f();
+                }
+              }
+            } catch (u) {
+              i.e(u);
+            } finally {
+              i.f();
+            }
+          },
+          immediate: true,
+          deep: true
+        }
+      },
+      methods: {
+        deleteColor: function (t) {
+          this.arrCol.splice(t, 1);
+        },
+        deleteGran: function (t) {
+          this.arrGrads.splice(t, 1);
+        },
+        saveGrad: function () {
+          var t;
+          var e = {
+            name: "提取渐变组",
+            show: true,
+            list: []
+          };
+          var n = Object(T.a)(this.arrGrads);
+          try {
+            for (n.s(); !(t = n.n()).done;) {
+              var a = t.value;
+              e.list.push(I_.createGradientItem("未命名", a));
+            }
+          } catch (i) {
+            n.e(i);
+          } finally {
+            n.f();
+          }
+          this.$appBus.emit("styleSaveGradient", e);
+        },
+        close: function () {
+          this.$emit("close");
+        },
+        setGrad: function (t) {
+          var e = I_.createGradientItem("未命名", this.arrGrads[t]);
+          this.$cep.jsxHistory("ys_useGradient", [e.gradient], "填充渐变色");
+        },
+        setColor: function (t) {
+          var e = new w_(this.colors[t]);
+          var n = e.toCMYK();
+          n.hex = this.colors[t].substr(1);
+          this.$cep.jsxHistoryNoCheck("ys_useStyleColor", [n]);
+        },
+        saveSeban: function () {
+          D.a.write(this.$config.path.seBan, JSON.stringify(this.getColorList()));
+          this.$cep.sendAppEvent("com.fengzi.event.seban", "GengXin");
+          this.$tips.show("发送成功");
+        },
+        saveColor: function () {
+          var t = {
+            name: "提取颜色组",
+            show: true,
+            list: this.getColorList()
+          };
+          this.$appBus.emit("appSeBanSendColor", t);
+        },
+        getColorList: function () {
+          var t;
+          var e = [];
+          var n = Object(T.a)(this.arrCol);
+          try {
+            for (n.s(); !(t = n.n()).done;) {
+              var a = t.value;
+              e.push(this.getColorItem(a));
+            }
+          } catch (i) {
+            n.e(i);
+          } finally {
+            n.f();
+          }
+          return e;
+        },
+        getColorItem: function (t) {
+          var e = new w_(t);
+          var n = e.toCMYK();
+          n.hex = t.substr(1);
+          var a = {
+            name: "未命名",
+            color: n
+          };
+          return a;
+        }
+      }
+    }

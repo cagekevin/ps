@@ -1,0 +1,252 @@
+{
+      mounted: function () {
+        var t = this;
+        this.getFileSize();
+        this.onResize();
+        var e = Object(vc.debounce)(function () {
+          t.onResize();
+        }, 50);
+        function n(e) {
+          var n = t.$refs.previewer;
+          if (!n || !n.contains(e.target)) {
+            t.$store.commit("setPreviewInfo", null);
+          }
+        }
+        window.addEventListener("click", n);
+        window.addEventListener("resize", e);
+        this.$once("hook:beforeDestroy", function () {
+          window.removeEventListener("resize", e);
+          window.removeEventListener("click", n);
+        });
+      },
+      components: {
+        GIcon: Jt.a
+      },
+      props: {
+        previewInfo: {
+          type: Object,
+          require: true
+        },
+        materialType: {
+          type: String,
+          required: true,
+          validator: function (t) {
+            return t === "template" || t === "material";
+          }
+        }
+      },
+      data: function () {
+        return {
+          fileSize: 0,
+          maxRatio: 1.91,
+          minRatio: 0,
+          remainHeight: 0,
+          remainWidth: 0,
+          clientWidth: 0,
+          clientHeight: 0,
+          progress: 0,
+          showProgress: false
+        };
+      },
+      computed: {
+        usingContent: function () {
+          var t = Ca.states[this.previewInfo.id];
+          return this.isPersonalTemplate || this.materialType === "material" || t && t.status === he.A.Done;
+        },
+        isPersonalTemplate: function () {
+          return this.previewInfo.type === "personal-template";
+        },
+        previewImg: function () {
+          return Ar(this.previewInfo);
+        },
+        aspectRatio: function () {
+          return Math.max(Math.min(this.previewImg.height / this.previewImg.width, this.maxRatio), this.minRatio);
+        },
+        fileSizeString: function () {
+          if (this.fileSize) {
+            return jr(this.fileSize);
+          } else {
+            return "正在获取大小...";
+          }
+        },
+        isLong: function () {
+          return this.previewImg.height / this.previewImg.width - this.aspectRatio > 0.2;
+        },
+        isRemainEnoughRate: function () {
+          return !!this.isLong && this.remainHeight / this.remainWidth >= 2;
+        },
+        longImgStyle: function () {
+          if (!this.isLong) {
+            return {};
+          }
+          var t = {
+            objectPosition: `0 ${this.progress}`
+          };
+          if (this.isRemainEnoughRate) {
+            Object.assign(t, {
+              width: this.remainWidth - kc + "px",
+              height: this.remainWidth * 2 + "px"
+            });
+          } else {
+            Object.assign(t, {
+              height: this.remainHeight - kc + "px",
+              width: this.remainHeight / 2 + "px"
+            });
+          }
+          return t;
+        },
+        normalImgStyle: function () {
+          var t = {};
+          var e = this.previewImg;
+          var n = e.width;
+          var a = e.height;
+          var i = a / n;
+          var r = this.clientHeight * 0.538;
+          if (this.remainWidth * i < r) {
+            Object.assign(t, {
+              width: this.remainWidth - kc + "px",
+              height: (this.remainWidth - kc) * i + "px"
+            });
+          } else {
+            Object.assign(t, {
+              width: r / i - kc + "px",
+              height: r + "px"
+            });
+          }
+          return t;
+        }
+      },
+      methods: {
+        getFileSize: function () {
+          var t = this;
+          return Object(d.a)(regeneratorRuntime.mark(function e() {
+            var n;
+            var a;
+            return regeneratorRuntime.wrap(function (e) {
+              while (1) {
+                switch (e.prev = e.next) {
+                  case 0:
+                    if (!t.previewInfo.pictureInfos) {
+                      e.next = 2;
+                      break;
+                    }
+                    return e.abrupt("return");
+                  case 2:
+                    if (!t.isPersonalTemplate) {
+                      e.next = 5;
+                      break;
+                    }
+                    t.fileSize = parseInt(t.previewInfo.size);
+                    return e.abrupt("return");
+                  case 5:
+                    e.prev = 5;
+                    e.next = 8;
+                    return Mn(t.previewInfo);
+                  case 8:
+                    n = e.sent;
+                    a = n.size;
+                    t.fileSize = a;
+                    e.next = 16;
+                    break;
+                  case 13:
+                    e.prev = 13;
+                    e.t0 = e.catch(5);
+                    G.a.error("获取模板大小失败");
+                  case 16:
+                  case "end":
+                    return e.stop();
+                }
+              }
+            }, e, null, [[5, 13]]);
+          }))();
+        },
+        closePreview: function () {
+          this.$store.commit("setPreviewInfo", null);
+        },
+        usePsdFile: function (t) {
+          var e = this;
+          return Object(d.a)(regeneratorRuntime.mark(function n() {
+            var a;
+            return regeneratorRuntime.wrap(function (n) {
+              while (1) {
+                switch (n.prev = n.next) {
+                  case 0:
+                    if ((a = e.previewInfo) !== null && a !== undefined) {
+                      a.useTemplate(t);
+                    }
+                    e.$nextTick(function () {
+                      e.closePreview();
+                    });
+                  case 2:
+                  case "end":
+                    return n.stop();
+                }
+              }
+            }, n);
+          }))();
+        },
+        openOrUse: function (t) {
+          var e = this;
+          return Object(d.a)(regeneratorRuntime.mark(function n() {
+            var a;
+            return regeneratorRuntime.wrap(function (n) {
+              while (1) {
+                switch (n.prev = n.next) {
+                  case 0:
+                    if (!e.isPersonalTemplate) {
+                      n.next = 4;
+                      break;
+                    }
+                    if ((a = e.previewInfo) !== null && a !== undefined) {
+                      a.useTemplate();
+                    }
+                    e.$nextTick(function () {
+                      e.closePreview();
+                    });
+                    return n.abrupt("return");
+                  case 4:
+                    window.__download_click_event__ = t;
+                    n.next = 7;
+                    return Ca.downloadOrOpen(Object(P.a)(Object(P.a)({}, e.previewInfo), {}, {
+                      type: e.materialType
+                    }));
+                  case 7:
+                  case "end":
+                    return n.stop();
+                }
+              }
+            }, n);
+          }))();
+        },
+        onResize: function () {
+          var t = document.body;
+          var e = t.clientHeight;
+          var n = t.clientWidth;
+          this.clientWidth = n;
+          this.clientHeight = e;
+          this.remainHeight = this.getRemainHeight(e);
+          this.remainWidth = this.getRemainWidth(n);
+        },
+        getRemainHeight: function (t) {
+          var e = t - bc - yc - wc - xc;
+          return e;
+        },
+        getRemainWidth: function (t) {
+          var e = t - mc;
+          return e;
+        },
+        mousemove: function (t) {
+          var e = t.clientX;
+          var n = this.longImgStyle.width.replace("px", "");
+          var a = this.clientWidth;
+          var i = e - 40 - (a - n - 40) / 2;
+          this.progress = Math.floor(i / n * 100) + "%";
+        },
+        mouseenter: function () {
+          this.showProgress = true;
+        },
+        mouseleave: function () {
+          this.showProgress = false;
+        }
+      }
+    }

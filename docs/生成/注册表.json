@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-10-22",
+  "updated": "2026-10-23",
   "note": "横切能力注册表。新增 src/{cep,composables,stores,utils,styles} 下的文件必须在这里登记，否则 npm run build 会失败。",
   "items": [
     {
@@ -866,6 +866,33 @@
       "when": "只在 commands/custom.ts 用",
       "status": "stable",
       "since": "2026-10-22"
+    },
+    {
+      "id": "cep-cloud-change-sync-ts",
+      "name": "（待补：中文名）",
+      "entry": "src/cep/cloud/change-sync.ts",
+      "api": "（待补：怎么调）",
+      "when": "（待补：什么时候用）",
+      "status": "todo",
+      "since": "2026-10-23"
+    },
+    {
+      "id": "cep-cloud-entries-font-hierarchy-ts",
+      "name": "（待补：中文名）",
+      "entry": "src/cep/cloud/entries/font-hierarchy.ts",
+      "api": "（待补：怎么调）",
+      "when": "（待补：什么时候用）",
+      "status": "todo",
+      "since": "2026-10-23"
+    },
+    {
+      "id": "cep-cloud-pending-ts",
+      "name": "（待补：中文名）",
+      "entry": "src/cep/cloud/pending.ts",
+      "api": "（待补：怎么调）",
+      "when": "（待补：什么时候用）",
+      "status": "todo",
+      "since": "2026-10-23"
     }
   ]
 }

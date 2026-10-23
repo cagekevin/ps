@@ -1,0 +1,86 @@
+<!DOCTYPE html><html lang="en"><head><script>
+(function(){
+  var LOGF = 'local-panel-debug.log';
+  var RECDIR = "D:\\稿定设计助理-存档\\05-接口抓取";
+  function getReq(){ try { return (window.cep_node && window.cep_node.require) || window.require; } catch(e){ return null; } }
+  function log(msg){
+    try {
+      var req = getReq(); if (!req) return;
+      var fs2 = req('fs'), os2 = req('os'), p2 = req('path');
+      fs2.appendFileSync(p2.join(os2.tmpdir(), LOGF), new Date().toISOString() + ' | ' + msg + '\n');
+    } catch(e){}
+  }
+  function saveRecord(name, obj){
+    try {
+      var req = getReq(); if (!req) return;
+      var fs2 = req('fs'), p2 = req('path');
+      fs2.mkdirSync(RECDIR, { recursive: true });
+      fs2.writeFileSync(p2.join(RECDIR, name), JSON.stringify(obj, null, 2), 'utf8');
+    } catch(e){}
+  }
+  window.__LOCAL_LOG__ = log;
+  window.__SAVE_RECORD__ = saveRecord;
+
+  log('=== 页面加载（真实 token 模式）=== ' + location.href);
+  window.__LOCAL_TOKEN__ = {"access_token":"eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6InVtcy1jbi1zdGFnZS0yMDI2MDkxMS1wcmltYXJ5In0.eyJoYl9pZCI6IjMzMjM2MTQ3IiwidW1zaWQiOiI5NDA1NTU2MiIsImlzcyI6InVtcy1jbiIsImF1ZCI6InBzemh1bGkiLCJzdWIiOiI5MDIwNDUwNzUxMjA3MzI2NzcyIiwicmVhbG0iOiJjbiIsInZlciI6MiwiaWF0IjoxNzkyNDY4NjU1LCJleHAiOjE3OTI1NTUwNTUsImp0aSI6IjY2NDU0OWZkN2I3ZWI0ZTQxZjg1M2Y3YjkwYzUyYjk2In0.jZm_XmLgeCwnOHX6fG55jl1VQhBI8ceEE_rYd6Nu8_iS01SFfW7qU3ufwroOPyo8zCZ4E1N3Ad1nQg-5Z7awbCg6woQUaMyUBOmtm7QTCZTBqhApRSrYhDuQ0vUYNp1MkyGzfGXeY2z2P8UF2_dtV6uj2kylh0MQbB5UAJ5jwmFtejrjobqBAnc93kG7kP0NIHgIXXhXqmTTdEbVMgiF8oPxN1Sgugq6l1mNMLAysYhKanE76nmldeP8yM770Fq-qyk4kpb8sBQRdo4ayYZmxm8_y9LyBn_4ttqF9AbupumIim1Zw-v7D4OK2eO9hZ-CbMS1wEUKOG1PNyoiZhHwHg","access_token_expires_at":"2026-10-21T03:57:35.000Z","access_token_life_time":86400,"appid":"pszhuli","client_id":"pszhuli","is_new":"false","referer_uri":"https://cepapp.pszhuli.com/gd-login-mid?env=prod","refresh_token_expires_at":"2026-10-21T03:57:35.000Z","refresh_token_life_time":7776000,"timestamp":1792468655594,"user_id":"94055562","refresh_token":"eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCIsImtpZCI6InVtcy1jbi1zdGFnZS0yMDI2MDkxMS1wcmltYXJ5In0.eyJoYl9pZCI6IjMzMjM2MTQ3IiwidW1zaWQiOiI5NDA1NTU2MiIsImlzcyI6InVtcy1jbiIsImF1ZCI6InBzemh1bGkiLCJzdWIiOiI5MDIwNDUwNzUxMjA3MzI2NzcyIiwicmVhbG0iOiJjbiIsInZlciI6MiwiaWF0IjoxNzkyNDY4NjU1LCJleHAiOjE3OTI1NTUwNTUsImp0aSI6IjY2NDU0OWZkN2I3ZWI0ZTQxZjg1M2Y3YjkwYzUyYjk2In0.jZm_XmLgeCwnOHX6fG55jl1VQhBI8ceEE_rYd6Nu8_iS01SFfW7qU3ufwroOPyo8zCZ4E1N3Ad1nQg-5Z7awbCg6woQUaMyUBOmtm7QTCZTBqhApRSrYhDuQ0vUYNp1MkyGzfGXeY2z2P8UF2_dtV6uj2kylh0MQbB5UAJ5jwmFtejrjobqBAnc93kG7kP0NIHgIXXhXqmTTdEbVMgiF8oPxN1Sgugq6l1mNMLAysYhKanE76nmldeP8yM770Fq-qyk4kpb8sBQRdo4ayYZmxm8_y9LyBn_4ttqF9AbupumIim1Zw-v7D4OK2eO9hZ-CbMS1wEUKOG1PNyoiZhHwHg"};
+
+  // evalScript hook
+  try {
+    if (window.__adobe_cep__ && window.__adobe_cep__.evalScript) {
+      var orig = window.__adobe_cep__.evalScript;
+      window.__adobe_cep__.evalScript = function(script, cb){
+        var t0 = Date.now();
+        var name = String(script).replace(/\s+/g, ' ').slice(0, 70);
+        try {
+          return orig.call(this, script, function(res){
+            log('EVAL ' + (Date.now() - t0) + 'ms  ' + name + '  => ' + String(res).slice(0, 90));
+            if (cb) cb(res);
+          });
+        } catch(e) { if (cb) cb('error: ' + e.message); }
+      };
+    }
+  } catch(e) {}
+
+  // 全量记录（不拦截，真实请求）
+  var API = {};
+  var XO = XMLHttpRequest.prototype.open;
+  var XS = XMLHttpRequest.prototype.send;
+  XMLHttpRequest.prototype.open = function(m, u, a){
+    this.__info = { method: String(m || 'GET').toUpperCase(), url: String(u || ''), async: (a !== false) };
+    return XO.apply(this, arguments);
+  };
+  XMLHttpRequest.prototype.send = function(){
+    var self = this, info = self.__info;
+    if (info && /zhuli\.gaoding|pszhuli|gaoding\.com/.test(info.url)) {
+      var t0 = Date.now();
+      self.addEventListener('loadend', function(){
+        var key = info.method + ' ' + info.url;
+        var body = '';
+        try { body = String(self.responseText || '').slice(0, 20000); } catch(e){}
+        if (!API[key]) API[key] = { method: info.method, url: info.url, count: 0, status: self.status, sample: '' };
+        API[key].count++;
+        API[key].status = self.status;
+        if (!API[key].sample && body) API[key].sample = body;
+        log('NET ' + self.status + ' ' + (Date.now() - t0) + 'ms  ' + key.slice(0, 120));
+        saveRecord('_api-index.json', API);
+      });
+    }
+    return XS.apply(this, arguments);
+  };
+
+  window.addEventListener('error', function(e){ log('ERROR ' + (e.message || '')); });
+  log('探针就绪（真实 token + 全量记录）');
+})();
+</script><meta charset="utf-8"><meta http-equiv="X-UA-Compatible" content="IE=edge"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="cep-app-version" content="3.6.2"><meta name="cep-pub-timestamp" content="1656410553279"><link rel="icon" href="favicon.ico"><title>design</title><link href="js/chunk-2d2261c4.5104d2b0.js" rel="prefetch"><link href="css/app.bf68b505.css" rel="preload" as="style"><link href="css/chunk-vendors.060f3b83.css" rel="preload" as="style"><link href="js/app.v4.js" rel="preload" as="script"><link href="js/chunk-vendors.a06ad4b7.js" rel="preload" as="script"><link href="css/chunk-vendors.060f3b83.css" rel="stylesheet"><link href="css/app.bf68b505.css" rel="stylesheet">
+
+
+
+
+
+
+
+
+
+
+
+</head><body><noscript><strong>We're sorry but design doesn't work properly without JavaScript enabled. Please enable it to continue.</strong></noscript><div id="app"></div><script src="js/chunk-vendors.a06ad4b7.js"></script><script src="js/app.8565afb8.js"></script></body></html>

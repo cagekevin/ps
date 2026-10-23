@@ -1,0 +1,5 @@
+{
+        updata: function () {
+          this.init();
+        }
+      }

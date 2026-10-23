@@ -226,23 +226,6 @@ export interface CloudDownloadPayload {
   onConfirm?: (diff: import('@/domain/cloud').SyncDiff) => Promise<boolean>
 }
 
-// ---------- 自定义（/custom）----------
-
-/**
- * 一次生成请求。
- *
- * UNVERIFIED: 原版 jsx 的参数形状未实测（`docs/页面/04-自定义.md:60-62`），
- * 这里按"页面全部状态打成一个对象"推断。字段定义见 `cep/jsx/types.ts` 的 `CustomRequest`。
- */
-export interface CustomGeneratePayload {
-  request: import('@/cep/jsx/types').CustomRequest
-}
-
-/** 合并矩形：与生成共用一份请求 */
-export interface CustomMergeRectanglesPayload {
-  request: import('@/cep/jsx/types').CustomRequest
-}
-
 // ---------- 字体面板（/fontSet）----------
 
 export interface FontSetAlignPayload {
@@ -756,9 +739,6 @@ export interface CommandPayloads {
   'cloud.setAutoSync': CloudSetAutoSyncPayload
   'cloud.upload': CloudUploadPayload
   'cloud.download': CloudDownloadPayload
-
-  'custom.generate': CustomGeneratePayload
-  'custom.mergeRectangles': CustomMergeRectanglesPayload
 }
 
 export type CommandId = keyof CommandPayloads

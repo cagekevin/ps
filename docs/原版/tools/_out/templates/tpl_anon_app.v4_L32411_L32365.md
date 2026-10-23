@@ -1,0 +1,85 @@
+# 模板 · anon_app.v4_L32411
+
+> 来源：`app.v4.js` render 函数 `Ad`（行 32365）
+> 结构：**带层级**，缩进表示嵌套
+
+## 结构树
+
+```jsx
+<basePopup @close>
+  <p class="mb12">
+    移动到分组
+  </p>
+  <Myvuescroll class="dropDown-check-context" />
+  <p>
+    *当前没有可移动的分组
+  </p>
+  <div class="w100 f-centerY mt15 align_right">
+    <button class="btn-cancel" @click>
+      取消
+    </button>
+    <button class="btn-ok ml10" @click>
+      确定
+    </button>
+  </div>
+</basePopup>
+```
+
+## 动态渲染（需人工对照）
+
+| 类型 | 处数 | 对应 |
+|---|---|---|
+| `_l()` 列表渲染 | 1 | `v-for` |
+
+> 这些在 render 函数里是**控制流**，不是节点属性，无法自动转成 `v-if` / `v-for`。
+> 重写时看下面的 render 源码，按 `_l(数组, function(item){...})` 还原列表，按 `if (条件) { return ... }` 还原条件。
+
+## render 源码
+
+```js
+{
+      var t = this;
+      var e = t.$createElement;
+      var n = t._self._c || e;
+      return n("basePopup", {
+        on: {
+          close: function (e) {
+            return t.cancel();
+          }
+        }
+      }, [n("p", {
+        staticClass: "mb12"
+      }, [t._v("移动到分组")]), n("Myvuescroll", {
+        staticClass: "dropDown-check-context"
+      }, t._l(t.showGroupList, function (e, a) {
+        return n("div", {
+          key: a,
+          staticClass: "group_item",
+          class: {
+            active_group_item: t.activeGroupItemIndex === a
+          },
+          on: {
+            click: function (e) {
+              return t.handleSelectMoveGroup(a);
+            }
+          }
+        }, [t._v(" " + t._s(e.name) + " ")]);
+      }), 0), t.showGroupList.length == 0 ? n("p", [t._v("*当前没有可移动的分组")]) : t._e(), n("div", {
+        staticClass: "w100 f-centerY mt15 align_right"
+      }, [n("button", {
+        staticClass: "btn-cancel",
+        on: {
+          click: function (e) {
+            return t.cancel();
+          }
+        }
+      }, [t._v("取消")]), n("button", {
+        staticClass: "btn-ok ml10",
+        on: {
+          click: function (e) {
+            return t.ok();
+          }
+        }
+      }, [t._v("确定")])])], 1);
+    }
+```

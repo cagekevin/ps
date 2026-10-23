@@ -1,4 +1,4 @@
-import js from '@eslint/js'
+﻿import js from '@eslint/js'
 import pluginVue from 'eslint-plugin-vue'
 import globals from 'globals'
 import tseslint from 'typescript-eslint'
@@ -12,7 +12,19 @@ import tseslint from 'typescript-eslint'
 export default tseslint.config(
   // .tmp-*/ / probe-* 是排查用的临时产物（headless Chrome 的 user-data-dir、dump 出来的 html），
   // 里面可能带 .js（Chrome 自带扩展），不排除就会让 lint 报上千条无关错误。
-  { ignores: ['dist/**', 'node_modules/**', 'public/**', '*.log', '.tmp-*/**', 'probe-*'] },
+  // docs/原版/ 是从官方安装包原样复制的一手证据（源码 / 组件文档 / 抽取脚本），
+  // 只读、不参与构建，也不能改。不排除就会让 lint 报出几万条无关错误。
+  {
+    ignores: [
+      'dist/**',
+      'node_modules/**',
+      'public/**',
+      'docs/**',
+      '*.log',
+      '.tmp-*/**',
+      'probe-*',
+    ],
+  },
 
   js.configs.recommended,
   ...tseslint.configs.recommended,

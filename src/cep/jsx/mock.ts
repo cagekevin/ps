@@ -178,25 +178,6 @@ export function createMockJsx(): JsxPort {
       },
     },
 
-    custom: {
-      checkStatus: async (request) => {
-        log.info('mock', 'zdy_checkStatus', request)
-        return { err: 0, data: null }
-      },
-      checkMergeRectangles: async (request) => {
-        log.info('mock', 'zdy_checkMergeRectangles', request)
-        return { err: 0, data: null }
-      },
-      mergeRectangles: async (request) => {
-        log.info('mock', 'zdy_mergeRectangles', request)
-        return { err: 0, data: null }
-      },
-      generate: async (request) => {
-        log.info('mock', 'zdy_generate', request)
-        return { err: 0, data: null }
-      },
-    },
-
     // 常用页域：参数形状与返回结构都未实测，mock 只保证"调用不炸、能看出走到哪一步"
     commonUse: {
       zoom: async (scale) => {

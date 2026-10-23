@@ -1,0 +1,288 @@
+# material-list
+
+> 来源：`app/56d7.js`　大小：6.6KB
+> 特征：props / data / methods
+
+## 子组件
+
+`MaterialPreview`、`Icon`、`Expose`、`WaterfallVirtualList`
+
+## props（11）
+
+`rows`、`materials`、`type`、`columns`、`columnsOffset`、`responsiveWidth`、`visible`、`loading`、`loadedAll`、`nextPage`、`updater`
+
+## computed（3）
+
+`list`、`innerColumns`、`setRatio`
+
+## methods（6）
+
+`cancelDownload`、`handleMaterialPreviewClick`、`getItemSize`、`isWideImage`、`update`、`expose`
+
+## 文案（4）
+
+素材库页 · 应用到当前设计稿 · 点击 · 应用
+
+## 源码
+
+```js
+{
+  name: "material-list",
+  inject: ["listTracker"],
+  components: {
+    MaterialPreview: Ur,
+    Icon: ie.a,
+    Expose: Xs,
+    WaterfallVirtualList: yo
+  },
+  props: {
+    rows: {
+      type: Number
+    },
+    materials: {
+      type: Array,
+      required: true
+    },
+    type: {
+      type: String,
+      required: true,
+      validator: function (t) {
+        return ["icon", "picture", "element"].indexOf(t) > -1;
+      }
+    },
+    columns: {
+      type: Number,
+      default: 2
+    },
+    columnsOffset: {
+      type: Number,
+      default: 1
+    },
+    responsiveWidth: {
+      type: Number,
+      default: 1200
+    },
+    visible: {
+      type: Boolean,
+      default: false
+    },
+    loading: {
+      type: Boolean,
+      default: false
+    },
+    loadedAll: {
+      type: Boolean,
+      default: false
+    },
+    nextPage: Function,
+    updater: {
+      type: Boolean,
+      default: false
+    }
+  },
+  data: function () {
+    return {
+      MATERIAL_MARGIN: Df,
+      MATERIAL_MARGIN_VERTICAL: Nf,
+      clientWidth: 0,
+      clientHeight: 0,
+      topDistance: 0,
+      observedEl: null,
+      materialDetailVisible: false,
+      activeIndex: -1,
+      currentMaterialElem: null,
+      innerLoading: false
+    };
+  },
+  watch: {
+    visible: {
+      handler: function (t, e) {
+        var n = this;
+        if (!e && t) {
+          this.$nextTick(function () {
+            n.update();
+          });
+          window.addEventListener("resize", this.update);
+        } else {
+          window.removeEventListener("resize", this.update);
+        }
+      },
+      immediate: true
+    },
+    updater: function (t) {
+      var e = this;
+      var n = function t() {
+        var n = e.update();
+        var a = n.val;
+        var i = n.oldVal;
+        if (a !== i) {
+          setTimeout(t);
+        } else {
+          setTimeout(e.update, 100);
+        }
+      };
+      if (this.visible) {
+        setTimeout(n);
+      }
+    },
+    loading: {
+      handler: function (t) {
+        this.innerLoading = t;
+      }
+    }
+  },
+  computed: {
+    list: function () {
+      var t = this;
+      var e = this.materials;
+      if (this.rows) {
+        e = this.materials.slice(0, this.innerColumns * this.rows);
+      }
+      return e.filter(function (e) {
+        if (e.compositePreview && e.compositePreview.height || e.preview && e.preview.height) {
+          var n = t.getItemSize(e);
+          e.height = n.height > 0 ? n.height : e.height;
+          e.width = n.width > 0 ? n.width : e.width;
+          return true;
+        }
+      });
+    },
+    innerColumns: function () {
+      if (this.clientWidth >= this.responsiveWidth) {
+        return this.columns + this.columnsOffset;
+      } else {
+        return this.columns;
+      }
+    },
+    setRatio: function () {
+      var t = this.list.filter(function (t) {
+        return t.type === "h5_bargraph";
+      });
+      var e = this.list.filter(function (t) {
+        return t.type === "web_page";
+      });
+      var n = Object(ct.a)(new Set(this.list.map(function (t) {
+        return t.type;
+      }))).length === 2 && t.length && e.length;
+      var a = 0;
+      if (n) {
+        var i = e[0];
+        var r = i.preview;
+        var s = 1;
+        if (i.type !== "movie" && i.compositePreview && i.compositePreview.url && i.compositePreview.width && i.compositePreview.height) {
+          r = i.compositePreview;
+          s = ~~(i.compositePreview.width / Pf);
+        }
+        if (s > 1) {
+          a = r.height / Pf;
+        } else {
+          var o = Math.max(Math.min(r.height / r.width, Bf(i)), 0.35);
+          a = Math.max(Math.min(r.height / r.width, 1.91), o);
+        }
+      }
+      return a;
+    }
+  },
+  methods: {
+    cancelDownload: function (t) {
+      return Object(d.a)(regeneratorRuntime.mark(function e() {
+        return regeneratorRuntime.wrap(function (e) {
+          while (1) {
+            switch (e.prev = e.next) {
+              case 0:
+                e.next = 2;
+                return Ca.cancelTask(t);
+              case 2:
+              case "end":
+                return e.stop();
+            }
+          }
+        }, e);
+      }))();
+    },
+    handleMaterialPreviewClick: function (t) {
+      var e = this;
+      return Object(d.a)(regeneratorRuntime.mark(function n() {
+        var a;
+        var i;
+        var r;
+        return regeneratorRuntime.wrap(function (n) {
+          while (1) {
+            switch (n.prev = n.next) {
+              case 0:
+                a = t.target;
+                i = t.downloadType;
+                e.$emit("download", a);
+                if (a.pictureInfos && i === undefined) {
+                  i = "standard";
+                }
+                n.next = 5;
+                return Ca.downloadAndUse(Object(P.a)(Object(P.a)({}, a), {}, {
+                  downloadType: i,
+                  type: "material"
+                }));
+              case 5:
+                e.$tracker.functionApply({
+                  function_source: `素材库页_${Ef(e.type)}`,
+                  function_name: "应用到当前设计稿"
+                });
+                r = Ca.states[a.id];
+                if (r) {
+                  n.next = 10;
+                  break;
+                }
+                e.listTracker.useTemplate(a, "点击");
+                return n.abrupt("return");
+              case 10:
+                if (r.status === he.A.Done) {
+                  e.listTracker.useTemplate(a, "应用");
+                }
+              case 11:
+              case "end":
+                return n.stop();
+            }
+          }
+        }, n);
+      }))();
+    },
+    getItemSize: function (t) {
+      var e = t.composite_preview;
+      var n = e && e.height;
+      var a = t.type === "web_page" && this.isWideImage(t);
+      var i = n && !a ? e : t.preview;
+      var r = Math.round((this.clientWidth - (this.columns - 1) * Df) / this.columns);
+      var s = i.width / r;
+      var o = 0.3;
+      var c = Math.floor(Math.max(Math.min(i.height / s, r * Bf(t)), r * o));
+      return {
+        height: c,
+        width: r
+      };
+    },
+    isWideImage: function (t) {
+      var e = t.compositePreview;
+      return !!e && !!e.url && !!e.width && !!e.height && ~~(e.width / 750) > 1;
+    },
+    update: function () {
+      var t = this.$refs["material-list"];
+      var e = this.clientHeight;
+      if (t) {
+        var n = t.clientWidth;
+        var a = t.clientHeight;
+        if (n && a) {
+          this.clientWidth = t.clientWidth;
+          this.clientHeight = t.clientHeight;
+          this.topDistance = t.getBoundingClientRect().top;
+        }
+      }
+      return {
+        val: this.clientHeight,
+        oldVal: e
+      };
+    },
+    expose: function (t) {
+      this.$emit("expose", t);
+    }
+  }
+}
+```

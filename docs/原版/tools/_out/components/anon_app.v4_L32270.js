@@ -1,0 +1,91 @@
+{
+      props: {
+        data: {
+          type: Array,
+          default: []
+        },
+        currentLabel: {
+          type: String,
+          default: ""
+        }
+      },
+      data: function () {
+        return {
+          checkval: 0,
+          select: [],
+          selectALl: false,
+          showData: []
+        };
+      },
+      watch: {
+        selectALl: function () {
+          for (var t = 0; t < this.select.length; t++) {
+            if (!this.showData[t].existed) {
+              this.select[t] = this.selectALl;
+            }
+          }
+        }
+      },
+      mounted: function () {
+        var t = this;
+        var e = JSON.parse(JSON.stringify(this.data));
+        for (var n = e.length - 1; n > -1; n--) {
+          var a = e[n];
+          var i = a.data.find(function (e) {
+            return e === t.currentLabel;
+          });
+          this.select.push(false);
+          if (i) {
+            a.existed = true;
+            e.splice(n, 1);
+            e.push(a);
+          }
+        }
+        this.showData = e;
+      },
+      methods: {
+        ok: function () {
+          var t = this;
+          var e = [];
+          for (var n = 0; n < this.select.length; n++) {
+            if (this.select[n]) {
+              (function () {
+                var a = t.showData[n];
+                var i = t.data.findIndex(function (t) {
+                  return t.name === a.name;
+                });
+                e.push(i);
+              })();
+            }
+          }
+          if (e.length) {
+            this.$emit("ok", e);
+          } else {
+            this.cancel();
+          }
+        },
+        cancel: function () {
+          this.$emit("close");
+        },
+        baseCheckChange: function (t, e) {
+          var n = this;
+          if (t.data.find(function (t) {
+            return t === n.currentLabel;
+          }) && this.select[e]) {
+            this.select.splice(e, 1, false);
+          }
+        },
+        sortData: function () {
+          if (!this.data.length) {
+            return [];
+          }
+          for (var t = JSON.parse(JSON.stringify(this.data)), e = 0; e < t.length; e++) {
+            if (item.existed) {
+              t.splice(e, 1);
+              t.push(item);
+            }
+          }
+          return t;
+        }
+      }
+    }

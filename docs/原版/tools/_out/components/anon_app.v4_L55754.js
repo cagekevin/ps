@@ -1,0 +1,91 @@
+{
+      props: {
+        data: Object,
+        isAdd: {
+          type: Boolean,
+          default: true
+        },
+        isMore: {
+          type: Boolean,
+          default: true
+        },
+        updata: Boolean
+      },
+      data: function () {
+        return {
+          showDown: false,
+          showMore: -1,
+          showEdit: -1,
+          editValue: "",
+          showData: {}
+        };
+      },
+      watch: {
+        updata: function () {
+          this.init();
+        }
+      },
+      created: function () {
+        this.init();
+      },
+      methods: {
+        init: function () {
+          var t = JSON.stringify(this.data);
+          this.showData = JSON.parse(t);
+        },
+        initData: function () {
+          this.showMore = -1;
+          this.showEdit = -1;
+          this.editValue = "";
+        },
+        f_showDown: function () {
+          if (this.$store.state.showMenu == 1) {
+            this.showDown = !this.showDown;
+          } else {
+            this.showDown = true;
+          }
+          this.$store.state.showMenu = 1;
+          this.initData();
+        },
+        f_select: function (t) {
+          this.showData.index = t;
+          this.$emit("select", t);
+          this.showDown = false;
+        },
+        f_add: function () {
+          this.showData.list.push({
+            name: "未命名分组"
+          });
+          this.showEdit = this.showData.list.length - 1;
+          this.editValue = this.showData.list[this.showEdit].name;
+          this.$emit("add", 1);
+        },
+        f_delete: function (t) {
+          var e = this;
+          if (this.showData.list.length != 1) {
+            this.$msg.confirm("确认删除", "删除操作不可恢复，是否继续?", function () {
+              e.$emit("delete", t);
+              setTimeout(function () {
+                e.init();
+              }, 200);
+            });
+          } else {
+            this.$tips.show("最少保留一个分组哦");
+          }
+        },
+        f_edit: function (t) {
+          this.showEdit = this.showEdit == -1 ? t : -1;
+          this.editValue = this.showData.list[t].name;
+        },
+        f_editEnd: function () {
+          this.showData.list.splice(this.showEdit, 1, {
+            name: this.editValue
+          });
+          this.$emit("rename", {
+            index: this.showEdit,
+            val: this.editValue
+          });
+          this.initData();
+        }
+      }
+    }

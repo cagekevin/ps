@@ -1,0 +1,547 @@
+{
+      components: {
+        dropDowncom: gm,
+        squarecom: Mv
+      },
+      data: function () {
+        return {
+          set: V.a.info,
+          square: "苹方",
+          squarecomIstrue: false,
+          switchIstrue: false,
+          fontSpacingIstrue: -1,
+          fontSpacingIstrueArr: [false, false, false],
+          dropDown: {
+            ExtraLight: ["Bold", "ExtraLight", "Heavy", "Light", "Medium", "Regulal"]
+          },
+          ExtraLight: "ExtraLight",
+          colorSvgTwo: ["#iconwenbenduiqi1", "#iconwenbenduiqi2", "#iconwenbenduiqi3"],
+          svgTwoTitle: ["左", "居中", "右"],
+          leadingVal: "0",
+          fontSpacingOne: [6, 8, 10, 11, 12, 14, 16, 18, 24, 30, 36, 48, 60, 72, 84, 96, 108, 120],
+          fontSpacingTwo: [1, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9, 2, 2.5],
+          fontSpacingTherr: [-100, -50, -25, 0, 25, 50, 75, 100, 200, 300, 500, 1000],
+          fontInfo: {
+            size: "12",
+            weight: "选择字重",
+            fauxBold: false,
+            fauxItalic: false,
+            useAutoLeading: false,
+            leading: 0,
+            tracking: 0,
+            autoKerning: "manual",
+            capitalization: "Nrml",
+            color: {
+              rgb: {
+                r: 255,
+                g: 255,
+                b: 255
+              }
+            },
+            family: "请选择字体",
+            justification: "left"
+          },
+          isOpticalKern: false,
+          setFontInfo: {
+            family: ""
+          },
+          weightIndex: 0,
+          alginIndex: -1,
+          changeSize: false,
+          changeLeading: false,
+          changeTrack: false,
+          focusOne: false,
+          focusTwo: false,
+          focusTherr: false,
+          settime: null,
+          oldVersionFont: ["-1", "-2", "+1", "+2"],
+          oldVersionLeading: [1.1, 1.2, 1.4, 1.6],
+          oldVersionTracking: [-25, 0, 25, 100],
+          appPreferencesTypeUnits: "TypeUnits.POINTS"
+        };
+      },
+      created: function () {
+        var t = this;
+        this.openPsEvent();
+        tv.$on("ctrlClickFun", function () {
+          t.fontSpacingIstrue = -1;
+        });
+        this.$appBus.on("updataFontSmipleInfo", function () {
+          t.selectLayer();
+        });
+        this.$appBus.on("fp_zt_setFontSize", this.setFontSize);
+        this.$appBus.on("fp_zt_setFontLeading", this.setFontLeading);
+        this.$appBus.on("fp_zt_setFontTracking", this.setFontTracking);
+      },
+      mounted: function () {
+        var t = this;
+        setTimeout(Object(d.a)(regeneratorRuntime.mark(function e() {
+          return regeneratorRuntime.wrap(function (e) {
+            while (1) {
+              switch (e.prev = e.next) {
+                case 0:
+                  e.next = 2;
+                  return t.$cep.jsxNoCheck("AppPreferences.typeUnits", []);
+                case 2:
+                  t.appPreferencesTypeUnits = e.sent;
+                  t.selectLayer();
+                case 4:
+                case "end":
+                  return e.stop();
+              }
+            }
+          }, e);
+        })), 600);
+      },
+      computed: {
+        fontColor: function () {
+          var t = this.fontInfo.color.rgb;
+          var e = {
+            background: "rgb(" + t.r + "," + t.g + "," + t.b + ")"
+          };
+          return e;
+        },
+        fontUnit: function () {
+          return {
+            "TypeUnits.PIXELS": "像素",
+            "TypeUnits.POINTS": "点",
+            "TypeUnits.MM": "毫米"
+          }[this.appPreferencesTypeUnits];
+        }
+      },
+      watch: {
+        "fontInfo.size": function (t) {
+          this.changeSize = true;
+        },
+        "fontInfo.tracking": function (t) {
+          this.changeTrack = true;
+        },
+        leadingVal: function (t) {
+          this.changeLeading = true;
+        }
+      },
+      methods: {
+        fontSizeDown: function () {
+          this.downSet(this.fontInfo, "size");
+        },
+        fontSpacDown: function () {
+          this.downSet(this, "leadingVal");
+        },
+        fontSpacText: function () {
+          this.downSet(this.fontInfo, "tracking");
+        },
+        downSet: function (t, e) {
+          var n = this;
+          var a = event.clientX;
+          var i = t[e];
+          var r = document.createElement("style");
+          r.type = "text/css";
+          try {
+            r.appendChild(document.createTextNode("*{cursor: w-resize!important;}"));
+          } catch (o) {
+            r.styleSheet.cssText = "*{cursor: w-resize!important;}";
+          }
+          var s = document.getElementsByTagName("head")[0];
+          s.appendChild(r);
+          document.onmousemove = function (n) {
+            t[e] = parseInt(i) + (n.clientX - a);
+          };
+          document.onmouseup = function () {
+            document.onmousemove = null;
+            s.removeChild(r);
+            if (e == "size") {
+              n.setFontSize(n.fontInfo.size);
+            } else if (e == "leadingVal") {
+              n.setFontLeading2(n.leadingVal);
+            } else if (e == "tracking") {
+              n.setFontTracking(n.fontInfo.tracking);
+            }
+          };
+        },
+        setOldFontSize: function (t) {
+          var e = parseFloat(this.fontInfo.size) + parseInt(t);
+          this.setFontSize(e);
+        },
+        fpSetFontSize: function (t, e) {
+          if (Object(ft.f)()) {
+            this.$freePanelBox.show(e, t, e);
+          }
+        },
+        wheelOne: function (t) {
+          var e = this;
+          if (this.focusOne) {
+            clearTimeout(this.settime);
+            this.settime = setTimeout(function () {
+              e.plusOne(t);
+            }, 100);
+          }
+        },
+        wheelTwo: function (t) {
+          var e = this;
+          if (this.focusTwo) {
+            clearTimeout(this.settime);
+            this.settime = setTimeout(function () {
+              e.plusTwo(t);
+            }, 100);
+          }
+        },
+        wheelTherr: function (t) {
+          var e = this;
+          if (this.focusTherr) {
+            clearTimeout(this.settime);
+            this.settime = setTimeout(function () {
+              e.plusTherr(t);
+            }, 100);
+          }
+        },
+        numHandle: function (t, e, n, a = 1) {
+          if (t == 38 || e > 0) {
+            return parseInt(n) + a;
+          }
+          if (t == 40 || e < 0) {
+            return parseInt(n) - a;
+          }
+          if (typeof n != "string") {
+            n = n.toString();
+          }
+          n.replace("。", "");
+          var i = /[^\d .]/g;
+          n = n.replace(i, "");
+          if (isNaN(n)) {
+            return "";
+          } else {
+            return n || "";
+          }
+        },
+        plusOne: function (t) {
+          this.fontInfo.size = this.numHandle(t.keyCode, t.wheelDelta, this.fontInfo.size);
+        },
+        plusTwo: function (t) {
+          this.leadingVal = this.numHandle(t.keyCode, t.wheelDelta, this.leadingVal);
+        },
+        plusTherr: function (t) {
+          this.fontInfo.tracking = this.numHandle(t.keyCode, t.wheelDelta, this.fontInfo.tracking, 20);
+        },
+        changeFontSizeFormat: function (t) {
+          this.fontInfo.size = this.setFontFormat(t);
+        },
+        changeFontLeadingFormat: function (t) {
+          if (t != "(自动)") {
+            this.leadingVal = this.setFontFormat(t);
+          }
+        },
+        setFontFormat: function (t) {
+          var e = parseFloat(t);
+          return e + " " + this.fontUnit;
+        },
+        setFontFamily: function (t) {
+          this.selectLayer();
+        },
+        ctrlClick: function () {
+          tv.$emit("ctrlClickFun");
+        },
+        setFontColor: function () {
+          var t = this;
+          return Object(d.a)(regeneratorRuntime.mark(function e() {
+            var n;
+            return regeneratorRuntime.wrap(function (e) {
+              while (1) {
+                switch (e.prev = e.next) {
+                  case 0:
+                    e.next = 2;
+                    return t.$cep.jsx("zt_setFontColor");
+                  case 2:
+                    n = e.sent;
+                    if (n && n.err == 0) {
+                      t.fontInfo.color = n.data;
+                    }
+                  case 4:
+                  case "end":
+                    return e.stop();
+                }
+              }
+            }, e);
+          }))();
+        },
+        ys_takeTwo: function (t) {
+          var e = Math.round(parseFloat(t) * 100) / 100;
+          return e;
+        },
+        blurSetFontTracking: function (t) {
+          this.focusTherr = false;
+          if (this.changeTrack != 0) {
+            this.setFontTracking(t);
+          }
+        },
+        setFontTracking: function (t) {
+          var e = this;
+          return Object(d.a)(regeneratorRuntime.mark(function n() {
+            var a;
+            return regeneratorRuntime.wrap(function (n) {
+              while (1) {
+                switch (n.prev = n.next) {
+                  case 0:
+                    n.next = 2;
+                    return e.$cep.jsx("zt_setFontWordSpacing", [t]);
+                  case 2:
+                    a = n.sent;
+                    e.fontInfo.tracking = t;
+                    setTimeout(function () {
+                      e.changeTrack = false;
+                    }, 10);
+                    if (a.err == 1) {
+                      e.$tips.show(a.msg);
+                    }
+                  case 6:
+                  case "end":
+                    return n.stop();
+                }
+              }
+            }, n);
+          }))();
+        },
+        setFontLeading: function (t) {
+          var e = this;
+          return Object(d.a)(regeneratorRuntime.mark(function n() {
+            var a;
+            var i;
+            return regeneratorRuntime.wrap(function (n) {
+              while (1) {
+                switch (n.prev = n.next) {
+                  case 0:
+                    a = parseInt(e.fontInfo.size) * t;
+                    n.next = 3;
+                    return e.$cep.jsx("layer_font_setLeading", [a]);
+                  case 3:
+                    i = n.sent;
+                    e.fontInfo.leading = e.ys_takeTwo(a);
+                    if (e.leadingVal != "") {
+                      e.leadingVal = e.fontInfo.leading + " " + e.fontUnit;
+                    }
+                    setTimeout(function () {
+                      e.changeLeading = false;
+                    }, 10);
+                    if (i.err == 1) {
+                      e.$tips.show(i.msg);
+                    }
+                  case 8:
+                  case "end":
+                    return n.stop();
+                }
+              }
+            }, n);
+          }))();
+        },
+        blurSetFontLeading2: function (t) {
+          this.focusTwo = false;
+          if (this.changeLeading != 0) {
+            this.setFontLeading2(t);
+          }
+        },
+        setFontLeading2: function (t) {
+          var e = this;
+          return Object(d.a)(regeneratorRuntime.mark(function n() {
+            return regeneratorRuntime.wrap(function (n) {
+              while (1) {
+                switch (n.prev = n.next) {
+                  case 0:
+                    n.next = 2;
+                    return e.$cep.jsx("layer_font_setLeading", [t]);
+                  case 2:
+                    e.fontInfo.leading = e.ys_takeTwo(t);
+                    if (e.leadingVal != "") {
+                      e.leadingVal = e.fontInfo.leading + " " + e.fontUnit;
+                    }
+                    setTimeout(function () {
+                      e.changeLeading = false;
+                    }, 10);
+                  case 5:
+                  case "end":
+                    return n.stop();
+                }
+              }
+            }, n);
+          }))();
+        },
+        blurSetFontSize: function (t) {
+          this.focusOne = false;
+          if (this.changeSize != 0) {
+            this.setFontSize(t);
+          }
+        },
+        setFontSize: function (t) {
+          var e = this;
+          return Object(d.a)(regeneratorRuntime.mark(function n() {
+            var a;
+            return regeneratorRuntime.wrap(function (n) {
+              while (1) {
+                switch (n.prev = n.next) {
+                  case 0:
+                    t = parseFloat(t);
+                    n.next = 3;
+                    return e.$cep.jsx("layer_font_setFontSize", [t]);
+                  case 3:
+                    a = n.sent;
+                    if (e.fontInfo.size != "") {
+                      e.fontInfo.size = t + " " + e.fontUnit;
+                    }
+                    setTimeout(function () {
+                      e.changeSize = false;
+                    }, 10);
+                    if (a.err == 1) {
+                      e.$tips.show(a.msg);
+                    }
+                  case 7:
+                  case "end":
+                    return n.stop();
+                }
+              }
+            }, n);
+          }))();
+        },
+        keyEnterFontSize: function (t) {
+          this.setFontSize(t);
+          this.$refs.refFontSize.$el.querySelector("input").blur();
+        },
+        keyEnterFontLeading: function (t) {
+          this.setFontLeading2(t);
+          this.$refs.refFontLeading.$el.querySelector("input").blur();
+        },
+        keyEnterFontTrack: function (t) {
+          this.setFontTracking(t);
+          this.$refs.refFontTrack.$el.querySelector("input").blur();
+        },
+        setAlign: function (t) {
+          var e = Object(ft.g)();
+          if (Object(ft.f)()) {
+            this.$cep.jsxHistory("zt_setFontJustified", [t], "设置成段落文本对齐");
+          } else {
+            this.alginIndex = t;
+            this.$cep.jsxHistory("zt_setTextAlignment", [t, e], "设置文本对齐");
+          }
+        },
+        setCapitalization: function () {
+          if (this.fontInfo.capitalization == "allCaps") {
+            this.fontInfo.capitalization = "Nrml";
+          } else {
+            this.fontInfo.capitalization = "allCaps";
+          }
+          this.$cep.jsx("zt_setFontAllCaps", [this.fontInfo.capitalization == "allCaps"]);
+        },
+        setAutoKerning: function () {
+          if (this.fontInfo.autoKerning == "opticalKern") {
+            this.fontInfo.autoKerning = "manual";
+          } else {
+            this.fontInfo.autoKerning = "opticalKern";
+          }
+          this.$cep.jsx("zt_setFontVision", [this.fontInfo.autoKerning]);
+        },
+        setFauxItalic: function () {
+          var t = this;
+          return Object(d.a)(regeneratorRuntime.mark(function e() {
+            return regeneratorRuntime.wrap(function (e) {
+              while (1) {
+                switch (e.prev = e.next) {
+                  case 0:
+                    t.fontInfo.fauxItalic = !t.fontInfo.fauxItalic;
+                    t.$cep.jsx("zt_setFauxItali", [t.fontInfo.fauxItalic]);
+                  case 2:
+                  case "end":
+                    return e.stop();
+                }
+              }
+            }, e);
+          }))();
+        },
+        setFauxBold: function () {
+          this.fontInfo.fauxBold = !this.fontInfo.fauxBold;
+          this.$cep.jsx("zt_setFontAddBold", [this.fontInfo.fauxBold]);
+        },
+        openPsEvent: function () {
+          this.$psEvent.add("1936483188", "ztSelectLayer", this.selectLayer);
+          this.$psEvent.add("1416785510", "ztSelectLayer", this.selectLayer);
+          this.$psEvent.add("1298866208", "ztSelectLayer", this.selectLayer);
+          this.$psEvent.add("1936028772", "ztSelectLayer", this.selectLayer);
+        },
+        closePsEvent: function () {
+          this.$psEvent.remove("1936483188", "ztSelectLayer");
+          this.$psEvent.remove("1416785510", "ztSelectLayer");
+          this.$psEvent.remove("1298866208", "ztSelectLayer");
+          this.$psEvent.remove("1936028772", "ztSelectLayer");
+        },
+        selectLayer: function () {
+          var t = this;
+          return Object(d.a)(regeneratorRuntime.mark(function e() {
+            var n;
+            var a;
+            return regeneratorRuntime.wrap(function (e) {
+              while (1) {
+                switch (e.prev = e.next) {
+                  case 0:
+                    e.next = 2;
+                    return t.$cep.jsxNoCheck("zt_getFontSimpleInfo");
+                  case 2:
+                    n = e.sent;
+                    if (n && n.err === 0) {
+                      t.fontInfo = n.data;
+                      t.leadingVal = t.fontInfo.useAutoLeading ? "(自动)" : t.fontInfo.leading;
+                      t.isOpticalKern = t.fontInfo.autoKerning == "opticalKern";
+                      if (t.fontInfo.justification == "left") {
+                        t.alginIndex = 0;
+                      } else if (t.fontInfo.justification == "center") {
+                        t.alginIndex = 1;
+                      } else if (t.fontInfo.justification == "right") {
+                        t.alginIndex = 2;
+                      }
+                      a = {
+                        family: t.fontInfo.family
+                      };
+                      t.setFontInfo = lv.findFontAllInfo(a);
+                      t.weightIndex = t.setFontInfo.zz.indexOf(t.fontInfo.weight);
+                      t.changeFontLeadingFormat(t.leadingVal);
+                      t.changeFontSizeFormat(t.fontInfo.size);
+                    }
+                  case 4:
+                  case "end":
+                    return e.stop();
+                }
+              }
+            }, e);
+          }))();
+        },
+        dropOpen: function (t) {
+          this.$refs[t].open();
+        },
+        fontSpacingOneFun: function () {
+          if (Object(ft.f)()) {
+            this.ctrlClick();
+          } else {
+            this.fontSpacingIstrueArr.splice(0, 1, !this.fontSpacingIstrueArr[0]);
+            this.fontSpacingIstrue = this.fontSpacingIstrue == 0 ? -1 : 0;
+          }
+        },
+        fontSpacingTwoFun: function () {
+          if (Object(ft.f)()) {
+            this.ctrlClick();
+          } else {
+            this.fontSpacingIstrueArr.splice(1, 1, !this.fontSpacingIstrueArr[1]);
+            this.fontSpacingIstrue = this.fontSpacingIstrue == 1 ? -1 : 1;
+          }
+        },
+        fontSpacingTherrFun: function () {
+          if (Object(ft.f)()) {
+            this.ctrlClick();
+          } else {
+            this.fontSpacingIstrueArr.splice(2, 1, !this.fontSpacingIstrueArr[2]);
+            this.fontSpacingIstrue = this.fontSpacingIstrue == 2 ? -1 : 2;
+          }
+        },
+        ExtraLightFun: function (t) {
+          this.weightIndex = t[0];
+          this.fontInfo.weight = this.setFontInfo.zz[this.weightIndex];
+          var e = this.setFontInfo;
+          var n = this.weightIndex;
+          this.$cep.jsx("zt_setFontName", [e.hjm[n], e.mz[n], e.zz[n]]);
+        }
+      }
+    }

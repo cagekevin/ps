@@ -1,0 +1,63 @@
+# 模板 · activate-modal
+
+> 来源：`app.v4.js` render 函数 `BO`（行 61885）
+> 结构：**带层级**，缩进表示嵌套
+
+## 结构树
+
+```jsx
+<CepModal />
+```
+
+## 动态渲染（需人工对照）
+
+| 类型 | 处数 | 对应 |
+|---|---|---|
+| `if` 条件分支 | 1 | `v-if` / `v-else` |
+
+> 这些在 render 函数里是**控制流**，不是节点属性，无法自动转成 `v-if` / `v-for`。
+> 重写时看下面的 render 源码，按 `_l(数组, function(item){...})` 还原列表，按 `if (条件) { return ... }` 还原条件。
+
+## render 源码
+
+```js
+{
+      var t = this;
+      var e = t.$createElement;
+      var n = t._self._c || e;
+      if (t.show) {
+        return n("CepModal", t._b({
+          attrs: {
+            title: t.title,
+            "confirm-loading": t.confirmLoading,
+            maskClosable: false
+          },
+          on: {
+            ok: t.ok,
+            cancel: t.cancel
+          }
+        }, "CepModal", t.$attrs, false), [n("GInput", {
+          ref: "inputbox",
+          attrs: {
+            placeholder: "请输入激活码"
+          },
+          on: {
+            change: function (e) {
+              t.showErr = "";
+            }
+          },
+          model: {
+            value: t.value,
+            callback: function (e) {
+              t.value = e;
+            },
+            expression: "value"
+          }
+        }), t.showErr != "" ? n("p", {
+          staticClass: "mt4 col-err"
+        }, [t._v("* " + t._s(t.showErr))]) : t._e()], 1);
+      } else {
+        return t._e();
+      }
+    }
+```

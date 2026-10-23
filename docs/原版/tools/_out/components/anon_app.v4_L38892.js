@@ -1,0 +1,45 @@
+{
+      data: function () {
+        return {
+          buttonData: ["分行", "分为单个", "合并", "合并为段落"],
+          title: ["将多行文本拆分为多个单行文本", "将文本拆分为单个文本", "将多个文本合并", "将多个文本合并为段落"]
+        };
+      },
+      computed: {},
+      created: function () {},
+      methods: {
+        fpAdd: function (t) {
+          if (Object(ft.f)()) {
+            this.$freePanelBox.show(this.buttonData[t], "zt_changeTextBranchMerge", t + 1);
+          }
+        },
+        btnClick: function (t) {
+          var e = this;
+          return Object(d.a)(regeneratorRuntime.mark(function n() {
+            var a;
+            return regeneratorRuntime.wrap(function (n) {
+              while (1) {
+                switch (n.prev = n.next) {
+                  case 0:
+                    n.next = 2;
+                    return e.$cep.jsx("zt_changeTextBranchMerge", [t + 1]);
+                  case 2:
+                    a = n.sent;
+                    if (a.err != 1) {
+                      n.next = 5;
+                      break;
+                    }
+                    return n.abrupt("return", e.$msg.showErr(a.msg));
+                  case 5:
+                    e.$cep.jsxHistory("zt_textBranchMerge", [t + 1], e.buttonData[t]);
+                  case 6:
+                  case "end":
+                    return n.stop();
+                }
+              }
+            }, n);
+          }))();
+        }
+      },
+      mounted: function () {}
+    }

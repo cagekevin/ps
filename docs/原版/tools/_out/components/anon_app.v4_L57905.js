@@ -1,0 +1,52 @@
+{
+      components: {},
+      data: function () {
+        return {
+          strData: ""
+        };
+      },
+      created: function () {
+        return Object(d.a)(regeneratorRuntime.mark(function t() {
+          return regeneratorRuntime.wrap(function (t) {
+            while (1) {
+              switch (t.prev = t.next) {
+                case 0:
+                case "end":
+                  return t.stop();
+              }
+            }
+          }, t);
+        }))();
+      },
+      methods: {
+        analysis: function () {
+          for (var t = this.strData.split("\n"), e = 0; e < t.length; e++) {
+            if (t[e] == "") {
+              t.splice(e, 1);
+              e--;
+            }
+          }
+          if (t.length <= 1) {
+            return this.$tips.show("解析失败，数据有误");
+          }
+          for (var n = t[0].split("\t"), a = 0; a < n.length; a++) {
+            n[a] = n[a].replace(/\s*/g, "");
+          }
+          var i = [];
+          for (var r = 1; r < t.length; r++) {
+            var s = t[r];
+            s = s.replace(/\\/g, "/");
+            var o = s.split("\t");
+            var c = {};
+            for (var l = 0; l < n.length; l++) {
+              c[n[l]] = Xv(o[l]);
+            }
+            i.push(c);
+          }
+          this.$emit("analysis", i);
+        },
+        close: function () {
+          this.$emit("close");
+        }
+      }
+    }

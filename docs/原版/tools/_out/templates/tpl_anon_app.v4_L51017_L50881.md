@@ -1,0 +1,161 @@
+# 模板 · anon_app.v4_L51017
+
+> 来源：`app.v4.js` render 函数 `e_`（行 50881）
+> 结构：**带层级**，缩进表示嵌套
+
+## 结构树
+
+```jsx
+<div class="export-wrap" @mousedown>
+  <div />
+</div>
+```
+
+## 动态渲染（需人工对照）
+
+| 类型 | 处数 | 对应 |
+|---|---|---|
+| `_l()` 列表渲染 | 2 | `v-for` |
+
+> 这些在 render 函数里是**控制流**，不是节点属性，无法自动转成 `v-if` / `v-for`。
+> 重写时看下面的 render 源码，按 `_l(数组, function(item){...})` 还原列表，按 `if (条件) { return ... }` 还原条件。
+
+## render 源码
+
+```js
+{
+      var t = this;
+      var e = t.$createElement;
+      var n = t._self._c || e;
+      return n("div", {
+        staticClass: "export-wrap",
+        on: {
+          mousedown: function (t) {
+            t.stopPropagation();
+          }
+        }
+      }, [typeof t.data.info != "undefined" && t.data.show ? n("div", {
+        attrs: {
+          title: "按住ctrl拖拽位置"
+        }
+      }, t._l(t.data.info, function (e, a) {
+        return n("div", {
+          key: "ys-font" + a,
+          staticClass: "app-padding mb4 drag-font-wrap",
+          on: {
+            mousedown: function (e) {
+              return t.dragColorWrap(a, ".drag-font-wrap", ".Style-vueScroll");
+            },
+            mousemove: function (e) {
+              return t.dragColorWrapDrop(a);
+            }
+          }
+        }, [n("baseGroup", {
+          attrs: {
+            text: e.name,
+            value: e.show
+          },
+          on: {
+            menu: function (e) {
+              return t.showGroupMenu(e, a);
+            },
+            change: function (e) {
+              return t.changGroupStatus(e, a);
+            }
+          }
+        }, [n("div", {
+          staticClass: "f-baseX f-br"
+        }, [t._l(e.list, function (e, i) {
+          return n("div", {
+            key: "ys-font2" + i,
+            ref: "blockWrap",
+            refInFor: true,
+            staticClass: "block-wrap mr5 mt5 drag-font",
+            on: {
+              mousedown: function (e) {
+                e.stopPropagation();
+                return t.drag(a, i, ".drag-font");
+              },
+              mousemove: function (e) {
+                return t.drop(a, i);
+              },
+              click: function (n) {
+                return t.useFont(e);
+              },
+              contextmenu: function (e) {
+                e.preventDefault();
+                e.stopPropagation();
+                return t.showItemMenu(e, a, i);
+              }
+            }
+          }, [n("div", {
+            staticClass: "block f-baseY cursor",
+            on: {
+              mouseenter: function (e) {
+                return t.moveBlock(a, i, e);
+              },
+              mouseleave: function (e) {
+                t.mousemoveBlock = null;
+              }
+            }
+          }, [n("div", {
+            staticClass: "f-alignNone w100"
+          }, [n("p", {
+            staticClass: "f-size12"
+          }, [t._v(t._s(e.fonts.length))]), n("p", {
+            staticClass: "f-size12 block-size"
+          }, [t._v(" " + t._s(parseInt(e.fonts[0].size)) + "点 ")]), n("div", {
+            staticClass: "block-color",
+            style: {
+              backgroundColor: "rgb(" + e.fonts[0].color.rgb.r + "," + e.fonts[0].color.rgb.g + "," + e.fonts[0].color.rgb.b + ")"
+            }
+          })]), n("p", {
+            staticClass: "block-context",
+            style: {
+              fontFamily: e.fonts[0].family + ",'" + e.fonts[0].family + "','" + e.fonts[0].family + " " + e.fonts[0].weight + "'," + e.fonts[0].scriptFamily
+            }
+          }, [t._v(" 中文字 ")])]), t.mousemoveBlock == "str" + a + i && t.isDown == 0 ? n("div", {
+            ref: "describe",
+            refInFor: true,
+            staticClass: "describe",
+            style: {
+              opacity: t.mousemoveBlock == "str" + a + i ? "1" : "0"
+            }
+          }, [n("p", [t._v(t._s(e.fonts[0].family))]), n("div", {
+            staticClass: "f-baseX f-alignNone mt5"
+          }, [n("p", [t._v("字号:" + t._s(e.fonts[0].size))]), n("p", [t._v("行距:" + t._s(e.fonts[0].leading))]), n("p", [t._v("字距:" + t._s(e.fonts[0].tracking))])])]) : t._e()]);
+        }), n("div", {
+          staticClass: "f-center add mt5",
+          attrs: {
+            title: "添加字体，支持多图层"
+          },
+          on: {
+            click: function (e) {
+              return t.addFont(a);
+            }
+          }
+        }, [n("svg", {
+          staticClass: "icon cursor",
+          attrs: {
+            "aria-hidden": "true"
+          },
+          on: {
+            click: function (e) {
+              e.stopPropagation();
+              return t.addFont(a);
+            }
+          }
+        }, [n("use", {
+          attrs: {
+            "xlink:href": "#iconchuangjian"
+          },
+          on: {
+            click: function (e) {
+              e.stopPropagation();
+              return t.addFont(a);
+            }
+          }
+        })])])], 2)])], 1);
+      }), 0) : t._e()]);
+    }
+```

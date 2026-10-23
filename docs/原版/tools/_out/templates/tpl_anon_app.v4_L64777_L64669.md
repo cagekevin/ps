@@ -1,0 +1,91 @@
+# 模板 · anon_app.v4_L64777
+
+> 来源：`app.v4.js` render 函数 `BI`（行 64669）
+> 结构：**带层级**，缩进表示嵌套
+
+## 结构树
+
+```jsx
+<div class="topic-center">
+  <div class="topic-center-nav">
+    <div class="topic-center-nav__back" @click>
+      <Icon type="back" />
+    </div>
+    <div class="topic-center-nav__title">
+      全部
+    </div>
+  </div>
+  <div class="topic-list">
+    <Item @click />
+    <div v-show="!loading" />
+  </div>
+</div>
+```
+
+## 动态渲染（需人工对照）
+
+| 类型 | 处数 | 对应 |
+|---|---|---|
+| `_l()` 列表渲染 | 1 | `v-for` |
+
+> 这些在 render 函数里是**控制流**，不是节点属性，无法自动转成 `v-if` / `v-for`。
+> 重写时看下面的 render 源码，按 `_l(数组, function(item){...})` 还原列表，按 `if (条件) { return ... }` 还原条件。
+
+## render 源码
+
+```js
+{
+      var t = this;
+      var e = t.$createElement;
+      var n = t._self._c || e;
+      return n("div", {
+        staticClass: "topic-center"
+      }, [n("div", {
+        staticClass: "topic-center-nav"
+      }, [n("div", {
+        staticClass: "topic-center-nav__back",
+        on: {
+          click: t.routeBack
+        }
+      }, [n("Icon", {
+        staticStyle: {
+          "font-size": "20px",
+          color: "white"
+        },
+        attrs: {
+          type: "back"
+        }
+      })], 1), n("div", {
+        staticClass: "topic-center-nav__title"
+      }, [t._v("全部" + t._s(this.topicText) + "专题")])]), n("div", {
+        staticClass: "topic-list"
+      }, [t._l(t.list, function (e, a) {
+        return n("Item", {
+          key: a,
+          attrs: {
+            topic: e
+          },
+          on: {
+            click: function (n) {
+              return t.routeDetail(e);
+            }
+          }
+        });
+      }), n("div", {
+        directives: [{
+          name: "show",
+          rawName: "v-show",
+          value: !t.loading,
+          expression: "!loading"
+        }],
+        ref: "loadMore",
+        staticStyle: {
+          width: "100%",
+          height: "1px"
+        },
+        attrs: {
+          id: "load-more"
+        }
+      })], 2)]);
+    }
+```

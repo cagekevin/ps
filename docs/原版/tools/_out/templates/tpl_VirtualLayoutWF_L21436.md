@@ -1,0 +1,61 @@
+# 模板 · VirtualLayoutWF
+
+> 来源：`app.v4.js` render 函数 `qs`（行 21436）
+> 结构：**带层级**，缩进表示嵌套
+
+## 结构树
+
+```jsx
+<div class="layout-container">
+  <transition />
+</div>
+```
+
+## render 源码
+
+```js
+{
+      var t = this;
+      var e = t.$createElement;
+      var n = t._self._c || e;
+      return n("div", {
+        staticClass: "layout-container"
+      }, [n("transition", {
+        attrs: {
+          name: t.animated ? "component-fade" : "normal",
+          mode: "out-in"
+        }
+      }, [n(t.layout, t._b({
+        tag: "component",
+        attrs: {
+          clientWidth: t.clientWidth,
+          clientHeight: t.clientHeight
+        },
+        on: {
+          scroll: t.handleScroll,
+          loadMore: t.loadMore
+        },
+        scopedSlots: t._u([{
+          key: "default",
+          fn: function (e) {
+            var n = e.item;
+            var a = e.index;
+            var i = e.width;
+            var r = e.height;
+            return [t._t("default", null, {
+              item: n,
+              index: a,
+              width: i,
+              height: r
+            })];
+          }
+        }, {
+          key: "other",
+          fn: function () {
+            return [t._t("other")];
+          },
+          proxy: true
+        }], null, true)
+      }, "component", t.$attrs, false))], 1)], 1);
+    }
+```

@@ -1,0 +1,66 @@
+<?xml version="1.0" encoding="UTF-8" standalone="no"?>
+<ExtensionManifest xmlns:xsi="" ExtensionBundleId="ps.sf.SheJiZhuLiZhiNengCanKao" ExtensionBundleVersion="2.0" Version="6.0">
+    <!-- MAJOR-VERSION-UPDATE-MARKER -->
+    <ExtensionList>
+        <Extension Id="ps.sf.SheJiZhuLiZhiNengCanKao" Version="2.7"/>
+    </ExtensionList>
+    <ExecutionEnvironment>
+        <HostList>
+            <Host Name="PHXS" Version="[11.0,99.9]"/>
+            <!-- <Host Name="ILST" Version="[11.0,99.9]"/> -->
+            <!-- <Host Name="PHSP" Version="[11.0,99.9]"/> -->
+        </HostList>
+        <LocaleList>
+            <Locale Code="All"/>
+        </LocaleList>
+        <RequiredRuntimeList>
+            <RequiredRuntime Name="CSXS" Version="7.0"/>
+            <!-- MAJOR-VERSION-UPDATE-MARKER -->
+        </RequiredRuntimeList>
+    </ExecutionEnvironment>
+    <DispatchInfoList>
+        <Extension Id="ps.sf.SheJiZhuLiZhiNengCanKao">
+            <DispatchInfo>
+                <Resources>
+                    <MainPath>./index.html</MainPath>
+                    <CEFCommandLine>
+                        <Parameter>--disable-features=SameSiteByDefaultCookies,CookiesWithoutSameSiteMustBeSecure,NetworkService</Parameter>
+                        <Parameter>--disable-site-isolation-trials</Parameter>
+                        <Parameter>--enable-nodejs</Parameter>
+                        <Parameter>--mixed-context</Parameter>
+                    </CEFCommandLine>
+                </Resources>
+                <Lifecycle>
+                    <AutoVisible>true</AutoVisible>
+                    <StartOn>
+                        <Event>com.gaoding.cep.events.invoke.CEP004</Event>
+                    </StartOn>
+                </Lifecycle>
+                <UI>
+                    <Type>Panel</Type>
+                    <Menu>稿定-智能参考</Menu>
+                    <Geometry>
+                        <Size>
+                            <Height>650</Height>
+                            <Width>280</Width>
+                        </Size>
+                        <MaxSize>
+                            <Height>4000</Height>
+                            <Width>600</Width>
+                        </MaxSize>
+                        <MinSize>
+                            <Height>450</Height>
+                            <Width>280</Width>
+                        </MinSize>
+                    </Geometry>
+                    <Icons>
+                        <Icon Type="Normal">./img/Light.png</Icon>
+                        <Icon Type="RollOver">./img/Light.png</Icon>
+                        <Icon Type="DarkNormal">./img/Dark.png</Icon>
+                        <Icon Type="DarkRollOver">./img/Dark.png</Icon>
+                    </Icons>
+                </UI>
+            </DispatchInfo>
+        </Extension>
+    </DispatchInfoList>
+</ExtensionManifest>

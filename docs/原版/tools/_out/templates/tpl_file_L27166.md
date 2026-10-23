@@ -1,0 +1,98 @@
+# 模板 · file
+
+> 来源：`app.v4.js` render 函数 `su`（行 27166）
+> 结构：**带层级**，缩进表示嵌套
+
+## 结构树
+
+```jsx
+<GDropdown>
+  <div class="dropdown-trigger">
+    <button class="dropdown-btn">
+      <Icon type="descending" />
+    </button>
+    <span>
+      排序
+    </span>
+  </div>
+  <GMenu class="sort-menu">
+    <GMenuItem class="sort-item" @click>
+      <Icon class="check-icon" type="check_outline" />
+      <span />
+    </GMenuItem>
+    <GMenuDivider />
+    <GMenuItem class="sort-item" @click>
+      <Icon class="check-icon" type="check_outline" />
+      <span />
+    </GMenuItem>
+  </GMenu>
+</GDropdown>
+```
+
+## 动态渲染（需人工对照）
+
+| 类型 | 处数 | 对应 |
+|---|---|---|
+| `_l()` 列表渲染 | 2 | `v-for` |
+
+> 这些在 render 函数里是**控制流**，不是节点属性，无法自动转成 `v-if` / `v-for`。
+> 重写时看下面的 render 源码，按 `_l(数组, function(item){...})` 还原列表，按 `if (条件) { return ... }` 还原条件。
+
+## render 源码
+
+```js
+{
+      var t = this;
+      var e = t.$createElement;
+      var n = t._self._c || e;
+      return n("GDropdown", {
+        attrs: {
+          trigger: ["click"]
+        }
+      }, [n("div", {
+        staticClass: "dropdown-trigger"
+      }, [n("button", {
+        staticClass: "dropdown-btn"
+      }, [n("Icon", {
+        attrs: {
+          type: "descending"
+        }
+      })], 1), n("span", [t._v("排序")])]), n("GMenu", {
+        staticClass: "sort-menu",
+        attrs: {
+          slot: "overlay"
+        },
+        slot: "overlay"
+      }, [t._l(t.data1, function (e, a) {
+        return n("GMenuItem", {
+          key: "mb-sortcom1" + a,
+          staticClass: "sort-item",
+          on: {
+            click: function (e) {
+              return t.top(a);
+            }
+          }
+        }, [t.data1Index == a ? n("Icon", {
+          staticClass: "check-icon",
+          attrs: {
+            type: "check_outline"
+          }
+        }) : t._e(), n("span", [t._v(t._s(e))])], 1);
+      }), n("GMenuDivider"), t._l(t.data2, function (e, a) {
+        return n("GMenuItem", {
+          key: "mb-sortcom" + a,
+          staticClass: "sort-item",
+          on: {
+            click: function (e) {
+              return t.bottom(a);
+            }
+          }
+        }, [t.data2Index == a ? n("Icon", {
+          staticClass: "check-icon",
+          attrs: {
+            type: "check_outline"
+          }
+        }) : t._e(), n("span", [t._v(t._s(e))])], 1);
+      })], 2)], 1);
+    }
+```

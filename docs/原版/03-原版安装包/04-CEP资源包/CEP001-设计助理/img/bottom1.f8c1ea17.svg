@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="14" height="14" viewBox="0 0 14 14">
+  <defs>
+    <linearGradient id="linear-gradient" x1="1" y1="0.612" x2="0" y2="0.612" gradientUnits="objectBoundingBox">
+      <stop offset="0" stop-color="#f03d4f"/>
+      <stop offset="0.154" stop-color="#f42cce"/>
+      <stop offset="0.295" stop-color="#231f9e"/>
+      <stop offset="0.44" stop-color="#2abfe9"/>
+      <stop offset="0.607" stop-color="#99ec55"/>
+      <stop offset="0.752" stop-color="#fcf011"/>
+      <stop offset="0.864" stop-color="#ffae20"/>
+      <stop offset="1" stop-color="#f02b1f"/>
+    </linearGradient>
+  </defs>
+  <rect id="新建颜色分组" width="14" height="14" rx="2" fill="url(#linear-gradient)"/>
+</svg>

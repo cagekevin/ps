@@ -1,0 +1,130 @@
+{
+      components: {
+        dropDowncom: gm
+      },
+      data: function () {
+        return {
+          set: V.a.info,
+          data: new lv(),
+          fontSizeIstrue: false,
+          index: -1
+        };
+      },
+      watch: {
+        "$store.state.showMenu": function (t, e) {
+          if (t == -1) {
+            this.fontSizeIstrue = false;
+          }
+        }
+      },
+      computed: {
+        selectFont: function () {
+          var t;
+          var e = [];
+          var n = Object(T.a)(this.data.info.list);
+          try {
+            for (n.s(); !(t = n.n()).done;) {
+              var a = t.value;
+              e.push(a.family);
+            }
+          } catch (i) {
+            n.e(i);
+          } finally {
+            n.f();
+          }
+          return e;
+        },
+        weightLen: function () {
+          if (this.data.info.list[this.data.info.index].zz.length > 7) {
+            return this.data.info.list[this.data.info.index].zz.splice(0, 7);
+          } else {
+            return this.data.info.list[this.data.info.index].zz;
+          }
+        }
+      },
+      methods: {
+        addCurrentLayer: function () {
+          var t = this;
+          return Object(d.a)(regeneratorRuntime.mark(function e() {
+            var n;
+            var a;
+            return regeneratorRuntime.wrap(function (e) {
+              while (1) {
+                switch (e.prev = e.next) {
+                  case 0:
+                    e.next = 2;
+                    return t.$cep.jsx("zt_getCurrentFontInfo");
+                  case 2:
+                    n = e.sent;
+                    if (n.err != 1) {
+                      e.next = 5;
+                      break;
+                    }
+                    return e.abrupt("return", t.$msg.showErr(n.msg));
+                  case 5:
+                    a = t.data.addFont(n.data);
+                    t.$tips.show(a == "" ? "添加字体成功" : a);
+                  case 7:
+                  case "end":
+                    return e.stop();
+                }
+              }
+            }, e);
+          }))();
+        },
+        setFont: function (t) {
+          var e = this;
+          return Object(d.a)(regeneratorRuntime.mark(function n() {
+            var a;
+            var i;
+            return regeneratorRuntime.wrap(function (n) {
+              while (1) {
+                switch (n.prev = n.next) {
+                  case 0:
+                    a = e.data.getCurrentObject();
+                    n.next = 3;
+                    return e.$cep.jsx("zt_setFontName", [a.hjm[t], a.mz[t], a.zz[t]]);
+                  case 3:
+                    i = n.sent;
+                    if (i.err == 1) {
+                      if (i.code == 1) {
+                        e.$msg.confirm("错误提醒", "字体缺失，点击确定前往下载", function () {
+                          setTimeout(function () {
+                            e.$cep.openUrl("http://mb.pszhuli.com/508.html");
+                          }, 10);
+                        });
+                      } else {
+                        e.$msg.showErr(i.msg);
+                      }
+                    } else {
+                      e.$emit("changeFont");
+                      e.index = t;
+                    }
+                    e.$bp.add("zt_001");
+                  case 6:
+                  case "end":
+                    return n.stop();
+                }
+              }
+            }, n);
+          }))();
+        },
+        changeSelect: function (t) {
+          var e = this.data.setIndex(t[0]);
+          if (e) {
+            this.index = -1;
+          }
+          this.$tips.show(e ? "切换成功" : "切换失败");
+        },
+        openMenu: function () {
+          var t = this;
+          setTimeout(function () {
+            t.$refs.fontSize.open();
+          }, 50);
+        },
+        deleteFont: function (t) {
+          var e = this.data.delete(t);
+          this.$tips.show(e != "" ? e : "删除成功");
+        }
+      }
+    }

@@ -1,0 +1,17 @@
+稿定设计助理 CEP 扩展 —— 完整备份
+
+备份时间  : 2026/10/20 11:21:43
+来源      : C:\Users\xinye\AppData\Roaming\Adobe\CEP\extensions\com.sf.设计助理2.7
+备份路径  : C:\Users\xinye\Downloads\稿定设计助理-本地模式\扩展备份\com.sf.设计助理2.7
+文件数量  : 27
+占用空间  : 201.7 KB
+扩展版本  : manifest 中 ExtensionBundleId = ps.sf.SheJiZhuLi（扩展 2.7）
+
+恢复方法：
+  1) 双击 本地模式工具\恢复扩展.cmd
+  2) 或命令行执行 node 本地模式工具\backup-extension.js restore
+  3) 恢复后完全退出 Photoshop 再打开
+
+注意：
+  - 本备份包含原始入口 index.html.official（官方版）以及本地模式入口 index.html
+  - 整个文件夹可以整体拷贝到 U 盘 / 其它盘长期保存

@@ -1,0 +1,167 @@
+# 模板 · anon_app.v4_L39290
+
+> 来源：`app.v4.js` render 函数 `Bm`（行 39179）
+> 结构：**带层级**，缩进表示嵌套
+
+## 结构树
+
+```jsx
+<div class="input-box" @click>
+  <div class="input-box-main" @click>
+    <div class="f-baseX">
+      <span />
+      <div class="f-space" />
+      <baseIcon class="ash" @handle />
+    </div>
+    <input class="mt15" @input v-model="value" type="text" />
+    <p class="input-box-err" />
+    <div class="mt10">
+      <div class="f-baseX cursor" @click>
+        高级用法
+        <baseSvg class="ml8 mt2 open svg-9" @handle />
+      </div>
+      <div class="mt10" v-show="istrue">
+        <p class="line16 mt3">
+          固定间距：高度1，高度2，高度3
+        </p>
+        <p class="line16 mt3">
+          如：20,30,40
+        </p>
+        <p class="mt10 f-size12 line16">
+          比例间距：高度=比例
+        </p>
+        <p class="line16 mt3">
+          如20=1:2:1
+        </p>
+        <p class="mt10 line16">
+          递增间距：高度+=比例，如20=5
+        </p>
+      </div>
+    </div>
+  </div>
+</div>
+```
+
+## 动态渲染（需人工对照）
+
+| 类型 | 处数 | 对应 |
+|---|---|---|
+| `if` 条件分支 | 2 | `v-if` / `v-else` |
+
+> 这些在 render 函数里是**控制流**，不是节点属性，无法自动转成 `v-if` / `v-for`。
+> 重写时看下面的 render 源码，按 `_l(数组, function(item){...})` 还原列表，按 `if (条件) { return ... }` 还原条件。
+
+## render 源码
+
+```js
+{
+      var t = this;
+      var e = t.$createElement;
+      var n = t._self._c || e;
+      return n("div", {
+        staticClass: "input-box",
+        on: {
+          click: function (e) {
+            e.stopPropagation();
+            return t.cancel();
+          }
+        }
+      }, [n("div", {
+        staticClass: "input-box-main",
+        on: {
+          click: function (t) {
+            t.stopPropagation();
+          }
+        }
+      }, [n("div", {
+        staticClass: "f-baseX"
+      }, [n("span", [t._v(t._s(t.title))]), n("div", {
+        staticClass: "f-space"
+      }), n("baseIcon", {
+        staticClass: "ash",
+        class: [t.set.ztDistributedIsFixed ? " ash-act" : " "],
+        attrs: {
+          hover: "no",
+          name: "#icongudingxuanxiangye",
+          title: "固定弹窗"
+        },
+        on: {
+          handle: function (e) {
+            t.set.ztDistributedIsFixed = !t.set.ztDistributedIsFixed;
+          }
+        }
+      })], 1), n("input", {
+        directives: [{
+          name: "model",
+          rawName: "v-model",
+          value: t.value,
+          expression: "value"
+        }],
+        ref: "inputBox",
+        staticClass: "mt15",
+        attrs: {
+          type: "text"
+        },
+        domProps: {
+          value: t.value
+        },
+        on: {
+          input: [function (e) {
+            if (!e.target.composing) {
+              t.value = e.target.value;
+            }
+          }, function (e) {
+            t.err = "";
+          }],
+          keyup: function (e) {
+            if (!e.type.indexOf("key") && t._k(e.keyCode, "enter", 13, e.key, "Enter")) {
+              return null;
+            } else {
+              return t.ok();
+            }
+          },
+          focus: t.select
+        }
+      }), t.err != "" ? n("p", {
+        staticClass: "input-box-err"
+      }, [t._v(t._s(t.err))]) : t._e(), n("div", {
+        staticClass: "mt10"
+      }, [n("div", {
+        staticClass: "f-baseX cursor",
+        on: {
+          click: function (e) {
+            t.istrue = !t.istrue;
+          }
+        }
+      }, [t._v(" 高级用法 "), n("baseSvg", {
+        staticClass: "ml8 mt2 open svg-9",
+        class: t.istrue ? "rotate0" : "rotate-90",
+        attrs: {
+          name: "#iconzhankaizhedie"
+        },
+        on: {
+          handle: function (e) {
+            t.istrue = !t.istrue;
+          }
+        }
+      })], 1), n("div", {
+        directives: [{
+          name: "show",
+          rawName: "v-show",
+          value: t.istrue,
+          expression: "istrue"
+        }],
+        staticClass: "mt10"
+      }, [n("p", {
+        staticClass: "line16 mt3"
+      }, [t._v("固定间距：高度1，高度2，高度3")]), n("p", {
+        staticClass: "line16 mt3"
+      }, [t._v("如：20,30,40")]), n("p", {
+        staticClass: "mt10 f-size12 line16"
+      }, [t._v("比例间距：高度=比例")]), n("p", {
+        staticClass: "line16 mt3"
+      }, [t._v("如20=1:2:1")]), n("p", {
+        staticClass: "mt10 line16"
+      }, [t._v("递增间距：高度+=比例，如20=5")])])])])]);
+    }
+```

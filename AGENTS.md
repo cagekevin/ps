@@ -160,35 +160,34 @@ grep -rn "export .*<概念词>" src  # 有哪些导出叫这个名字
 
 | 层 | 规模 | 放什么 |
 | --- | --- | --- |
-| `src/pages/` | <!-- stats:begin layers.pages -->65 文件 / 13272 行<!-- stats:end layers.pages --> | 11 个页面（含 `_atoms` `_probe` `_placeholder` 三个内部页） |
-| `src/cep/` | <!-- stats:begin layers.cep -->52 文件 / 5347 行<!-- stats:end layers.cep --> | PS 出口：`transport` / `jsx/<域>` / `data/`（仓库层）/ `cloud` / `dialog` / `events` |
-| `src/components/` | <!-- stats:begin layers.components -->35 文件 / 3169 行<!-- stats:end layers.components --> | 跨页组件；`G` 前缀 = UI 基础件 |
-| `src/domain/` | <!-- stats:begin layers.domain -->22 文件 / 2907 行<!-- stats:end layers.domain --> | 纯函数与类型，零 IO、零 Vue |
-| `src/commands/` | <!-- stats:begin layers.commands -->16 文件 / 3997 行<!-- stats:end layers.commands --> | 命令注册表 + 分域命令 |
+| `src/pages/` | <!-- stats:begin layers.pages -->51 文件 / 11112 行<!-- stats:end layers.pages --> | 11 个页面（含 `_atoms` `_probe` `_placeholder` 三个内部页） |
+| `src/cep/` | <!-- stats:begin layers.cep -->51 文件 / 5246 行<!-- stats:end layers.cep --> | PS 出口：`transport` / `jsx/<域>` / `data/`（仓库层）/ `cloud` / `dialog` / `events` |
+| `src/components/` | <!-- stats:begin layers.components -->33 文件 / 2993 行<!-- stats:end layers.components --> | 跨页组件；`G` 前缀 = UI 基础件 |
+| `src/domain/` | <!-- stats:begin layers.domain -->21 文件 / 2856 行<!-- stats:end layers.domain --> | 纯函数与类型，零 IO、零 Vue |
+| `src/commands/` | <!-- stats:begin layers.commands -->15 文件 / 3799 行<!-- stats:end layers.commands --> | 命令注册表 + 分域命令 |
 | `src/composables/` | <!-- stats:begin layers.composables -->10 文件 / 918 行<!-- stats:end layers.composables --> | 组合式（`useCommand` 在 `components/command/`） |
 | `src/stores/` | <!-- stats:begin layers.stores -->13 文件 / 803 行<!-- stats:end layers.stores --> | 只读投影 + 少量 UI 状态 |
 | `src/utils/` | <!-- stats:begin layers.utils -->10 文件 / 505 行<!-- stats:end layers.utils --> | 无依赖工具 |
 | `src/cloud/` | <!-- stats:begin layers.cloud -->4 文件 / 881 行<!-- stats:end layers.cloud --> | 同步引擎与台账 |
 | `src/selection/` | <!-- stats:begin layers.selection -->2 文件 / 292 行<!-- stats:end layers.selection --> | 选区 / 当前文字快照 |
 
-**测试**：<!-- stats:begin tests -->**106 个文件、885 处用例**（静态计数 `it()`/`test()`；非通过数）<!-- stats:end tests -->（`tests/{cep,cloud,commands,components,composables,data,domain,pages,selection,stores,utils}`）。
+**测试**：<!-- stats:begin tests -->**100 个文件、837 处用例**（静态计数 `it()`/`test()`；非通过数）<!-- stats:end tests -->（`tests/{cep,cloud,commands,components,composables,data,domain,pages,selection,stores,utils}`）。
 
-### 3. 动手前先查一下：这些路径在不在
+### 3. 一手证据已入库，别再问"路径在不在"
 
-下面这些资料不跟仓库一起分发（都在仓库目录之外），在不在取决于你手上有没有。
-**先 `ls` 一下路径，再决定怎么干活**：
+**原版源码、组件文档、CSS、抽取脚本都已搬进仓库**（2026-10-23），位置见 `docs/原版/` 与 `docs/原版/README.md`。
 
-- **在** → 直接拿原版核对，这是最硬的一手证据。
-- **不在** → 按右列走，用 `docs/` 里的记录，并在结论上标 `UNVERIFIED`。
-
-| 路径 | 是什么 | 不在时看哪 |
+| 想知道 | 去哪 | 备注 |
 | --- | --- | --- |
-| `../reference/01-原版源码/panel/js/app.v4.js`     | 原版未压缩源码（2.5 MB / 73946 行） | **行号锚点无法当场复核**，只能靠 `docs/` 里的二手记录        |
-| `../reference/02-组件文档/`                       | 原版组件文档、`08-模板/tpl_*.md`    | 组件细节只能查 `docs/生成/页面规格/`                         |
-| `../reference/03-原版安装包/.../app.bf68b505.css` | 原版 CSS 实测值来源                 | CSS 值只能查 `docs/生成/页面规格/0N-*.md` 里的「实测样式」列 |
-| `../tools/15-page-spec.cjs`                       | 生成 `页面规格/` 的脚本             | 该产物**无法重新生成**，只能手改（且已过期风险）             |
+| 原版未压缩源码 | `docs/原版/01-原版源码/panel/js/app.v4.js`（73,703 行美化版） | **一手证据**，行号即锚点 |
+| jsx 函数真实名单 | `app.v4.js:17058`（派发表）+ `17061-17184`（调用封装） | 函数名先在这里对一遍，对不上就是假的 |
+| 原版组件 props / methods / 文案 | `docs/原版/02-组件文档/02-组件/<组件>.md`、`08-模板/tpl_*.md` | 注意 `tpl_*` 文件名会错位（D-10） |
+| 原版 CSS 实测值 | `docs/原版/03-原版安装包/.../app.bf68b505.css` | 也可查 `生成/页面规格/0N-*.md` 的「实测样式」列 |
+| 页面结构树 / 全量 class | `docs/生成/页面规格/0N-*.md` | 由 `docs/原版/tools/15-page-spec.cjs` 生成 |
 
-**注意**：`~/Library/Application Support/fz.FengZi1Hao/` 这类插件安装副本即使找到也**不能直接当核对依据**——曾经有一份是 **2022 年旧版**，与文档调查的版本不一致（文档引用的 `56d7.js` / `0425.js` 该副本里没有）。先确认版本，再决定能不能用。
+**规矩**：凡"官方怎么调 / 什么参数 / 什么结构"，**必须回源码核对**；
+`UNVERIFIED` 只留给真机行为（PS 是否回某个事件、jsx 返回值的取值），
+**不再给函数签名这种读一次就能确定的东西**。
 
 ### 4. 三个会让人白跑一趟的陷阱
 
@@ -203,7 +202,7 @@ grep -rn "export .*<概念词>" src  # 有哪些导出叫这个名字
 | 命令 | 干什么 | 状态 |
 | --- | --- | --- |
 | `npm run check` | style-guard + ledger + stats --check + lint + format:check | ✅ **不含测试、不含 tests 类型检查** |
-| `npm test` | vitest run（`<!-- stats:begin tests -->**106 个文件、885 处用例**（静态计数 `it()`/`test()`；非通过数）<!-- stats:end tests -->`） | ✅ 单独一条，`check` 不调它 |
+| `npm test` | vitest run（`<!-- stats:begin tests -->**100 个文件、837 处用例**（静态计数 `it()`/`test()`；非通过数）<!-- stats:end tests -->`） | ✅ 单独一条，`check` 不调它 |
 | `npm run deploy` | check → typecheck → build → verify:dist | ✅ 跑全的入口；**不含测试**，测试是流程不是脚本 |
 | `npm run build` | `vite build`，**只此一步** | ✅ 不带任何检查；检查归 `check` / `typecheck` / `verify:dist` |
 | `npm run stats` | 生成规模数字，改写 `进度.md` 与本文的注入块 | ✅ |
@@ -223,7 +222,7 @@ grep -rn "export .*<概念词>" src  # 有哪些导出叫这个名字
 
 ## 需要事实时再查（不是开工前通读）
 
-> **读这一节前先记住**：下面凡是写 `../reference/**` 或 `../tools/**` 的条目，都是**仓外路径**——用之前先看路径在不在，不在就按右列走。
+> **读这一节前先记住**：下面的 `../reference/**` / `../tools/**` 写法**已经过期**——那些资料已入库到 `docs/原版/`（见 §3）。
 > 需要原版结构 / CSS 实测值 / 组件细节时，一律改查 **`docs/生成/页面规格/0N-*.md`**（9 份，带 `app.v4.js` 行号），
 > 或 `docs/页面/0N-*.md` 的组件表。完整清单见上一节「我们有什么」的 §3。
 

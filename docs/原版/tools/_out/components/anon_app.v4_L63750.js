@@ -1,0 +1,258 @@
+{
+      components: {
+        List: aI
+      },
+      props: {
+        cep: {
+          type: String,
+          required: true
+        },
+        visible: {
+          type: Boolean,
+          required: true
+        }
+      },
+      data: function () {
+        return {
+          devices: [],
+          maxDevicesCount: 2,
+          removeDevice: function () {},
+          renameDevice: function () {}
+        };
+      },
+      created: function () {
+        var t = this;
+        return Object(d.a)(regeneratorRuntime.mark(function e() {
+          var n;
+          var a;
+          var i;
+          var r;
+          var s;
+          var o;
+          var c;
+          var l;
+          return regeneratorRuntime.wrap(function (e) {
+            while (1) {
+              switch (e.prev = e.next) {
+                case 0:
+                  n = iI(t.cep);
+                  a = n.getDevices;
+                  i = n.removeDevice;
+                  r = n.renameDevice;
+                  s = k(t.cep);
+                  o = s.removeActivation;
+                  c = s.initActivationRepo;
+                  e.next = 4;
+                  return Object(rI.a)();
+                case 4:
+                  l = e.sent;
+                  t.getDevices = Object(d.a)(regeneratorRuntime.mark(function e() {
+                    var n;
+                    var i;
+                    var r;
+                    return regeneratorRuntime.wrap(function (e) {
+                      while (1) {
+                        switch (e.prev = e.next) {
+                          case 0:
+                            e.next = 2;
+                            return a();
+                          case 2:
+                            n = e.sent;
+                            i = n.deviceInfo;
+                            r = n.quantity;
+                            t.devices = i.map(function (t) {
+                              if (t.cpuId === l) {
+                                t.current = true;
+                              }
+                              return wI(t);
+                            }).sort(function (t, e) {
+                              if (t.current) {
+                                return -1;
+                              } else if (e.current) {
+                                return 1;
+                              } else {
+                                return e.lastLoginTime - t.lastLoginTime;
+                              }
+                            });
+                            t.maxDevicesCount = r;
+                          case 7:
+                          case "end":
+                            return e.stop();
+                        }
+                      }
+                    }, e);
+                  }));
+                  t.removeDevice = function () {
+                    var e = Object(d.a)(regeneratorRuntime.mark(function e(n, a) {
+                      var r;
+                      var s;
+                      var u;
+                      var h;
+                      var d;
+                      return regeneratorRuntime.wrap(function (e) {
+                        while (1) {
+                          switch (e.prev = e.next) {
+                            case 0:
+                              t.close();
+                              if (n.cpuId !== l) {
+                                e.next = 10;
+                                break;
+                              }
+                              r = dI({
+                                title: "移除当前设备",
+                                content: "您当前正在使用该设备，移除后将退出使用",
+                                confirmBtnText: "移除",
+                                cancelBtnText: "取消",
+                                mask: true,
+                                maskClickClosable: false,
+                                exclamation: false
+                              }, t.$el.parentNode);
+                              s = r.result;
+                              e.next = 5;
+                              return s;
+                            case 5:
+                              u = e.sent;
+                              console.log(u);
+                              if (u === "confirm") {
+                                e.next = 10;
+                                break;
+                              }
+                              t.show();
+                              return e.abrupt("return");
+                            case 10:
+                              if (n.cpuId !== l) {
+                                e.next = 23;
+                                break;
+                              }
+                              h = yI({
+                                text: "正在退出登录"
+                              });
+                              d = h.close;
+                              e.next = 14;
+                              return i({
+                                cpuId: n.cpuId
+                              });
+                            case 14:
+                              console.log("remove activation");
+                              e.next = 17;
+                              return c();
+                            case 17:
+                              o();
+                              d();
+                              console.log("send deactivate");
+                              t.$emit("deactivate");
+                              e.next = 34;
+                              break;
+                            case 23:
+                              e.prev = 23;
+                              e.next = 26;
+                              return i({
+                                cpuId: n.cpuId
+                              });
+                            case 26:
+                              e.next = 32;
+                              break;
+                            case 28:
+                              e.prev = 28;
+                              e.t0 = e.catch(23);
+                              console.error(e.t0);
+                              G.a.error(Nt()(e.t0, "response.data.message") || "操作失败");
+                            case 32:
+                              e.next = 34;
+                              return t.getDevices();
+                            case 34:
+                            case "end":
+                              return e.stop();
+                          }
+                        }
+                      }, e, null, [[23, 28]]);
+                    }));
+                    return function (t, n) {
+                      return e.apply(this, arguments);
+                    };
+                  }();
+                  t.renameDevice = function () {
+                    var e = Object(d.a)(regeneratorRuntime.mark(function e(n, a, i) {
+                      return regeneratorRuntime.wrap(function (e) {
+                        while (1) {
+                          switch (e.prev = e.next) {
+                            case 0:
+                              console.log(n, a, i);
+                              if (n && n.trim()) {
+                                e.next = 5;
+                                break;
+                              }
+                              console.error("名称为空");
+                              G.a.error("设备名称不可为空");
+                              return e.abrupt("return");
+                            case 5:
+                              e.prev = 5;
+                              e.next = 8;
+                              return r({
+                                cpuId: a.cpuId,
+                                deviceName: n
+                              });
+                            case 8:
+                              e.next = 10;
+                              return t.getDevices();
+                            case 10:
+                              e.next = 16;
+                              break;
+                            case 12:
+                              e.prev = 12;
+                              e.t0 = e.catch(5);
+                              console.error(e.t0);
+                              G.a.error(Nt()(e.t0, "response.data.message") || "操作失败");
+                            case 16:
+                            case "end":
+                              return e.stop();
+                          }
+                        }
+                      }, e, null, [[5, 12]]);
+                    }));
+                    return function (t, n, a) {
+                      return e.apply(this, arguments);
+                    };
+                  }();
+                  t.$watch(function () {
+                    return t.visible;
+                  }, function (e) {
+                    if (e) {
+                      t.getDevices();
+                    }
+                  });
+                  e.prev = 9;
+                  e.next = 12;
+                  return t.getDevices();
+                case 12:
+                  e.next = 17;
+                  break;
+                case 14:
+                  e.prev = 14;
+                  e.t0 = e.catch(9);
+                  G.a.error(Nt()(e.t0, "response.data.message"), "操作失败");
+                case 17:
+                case "end":
+                  return e.stop();
+              }
+            }
+          }, e, null, [[9, 14]]);
+        }))();
+      },
+      computed: {
+        currentDevicesCount: function () {
+          return this.devices.length;
+        }
+      },
+      methods: {
+        clickMask: function () {
+          this.close();
+        },
+        show: function () {
+          this.$emit("update:visible", true);
+        },
+        close: function () {
+          this.$emit("update:visible", false);
+        }
+      }
+    }

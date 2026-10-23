@@ -1,0 +1,919 @@
+# 模板 · activate-modal
+
+> 来源：`app.v4.js` render 函数 `PO`（行 61136）
+> 结构：**带层级**，缩进表示嵌套
+
+## 结构树
+
+```jsx
+<div class="Set relative">
+  <Myvuescroll class="w100 h100 relative">
+    <Member />
+    <hr class="line" />
+    <p class="setTitle setTitle-none app-padding">
+      使用设置
+    </p>
+    <open class="mt5 use-setting-item" @change v-model="showMore.base">
+      <div class="list-hidden">
+        <baseCheck v-model="set.setLongRun">
+          后台持久化运行
+        </baseCheck>
+        <div class="f-baseX mt10">
+          <p>
+            单位：
+          </p>
+          <div class="relative">
+            <baseDropdownMenu class="company" @handle />
+            <dropDowncom class="w100 absolute zindex99" @dropchange />
+          </div>
+        </div>
+        <button class="btn-1 mt10 mb0" @click>
+          恢复默认设置
+        </button>
+        <button class="btn-1 mt10 mb0" @click>
+          打开日志
+        </button>
+      </div>
+    </open>
+    <open class="mt5 use-setting-item" @change v-model="showMore.leftNav">
+      <div class="list-hidden">
+        <baseCheck v-model="set.setShowTips">
+          显示提示框
+        </baseCheck>
+        <baseCheck class="mt10" v-model="set.setMoveTab">
+          鼠标滑入切换选项卡
+        </baseCheck>
+        <baseCheck class="mt10" v-model="set.navAuto">
+          选择文字/普通图层自动跳转
+        </baseCheck>
+        <hr class="div-line" />
+        <baseOpen @change v-model="leftNav.one" />
+        <baseOpen class="mt4" @change v-model="leftNav.two" />
+      </div>
+    </open>
+    <open class="mt5 use-setting-item" @change v-model="showMore.shortcutKey">
+      <baseSvg class="quick" @handle />
+      <div class="list-hidden">
+        <div>
+          <baseOpen @click v-model="showShortcutKey[i]">
+            <div class="mb10" />
+          </baseOpen>
+        </div>
+        <hr class="div-line" />
+        <button class="btn-1 mb0" @click>
+          手动拷贝配置文件
+        </button>
+        <p class="mt8 tac cursor reset-text" @click>
+          刷新配置文件
+        </p>
+      </div>
+    </open>
+    <open class="mt5 use-setting-item" @change v-model="showMore.commonUse">
+      <div class="list-hidden">
+        <baseCheck v-model="set.cyShowZoom">
+          显示缩放
+        </baseCheck>
+        <baseCheck class="mt10" v-model="set.cyShowTransformation">
+          显示变换元素
+        </baseCheck>
+        <hr class="div-line" />
+        <p class="mb10">
+          显示 / 隐藏功能
+        </p>
+        <baseCheck v-model="site.isShow">
+        </baseCheck>
+        <hr class="div-line" />
+        <button class="btn-1 mb0" @click>
+          重置常用功能排序
+        </button>
+      </div>
+    </open>
+    <open class="mt5 use-setting-item" @change v-model="showMore.fontSet">
+      <div class="list-hidden">
+        <baseCheck v-model="set[site.key]">
+        </baseCheck>
+        <div class="mt10">
+          <button class="btn-small btn-small-2" @click>
+            配置字号
+          </button>
+          <button class="btn-small btn-small-2 mr0" @click>
+            配置行间距
+          </button>
+          <button class="btn-small btn-small-2 mb0" @click>
+            配置字间距
+          </button>
+        </div>
+        <hr class="div-line" />
+        <baseCheck v-model="set.ztOldVersion">
+          使用旧版本排版
+        </baseCheck>
+      </div>
+    </open>
+    <open class="mt5 use-setting-item" @change v-model="showMore.sync">
+      <div class="list-hidden">
+        <p class="contextHover">
+          最新更新：
+        </p>
+        <baseCheck class="mt10" v-model="set.appSync">
+          开启云同步预设
+        </baseCheck>
+        <hr class="div-line" />
+        <p class="mb10">
+          说明
+        </p>
+        <p>
+          1. 除模板库以及图层样式的预设之外，均支持云同步。
+        </p>
+        <p class="mt6">
+          2. 本功能内测中，如有不稳定请反馈我们
+        </p>
+      </div>
+    </open>
+    <div class="mt5 clear_cache_bar" @click>
+      <span>
+        清理缓存
+      </span>
+      <div class="right">
+        <span />
+        <Icon class="clear_cache_pointer f-size20" type="chevron_left" />
+      </div>
+    </div>
+    <open class="mt5 use-setting-item" v-model="deviceManageVisible" />
+    <hr class="line" />
+    <div class="app-padding">
+      <p class="setTitle setTitle-none version-manager">
+        <span>
+          帮助更新
+        </span>
+        <version-switcher />
+      </p>
+      <div class="mt10">
+        <button class="btn-2 mb0" @click>
+          使用教程
+        </button>
+        <button class="btn-2 mb0 mr0" @click>
+          检查更新
+        </button>
+        <button class="btn-2 mb0 mt8" @click>
+          新手指引
+        </button>
+        <GDropdown>
+          <button class="btn-2 mb0 mr0 mt8">
+            更多产品
+          </button>
+          <GMenu class="product-menu" />
+        </GDropdown>
+      </div>
+    </div>
+    <hr class="line" />
+    <div class="app-padding f-baseX mt12 mb7" @click>
+      <p class="setTitle setTitle-none">
+        关于我们
+      </p>
+    </div>
+    <div class="app-padding mt12">
+      <div class="f-baseX about-item">
+        <p class="left">
+          名称
+        </p>
+        <p />
+      </div>
+      <div class="f-baseX mt10 about-item">
+        <p class="left">
+          版本
+        </p>
+        <p />
+      </div>
+      <div class="f-baseX mt10 about-item">
+        <p class="left">
+          所属
+        </p>
+        <p>
+          稿定（厦门）科技有限公司
+        </p>
+      </div>
+      <div class="f-baseX mt10 about-item">
+        <p class="left">
+          官网
+        </p>
+        <a class="f-size12 cursor a" @click>
+          https://pszhuli.com/
+        </a>
+      </div>
+    </div>
+    <hr class="line" />
+    <div class="app-padding">
+      <p class="setTitle setTitle-none">
+        反馈与建议
+      </p>
+      <div class="f-baseX f-center mt20">
+        <div class="f-baseY qrcode-item">
+          <img class="qrcode" src="https://gd-filems.dancf.com/saas/6khzgo/40317/b49c7a74-8465 />
+          <p class="align-center mt8">
+            微信公众号
+          </p>
+        </div>
+        <div class="f-baseY qrcode-item">
+          <img class="qrcode" src="https://gd-filems.dancf.com/saas/6khzgo/40317/e225b8d3-7e1e />
+          <p class="align-center mt8">
+            微信客服
+          </p>
+        </div>
+      </div>
+      <p class="align-center mt20 mb5 feedback-text">
+        期待您的反馈与建议
+        <br />
+        我们将持续优化，给您带来更好的体验
+      </p>
+    </div>
+    <hr class="line" />
+    <div class="app-padding">
+      <GButton class="out-login-btn" @click>
+        退出登录
+      </GButton>
+    </div>
+  </Myvuescroll>
+  <tips @close v-show="tipsIstrue" />
+  <addcom @close />
+  <ClearCacheDialog @readEncryptedFileSize />
+  <DevicesManageModal @update />
+</div>
+```
+
+## 动态渲染（需人工对照）
+
+| 类型 | 处数 | 对应 |
+|---|---|---|
+| `_l()` 列表渲染 | 7 | `v-for` |
+| `if` 条件分支 | 1 | `v-if` / `v-else` |
+
+> 这些在 render 函数里是**控制流**，不是节点属性，无法自动转成 `v-if` / `v-for`。
+> 重写时看下面的 render 源码，按 `_l(数组, function(item){...})` 还原列表，按 `if (条件) { return ... }` 还原条件。
+
+## render 源码
+
+```js
+{
+      var t = this;
+      var e = t.$createElement;
+      var n = t._self._c || e;
+      return n("div", {
+        staticClass: "Set relative"
+      }, [n("Myvuescroll", {
+        staticClass: "w100 h100 relative"
+      }, [n("Member", {
+        attrs: {
+          getAccessToken: t.getAccessToken,
+          postRequest: t.postRequest,
+          getRequest: t.getRequest,
+          userService: t.userService,
+          hasOffset: true,
+          umsHost: t.umsHost,
+          pszhuliHost: t.pszhuliHost,
+          cepId: t.cepId
+        }
+      }), n("hr", {
+        staticClass: "line"
+      }), n("p", {
+        staticClass: "setTitle setTitle-none app-padding"
+      }, [t._v("使用设置")]), n("open", {
+        staticClass: "mt5 use-setting-item",
+        attrs: {
+          text: "基本设置"
+        },
+        on: {
+          change: function (e) {
+            return t.changeShowMore("showMore", "base");
+          }
+        },
+        model: {
+          value: t.showMore.base,
+          callback: function (e) {
+            t.$set(t.showMore, "base", e);
+          },
+          expression: "showMore.base"
+        }
+      }, [n("div", {
+        staticClass: "list-hidden"
+      }, [n("baseCheck", {
+        nativeOn: {
+          click: function (e) {
+            return t.changeLongRun();
+          }
+        },
+        model: {
+          value: t.set.setLongRun,
+          callback: function (e) {
+            t.$set(t.set, "setLongRun", e);
+          },
+          expression: "set.setLongRun"
+        }
+      }, [t._v(" 后台持久化运行 ")]), n("div", {
+        staticClass: "f-baseX mt10"
+      }, [n("p", [t._v("单位：")]), n("div", {
+        staticClass: "relative"
+      }, [n("baseDropdownMenu", {
+        staticClass: "company",
+        attrs: {
+          dark: true,
+          text: t.set.appUnit
+        },
+        on: {
+          handle: t.openCompany
+        }
+      }), n("dropDowncom", {
+        ref: "company",
+        staticClass: "w100 absolute zindex99",
+        attrs: {
+          text: t.company
+        },
+        on: {
+          dropchange: function (e) {
+            return t.companyChange(e);
+          }
+        }
+      })], 1)]), n("button", {
+        staticClass: "btn-1 mt10 mb0",
+        on: {
+          click: function (e) {
+            return t.resetAll();
+          }
+        }
+      }, [t._v("恢复默认设置")]), n("button", {
+        staticClass: "btn-1 mt10 mb0",
+        on: {
+          click: function (e) {
+            return t.openLogs();
+          }
+        }
+      }, [t._v("打开日志")])], 1)]), n("open", {
+        staticClass: "mt5 use-setting-item",
+        attrs: {
+          text: "左侧栏菜单"
+        },
+        on: {
+          change: function (e) {
+            return t.changeShowMore("showMore", "leftNav");
+          }
+        },
+        model: {
+          value: t.showMore.leftNav,
+          callback: function (e) {
+            t.$set(t.showMore, "leftNav", e);
+          },
+          expression: "showMore.leftNav"
+        }
+      }, [n("div", {
+        staticClass: "list-hidden"
+      }, [n("baseCheck", {
+        model: {
+          value: t.set.setShowTips,
+          callback: function (e) {
+            t.$set(t.set, "setShowTips", e);
+          },
+          expression: "set.setShowTips"
+        }
+      }, [t._v("显示提示框")]), n("baseCheck", {
+        staticClass: "mt10",
+        model: {
+          value: t.set.setMoveTab,
+          callback: function (e) {
+            t.$set(t.set, "setMoveTab", e);
+          },
+          expression: "set.setMoveTab"
+        }
+      }, [t._v("鼠标滑入切换选项卡")]), n("baseCheck", {
+        staticClass: "mt10",
+        model: {
+          value: t.set.navAuto,
+          callback: function (e) {
+            t.$set(t.set, "navAuto", e);
+          },
+          expression: "set.navAuto"
+        }
+      }, [t._v(" 选择文字/普通图层自动跳转 ")]), n("hr", {
+        staticClass: "div-line"
+      }), n("baseOpen", {
+        attrs: {
+          text: "显示 / 隐藏选项卡",
+          align: "left"
+        },
+        on: {
+          change: function (e) {
+            return t.changeShowMore("leftNav", "one");
+          }
+        },
+        model: {
+          value: t.leftNav.one,
+          callback: function (e) {
+            t.$set(t.leftNav, "one", e);
+          },
+          expression: "leftNav.one"
+        }
+      }, t._l(t.navData, function (e, a) {
+        return n("baseCheck", {
+          key: "font" + a,
+          staticClass: "ml16",
+          class: a == 0 ? "mt4" : "mt8",
+          model: {
+            value: e.show,
+            callback: function (n) {
+              t.$set(e, "show", n);
+            },
+            expression: "site.show"
+          }
+        }, [t._v(" " + t._s(e.text) + " ")]);
+      }), 1), n("baseOpen", {
+        staticClass: "mt4",
+        attrs: {
+          text: "选择工具跳转",
+          align: "left"
+        },
+        on: {
+          change: function (e) {
+            return t.changeShowMore("leftNav", "two");
+          }
+        },
+        model: {
+          value: t.leftNav.two,
+          callback: function (e) {
+            t.$set(t.leftNav, "two", e);
+          },
+          expression: "leftNav.two"
+        }
+      }, t._l(t.set.navToolRelation, function (e, a) {
+        return n("baseCheck", {
+          key: "set" + a,
+          staticClass: "mt6 ml16",
+          model: {
+            value: e.status,
+            callback: function (n) {
+              t.$set(e, "status", n);
+            },
+            expression: "item.status"
+          }
+        }, [t._v(" " + t._s(e.text) + " ")]);
+      }), 1)], 1)]), n("open", {
+        staticClass: "mt5 use-setting-item",
+        attrs: {
+          text: "快捷键设置"
+        },
+        on: {
+          change: function (e) {
+            return t.changeShowMore("showMore", "shortcutKey");
+          }
+        },
+        model: {
+          value: t.showMore.shortcutKey,
+          callback: function (e) {
+            t.$set(t.showMore, "shortcutKey", e);
+          },
+          expression: "showMore.shortcutKey"
+        }
+      }, [n("baseSvg", {
+        staticClass: "quick",
+        attrs: {
+          slot: "tip",
+          name: "#iconweifenlei",
+          title: "帮助说明"
+        },
+        on: {
+          handle: function (e) {
+            t.tipsIstrue = !t.tipsIstrue;
+          }
+        },
+        slot: "tip"
+      }), n("div", {
+        staticClass: "list-hidden"
+      }, [t._l(t.quick, function (e, a) {
+        return n("div", {
+          key: "set1" + a,
+          class: a != 0 ? "mt4" : ""
+        }, [n("baseOpen", {
+          attrs: {
+            text: e.groupName,
+            align: "left"
+          },
+          on: {
+            click: function (e) {
+              e.stopPropagation();
+              return t.setQuickIndex(a);
+            }
+          },
+          model: {
+            value: t.showShortcutKey[a],
+            callback: function (e) {
+              t.$set(t.showShortcutKey, a, e);
+            },
+            expression: "showShortcutKey[i]"
+          }
+        }, [n("div", {
+          staticClass: "mb10"
+        }, t._l(e.arr, function (e, i) {
+          return n("baseCheck", {
+            key: a + "" + i,
+            staticClass: "mt8 ml14",
+            model: {
+              value: e.add,
+              callback: function (n) {
+                t.$set(e, "add", n);
+              },
+              expression: "item.add"
+            }
+          }, [t._v(" " + t._s(e.name) + " ")]);
+        }), 1)])], 1);
+      }), n("hr", {
+        staticClass: "div-line"
+      }), n("button", {
+        staticClass: "btn-1 mb0",
+        on: {
+          click: function (e) {
+            return t.manualCopy();
+          }
+        }
+      }, [t._v("手动拷贝配置文件")]), n("p", {
+        staticClass: "mt8 tac cursor reset-text",
+        attrs: {
+          title: "刷新配置文件"
+        },
+        on: {
+          click: function (e) {
+            return t.resetQuickKey();
+          }
+        }
+      }, [t._v(" 刷新配置文件 ")])], 2)], 1), n("open", {
+        staticClass: "mt5 use-setting-item",
+        attrs: {
+          text: "常用功能面板"
+        },
+        on: {
+          change: function (e) {
+            return t.changeShowMore("showMore", "commonUse");
+          }
+        },
+        model: {
+          value: t.showMore.commonUse,
+          callback: function (e) {
+            t.$set(t.showMore, "commonUse", e);
+          },
+          expression: "showMore.commonUse"
+        }
+      }, [n("div", {
+        staticClass: "list-hidden"
+      }, [n("baseCheck", {
+        model: {
+          value: t.set.cyShowZoom,
+          callback: function (e) {
+            t.$set(t.set, "cyShowZoom", e);
+          },
+          expression: "set.cyShowZoom"
+        }
+      }, [t._v("显示缩放")]), n("baseCheck", {
+        staticClass: "mt10",
+        model: {
+          value: t.set.cyShowTransformation,
+          callback: function (e) {
+            t.$set(t.set, "cyShowTransformation", e);
+          },
+          expression: "set.cyShowTransformation"
+        }
+      }, [t._v(" 显示变换元素 ")]), n("hr", {
+        staticClass: "div-line"
+      }), n("p", {
+        staticClass: "mb10"
+      }, [t._v("显示 / 隐藏功能")]), t._l(t.showCommonFunc, function (e, a) {
+        return n("baseCheck", {
+          key: "font" + a,
+          class: a != 0 ? "mt10" : "",
+          model: {
+            value: e.isShow,
+            callback: function (n) {
+              t.$set(e, "isShow", n);
+            },
+            expression: "site.isShow"
+          }
+        }, [t._v(" " + t._s(e.name) + " ")]);
+      }), n("hr", {
+        staticClass: "div-line"
+      }), n("button", {
+        staticClass: "btn-1 mb0",
+        on: {
+          click: t.resetSort
+        }
+      }, [t._v("重置常用功能排序")])], 2)]), n("open", {
+        staticClass: "mt5 use-setting-item",
+        attrs: {
+          text: "字体面板"
+        },
+        on: {
+          change: function (e) {
+            return t.changeShowMore("showMore", "fontSet");
+          }
+        },
+        model: {
+          value: t.showMore.fontSet,
+          callback: function (e) {
+            t.$set(t.showMore, "fontSet", e);
+          },
+          expression: "showMore.fontSet"
+        }
+      }, [n("div", {
+        staticClass: "list-hidden"
+      }, [t._l(t.fontData, function (e, a) {
+        return n("baseCheck", {
+          key: "font" + a,
+          class: a != 0 ? "mt10" : "",
+          model: {
+            value: t.set[e.key],
+            callback: function (n) {
+              t.$set(t.set, e.key, n);
+            },
+            expression: "set[site.key]"
+          }
+        }, [t._v(" " + t._s(e.name) + " ")]);
+      }), n("div", {
+        staticClass: "mt10"
+      }, [n("button", {
+        staticClass: "btn-small btn-small-2",
+        on: {
+          click: function (e) {
+            return t.dropOpen(e, 0);
+          }
+        }
+      }, [t._v(" 配置字号 ")]), n("button", {
+        staticClass: "btn-small btn-small-2 mr0",
+        on: {
+          click: function (e) {
+            return t.dropOpen(e, 1);
+          }
+        }
+      }, [t._v(" 配置行间距 ")]), n("button", {
+        staticClass: "btn-small btn-small-2 mb0",
+        on: {
+          click: function (e) {
+            return t.dropOpen(e, 2);
+          }
+        }
+      }, [t._v(" 配置字间距 ")])]), n("hr", {
+        staticClass: "div-line"
+      }), n("baseCheck", {
+        model: {
+          value: t.set.ztOldVersion,
+          callback: function (e) {
+            t.$set(t.set, "ztOldVersion", e);
+          },
+          expression: "set.ztOldVersion"
+        }
+      }, [t._v("使用旧版本排版")])], 2)]), n("open", {
+        staticClass: "mt5 use-setting-item",
+        attrs: {
+          text: "云同步设置"
+        },
+        on: {
+          change: function (e) {
+            return t.changeShowMore("showMore", "sync");
+          }
+        },
+        model: {
+          value: t.showMore.sync,
+          callback: function (e) {
+            t.$set(t.showMore, "sync", e);
+          },
+          expression: "showMore.sync"
+        }
+      }, [n("div", {
+        staticClass: "list-hidden"
+      }, [n("p", {
+        staticClass: "contextHover"
+      }, [t._v("最新更新：" + t._s(t.syncTime))]), n("baseCheck", {
+        staticClass: "mt10",
+        model: {
+          value: t.set.appSync,
+          callback: function (e) {
+            t.$set(t.set, "appSync", e);
+          },
+          expression: "set.appSync"
+        }
+      }, [t._v("开启云同步预设")]), n("hr", {
+        staticClass: "div-line"
+      }), n("p", {
+        staticClass: "mb10"
+      }, [t._v("说明")]), n("p", [t._v("1. 除模板库以及图层样式的预设之外，均支持云同步。")]), n("p", {
+        staticClass: "mt6"
+      }, [t._v("2. 本功能内测中，如有不稳定请反馈我们")])], 1)]), n("div", {
+        staticClass: "mt5 clear_cache_bar",
+        on: {
+          click: function (e) {
+            return t.showClearCacheDialog();
+          }
+        }
+      }, [n("span", [t._v("清理缓存")]), n("div", {
+        staticClass: "right"
+      }, [n("span", [t._v(t._s(t.formattedUsage))]), n("Icon", {
+        staticClass: "clear_cache_pointer f-size20",
+        attrs: {
+          type: "chevron_left"
+        }
+      })], 1)]), n("open", {
+        staticClass: "mt5 use-setting-item",
+        attrs: {
+          text: "设备管理"
+        },
+        model: {
+          value: t.deviceManageVisible,
+          callback: function (e) {
+            t.deviceManageVisible = e;
+          },
+          expression: "deviceManageVisible"
+        }
+      }), n("hr", {
+        staticClass: "line"
+      }), n("div", {
+        staticClass: "app-padding"
+      }, [n("p", {
+        staticClass: "setTitle setTitle-none version-manager"
+      }, [n("span", [t._v("帮助更新")]), n("version-switcher", {
+        attrs: {
+          "has-offset": true,
+          version: t.data.version,
+          time: t.data.time,
+          showVersionSwitcher: t.showVersionSwitcher,
+          switchTo: t.switchTo
+        }
+      })], 1), n("div", {
+        staticClass: "mt10"
+      }, [n("button", {
+        staticClass: "btn-2 mb0",
+        on: {
+          click: function (e) {
+            return t.openHelp();
+          }
+        }
+      }, [t._v("使用教程")]), n("button", {
+        staticClass: "btn-2 mb0 mr0",
+        on: {
+          click: function (e) {
+            return t.checkUpdata();
+          }
+        }
+      }, [t._v("检查更新")]), n("button", {
+        staticClass: "btn-2 mb0 mt8",
+        on: {
+          click: t.openGuide
+        }
+      }, [t._v("新手指引")]), n("GDropdown", {
+        attrs: {
+          trigger: ["click"]
+        }
+      }, [n("button", {
+        staticClass: "btn-2 mb0 mr0 mt8"
+      }, [t._v("更多产品")]), n("GMenu", {
+        staticClass: "product-menu",
+        attrs: {
+          slot: "overlay"
+        },
+        slot: "overlay"
+      }, t._l(t.PRODUCTS, function (e) {
+        return n("GMenuItem", {
+          key: e.name,
+          staticClass: "product-menu-item",
+          on: {
+            click: function (n) {
+              return t.openUrl(e.url);
+            }
+          }
+        }, [t._v(" " + t._s(e.name) + " "), n("svg", {
+          staticClass: "product-menu-item-icon",
+          attrs: {
+            width: "16",
+            height: "16",
+            viewBox: "0 0 16 16",
+            fill: "none",
+            xmlns: "http://www.w3.org/2000/svg"
+          }
+        }, [n("path", {
+          attrs: {
+            "fill-rule": "evenodd",
+            "clip-rule": "evenodd",
+            d: "M5.72668 11.06L8.78002 8L5.72668 4.94L6.66668 4L10.6667 8L6.66668 12L5.72668 11.06Z",
+            fill: "#EAEAEA"
+          }
+        })])]);
+      }), 1)], 1)], 1)]), n("hr", {
+        staticClass: "line"
+      }), n("div", {
+        staticClass: "app-padding f-baseX mt12 mb7",
+        on: {
+          click: function (e) {
+            if (t.allIndex == 4) {
+              t.allIndex = -1;
+            } else {
+              t.allIndex = 4;
+            }
+          }
+        }
+      }, [n("p", {
+        staticClass: "setTitle setTitle-none"
+      }, [t._v("关于我们")])]), n("div", {
+        staticClass: "app-padding mt12"
+      }, [n("div", {
+        staticClass: "f-baseX about-item"
+      }, [n("p", {
+        staticClass: "left"
+      }, [t._v("名称")]), n("p", [t._v(t._s(t.data.name) + t._s(t.testString))])]), n("div", {
+        staticClass: "f-baseX mt10 about-item"
+      }, [n("p", {
+        staticClass: "left"
+      }, [t._v("版本")]), n("p", [t._v(t._s(t.displayVersionNum))])]), n("div", {
+        staticClass: "f-baseX mt10 about-item"
+      }, [n("p", {
+        staticClass: "left"
+      }, [t._v("所属")]), n("p", [t._v("稿定（厦门）科技有限公司")])]), n("div", {
+        staticClass: "f-baseX mt10 about-item"
+      }, [n("p", {
+        staticClass: "left"
+      }, [t._v("官网")]), n("a", {
+        staticClass: "f-size12 cursor a",
+        attrs: {
+          target: "_blank"
+        },
+        on: {
+          click: t.openOs
+        }
+      }, [t._v(" https://pszhuli.com/ ")])])]), n("hr", {
+        staticClass: "line"
+      }), n("div", {
+        staticClass: "app-padding"
+      }, [n("p", {
+        staticClass: "setTitle setTitle-none"
+      }, [t._v("反馈与建议")]), n("div", {
+        staticClass: "f-baseX f-center mt20"
+      }, [n("div", {
+        staticClass: "f-baseY qrcode-item"
+      }, [n("img", {
+        staticClass: "qrcode",
+        attrs: {
+          src: "https://gd-filems.dancf.com/saas/6khzgo/40317/b49c7a74-8465-42ce-ab0d-09294c991c862523654.png"
+        }
+      }), n("p", {
+        staticClass: "align-center mt8"
+      }, [t._v("微信公众号")])]), n("div", {
+        staticClass: "f-baseY qrcode-item"
+      }, [n("img", {
+        staticClass: "qrcode",
+        attrs: {
+          src: "https://gd-filems.dancf.com/saas/6khzgo/40317/e225b8d3-7e1e-4d50-8c93-86b9501238c02523655.png"
+        }
+      }), n("p", {
+        staticClass: "align-center mt8"
+      }, [t._v("微信客服")])])]), n("p", {
+        staticClass: "align-center mt20 mb5 feedback-text"
+      }, [t._v(" 期待您的反馈与建议 "), n("br"), t._v(" 我们将持续优化，给您带来更好的体验 ")])]), n("hr", {
+        staticClass: "line"
+      }), n("div", {
+        staticClass: "app-padding"
+      }, [n("GButton", {
+        staticClass: "out-login-btn",
+        on: {
+          click: t.outLogin
+        }
+      }, [t._v("退出登录")])], 1)], 1), n("tips", {
+        directives: [{
+          name: "show",
+          rawName: "v-show",
+          value: t.tipsIstrue,
+          expression: "tipsIstrue"
+        }],
+        on: {
+          close: t.closeTipFun
+        }
+      }), t.addIstrue ? n("addcom", {
+        attrs: {
+          dataval: t.addDataVal,
+          text: t.addText
+        },
+        on: {
+          close: t.addComClose
+        }
+      }) : t._e(), t.isShowClearCacheDialog ? n("ClearCacheDialog", {
+        attrs: {
+          encryptedFileSize: t.usage
+        },
+        on: {
+          readEncryptedFileSize: t.diskUsage,
+          showClearCacheDialog: t.showClearCacheDialog
+        }
+      }) : t._e(), n("DevicesManageModal", {
+        attrs: {
+          visible: t.deviceManageVisible,
+          cep: "CEP001"
+        },
+        on: {
+          "update:visible": function (e) {
+            t.deviceManageVisible = e;
+          },
+          deactivate: t.outLogin
+        }
+      })], 1);
+    }
+```

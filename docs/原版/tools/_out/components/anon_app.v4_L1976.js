@@ -1,0 +1,52 @@
+{
+      components: {
+        childre: _t
+      },
+      data: function () {
+        return {
+          columnIndex: -1,
+          display: -1,
+          data: null
+        };
+      },
+      computed: {
+        moveFreeLayoutIndex: function () {
+          return wt.a.state.moveFreeLayoutIndex;
+        },
+        freeLayoutIndex: function () {
+          return wt.a.state.freeLayoutIndex;
+        },
+        istrue: function () {
+          return this.data.type == "row";
+        },
+        width: function () {
+          return "calc((100% - " + (this.data.list.length - 1) * 2 + "px )/" + this.data.list.length + " )";
+        },
+        height: function () {
+          return "calc((100% - " + (this.data.list.length - 1) * 2 + "px )/" + this.data.list.length + " )";
+        }
+      },
+      created: function () {
+        var t = new jt();
+        this.data = t.obj;
+      },
+      methods: {
+        selectId: function (t) {
+          this.$emit("selectId", t);
+        },
+        move: function (t) {
+          if (t == wt.a.state.freeLayoutIndex) {
+            wt.a.state.moveFreeLayoutIndex = -1;
+          } else {
+            wt.a.state.moveFreeLayoutIndex = t;
+          }
+        },
+        leav: function () {
+          wt.a.state.moveFreeLayoutIndex = -1;
+        },
+        highlight: function (t) {
+          wt.a.state.freeLayoutIndex = t;
+          this.$emit("selectId", t);
+        }
+      }
+    }

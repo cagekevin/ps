@@ -1,0 +1,72 @@
+{
+      components: {},
+      props: {
+        dataval: null,
+        text: null
+      },
+      data: function () {
+        return {
+          strData: "",
+          set: V.a.info,
+          errIstrue: false,
+          ztDefaultSize: [6, 8, 10, 11, 12, 14, 16, 18, 24, 30, 36, 48, 60, 72, 84, 96, 108, 120],
+          ztDefaultLeading: [1, 1.1, 1.2, 1.3, 1.4, 1.5, 1.6, 1.7, 1.8, 1.9, 2, 2.5],
+          ztDefaultTracking: [-100, -50, -25, 0, 25, 50, 75, 100, 200, 300, 500, 1000]
+        };
+      },
+      created: function () {
+        this.strData = this.getData(this.set[this.dataval]);
+      },
+      watch: {
+        strData: function (t, e) {
+          var n = /[^\d,.\s-]/g;
+          var a = /([.]{2})/g;
+          var i = /[,]{2}/g;
+          var r = /[,][.]/g;
+          var s = /[.][,]/g;
+          this.strData = this.strData.replace(a, ".");
+          this.strData = this.strData.replace(i, ",");
+          this.strData = this.strData.replace(r, ",");
+          this.strData = this.strData.replace(s, ".");
+          this.strData = this.strData.replace(n, "");
+        }
+      },
+      methods: {
+        getData: function (t) {
+          var e = 0;
+          var n = "";
+          for (var a = t.slice(0).join(","), i = 0; i < a.length; i++) {
+            if (a[i] != "," || (e++, e % 6 != 0)) {
+              n += a[i];
+            } else {
+              n += ",\n";
+            }
+          }
+          return n;
+        },
+        resetFun: function () {
+          this.strData = this.getData(this[this.dataval]);
+        },
+        analysis: function () {
+          var t = 0;
+          for (var e = 0; e < this.strData.length; e++) {
+            if (this.strData[e] == ",") {
+              t++;
+            }
+          }
+          if (t >= 23 || t <= 4) {
+            this.errIstrue = true;
+          } else {
+            this.errIstrue = false;
+            var n = this.strData.split(",");
+            this.set[this.dataval] = n.map(function (t) {
+              return parseFloat(t);
+            });
+            this.$emit("close");
+          }
+        },
+        close: function () {
+          this.$emit("close");
+        }
+      }
+    }

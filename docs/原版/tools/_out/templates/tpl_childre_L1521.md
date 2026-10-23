@@ -1,0 +1,72 @@
+# 模板 · childre
+
+> 来源：`app.v4.js` render 函数 `vt`（行 1521）
+> 结构：**带层级**，缩进表示嵌套
+
+## 结构树
+
+```jsx
+<div class="w100 h100">
+  <div class="freelayout w100 h100 f-alignNone" />
+</div>
+```
+
+## 动态渲染（需人工对照）
+
+| 类型 | 处数 | 对应 |
+|---|---|---|
+| `_l()` 列表渲染 | 1 | `v-for` |
+
+> 这些在 render 函数里是**控制流**，不是节点属性，无法自动转成 `v-if` / `v-for`。
+> 重写时看下面的 render 源码，按 `_l(数组, function(item){...})` 还原列表，按 `if (条件) { return ... }` 还原条件。
+
+## render 源码
+
+```js
+{
+      var t = this;
+      var e = t.$createElement;
+      var n = t._self._c || e;
+      return n("div", {
+        staticClass: "w100 h100"
+      }, [n("div", {
+        staticClass: "freelayout w100 h100 f-alignNone",
+        class: t.istrue ? "f-arrayX" : "f-arrayY"
+      }, t._l(t.data.list, function (e, a) {
+        return n("div", {
+          key: "freePanelIndex" + a,
+          staticClass: "block-wrap relative",
+          class: [e.id == t.freeLayoutIndex ? "highlight" : "", e.id == t.moveFreeLayoutIndex ? "moveFreeLayoutIndex" : ""],
+          style: {
+            backgroundColor: e.children.length > 0 ? "#FFFFFF" : "#EBEBEB",
+            margin: t.istrue ? "0 2px 0 0" : "0 0 2px 0",
+            width: t.istrue ? t.width : "100%",
+            height: t.istrue ? "100%" : t.height
+          },
+          attrs: {
+            id: "drag" + e.id
+          },
+          on: {
+            mouseenter: function (n) {
+              n.stopPropagation();
+              return t.move(e.id);
+            },
+            mouseleave: t.leav,
+            click: function (n) {
+              n.stopPropagation();
+              return t.highlight(e.id);
+            }
+          }
+        }, [e.children.length > 0 ? n("childre", {
+          attrs: {
+            data: e
+          },
+          on: {
+            selectId: function (e) {
+              return t.selectId(e);
+            }
+          }
+        }) : t._e()], 1);
+      }), 0)]);
+    }
+```

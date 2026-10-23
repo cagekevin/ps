@@ -1,0 +1,107 @@
+{
+      props: {
+        textClass: null,
+        bottom: null,
+        selectIndex: {
+          type: null,
+          default: 1
+        },
+        ischeck: {
+          type: null,
+          default: 1
+        },
+        firstSvg: null,
+        secondSvg: null,
+        therrSvg: null,
+        text: {
+          type: Array,
+          default: function () {
+            return [];
+          }
+        }
+      },
+      data: function () {
+        return {
+          mouseIndex: -1,
+          firstSvgIstrue: null,
+          condition: Math.floor(Math.random() * 10000000),
+          right: false
+        };
+      },
+      created: function () {
+        this.setSelectIndex();
+      },
+      computed: {
+        isShowCurDropdown: function () {
+          return this.condition === this.$store.state.showMenu;
+        }
+      },
+      watch: {
+        selectIndex: function () {
+          this.setSelectIndex();
+        }
+      },
+      methods: {
+        setSelectIndex: function () {
+          var t = this;
+          if (this.text == null) {
+            return false;
+          }
+          this.firstSvgIstrue = new Array(this.text.length).fill(false);
+          if (Array.isArray(this.selectIndex)) {
+            this.selectIndex.filter(function (e, n) {
+              t.firstSvgIstrue.splice(e, 1, true);
+              return false;
+            });
+          } else {
+            this.firstSvgIstrue.splice(this.selectIndex, 1, true);
+          }
+        },
+        getLeft: function (t) {
+          var e = t.offsetLeft;
+          var n = t.offsetParent;
+          while (n != null) {
+            e += n.offsetLeft;
+            n = n.offsetParent;
+          }
+          return e;
+        },
+        open: function () {
+          var t = this;
+          this.right = false;
+          this.$store.state.showMenu = this.$store.state.showMenu == this.condition ? -1 : this.condition;
+          this.$nextTick(function () {
+            var e = t.$refs.test.$el;
+            if (t.getLeft(e) + e.offsetWidth > document.body.offsetWidth) {
+              t.right = true;
+            }
+          });
+        },
+        select: function (t) {
+          if (this.ischeck == 1) {
+            this.firstSvgIstrue.fill(false);
+            this.firstSvgIstrue.splice(t, 1, true);
+          } else if (this.ischeck == 2) {
+            this.firstSvgIstrue.splice(t, 1, !this.firstSvgIstrue[t]);
+          }
+          var e = [];
+          this.firstSvgIstrue.filter(function (t, n) {
+            if (t) {
+              e.push(n);
+            }
+            return false;
+          });
+          this.$emit("dropchange", e);
+        },
+        clickBottom: function () {
+          this.$emit("clickBottom");
+        },
+        therrHandle: function (t) {
+          this.$emit("therrHandle", t);
+        },
+        secondHandle: function (t) {
+          this.$emit("secondHandle", t);
+        }
+      },
+      mounted: function () {}
+    }

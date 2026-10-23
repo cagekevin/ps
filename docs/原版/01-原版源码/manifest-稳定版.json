@@ -1,0 +1,18 @@
+{
+  "名称": "稳定版 v2 - V4 还原源码",
+  "保存时间": "2026/10/20 13:38:38",
+  "说明": "基于 webcrack 还原的可读源码 bundle（2.4MB），已包含全部补丁",
+  "关键参数": {
+    "bundle文件": "panel/js/app.v4.js",
+    "体积": "2.4MB（可读、可直接编辑）",
+    "菜单名": "V4-还原源码",
+    "bundle_id": "com.local.psz.panel.v4",
+    "补丁": "II / OI / setupCheck / 字体缓存 / scrollTop 守卫 / pageMax 16"
+  },
+  "验证记录": {
+    "语法": "node --check 通过",
+    "加载行为": "与原版一致（原版24ms / 还原版26ms，全局键数相同）",
+    "真机": "用户确认面板正常打开"
+  },
+  "回滚": "整目录复制回 %APPDATA%\\Adobe\\CEP\\extensions\\com.local.psz.panel.v4"
+}

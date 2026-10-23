@@ -1,0 +1,42 @@
+# 模板 · anon_app.v4_L2798
+
+> 来源：`app.v4.js` render 函数 `Oe`（行 2770）
+> 结构：**带层级**，缩进表示嵌套
+
+## 结构树
+
+```jsx
+<baseInput />
+```
+
+## render 源码
+
+```js
+{
+      var t = this;
+      var e = t.$createElement;
+      var n = t._self._c || e;
+      return n("baseInput", t._g(t._b({
+        attrs: {
+          size: t.size,
+          leftPadding: t.size == "small" ? "5px" : "10px"
+        }
+      }, "baseInput", t.$attrs, false), t.$listeners), [t._t("default", null, {
+        slot: "left"
+      }), n("baseIcon", {
+        staticClass: "f-full",
+        attrs: {
+          slot: "right",
+          hover: "no",
+          name: "#iconzhankaizhedie",
+          svgWidth: "10px",
+          width: t.size == "small" ? "18px" : "24px"
+        },
+        on: {
+          handle: t.handle,
+          menu: t.menu
+        },
+        slot: "right"
+      })], 2);
+    }
+```

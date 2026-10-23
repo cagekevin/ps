@@ -1,0 +1,63 @@
+{
+      props: {
+        data: {
+          type: Array,
+          default: []
+        },
+        currentLabel: {
+          type: String,
+          default: ""
+        }
+      },
+      data: function () {
+        return {
+          showGroupList: [],
+          activeGroupItemIndex: ""
+        };
+      },
+      mounted: function () {
+        var t = this;
+        var e = JSON.parse(JSON.stringify(this.data));
+        for (var n = e.length - 1; n > -1; n--) {
+          var a = e[n];
+          var i = a.data.find(function (e) {
+            return e === t.currentLabel;
+          });
+          if (i) {
+            a.existed = true;
+            e.splice(n, 1);
+          }
+        }
+        this.showGroupList = e;
+      },
+      methods: {
+        handleSelectMoveGroup: function (t) {
+          this.activeGroupItemIndex = t;
+        },
+        ok: function () {
+          if (this.activeGroupItemIndex || this.activeGroupItemIndex === 0) {
+            var t = this.showGroupList[this.activeGroupItemIndex];
+            var e = this.data.findIndex(function (e) {
+              return e.name === t.name;
+            });
+            this.$emit("ok", [e]);
+          }
+          this.cancel();
+        },
+        cancel: function () {
+          this.$emit("close");
+        },
+        sortData: function () {
+          if (!this.data.length) {
+            return [];
+          }
+          for (var t = JSON.parse(JSON.stringify(this.data)), e = 0; e < t.length; e++) {
+            if (item.existed) {
+              t.splice(e, 1);
+              t.push(item);
+            }
+          }
+          return t;
+        }
+      }
+    }

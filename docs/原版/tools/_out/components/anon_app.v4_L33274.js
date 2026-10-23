@@ -1,0 +1,92 @@
+{
+      model: {
+        prop: "collapse",
+        event: "change"
+      },
+      components: {
+        TopicCarousel: rf
+      },
+      props: {
+        visible: {
+          type: Boolean,
+          default: false
+        },
+        collapse: {
+          type: Boolean,
+          default: false
+        },
+        type: {
+          type: String,
+          required: true
+        }
+      },
+      data: function () {
+        return {
+          loading: false
+        };
+      },
+      computed: Object(P.a)(Object(P.a)({}, Object(mu.d)("topic", {
+        topics: function (t) {
+          return t.bannerTopics;
+        }
+      })), {}, {
+        innerCollapse: function () {
+          return this.collapse || this.topics.length === 0;
+        },
+        bannerStyle: function () {
+          if (this.innerCollapse || !this.visible || this.loading) {
+            return {
+              height: "0px"
+            };
+          } else {
+            return {
+              height: "107px"
+            };
+          }
+        }
+      }),
+      watch: {
+        visible: function (t) {
+          if (t) {
+            this.init();
+          }
+        },
+        innerCollapse: function (t) {
+          this.$emit("change", t);
+        }
+      },
+      mounted: function () {
+        this.init();
+      },
+      methods: Object(P.a)(Object(P.a)({}, Object(mu.b)("topic", ["getBannerTopics"])), {}, {
+        toDetail: function (t) {
+          this.$router.push(`/topic/${this.type}/${t.id}`);
+        },
+        toAll: function () {
+          this.$router.push(`/topics/${this.type}`);
+        },
+        init: function () {
+          var t = this;
+          return Object(d.a)(regeneratorRuntime.mark(function e() {
+            return regeneratorRuntime.wrap(function (e) {
+              while (1) {
+                switch (e.prev = e.next) {
+                  case 0:
+                    t.loading = true;
+                    e.prev = 1;
+                    e.next = 4;
+                    return t.getBannerTopics(t.type);
+                  case 4:
+                    e.prev = 4;
+                    t.loading = false;
+                    return e.finish(4);
+                  case 7:
+                  case "end":
+                    return e.stop();
+                }
+              }
+            }, e, null, [[1,, 4, 7]]);
+          }))();
+        }
+      })
+    }

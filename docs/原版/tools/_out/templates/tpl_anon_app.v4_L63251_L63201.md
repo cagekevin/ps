@@ -1,0 +1,77 @@
+# 模板 · anon_app.v4_L63251
+
+> 来源：`app.v4.js` render 函数 `XT`（行 63201）
+> 结构：**带层级**，缩进表示嵌套
+
+## 结构树
+
+```jsx
+<div class="device-input">
+  <div class="device-input__editing">
+    <GInput class="device-input__editing__input" @blur v-model="inputVal" />
+  </div>
+  <div class="device-input__display">
+    <div class="device-input__display__text" />
+    <div class="device-input__display__text-suffix" />
+    <div class="device-input__display__suffix" @click>
+      <svg>
+        <path />
+      </svg>
+    </div>
+  </div>
+</div>
+```
+
+## render 源码
+
+```js
+{
+      var t = this;
+      var e = t.$createElement;
+      var n = t._self._c || e;
+      return n("div", {
+        staticClass: "device-input"
+      }, [t.editing ? n("div", {
+        staticClass: "device-input__editing"
+      }, [n("GInput", {
+        ref: "input",
+        staticClass: "device-input__editing__input",
+        attrs: {
+          size: "small",
+          spellcheck: "false"
+        },
+        on: {
+          blur: t.onBlur
+        },
+        model: {
+          value: t.inputVal,
+          callback: function (e) {
+            t.inputVal = e;
+          },
+          expression: "inputVal"
+        }
+      })], 1) : n("div", {
+        staticClass: "device-input__display"
+      }, [n("div", {
+        staticClass: "device-input__display__text"
+      }, [t._v(t._s(t.value))]), n("div", {
+        staticClass: "device-input__display__text-suffix"
+      }, [t._v(t._s(t.suffixText))]), n("div", {
+        staticClass: "device-input__display__suffix",
+        on: {
+          click: t.onEdit
+        }
+      }, [n("svg", {
+        attrs: {
+          width: "16",
+          height: "16",
+          fill: "#8E8E8E",
+          xmlns: "http://www.w3.org/2000/svg"
+        }
+      }, [n("path", {
+        attrs: {
+          d: "M13.808 4.688l-1.216 1.216-2.496-2.496 1.216-1.216A.642.642 0 0111.784 2c.187 0 .344.064.472.192l1.552 1.552a.642.642 0 01.192.472.642.642 0 01-.192.472zM2 11.504l7.376-7.376 2.496 2.496L4.496 14H2v-2.496z"
+        }
+      })])])])]);
+    }
+```

@@ -1,0 +1,96 @@
+# 模板 · select-box
+
+> 来源：`app.v4.js` render 函数 `mS`（行 55328）
+> 结构：**带层级**，缩进表示嵌套
+
+## 结构树
+
+```jsx
+<cep-modal class="action-card" @cancel>
+  <div>
+    <div>
+      <check-box @change v-model="checkAll">
+        全选
+      </check-box>
+    </div>
+    <div>
+      *该分组没有动作
+    </div>
+    <Myvuescroll />
+  </div>
+</cep-modal>
+```
+
+## 动态渲染（需人工对照）
+
+| 类型 | 处数 | 对应 |
+|---|---|---|
+| `_l()` 列表渲染 | 1 | `v-for` |
+
+> 这些在 render 函数里是**控制流**，不是节点属性，无法自动转成 `v-if` / `v-for`。
+> 重写时看下面的 render 源码，按 `_l(数组, function(item){...})` 还原列表，按 `if (条件) { return ... }` 还原条件。
+
+## render 源码
+
+```js
+{
+      var t = this;
+      var e = t.$createElement;
+      var n = t._self._c || e;
+      return n("cep-modal", {
+        staticClass: "action-card",
+        attrs: {
+          "has-offset": true
+        },
+        on: {
+          cancel: t.cancel,
+          ok: t.confirm
+        },
+        scopedSlots: t._u([{
+          key: "header",
+          fn: function () {
+            return [n("select-box", {
+              attrs: {
+                options: t.groups
+              },
+              on: {
+                choose: t.choose
+              }
+            })];
+          },
+          proxy: true
+        }])
+      }, [n("div", [n("div", [n("check-box", {
+        attrs: {
+          indeterminate: t.indeterminate
+        },
+        on: {
+          change: t.onCheckAllChange
+        },
+        model: {
+          value: t.checkAll,
+          callback: function (e) {
+            t.checkAll = e;
+          },
+          expression: "checkAll"
+        }
+      }, [t._v("全选")])], 1), t.actions.length === 0 ? n("div", [t._v(" *该分组没有动作 ")]) : n("Myvuescroll", t._l(t.actions, function (e, a) {
+        return n("div", {
+          key: a
+        }, [n("check-box", {
+          on: {
+            change: function (e) {
+              return t.onCheckChange(e, a);
+            }
+          },
+          model: {
+            value: e.isAdd,
+            callback: function (n) {
+              t.$set(e, "isAdd", n);
+            },
+            expression: "action.isAdd"
+          }
+        }, [t._v(t._s(e.name))])], 1);
+      }), 0)], 1)]);
+    }
+```

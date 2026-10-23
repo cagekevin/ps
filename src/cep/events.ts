@@ -8,7 +8,7 @@ import { log } from '@/utils/logger'
  * （app.v4.js:42473-42476）直接写死十进制。这里保持同一份值，
  * **不再经过 `charIDToTypeID` 之类的二次转换**。
  */
-export type HostEventName = 'selection' | 'transform' | 'make' | 'setd' | 'drop'
+export type HostEventName = 'selection' | 'transform' | 'make' | 'setd'
 
 /**
  * 样式页「快速吸色到组」（T-66）复用已有两个事件：
@@ -18,8 +18,8 @@ export type HostEventName = 'selection' | 'transform' | 'make' | 'setd' | 'drop'
  * 这条约束有两处兜底：`tests/cep/events.test.ts` 的「value 不得重复」断言，
  * 与 `register()` 里的 `describeEventIdConflict` 运行期拦截。
  *
- * UNVERIFIED(T-72): PS 是否在拖入文件时真回 `1349280544`，未在真实环境验证。
- * 本表只接了一条链路「drop → commonUse.importMultipleImages」；
+ * 拖入事件 `1349280544` 已随 /commonUse 页面撤销一并移除（台账 T-80）；
+ * 重做该页时再按需接入，接入前先用一手源码确认 PS 是否真回该 ID。
  * 粘贴 / 剪贴蒙版 / 智能填色不在本表（台账 T-73，blocked）。
  */
 const EVENT_IDS: Record<HostEventName, string> = {
@@ -27,7 +27,6 @@ const EVENT_IDS: Record<HostEventName, string> = {
   transform: '1416785510', // Trnf
   make: '1298866208', // Mk
   setd: '1936028772', // setd
-  drop: '1349280544', // 拖入（`docs/页面/05-常用.md:43`，T-72）
 }
 
 /** 供测试断言「一个 ID 只能有一个语义名」；生产代码只经 `subscribeHostEvent` 访问 */

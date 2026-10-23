@@ -1,0 +1,14 @@
+﻿# 行尾一律 LF：prettier 默认 endOfLine=lf，Windows 上 core.autocrlf=true
+# 会把工作区写成 CRLF，导致 npm run check 的 format:check 对**所有**文件报错。
+# 有了这条，checkout 就按 eol=lf 落盘，不依赖每台机器的 autocrlf 设置。
+* text=auto eol=lf
+
+# 一手证据里可能有二进制（安装包解出来的 png/svg/xlsx 等），不要参与行尾归一化
+*.png binary
+*.jpg binary
+*.ico binary
+*.xlsx binary
+*.kux binary
+*.atn binary
+*.dzx binary
+*.psd binary

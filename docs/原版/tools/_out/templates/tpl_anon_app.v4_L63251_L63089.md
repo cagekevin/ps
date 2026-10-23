@@ -1,0 +1,70 @@
+# 模板 · anon_app.v4_L63251
+
+> 来源：`app.v4.js` render 函数 `UT`（行 63089）
+> 结构：**带层级**，缩进表示嵌套
+
+## 结构树
+
+```jsx
+<div class="devices-manage-modal__mask" @click>
+  <div class="devices-manage-modal" @click>
+    <div class="devices-manage-list-title">
+      设备管理（
+    </div>
+    <div class="gap" />
+    <List />
+  </div>
+</div>
+```
+
+## 动态渲染（需人工对照）
+
+| 类型 | 处数 | 对应 |
+|---|---|---|
+| `if` 条件分支 | 1 | `v-if` / `v-else` |
+
+> 这些在 render 函数里是**控制流**，不是节点属性，无法自动转成 `v-if` / `v-for`。
+> 重写时看下面的 render 源码，按 `_l(数组, function(item){...})` 还原列表，按 `if (条件) { return ... }` 还原条件。
+
+## render 源码
+
+```js
+{
+      var t = this;
+      var e = t.$createElement;
+      var n = t._self._c || e;
+      if (t.visible) {
+        return n("div", {
+          staticClass: "devices-manage-modal__mask",
+          on: {
+            click: t.clickMask
+          }
+        }, [n("div", {
+          staticClass: "devices-manage-modal",
+          on: {
+            click: function (t) {
+              t.stopPropagation();
+            }
+          }
+        }, [n("div", {
+          staticClass: "devices-manage-list-title"
+        }, [t._v(" 设备管理（" + t._s(t.currentDevicesCount) + "/" + t._s(t.maxDevicesCount) + "） ")]), n("div", {
+          staticClass: "gap",
+          staticStyle: {
+            height: "8px"
+          }
+        }), n("List", {
+          attrs: {
+            devices: t.devices,
+            maxDevicesCount: t.maxDevicesCount
+          },
+          on: {
+            "remove-device": t.removeDevice,
+            "rename-device": t.renameDevice
+          }
+        })], 1)]);
+      } else {
+        return t._e();
+      }
+    }
+```

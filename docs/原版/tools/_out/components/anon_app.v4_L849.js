@@ -1,0 +1,123 @@
+{
+      components: {
+        check: D.a,
+        GButton: g.a,
+        Icon: P.a
+      },
+      props: {
+        title: {
+          type: String,
+          default: "设计助理"
+        },
+        showCancel: {
+          type: Boolean,
+          default: false
+        },
+        showTopCancel: {
+          type: Boolean,
+          default: false
+        },
+        showOk: {
+          type: Boolean,
+          default: true
+        },
+        content: {
+          type: String,
+          default: "提示信息"
+        },
+        mask: {
+          type: Boolean,
+          default: false
+        },
+        html: {
+          type: String,
+          default: ""
+        },
+        okText: {
+          type: String,
+          default: ""
+        },
+        cancelText: {
+          type: String,
+          default: ""
+        },
+        clickClose: {
+          type: Boolean,
+          default: false
+        },
+        okClass: {
+          type: String,
+          default: ""
+        },
+        checkConfig: {
+          type: Object,
+          default: function () {
+            return {
+              show: false,
+              isCheck: false,
+              content: ""
+            };
+          }
+        }
+      },
+      data: function () {
+        return {
+          isShow: false,
+          isCheck: false,
+          resolve: "",
+          reject: "",
+          promise: ""
+        };
+      },
+      watch: {
+        isShow: function () {
+          if (this.isShow == 0) {
+            this.initVal();
+          }
+        },
+        checkConfig: function (t) {
+          this.isCheck = t.isCheck;
+        }
+      },
+      methods: {
+        mainCancel: function () {
+          if (!this.clickClose && !this.showTopCancel) {
+            this.cancel();
+          }
+        },
+        cancel: function () {
+          this.initVal();
+          this.reject("cancel");
+        },
+        confirm: function () {
+          if (this.checkConfig.show) {
+            this.resolve(this.isCheck);
+          } else {
+            this.resolve("confirm");
+          }
+          this.initVal();
+        },
+        show: function () {
+          var t = this;
+          this.isShow = true;
+          this.promise = new Promise(function (e, n) {
+            t.resolve = e;
+            t.reject = n;
+          });
+          return this.promise;
+        },
+        initVal: function () {
+          this.isShow = false;
+          this.isCheck = false;
+          this.title = "设计助理";
+          this.showCancel = false;
+          this.showOk = true;
+          this.content = "";
+          this.mask = false;
+          this.html = "";
+          this.okText = "";
+          this.okClass = "";
+          this.clickClose = false;
+        }
+      }
+    }

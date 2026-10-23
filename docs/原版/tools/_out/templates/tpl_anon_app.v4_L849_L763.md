@@ -1,0 +1,131 @@
+# 模板 · anon_app.v4_L849
+
+> 来源：`app.v4.js` render 函数 `L`（行 763）
+> 结构：**带层级**，缩进表示嵌套
+
+## 结构树
+
+```jsx
+<div class="titlePopup" @click>
+  <div class="popup-main" @click>
+    <div class="title-top f-baseX">
+      <span class="popup-title" />
+      <div class="f-space" />
+      <Icon class="icon-close" type="clear_outline" />
+    </div>
+    <div class="title-content f-centerY mt10">
+      <div class="contentText">
+        <div />
+        <check class="mt5" v-model="isCheck">
+          <p />
+        </check>
+      </div>
+      <div>
+        <div class="html-content" />
+      </div>
+    </div>
+    <div class="title-bottom">
+      <GButton class="input-box-btn" @click />
+      <GButton class="input-box-btn" @click v-show="showOk" type="primary">
+      </GButton>
+    </div>
+  </div>
+</div>
+```
+
+## 动态渲染（需人工对照）
+
+| 类型 | 处数 | 对应 |
+|---|---|---|
+| `if` 条件分支 | 1 | `v-if` / `v-else` |
+
+> 这些在 render 函数里是**控制流**，不是节点属性，无法自动转成 `v-if` / `v-for`。
+> 重写时看下面的 render 源码，按 `_l(数组, function(item){...})` 还原列表，按 `if (条件) { return ... }` 还原条件。
+
+## render 源码
+
+```js
+{
+      var t = this;
+      var e = t.$createElement;
+      var n = t._self._c || e;
+      if (t.isShow) {
+        return n("div", {
+          staticClass: "titlePopup",
+          class: [t.mask ? "mask" : ""],
+          on: {
+            click: t.mainCancel
+          }
+        }, [n("div", {
+          staticClass: "popup-main",
+          on: {
+            click: function (t) {
+              t.stopPropagation();
+            }
+          }
+        }, [n("div", {
+          staticClass: "title-top f-baseX"
+        }, [n("span", {
+          staticClass: "popup-title"
+        }, [t._v(t._s(t.title))]), n("div", {
+          staticClass: "f-space"
+        }), t.showTopCancel ? n("Icon", {
+          staticClass: "icon-close",
+          attrs: {
+            type: "clear_outline"
+          },
+          nativeOn: {
+            click: function (e) {
+              return t.cancel.apply(null, arguments);
+            }
+          }
+        }) : t._e()], 1), n("div", {
+          staticClass: "title-content f-centerY mt10"
+        }, [t.html == "" ? n("div", {
+          staticClass: "contentText"
+        }, [n("div", [t._v(t._s(t.content))]), t.checkConfig.show ? n("check", {
+          staticClass: "mt5",
+          model: {
+            value: t.isCheck,
+            callback: function (e) {
+              t.isCheck = e;
+            },
+            expression: "isCheck"
+          }
+        }, [n("p", [t._v(t._s(t.checkConfig.content))])]) : t._e()], 1) : n("div", {
+          staticStyle: {
+            width: "100%"
+          }
+        }, [n("div", {
+          staticClass: "html-content",
+          domProps: {
+            innerHTML: t._s(t.html)
+          }
+        })])]), t.showOk || t.showCancel ? n("div", {
+          staticClass: "title-bottom"
+        }, [t.showCancel ? n("GButton", {
+          staticClass: "input-box-btn",
+          on: {
+            click: t.cancel
+          }
+        }, [t._v(t._s(t.cancelText !== "" ? t.cancelText : "取消"))]) : t._e(), n("GButton", {
+          directives: [{
+            name: "show",
+            rawName: "v-show",
+            value: t.showOk,
+            expression: "showOk"
+          }],
+          staticClass: "input-box-btn",
+          class: [t.okClass],
+          attrs: {
+            type: "primary"
+          },
+          on: {
+            click: t.confirm
+          }
+        }, [t._v(" " + t._s(t.okText != "" ? t.okText : "确定") + " ")])], 1) : t._e()])]);
+      } else {
+        return t._e();
+      }
+    }
+```
