@@ -71,11 +71,11 @@
 
 | 行号 | 在做什么 | 现在怎么处理"坏" | 分类 |
 | --- | --- | --- | --- |
-| 77 ×3 | `archiveDefaultName`：取 `read.value.list[read.value.index]` 拼默认文件名 | **没有**：坏索引 → fallback 空列表 → 抛「没有可导出的仓库」（把"文件坏了"说成"没有仓库"） | 必须处理 |
-| 85 | `exportActionArchive`：`const index = read.value` | **没有**：坏索引 → 导出空索引 | 必须处理 |
-| 89 | 遍历 `list` 逐个读 `.dzx` 拼 `arrFileData` | **没有**（list 为空时循环不执行） | 必须处理 |
-| 118 | `importActionArchive`：`const current = read.value` | **没有**：坏索引 → `current` 是空索引，后面 `write(next)` 直接覆盖（绕过 D-42） | 必须处理 |
-| 144 ×2 | 导入收尾：`current.list.map(...)` 删掉不在新列表里的旧文件 | **没有**（`current` 空 → 一个都不删） | 必须处理 |
+| 77 ×3 | `archiveDefaultName`：取 `read.value.list[read.value.index]` 拼默认文件名 | **已修（T-99-4）**：原来坏索引 → `value` 是 fallback `DEFAULT_INDEX`（1 条「默认仓库」→ `sj_dz_default.json`），于是按"默认仓库.dzx"命名或抛「没有可导出的仓库」（把"文件坏了"说成"没有仓库"）；现在 `requireIndex()` 先抛「索引文件损坏…导出已中止」 | 必须处理 |
+| 85 | `exportActionArchive`：`const index = read.value` | **已修（T-99-4）**：原来坏索引 → 拿 fallback 导出「默认仓库」或抛「读取仓库失败：sj_dz_default.json」；现在读索引即抛，且不生成 `.dzx` | 必须处理 |
+| 89 | 遍历 `list` 逐个读 `.dzx` 拼 `arrFileData` | 无（被 85 挡住；原来 fallback 只有 1 条时循环只跑一次） | 必须处理 |
+| 118 | `importActionArchive`：`const current = read.value` | **已修（T-99-4）**：原来坏索引 → `current` 是 fallback `DEFAULT_INDEX`（**不是空索引**），`next.list` 基于它算，`write(next)` 直接覆盖真索引（绕过 D-42）；现在在任何写之前 `requireIndex()` 抛错 | 必须处理 |
+| 144 ×2 | 导入收尾：`current.list.map(...)` 删掉不在新列表里的旧文件 | **已修（T-99-4）**（不再可达）：原来 `current` 只有 fallback 那一条 → 替换模式下会 `removeAll` 删掉 `sj_dz_default.json`；用户的其它 `sj_dz*.json` 不在 `current.list` 里，不删、变孤儿 | 必须处理 |
 
 #### `src/cep/data/actions.ts` — 2 处
 
@@ -279,15 +279,18 @@
 **触发条件**（三条同时成立）：
 1. `%APPDATA%\SheJiZhuLi\` 下动作库索引文件损坏（不是合法 JSON，或结构不认识 → `read.degraded` 有值）；
 2. 用户在动作页执行「导入动作库」（`.dzx`）；
-3. 追加或替换都会中招：替换 = `next.list` 只有导入项；追加 = `[...current.list(空), ...imported]`，结果同样只有导入项。
+3. 追加或替换都会中招：替换 = `next.list` 只有导入项；追加 = `[...current.list, ...imported]`，
+   而 `current` 是 fallback `DEFAULT_INDEX`（**1 条「默认仓库」，不是空索引**）→ 结果 = 默认仓库 + 导入项。
 
 **实际后果（写清边界，别夸大）**：**索引被覆盖**（`actionIndexRepo.write(next)`，`write` 不走 D-42 的拒绝逻辑），
-`.dzx` 仓库文件本身**不会被删**（`current.list` 为空 → `removeAll` 空转），原件在 `.bak` 里还有一份索引。
-所以是"仓库列表在面板里消失 + 索引被默认值顶掉"，不是"文件被删"。导出路径（`:77`）不丢数据，只是文案误导。
+用户原来的仓库文件名（`sj_dz*.json`）不在 `current.list` 里，所以**不删、变孤儿**；替换模式下
+`removeAll` 会删掉 fallback 那一条指向的 `sj_dz_default.json`。原件在 `.bak` 里还有一份索引。
+所以是"仓库列表在面板里消失 + 索引被 fallback 顶掉"，不是"用户仓库文件被删"。导出路径（`:77` / `:85`）不写仓库，只是文案误导。
 
-**最小修法方向（一句话）**：`importActionArchive` 取到 `read` 后立刻
-`if (read.degraded) throw new CepError('IO', \`${...} ${read.degraded}，拒绝覆盖写\`)`，
-把判定放在任何 `write` 之前——与 `file-repo.update`（D-42）和 `style-library-repo.usableIndex()` 同口径。
+**已修（T-99-4）**：`requireIndex(read, '导入' | '导出')` 在**任何写之前**判 `degraded` 并抛
+`动作库索引文件损坏（<原因>），<动作>已中止：磁盘上的仓库文件没动`——与 `file-repo.update`（D-42）
+和 `style-library-repo.usableIndex()` 同口径。用例见 `tests/cep/action-archive.test.ts` 的
+「action-archive · 坏索引（T-99-4）」三条。
 
 ---
 

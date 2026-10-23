@@ -72,17 +72,38 @@ function removeAll(fileNames: string[]): void {
   }
 }
 
+/**
+ * 索引读坏了就停下（D-42 同口径：读坏禁止覆盖写）。
+ *
+ * 为什么必须在**任何写之前**：坏索引的 `value` 是 fallback `DEFAULT_INDEX`（一条「默认仓库」），
+ * 拿它当真索引算 `next.list`，再 `write(next)` 就把用户真实的仓库列表顶掉了——
+ * 文件还在磁盘上，但索引不再指向它们，面板里等于全没了。
+ *
+ * 文案要求：让人看出"是文件坏了"，不是"你没有仓库"——后者会让人以为数据被清了。
+ */
+function requireIndex(
+  read: { value: ActionWarehouseIndex; degraded?: string },
+  action: '导入' | '导出',
+): ActionWarehouseIndex {
+  if (read.degraded) {
+    throw new CepError(
+      'IO',
+      `动作库索引文件损坏（${read.degraded}），${action}已中止：磁盘上的仓库文件没动`,
+    )
+  }
+  return read.value
+}
+
 export async function archiveDefaultName(current: boolean): Promise<string> {
-  const read = await actionIndexRepo.read()
-  const list = current ? [read.value.list[read.value.index]].filter(Boolean) : read.value.list
+  const index = requireIndex(await actionIndexRepo.read(), '导出')
+  const list = current ? [index.list[index.index]].filter(Boolean) : index.list
   if (!list.length) throw new CepError('PARSE', '没有可导出的仓库')
   return current ? `${list[0].name}.dzx` : '全部仓库.dzx'
 }
 
 export function exportActionArchive(current: boolean, targetPath: string): Promise<void> {
   return enqueue(async () => {
-    const read = await actionIndexRepo.read()
-    const index = read.value
+    const index = requireIndex(await actionIndexRepo.read(), '导出')
     const list = current ? [index.list[index.index]].filter(Boolean) : index.list
     if (!list.length) throw new CepError('PARSE', '没有可导出的仓库')
 
@@ -114,8 +135,8 @@ export function importActionArchive(append: boolean, sourcePath: string): Promis
       throw new CepError('PARSE', e instanceof Error ? e.message : '导入文件结构不正确')
     }
 
-    const read = await actionIndexRepo.read()
-    const current = read.value
+    // 任何写之前先确认索引是真实数据：坏索引时下面的 next.list 会基于 fallback 算出来
+    const current = requireIndex(await actionIndexRepo.read(), '导入')
     const nextList = append ? [...current.list, ...imported.store.list] : imported.store.list
     const next: ActionWarehouseIndex = {
       index: append ? nextList.length - 1 : 0,
