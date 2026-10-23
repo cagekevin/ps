@@ -1,10 +1,11 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { ref } from 'vue'
 import GAnchorGrid from '@/components/GAnchorGrid.vue'
 import GButton from '@/components/GButton.vue'
 import GInput from '@/components/GInput.vue'
 import SettingsRow from '@/components/SettingsRow.vue'
 import { useCommand } from '@/components/command/useCommand'
+import { useLoadingStore } from '@/stores/loading'
 
 /**
  * ⑧ 自定义变换（官方 `comcustomChange`，render `Ip()` `app.v4.js:36062`）。
@@ -23,20 +24,29 @@ const opacity = ref('')
 const anchorIndex = ref(0)
 
 const transformCmd = useCommand('commonUse.transform')
+const loading = useLoadingStore()
 
-/** 官方 getCustomBuildTransformOption()：[数量, 缩放, 左右, 上下, 角度, 不透明度, 锚点下标]（顺序取自 data 声明 :36316-36323） */
+/**
+ * 官方 getCustomBuildTransformOption()：[数量, 缩放, 左右, 上下, 角度, 不透明度, 锚点下标]（顺序取自 data 声明 :36316-36323）。
+ *
+ * 遮罩只在这个条件下出：官方 `if (n.number > 5) { $load.show("正在处理...") }`（`:36412-36414`），
+ * 数量 ≤5 时不遮（`:36419` 的 `hide()` 无条件调，但没 `show` 过就等于空操作）。
+ */
 function runTransform() {
-  void transformCmd.run({
-    params: [
-      Number(number.value) || 0,
-      Number(scale.value) || 100,
-      leftRight.value,
-      topBottom.value,
-      Number(angle.value) || 0,
-      Number(opacity.value) || 100,
-      anchorIndex.value,
-    ],
-  })
+  const params: [number, number, string, string, number, number, number] = [
+    Number(number.value) || 0,
+    Number(scale.value) || 100,
+    leftRight.value,
+    topBottom.value,
+    Number(angle.value) || 0,
+    Number(opacity.value) || 100,
+    anchorIndex.value,
+  ]
+  if (params[0] > 5) {
+    void loading.run('正在处理...', () => transformCmd.run({ params }))
+    return
+  }
+  void transformCmd.run({ params })
 }
 
 function resetParams() {

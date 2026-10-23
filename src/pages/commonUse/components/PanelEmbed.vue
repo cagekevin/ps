@@ -4,6 +4,7 @@ import GButton from '@/components/GButton.vue'
 import GRadio from '@/components/GRadio.vue'
 import SettingsRow from '@/components/SettingsRow.vue'
 import { useCommand } from '@/components/command/useCommand'
+import { useLoadingStore } from '@/stores/loading'
 import { useOptionRef } from '../useCommonUseOptions'
 
 /**
@@ -27,6 +28,20 @@ const dragInToLink = useOptionRef('cyOpenDranInToLinkObject', false)
  */
 const toLinkSmartCmd = useCommand('commonUse.smartToLinkSmartObject')
 const linkToSmartCmd = useCommand('commonUse.linkSmartObjectToSmartObject')
+
+/**
+ * 执行中全屏遮罩 + 官方文案（官方 `toLinkSmart` `:35889` / `linkToSmart` `:35869` 各自
+ * `$load.show(...)` … `$load.hide()`）。`loading.run` 内部是 try/finally，失败也一定撤遮罩。
+ */
+const loading = useLoadingStore()
+
+function toLinkSmart() {
+  void loading.run('正在转链接智能对象...', () => toLinkSmartCmd.run())
+}
+
+function linkToSmart() {
+  void loading.run('正在转回普通智能对象...', () => linkToSmartCmd.run())
+}
 </script>
 
 <template>
@@ -57,8 +72,8 @@ const linkToSmartCmd = useCommand('commonUse.linkSmartObjectToSmartObject')
     <hr class="panel-embed__rule" />
 
     <SettingsRow>
-      <GButton width="half" @click="toLinkSmartCmd.run()">转链接智能对象</GButton>
-      <GButton width="half" @click="linkToSmartCmd.run()">转智能对象</GButton>
+      <GButton width="half" @click="toLinkSmart()">转链接智能对象</GButton>
+      <GButton width="half" @click="linkToSmart()">转智能对象</GButton>
     </SettingsRow>
   </div>
 </template>

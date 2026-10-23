@@ -1,4 +1,4 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { computed } from 'vue'
 import CheckBox from '@/components/CheckBox.vue'
 import GButton from '@/components/GButton.vue'
@@ -9,6 +9,7 @@ import GSegment from '@/components/GSegment.vue'
 import SettingsRow from '@/components/SettingsRow.vue'
 import { useCommand } from '@/components/command/useCommand'
 import { useFeedbackStore } from '@/stores/feedback'
+import { useLoadingStore } from '@/stores/loading'
 import { useCommonUseOptions, useOptionRef } from '../useCommonUseOptions'
 
 /**
@@ -47,6 +48,7 @@ const exportCmd = useCommand('commonUse.exportImages')
 const openFolderCmd = useCommand('commonUse.openExportFolder')
 const exportFolderCmd = useCommand('commonUse.exportPsdFolder')
 const feedback = useFeedbackStore()
+const loading = useLoadingStore()
 
 /** 当前导出参数 = 磁盘上的 `cyExport` 整块，被面板管理的字段用面板值覆盖 */
 const exportOptions = computed<Record<string, unknown>>(() => {
@@ -67,9 +69,19 @@ const exportOptions = computed<Record<string, unknown>>(() => {
   }
 })
 
-/** 官方三个导出入口：`cy_ExportImage`（单张）/ `cy_BatchExportLayer` / `cy_BatchExportSecondLayer` */
+/**
+ * 官方三个导出入口：`cy_ExportImage`（单张）/ `cy_BatchExportLayer` / `cy_BatchExportSecondLayer`。
+ *
+ * 只有后两条有全屏遮罩：官方 `batchExportLayer` `:37829` 是 `正在导出一级图层...`、
+ * `batchExportSecondLayer` `:37858` 是 `正在导出二级图层...`；单张 `cy_ExportImage`（`:37993`）
+ * **没有** `$load`，所以 `mode: 'image'` 不加遮罩（照官方，不是漏做）。
+ */
 async function exportImages(mode: 'image' | 'first' | 'second') {
-  const ok = await exportCmd.run({ mode, options: exportOptions.value })
+  const text =
+    mode === 'first' ? '正在导出一级图层...' : mode === 'second' ? '正在导出二级图层...' : ''
+  const ok = text
+    ? await loading.run(text, () => exportCmd.run({ mode, options: exportOptions.value }))
+    : await exportCmd.run({ mode, options: exportOptions.value })
   // 命令层失败会自己提示；这里补一条面板级的可见提示，避免"点了没反应"
   if (!ok) feedback.error('导出失败：请检查导出目录与参数后重试')
 }

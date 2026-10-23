@@ -1,8 +1,9 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ref, type Ref } from 'vue'
 import { createPinia, setActivePinia } from 'pinia'
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 import GAnchorGrid, { ANCHOR_ROWS } from '@/components/GAnchorGrid.vue'
+import { useLoadingStore } from '@/stores/loading'
 /** pinia setup store 形态：状态是 ref，storeToRefs 才拿得到 */
 let fakeStore: { options: Ref<Record<string, unknown>>; loadOptions: () => Promise<void> }
 
@@ -16,6 +17,7 @@ const cmds = vi.hoisted(() => ({
   referenceGuide: vi.fn(async (_payload: unknown) => true),
   smartToLink: vi.fn(async () => true),
   linkToSmart: vi.fn(async () => true),
+  transform: vi.fn(async (_payload: unknown) => true),
 }))
 
 vi.mock('@/components/command/useCommand', () => ({
@@ -35,7 +37,9 @@ vi.mock('@/components/command/useCommand', () => ({
                   ? cmds.smartToLink
                   : id === 'commonUse.linkSmartObjectToSmartObject'
                     ? cmds.linkToSmart
-                    : vi.fn(async () => true),
+                    : id === 'commonUse.transform'
+                      ? cmds.transform
+                      : vi.fn(async () => true),
     disabled: false,
     running: false,
   }),
@@ -247,6 +251,8 @@ describe('A4：导出链路（参数 = 面板写进 cyExport 的整块）', () =
     const button = wrapper.findAll('button').find((b) => b.text() === '导出一级图层')
 
     await button!.trigger('click')
+    // T-97-7 之后这条路径多了"撤遮罩"一步（多一层 await），断言前先跑完微任务
+    await flushPromises()
 
     expect(toasts.filter((t) => t.type === 'error')).toHaveLength(1)
     expect(toasts.find((t) => t.type === 'error')?.text).toContain('导出失败')
@@ -338,5 +344,131 @@ describe('T-97-3：参数落盘（官方键名）', () => {
 
     expect(cmds.referenceGuide).not.toHaveBeenCalled()
     expect(toasts.some((t) => t.text === '请输入宽度')).toBe(true)
+  })
+})
+
+describe('T-97-7：长任务全屏遮罩 + 官方文案', () => {
+  /** 让"执行中"可观察：命令返回一个由用例自己决定何时结束的 promise */
+  function deferred<T>() {
+    let settle!: (value: T) => void
+    const promise = new Promise<T>((resolve) => {
+      settle = resolve
+    })
+    return { promise, settle }
+  }
+
+  function clickButton(wrapper: ReturnType<typeof mount>, label: string) {
+    const button = wrapper.findAll('button').find((b) => b.text() === label)
+    expect(button, `应有按钮「${label}」`).toBeTruthy()
+    return button!.trigger('click')
+  }
+
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    fakeStore = { options: ref({}), loadOptions: vi.fn(async () => {}) }
+    cmds.smartToLink.mockClear()
+    cmds.linkToSmart.mockClear()
+    cmds.exportImages.mockClear()
+    cmds.exportPsdFolder.mockClear()
+    cmds.transform.mockClear()
+  })
+
+  it('转链接智能对象：执行中出遮罩、文案是官方原文，结束后消失（官方 :35889）', async () => {
+    const gate = deferred<boolean>()
+    cmds.smartToLink.mockImplementationOnce(() => gate.promise)
+    const loading = useLoadingStore()
+    const wrapper = mount(PanelEmbed)
+
+    await clickButton(wrapper, '转链接智能对象')
+
+    expect(loading.active).toBe(true)
+    expect(loading.message).toBe('正在转链接智能对象...')
+
+    gate.settle(true)
+    await flushPromises()
+    expect(loading.active).toBe(false)
+  })
+
+  it('转智能对象：文案是官方原文，命令返回 false（失败）也撤遮罩（官方 :35869）', async () => {
+    const gate = deferred<boolean>()
+    cmds.linkToSmart.mockImplementationOnce(() => gate.promise)
+    const loading = useLoadingStore()
+    const wrapper = mount(PanelEmbed)
+
+    await clickButton(wrapper, '转智能对象')
+    expect(loading.message).toBe('正在转回普通智能对象...')
+
+    gate.settle(false)
+    await flushPromises()
+    expect(loading.active).toBe(false)
+  })
+
+  it.each([
+    ['导出一级图层', '正在导出一级图层...', 'first'],
+    ['导出二级图层', '正在导出二级图层...', 'second'],
+  ])(
+    '「%s」执行中出遮罩、文案 %s，结束后消失（官方 :37829 / :37858）',
+    async (label, text, mode) => {
+      const gate = deferred<boolean>()
+      cmds.exportImages.mockImplementationOnce(() => gate.promise)
+      const loading = useLoadingStore()
+      const wrapper = mount(PanelExport)
+
+      await clickButton(wrapper, label)
+      expect(loading.active).toBe(true)
+      expect(loading.message).toBe(text)
+      expect(cmds.exportImages.mock.calls[0][0]).toMatchObject({ mode })
+
+      gate.settle(true)
+      await flushPromises()
+      expect(loading.active).toBe(false)
+    },
+  )
+
+  it('「批量导出文件夹所有PSD」不加遮罩：官方那两条文案在命令层的循环里，已由 TaskHud 承担', async () => {
+    const gate = deferred<boolean>()
+    cmds.exportPsdFolder.mockImplementationOnce(() => gate.promise)
+    const loading = useLoadingStore()
+    const wrapper = mount(PanelExport)
+
+    await clickButton(wrapper, '批量导出文件夹所有PSD')
+    expect(loading.active).toBe(false)
+
+    gate.settle(true)
+    await flushPromises()
+    expect(loading.active).toBe(false)
+  })
+
+  it('自定义变换：数量 >5 才出遮罩，文案「正在处理...」（官方 :36412-36414）', async () => {
+    const gate = deferred<boolean>()
+    cmds.transform.mockImplementationOnce(() => gate.promise)
+    const loading = useLoadingStore()
+    const wrapper = mount(PanelCustomChange)
+
+    await wrapper.findAll('.panel-custom input')[0].setValue('6')
+    await clickButton(wrapper, '生成变换')
+
+    expect(loading.active).toBe(true)
+    expect(loading.message).toBe('正在处理...')
+
+    gate.settle(true)
+    await flushPromises()
+    expect(loading.active).toBe(false)
+  })
+
+  it('自定义变换：数量 ≤5 不出遮罩（官方只对 number>5 才 show）', async () => {
+    const gate = deferred<boolean>()
+    cmds.transform.mockImplementationOnce(() => gate.promise)
+    const loading = useLoadingStore()
+    const wrapper = mount(PanelCustomChange)
+
+    await wrapper.findAll('.panel-custom input')[0].setValue('5')
+    await clickButton(wrapper, '生成变换')
+
+    expect(loading.active).toBe(false)
+    expect(cmds.transform).toHaveBeenCalledTimes(1)
+
+    gate.settle(true)
+    await flushPromises()
   })
 })

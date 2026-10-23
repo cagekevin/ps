@@ -26,8 +26,8 @@
   },
   "tests": {
     "files": 114,
-    "cases": 987,
-    "eachSites": 7
+    "cases": 992,
+    "eachSites": 8
   },
   "components": 31,
   "icons": 189,
@@ -91,7 +91,7 @@
     },
     "pages": {
       "files": 61,
-      "lines": 12482
+      "lines": 12519
     },
     "selection": {
       "files": 2,
