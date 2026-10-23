@@ -28,7 +28,7 @@ const registry = new Map<string, Command<unknown>>()
 export function defineCommand<K extends CommandId>(
   command: Command<CommandPayloads[K]> & { id: K },
 ): Command<unknown> {
-  return command as unknown as Command<unknown>
+  return command
 }
 
 export function register<P>(command: Command<P>): void {
@@ -36,7 +36,7 @@ export function register<P>(command: Command<P>): void {
     // 覆盖是允许的（模块热替换/测试重置），但必须留痕，避免"两份同名命令"悄悄打架
     log.warn('cmd', `命令 id 重复注册：${command.id}，后者覆盖前者`)
   }
-  registry.set(command.id, command as unknown as Command<unknown>)
+  registry.set(command.id, command)
 }
 
 export function get(id: string): Command<unknown> | undefined {

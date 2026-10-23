@@ -6,6 +6,5 @@
   "src/cep/mock.ts": 1,
   "src/cep/transport.ts": 1,
   "src/commands/commonUse.ts": 1,
-  "src/commands/registry.ts": 2,
   "src/utils/logger.ts": 1
 }
