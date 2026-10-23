@@ -61,9 +61,14 @@ docs/
 |---|---|---|
 | `生成/横切能力.md` | `npm run registry` | 新增 `src/{cep,composables,stores,utils,styles}` 文件后跑 |
 | `生成/交互清单.md` | `npm run interactions` | 1068 条，**只能查"某元素有没有事件"，不能当页面清单** |
-| `生成/页面规格/0N-*.md` | `node ../tools/15-page-spec.cjs` | 每页根组件 + 全部子组件的**结构树 + 全量 class + CSS 实测值**，带源码行号 |
+| `生成/页面规格/0N-*.md` | `npm run spec`（读 `docs/原版/01-原版源码/`，写本目录） | 每页根组件 + 全部子组件的**结构树 + 全量 class + CSS 实测值**，带源码行号 |
 | `生成/注册表.json` / `生成/样式基线.json` | 脚本读写 | 别手改 |
 | `日志/index.md` | `npm run log:index` | 别手改 |
+
+> **生成脚本为什么是副本**：原版抽取脚本在 `docs/原版/tools/15-page-spec.cjs`（证据原件，只读），
+> 里面的输入路径按仓外 `../reference` 写死，在仓内跑不通。所以 `scripts/page-spec.mjs` 是它的可运行副本，
+> 只改输入/输出路径，解析逻辑与页面映射没动。**`docs/原版/README.md` 里「跑之前先确认或就地改路径」那句已过期**——
+> 证据目录不许改，重跑一律用 `npm run spec`。
 
 **页面清单不自动生成**：组件树有 31% 未解析且名字错位（D-19），生成出来的骨架比没有更糟。
 按 `AGENTS.md` 第 66 条，从 `02-组件/<组件>.md` 的「子组件」小节人工抄。

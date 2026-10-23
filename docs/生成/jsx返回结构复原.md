@@ -24,7 +24,7 @@
 | `0425.js:3469` | 同上目录 `0425.js` 第 3469 行 |
 | `组件/` | `D:\稿定设计助理-存档\archive\源码还原\组件\`（192 个 `.js`） |
 | `函数源码/` | `D:\稿定设计助理-存档\archive\源码还原\函数源码\`（2466 个文件） |
-| `reference/02-组件文档/` | `D:\稿定设计助理-存档\reference\02-组件文档\`（旧的 `BUILD-SPEC/`） |
+| `docs/原版/02-组件文档/` | `D:\稿定设计助理-存档\app\docs\原版\02-组件文档\`（旧的 `BUILD-SPEC/`） |
 | `jsx契约.md` | `app\docs\架构\jsx契约.md` |
 
 **行号口径**：`webcrack输出/app/` 是**分模块**产物，行号按**单文件**计；它与 `deobfuscated.js`（整包一份，4227 行）
@@ -88,7 +88,7 @@ README `tools/README.md:28-46` 把 9 个脚本标 ⛔，理由是"缺输入（�
 
 **② 产物目录改名 —— 不是缺输入，是"不知道该往哪写"**
 
-所有脚本写死 `OUT = path.join(ROOT, 'BUILD-SPEC', ...)`。`BUILD-SPEC/` 现在叫 `reference/02-组件文档/`，
+所有脚本写死 `OUT = path.join(ROOT, 'BUILD-SPEC', ...)`。`BUILD-SPEC/` 现在叫 `docs/原版/02-组件文档/`，
 那里面 12 份产物**已经存在**（`00-总览.md`…`12-组件复用度.md`）。所以第二类问题不是"跑不了"，
 而是"跑起来会把新产物写到 `D:\稿定设计助理-存档\BUILD-SPEC\` 这个不存在的目录下"。
 
@@ -131,7 +131,7 @@ node --require "$P\fs-shim\index.js" "$P\patched\04-spec.cjs"
 
 | 脚本 | 需要改的常量 | 现值 → 应指向 |
 |---|---|---|
-| `04-spec.cjs` | `:15 SRC` `:16 MAP` `:17 OUT` | `archive/源码还原/组件`、`archive/源码还原/component-map.json`、`reference/02-组件文档/02-组件` |
+| `04-spec.cjs` | `:15 SRC` `:16 MAP` `:17 OUT` | `archive/源码还原/组件`、`archive/源码还原/component-map.json`、`docs/原版/02-组件文档/02-组件` |
 | `04b-methods.cjs` | `:15` `:16` `:17` | 同上（OUT 到 `02-组件/methods`） |
 | `05-flows.cjs` | `:13` `:14` `:15` | OUT 到 `02-组件文档/03-交互链路` |
 | `06-store.cjs` | `:13` `:14` | OUT 到 `02-组件文档/04-store.md` |
@@ -139,15 +139,15 @@ node --require "$P\fs-shim\index.js" "$P\patched\04-spec.cjs"
 | `10-deps.cjs` | `:18` `:19` `:20` `:21` | OUT 到 `02-组件文档/09-依赖关系.*` |
 | `11-tree.cjs` | `:18` `:19` `:20` `:21` | OUT 到 `02-组件文档/11-组件树.md` |
 | `12-dynamic.cjs` | `:20` `:21` `:22` | OUT 到 `02-组件文档/10-动态逻辑.md` |
-| `13-reuse.cjs` | `:14` `:15` `:16` | SPEC 指向 `reference/02-组件文档` |
+| `13-reuse.cjs` | `:14` `:15` `:16` | SPEC 指向 `docs/原版/02-组件文档` |
 | `98-audit.cjs` | `:14` `:15` `:16` `:17` | 同 map/组件/规格目录 |
-| `99-build-spec.cjs` | `:13` | SPEC 指向 `reference/02-组件文档` |
+| `99-build-spec.cjs` | `:13` | SPEC 指向 `docs/原版/02-组件文档` |
 
 `tools/README.md` **我没有改，也不替你决定改不改**。§1.2 只陈述"声明与事实不符"及其行号。
 
 ### 1.4 复现性验证：重新生成的产物 vs 存档里已有的产物
 
-把探针产物与 `reference/02-组件文档/` 逐字节比对（SHA256）：
+把探针产物与 `docs/原版/02-组件文档/` 逐字节比对（SHA256）：
 
 | 产物 | 探针 | 存档 | 结果 |
 |---|---|---|---|

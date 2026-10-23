@@ -22,6 +22,7 @@
     "list": "node scripts/page-list.mjs",
     "new:page": "node scripts/new-page.mjs",
     "registry": "node scripts/registry.mjs fix && node scripts/registry.mjs gen",
+    "spec": "node scripts/page-spec.mjs",
     "stats": "node scripts/stats.mjs gen",
     "style:fix": "node scripts/style-guard.mjs --fix",
     "style:baseline": "node scripts/style-guard.mjs --update",

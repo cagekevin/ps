@@ -28,8 +28,8 @@ const src = process.argv.find((a) => a.startsWith('--src='))?.slice(6) ?? 'v4'
 const FILE =
   src === '56d7'
     ? join(root, '..', 'archive', '源码还原', 'webcrack输出', 'app', '56d7.js')
-    : join(root, '..', 'reference', '01-原版源码', 'panel', 'js', 'app.v4.js')
-requireExternal(FILE, '需要 ../reference/01-原版源码/panel/js/app.v4.js（美化版原版源码）。')
+    : join(root, 'docs', '原版', '01-原版源码', 'panel', 'js', 'app.v4.js')
+requireExternal(FILE, '需要 docs/原版/01-原版源码/panel/js/app.v4.js（美化版原版源码，已入库）。')
 const code = readFileSync(FILE, 'utf8')
 const ast = parse(code, {
   sourceType: 'script',

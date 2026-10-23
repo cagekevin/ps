@@ -117,7 +117,7 @@ export interface RenameJsx {
 /**
  * 样式域（`/style` 第 2 段）。
  *
- * 依据全部是**调用侧**（`reference/01-原版源码/panel/js/app.v4.js` 行号见每个方法）；
+ * 依据全部是**调用侧**（`docs/原版/01-原版源码/panel/js/app.v4.js` 行号见每个方法）；
  * jsxbin 是字节码，符号名不可读也不可搜，所以返回结构一律按最宽松联合写，标 UNVERIFIED。
  *
  * 原版 `useColor` 不是"能力降级链"，而是**修饰键路由**（原版用户已核实）：

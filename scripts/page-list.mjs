@@ -16,13 +16,13 @@ import { fileURLToPath } from 'node:url'
 import { requireExternal } from './_env-guard.mjs'
 
 const root = fileURLToPath(new URL('..', import.meta.url))
-const REF = join(root, '..', 'reference', '02-组件文档')
+const REF = join(root, 'docs', '原版', '02-组件文档')
 const TPL_DIR = join(REF, '08-模板')
 const COMP_DIR = join(REF, '02-组件')
 const CSS_FILE = join(
   root,
-  '..',
-  'reference',
+  'docs',
+  '原版',
   '03-原版安装包',
   '04-CEP资源包',
   'CEP001-设计助理',
@@ -30,8 +30,8 @@ const CSS_FILE = join(
   'app.bf68b505.css',
 )
 
-requireExternal(TPL_DIR, '需要 ../reference/02-组件文档/08-模板（原版 render 模板）。')
-requireExternal(COMP_DIR, '需要 ../reference/02-组件文档/02-组件（组件方法/文案提取）。')
+requireExternal(TPL_DIR, '需要 docs/原版/02-组件文档/08-模板（原版 render 模板，已入库）。')
+requireExternal(COMP_DIR, '需要 docs/原版/02-组件文档/02-组件（组件方法/文案提取，已入库）。')
 const OUT_DIR = join(root, 'docs', '页面')
 
 /** 页面 → 根 class + 组件文档名 + 输出文件 */
