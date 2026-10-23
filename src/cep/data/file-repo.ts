@@ -1,7 +1,7 @@
 import { hasNode, readTextFile, readTextSmart, writeTextFile, writeTextFileAtomic } from '@/cep/fs'
 import { CepError } from '@/utils/errors'
 import { log } from '@/utils/logger'
-import type { Repo, RepoRead } from './types'
+import type { Repo } from './types'
 
 export interface FileRepoOptions<T = unknown> {
   /** 写之前把原文备份成 .bak，默认开（ADR-12） */
@@ -13,7 +13,7 @@ export interface FileRepoOptions<T = unknown> {
   /**
    * 读边界归一：把 `JSON.parse` 出来的 `unknown` 变成 `T`。
    *
-   * **形状不认识必须返回 `null`**——`readRaw` 会把它转成 `degraded` + fallback，用户能在界面上看到。
+   * **形状不认识必须返回 `null`**——`readRaw` 会把它转成 `{ ok: false, reason }`，用户能在界面上看到。
    * 归一器里不许补默认值：那等于把坏文件变成"看起来能用"（硬规则 20(b) 的静默回退）。
    *
    * 不传 = 仍把解析结果直接当 `T`（未接归一的仓库，剩余清单见台账 T-99-2）。
@@ -56,7 +56,13 @@ export function fileRepo<T>(
     for (const listener of listeners) listener(value)
   }
 
-  async function readRaw(): Promise<RepoRead<T> & { text: string | null }> {
+  /**
+   * 读原文。判别联合 + `text`：`ok: false` 时**没有 value**，也没有 text（update 只会在
+   * `ok: true` 分支里用 text 做 CAS 比对）。
+   */
+  async function readRaw(): Promise<
+    { ok: true; value: T; text: string | null } | { ok: false; reason: string }
+  > {
     const target = resolvePath()
     let text: string | null
 
@@ -65,11 +71,11 @@ export function fileRepo<T>(
     } catch (e) {
       // 读不抛：文件可能在原面板那边被占用，回退默认值但要标记
       log.warn('repo', `${target} 读取失败，使用默认值`, e)
-      return { value: fallback(), text: null, degraded: '读取失败' }
+      return { ok: false, reason: '读取失败' }
     }
 
-    // 文件不存在是首次使用的正常状态，不算 degraded
-    if (!text) return { value: fallback(), text: null }
+    // 文件不存在是首次使用的正常状态，不算坏
+    if (!text) return { ok: true, value: fallback(), text: null }
 
     let parsed: unknown
     try {
@@ -77,19 +83,19 @@ export function fileRepo<T>(
     } catch (e) {
       // 坏文件是错误不是警告：与 `style-library-repo.ts:136` 同一档（用户能在「打开日志」里查到）
       log.error('repo', `${target} 不是合法 JSON，使用默认值`, e)
-      return { value: fallback(), text, degraded: '内容不是合法 JSON' }
+      return { ok: false, reason: '内容不是合法 JSON' }
     }
 
     // 没接归一的仓库：解析结果直接当 T。这是"形状"的第二份真相，逐仓库接归一后消失（T-99-2）
-    if (!normalize) return { value: parsed as T, text }
+    if (!normalize) return { ok: true, value: parsed as T, text }
 
     const value = normalize(parsed)
     if (value === null) {
       // 结构不认识 ≠ 文件不存在：两者必须能分辨，否则坏文件在页面上就是"空面板"
       log.error('repo', `${target} 内容结构不认识，使用默认值`)
-      return { value: fallback(), text, degraded: '内容结构不认识' }
+      return { ok: false, reason: '内容结构不认识' }
     }
-    return { value, text }
+    return { ok: true, value, text }
   }
 
   /**
@@ -138,8 +144,11 @@ export function fileRepo<T>(
   return {
     read: () =>
       enqueue(async () => {
-        const { value, degraded } = await readRaw()
-        return { value, degraded }
+        const r = await readRaw()
+        // 只暴露判别联合，不外泄 readRaw 的 text
+        return r.ok
+          ? { ok: true as const, value: r.value }
+          : { ok: false as const, reason: r.reason }
       }),
 
     write: (value) =>
@@ -154,21 +163,21 @@ export function fileRepo<T>(
         let attempts = 0
 
         for (;;) {
-          const { value, text, degraded } = await readRaw()
+          const r = await readRaw()
 
           // D-42：读到的不是真实数据（损坏 / 读不到）时**禁止写**。以前这里会拿 fallback
           // 继续 update，一次点击就把用户文件覆盖成默认值——原文只剩 .bak 里那一份。
-          if (degraded) throw new CepError('IO', `${target} ${degraded}，拒绝覆盖写`)
-          if (opts.requireExisting && text === null) {
+          if (!r.ok) throw new CepError('IO', `${target} ${r.reason}，拒绝覆盖写`)
+          if (opts.requireExisting && r.text === null) {
             throw new CepError('IO', `${target} 不存在，拒绝写入`)
           }
 
-          const result = mutator(value)
-          const next = (result === undefined ? value : result) as T
+          const result = mutator(r.value)
+          const next = (result === undefined ? r.value : result) as T
 
           // D-26：读 → 改 的窗口里，另一个面板（独立面板）可能已经写过。
           // 落盘前同步比对；不一致就丢掉本轮结果、在新值上重跑 mutator。
-          const written = await persist(next, text, text)
+          const written = await persist(next, r.text, r.text)
           if (!written) {
             attempts += 1
             if (attempts > retries) {
