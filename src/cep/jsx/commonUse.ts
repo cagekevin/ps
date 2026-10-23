@@ -70,6 +70,20 @@ export function createCommonUseJsx(): CommonUseJsx {
         timeout: WRITE,
       }),
 
+    // 修正边缘模糊：派发表 key 是 ``cy_coorectBlur``（官方拼错），**真实 jsx 名是 ``cy_correctRectangleBlur``**
+    // （``app.v4.js:17096`` case 34 → 调用点 ``:37965`` ``jsxHistory("cy_correctRectangleBlur", [], "修正边缘模糊")``）
+    correctBlur: () =>
+      jsxCall('cy_correctRectangleBlur', [], { label: '修正边缘模糊', timeout: WRITE }),
+
+    // 元素替换：派发表 key ``cy_layerReplace``，**真实 jsx 名 ``cy_LayerReplace``（大写 L）**（``:17178`` / ``:37959``）
+    layerReplace: () => jsxCall('cy_LayerReplace', [], { label: '元素替换', timeout: WRITE }),
+
+    // 位置对换：``cy_locationTrade([])``（``:17181`` / ``:37953``）
+    locationTrade: () => jsxCall('cy_locationTrade', [], { label: '位置对换', timeout: WRITE }),
+
+    // 图层颜色互换：``cy_exchangeLayerColor([])``（``:17184`` / ``:37956``）
+    exchangeLayerColor: () =>
+      jsxCall('cy_exchangeLayerColor', [], { label: '图层颜色互换', timeout: WRITE }),
     // 清除参考线 / 切片：官方 key `cy_clearCutGuide` → jsx `cy_guideFunction`（`:17171`）
     referenceSlice: (options?: unknown) =>
       jsxCall('cy_guideFunction', options === undefined ? [] : [options], {

@@ -220,6 +220,27 @@ export function createMockJsx(): JsxPort {
         log.info('mock', 'cy_createSafeAreaGuide', options ?? null)
         return null
       },
+      // 四个无参 jsx：**多传参数就抛**——jsdom 里否则永远是绿的（A1 判据）
+      correctBlur: async (...args) => {
+        if (args.length) throw new Error('cy_correctRectangleBlur 不接受参数')
+        log.info('mock', 'cy_correctRectangleBlur', null)
+        return null
+      },
+      layerReplace: async (...args) => {
+        if (args.length) throw new Error('cy_LayerReplace 不接受参数')
+        log.info('mock', 'cy_LayerReplace', null)
+        return null
+      },
+      locationTrade: async (...args) => {
+        if (args.length) throw new Error('cy_locationTrade 不接受参数')
+        log.info('mock', 'cy_locationTrade', null)
+        return null
+      },
+      exchangeLayerColor: async (...args) => {
+        if (args.length) throw new Error('cy_exchangeLayerColor 不接受参数')
+        log.info('mock', 'cy_exchangeLayerColor', null)
+        return null
+      },
       referenceSlice: async (options) => {
         log.info('mock', 'cy_guideFunction', options ?? null)
         return null

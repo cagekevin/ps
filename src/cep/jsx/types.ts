@@ -188,6 +188,17 @@ export interface CommonUseJsx {
   /** cy_guideFunction([选项])：清除参考线 / 基于参考线切片（key `cy_clearCutGuide`，`:17171`） */
   referenceSlice(options?: unknown): Promise<unknown>
   /** cy_distributedByPitch([option])：按间距分布（`:17173`） */
+  /**
+   * cy_correctRectangleBlur([])：修正边缘模糊。**派发表 key 叫 `cy_coorectBlur`（官方拼错），
+   * jsx 名是 `cy_correctRectangleBlur`**（`:17096` case 34 / 调用点 `:37965`），实参 `[]`。
+   */
+  correctBlur(): Promise<unknown>
+  /** cy_LayerReplace([])：元素替换。派发表 key `cy_layerReplace`，**jsx 名大写 L**（`:17178` / `:37959`） */
+  layerReplace(): Promise<unknown>
+  /** cy_locationTrade([])：位置对换（`:17181` / `:37953`） */
+  locationTrade(): Promise<unknown>
+  /** cy_exchangeLayerColor([])：图层颜色互换（`:17184` / `:37956`） */
+  exchangeLayerColor(): Promise<unknown>
   distribute(options: unknown): Promise<unknown>
   /**
    * cy_getPsdForFolder()：**无参**，文件夹由 jsx 自己弹选（官方 `jsxNoCheck("cy_getPsdForFolder")`，

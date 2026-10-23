@@ -268,6 +268,51 @@ export const commonUseCommands: Command<unknown>[] = [
     },
   }),
 
+  // ---------- 4 个格子直连功能（都是无参 jsx，名字照真实 jsx 名） ----------
+
+  defineCommand({
+    id: 'commonUse.correctBlur',
+    title: '修正边缘模糊',
+    group: 'layer',
+    requires: 'layer',
+    kind: 'instant',
+    async run(ctx) {
+      await ctx.jsx.commonUse.correctBlur()
+    },
+  }),
+
+  defineCommand({
+    id: 'commonUse.layerReplace',
+    title: '元素替换',
+    group: 'layer',
+    requires: 'layer',
+    kind: 'instant',
+    async run(ctx) {
+      await ctx.jsx.commonUse.layerReplace()
+    },
+  }),
+
+  defineCommand({
+    id: 'commonUse.locationTrade',
+    title: '位置对换',
+    group: 'layer',
+    requires: 'layer',
+    kind: 'instant',
+    async run(ctx) {
+      await ctx.jsx.commonUse.locationTrade()
+    },
+  }),
+
+  defineCommand({
+    id: 'commonUse.exchangeLayerColor',
+    title: '图层颜色互换',
+    group: 'layer',
+    requires: 'layer',
+    kind: 'instant',
+    async run(ctx) {
+      await ctx.jsx.commonUse.exchangeLayerColor()
+    },
+  }),
   // ---------- 子面板参数（写 sj_set.json，官方 12 个 cy* 键） ----------
 
   defineCommand({

@@ -1,4 +1,4 @@
-import type {
+﻿import type {
   CreateButtonConfig,
   FontSetSettings,
   PasteFontConfig,
@@ -747,6 +747,10 @@ export interface CommandPayloads {
   'commonUse.exportPsdFolder': CommonUseExportPsdFolderPayload
   'commonUse.setCollapsed': CommonUseCollapsePayload
   'commonUse.setOption': CommonUseSetOptionPayload
+  'commonUse.correctBlur': void
+  'commonUse.layerReplace': void
+  'commonUse.locationTrade': void
+  'commonUse.exchangeLayerColor': void
   'commonUse.transform': CommonUseTransformPayload
   'commonUse.referenceGuide': CommonUseReferenceGuidePayload
   'commonUse.referenceSlice': CommonUseReferenceSlicePayload

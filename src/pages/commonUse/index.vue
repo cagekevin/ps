@@ -45,6 +45,10 @@ const zoomCmd = useCommand('commonUse.zoom')
 const flipCmd = useCommand('commonUse.flip')
 const setCollapsedCmd = useCommand('commonUse.setCollapsed')
 const addToPanelCmd = useCommand('freePanel.add')
+const correctBlurCmd = useCommand('commonUse.correctBlur')
+const layerReplaceCmd = useCommand('commonUse.layerReplace')
+const locationTradeCmd = useCommand('commonUse.locationTrade')
+const exchangeLayerColorCmd = useCommand('commonUse.exchangeLayerColor')
 const feedback = useFeedbackStore()
 const freePanel = useFreePanelStore()
 
@@ -139,9 +143,19 @@ function panelOfRow(row: CommonUseTile[]) {
   return tile?.comName ? PANELS[tile.comName] : undefined
 }
 
+/** 4 个"点一下直接干活"的格子：官方 `fpFunction` 的 name→key 表与 `:37953-37965` 的调用点一一对应 */
+const DIRECT_ACTIONS: Record<string, { run: () => Promise<boolean> }> = {
+  修正模糊: { run: () => correctBlurCmd.run() },
+  元素替换: { run: () => layerReplaceCmd.run() },
+  位置对换: { run: () => locationTradeCmd.run() },
+  图层颜色互换: { run: () => exchangeLayerColorCmd.run() },
+}
 function toggle(tile: CommonUseTile) {
-  // 没有子面板的格子点了不做事（官方这类格直接执行功能，接线在 T-88c）
-  if (!tile.comName) return
+  // 没有子面板的格子 = 直接执行功能（官方 :37953-37965 的 4 个无参 jsx）
+  if (!tile.comName) {
+    void DIRECT_ACTIONS[tile.name]?.run()
+    return
+  }
   const open = expandedId.value !== tile.id
   expandedId.value = open ? tile.id : ''
   void setCollapsedCmd.run({ id: tile.id, collapsed: !open })

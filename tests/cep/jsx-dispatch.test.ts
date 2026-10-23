@@ -87,6 +87,11 @@ const CHANNEL_FACTS: Array<{ name: string; official: string; ours: string }> = [
   { name: 'cy_optimizeDoc', official: 'jsxHistoryNoCheck', ours: 'jsxCall' },
   { name: 'cy_batchOptimizeDoc', official: 'jsxNoCheck', ours: 'jsxCall' },
   { name: 'cy_insertionImage', official: 'jsxHistory', ours: 'jsxCall' },
+  // A1 的 4 个无参调用：官方 `l(name)` 不传通道 → 默认 `jsxHistory`（`:17096`、`:17178`、`:17181`、`:17184`）
+  { name: 'cy_correctRectangleBlur', official: 'jsxHistory', ours: 'jsxCall' },
+  { name: 'cy_LayerReplace', official: 'jsxHistory', ours: 'jsxCall' },
+  { name: 'cy_locationTrade', official: 'jsxHistory', ours: 'jsxCall' },
+  { name: 'cy_exchangeLayerColor', official: 'jsxHistory', ours: 'jsxCall' },
 ]
 
 const ourNames = collectOurNames()

@@ -14,12 +14,17 @@ const commands = vi.hoisted(() => ({
   zoom: vi.fn(async () => true),
   flip: vi.fn(async () => true),
   setCollapsed: vi.fn(async () => true),
+  correctBlur: vi.fn(async () => true),
+  layerReplace: vi.fn(async () => true),
+  locationTrade: vi.fn(async () => true),
+  exchangeLayerColor: vi.fn(async () => true),
 }))
 
 /** 每个用例换一份新的响应式假 store（`storeToRefs` 需要真响应式对象） */
 interface FakeStore {
   tiles: Ref<unknown[]>
   collapsed: Ref<Record<string, boolean>>
+  options: Ref<Record<string, unknown>>
   loading: Ref<boolean>
   error: Ref<string>
   degraded: Ref<string>
@@ -39,7 +44,15 @@ vi.mock('@/components/command/useCommand', () => ({
         ? commands.zoom
         : id === 'commonUse.setCollapsed'
           ? commands.setCollapsed
-          : commands.flip,
+          : id === 'commonUse.correctBlur'
+            ? commands.correctBlur
+            : id === 'commonUse.layerReplace'
+              ? commands.layerReplace
+              : id === 'commonUse.locationTrade'
+                ? commands.locationTrade
+                : id === 'commonUse.exchangeLayerColor'
+                  ? commands.exchangeLayerColor
+                  : commands.flip,
     disabled: false,
     running: false,
     command: undefined,
@@ -81,6 +94,10 @@ beforeEach(() => {
   commands.zoom.mockClear()
   commands.flip.mockClear()
   commands.setCollapsed.mockClear()
+  commands.correctBlur.mockClear()
+  commands.layerReplace.mockClear()
+  commands.locationTrade.mockClear()
+  commands.exchangeLayerColor.mockClear()
 })
 
 describe('三种状态', () => {
@@ -239,5 +256,27 @@ describe('展开面板（T-88b）', () => {
     await flushPromises()
 
     expect(wrapper.find('.page-common-use__panel').exists()).toBe(true)
+  })
+})
+
+describe('4 个直连格子（A1）', () => {
+  const cases: Array<[string, keyof typeof commands]> = [
+    ['修正模糊', 'correctBlur'],
+    ['元素替换', 'layerReplace'],
+    ['位置对换', 'locationTrade'],
+    ['图层颜色互换', 'exchangeLayerColor'],
+  ]
+
+  it.each(cases)('点「%s」→ 调 %s 命令且不带参数', async (name, fn) => {
+    store.tiles.value = [tile(0, name as string)]
+    const wrapper = mount(Page)
+    await flushPromises()
+
+    await wrapper.find('.use-grid-item').trigger('click')
+
+    expect(commands[fn]).toHaveBeenCalledTimes(1)
+    expect(commands[fn]).toHaveBeenCalledWith()
+    // 不是展开面板的路子，也不会误写折叠态
+    expect(commands.setCollapsed).not.toHaveBeenCalled()
   })
 })
