@@ -173,7 +173,7 @@ grep -rn "export .*<概念词>" src  # 有哪些导出叫这个名字
 
 | 层 | 规模 | 放什么 |
 | --- | --- | --- |
-| `src/pages/` | <!-- stats:begin layers.pages -->61 文件 / 12202 行<!-- stats:end layers.pages --> | 11 个页面（含 `_atoms` `_probe` `_placeholder` 三个内部页） |
+| `src/pages/` | <!-- stats:begin layers.pages -->61 文件 / 12201 行<!-- stats:end layers.pages --> | 11 个页面（含 `_atoms` `_probe` `_placeholder` 三个内部页） |
 | `src/cep/` | <!-- stats:begin layers.cep -->52 文件 / 5670 行<!-- stats:end layers.cep --> | PS 出口：`transport` / `jsx/<域>` / `data/`（仓库层）/ `cloud` / `dialog` / `events` |
 | `src/components/` | <!-- stats:begin layers.components -->36 文件 / 3269 行<!-- stats:end layers.components --> | 跨页组件；`G` 前缀 = UI 基础件 |
 | `src/domain/` | <!-- stats:begin layers.domain -->22 文件 / 3221 行<!-- stats:end layers.domain --> | 纯函数与类型，零 IO、零 Vue |
@@ -184,7 +184,7 @@ grep -rn "export .*<概念词>" src  # 有哪些导出叫这个名字
 | `src/cloud/` | <!-- stats:begin layers.cloud -->4 文件 / 881 行<!-- stats:end layers.cloud --> | 同步引擎与台账 |
 | `src/selection/` | <!-- stats:begin layers.selection -->2 文件 / 292 行<!-- stats:end layers.selection --> | 选区 / 当前文字快照 |
 
-**测试**：<!-- stats:begin tests -->**110 个文件、944 处用例**（静态计数 `it()`/`test()`；非通过数）<!-- stats:end tests -->（`tests/{cep,cloud,commands,components,composables,data,domain,pages,selection,stores,utils}`）。
+**测试**：<!-- stats:begin tests -->**111 个文件、947 处用例**（静态计数 `it()`/`test()`；非通过数）<!-- stats:end tests -->（`tests/{cep,cloud,commands,components,composables,data,domain,pages,selection,stores,utils}`）。
 
 ### 3. 一手证据已入库，别再问"路径在不在"
 
@@ -215,7 +215,7 @@ grep -rn "export .*<概念词>" src  # 有哪些导出叫这个名字
 | 命令 | 干什么 | 状态 |
 | --- | --- | --- |
 | `npm run check` | style-guard + ledger + stats --check + lint + format:check | ✅ **不含测试、不含 tests 类型检查** |
-| `npm test` | vitest run（`<!-- stats:begin tests -->**110 个文件、944 处用例**（静态计数 `it()`/`test()`；非通过数）<!-- stats:end tests -->`） | ✅ 单独一条，`check` 不调它 |
+| `npm test` | vitest run（`<!-- stats:begin tests -->**111 个文件、947 处用例**（静态计数 `it()`/`test()`；非通过数）<!-- stats:end tests -->`） | ✅ 单独一条，`check` 不调它 |
 | `npm run deploy` | check → typecheck → build → verify:dist | ✅ 跑全的入口；**不含测试**，测试是流程不是脚本 |
 | `npm run build` | `vite build`，**只此一步** | ✅ 不带任何检查；检查归 `check` / `typecheck` / `verify:dist` |
 | `npm run stats` | 生成规模数字，改写 `进度.md` 与本文的注入块 | ✅ |
@@ -663,5 +663,6 @@ npm run deploy     # check + 类型检查 + 构建 + 产物校验，唯一强制
 | `npm run deploy`                       | 要进 PS 里验收之前，必须通过                                    |
 | `npm run ledger`                       | 只改了台账                                                      |
 | `npm run registry`                     | 新增了 `src/{cep,composables,stores,utils,styles}` 下的文件     |
+| `npm run template:guard` | 扫 `.vue`：模板里的非法属性名（反引号等）+ SFC 解析错误。**编译与 jsdom 都抓不到**这类问题，所以单独一道 | ✅ 已接进 `check` |
 | `npm run style:fix` / `style:baseline` | 修样式违规 / 清理完一个文件后收紧基线                           |
 | `npm run log:new` / `log:index`        | 写日志（只在三种情况下写，见第 15 条）                          |

@@ -1,4 +1,4 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import EmptyState from '@/components/EmptyState.vue'
@@ -279,7 +279,6 @@ function flip(direction: FlipDirection) {
               :tile="tile"
               @click="toggle(tile)"
               @contextmenu="onGridContextMenu(tile)"
-              `n
               @mousedown="onGridMouseDown($event)"
             />
             <span
