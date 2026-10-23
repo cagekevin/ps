@@ -41,6 +41,16 @@ export function createCommonUseJsx(): CommonUseJsx {
     embedMultipleImages: () =>
       jsxCall('cy_embedMultipleImage', [], { label: '嵌入多图片', timeout: LONG }),
 
+    // 转链接智能对象：官方 `toLinkSmart()` → `jsxHistory("cy_smartToLinkSmartObject", [], "转链接智能对象")`
+    // （`app.v4.js:35882-35891`）。**无参**。
+    smartToLinkSmartObject: () =>
+      jsxCall('cy_smartToLinkSmartObject', [], { label: '转链接智能对象', timeout: LONG }),
+
+    // 转智能对象：官方 `linkToSmart()` → `jsxHistory("cy_linkSmartObjectToSmartObject", [], "转智能对象")`
+    // （`app.v4.js:35862-35871`）。**无参**，与上面那条**不是**同一条 jsx。
+    linkSmartObjectToSmartObject: () =>
+      jsxCall('cy_linkSmartObjectToSmartObject', [], { label: '转智能对象', timeout: LONG }),
+
     // 导入多图片：官方 `cy_importMultipleImage([{path, toLinkObject}])`（`:38106`）。
     // `path` 由 `cy_getImagePath` 原样给出，**加工点为零**（对象形状 `:38101-38104`）
     importMultipleImages: (options: { path: unknown; toLinkObject: unknown }) =>

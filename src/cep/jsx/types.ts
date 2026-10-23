@@ -173,6 +173,10 @@ export interface CommonUseJsx {
   embedImage(options: { path: string; bLink2: unknown; bDelete: unknown }): Promise<unknown>
   /** cy_embedMultipleImage([])：嵌入多图片，无参（`:37902`） */
   embedMultipleImages(): Promise<unknown>
+  /** 转链接智能对象（官方 cy_smartToLinkSmartObject，:35891，无参） */
+  smartToLinkSmartObject(): Promise<unknown>
+  /** 转智能对象（官方 cy_linkSmartObjectToSmartObject，:35871，无参） */
+  linkSmartObjectToSmartObject(): Promise<unknown>
   /** cy_importMultipleImage([{path,toLinkObject}])：导入多图片（`:38106`） */
   importMultipleImages(options: { path: unknown; toLinkObject: unknown }): Promise<unknown>
   /** cy_getImagePath()：取导入路径；取消返回 -1（`:38099`），返回形状未实测 */

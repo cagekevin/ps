@@ -189,6 +189,30 @@ export const commonUseCommands: Command<unknown>[] = [
   }),
 
   defineCommand({
+    id: 'commonUse.smartToLinkSmartObject',
+    title: '转链接智能对象',
+    group: 'layer',
+    requires: 'layer',
+    kind: 'instant',
+    async run(ctx) {
+      // 官方 `toLinkSmart()` → `cy_smartToLinkSmartObject([], "转链接智能对象")`（`:35882-35891`），无参
+      assertJsxOk(await ctx.jsx.commonUse.smartToLinkSmartObject(), '转链接智能对象失败')
+    },
+  }),
+
+  defineCommand({
+    id: 'commonUse.linkSmartObjectToSmartObject',
+    title: '转智能对象',
+    group: 'layer',
+    requires: 'layer',
+    kind: 'instant',
+    async run(ctx) {
+      // 官方 `linkToSmart()` → `cy_linkSmartObjectToSmartObject([], "转智能对象")`（`:35862-35871`），无参
+      assertJsxOk(await ctx.jsx.commonUse.linkSmartObjectToSmartObject(), '转智能对象失败')
+    },
+  }),
+
+  defineCommand({
     id: 'commonUse.importMultipleImages',
     title: '导入多图片',
     group: 'layer',

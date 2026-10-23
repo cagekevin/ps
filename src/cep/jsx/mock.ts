@@ -196,6 +196,14 @@ export function createMockJsx(): JsxPort {
         log.info('mock', 'cy_embedMultipleImage', null)
         return null
       },
+      smartToLinkSmartObject: async () => {
+        log.info('mock', 'cy_smartToLinkSmartObject', null)
+        return null
+      },
+      linkSmartObjectToSmartObject: async () => {
+        log.info('mock', 'cy_linkSmartObjectToSmartObject', null)
+        return null
+      },
       importMultipleImages: async (options) => {
         log.info('mock', 'cy_importMultipleImage', options)
         return null

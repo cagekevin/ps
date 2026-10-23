@@ -1,4 +1,4 @@
-﻿import type {
+import type {
   CreateButtonConfig,
   FontSetSettings,
   PasteFontConfig,
@@ -335,6 +335,12 @@ export interface CommonUseEmbedOptions {
 export interface CommonUseEmbedPayload {
   options: CommonUseEmbedOptions
 }
+
+/**
+ * 两个"转智能对象"命令都**无参**：官方 `jsxHistory("cy_…", [], "…")`（`:35871` / `:35891`），
+ * 所以 payload 是空对象——传任何字段都说明调用方搞错了（命令层不读它）。
+ */
+export type CommonUseNoArgPayload = Record<string, never>
 
 /**
  * 导入多图片：官方 `{path, toLinkObject}`（`:38101-38104`），`path` 来自 `cy_getImagePath()`。
@@ -755,6 +761,8 @@ export interface CommandPayloads {
   'commonUse.zoom': CommonUseZoomPayload
   'commonUse.flip': CommonUseFlipPayload
   'commonUse.embedImage': CommonUseEmbedPayload
+  'commonUse.smartToLinkSmartObject': CommonUseNoArgPayload
+  'commonUse.linkSmartObjectToSmartObject': CommonUseNoArgPayload
   'commonUse.importMultipleImages': CommonUseImportPayload
   'commonUse.optimizeOnce': CommonUseOptimizePayload
   'commonUse.optimizeFolder': CommonUseOptimizePayload

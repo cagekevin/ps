@@ -42,7 +42,7 @@ function walk(dir: string): string[] {
  * 刀 2（comembed 两个按钮 + 两个新 jsx 包装）落地时把这两条删掉——留着就说明没接。
  * 判据：白名单里的每条都必须真实存在，否则报"过期条目"（防止删了代码忘删白名单）。
  */
-const KNOWN_DEAD = ['components/PanelEmbed.vue:52', 'components/PanelEmbed.vue:53']
+const KNOWN_DEAD: string[] = []
 
 describe('常用页：按钮必须有 @click', () => {
   it('全页扫一遍，缺 @click 的按钮只剩白名单里那几条', () => {

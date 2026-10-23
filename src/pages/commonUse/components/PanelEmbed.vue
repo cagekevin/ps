@@ -1,8 +1,9 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import CheckBox from '@/components/CheckBox.vue'
 import GButton from '@/components/GButton.vue'
 import GRadio from '@/components/GRadio.vue'
 import SettingsRow from '@/components/SettingsRow.vue'
+import { useCommand } from '@/components/command/useCommand'
 import { useOptionRef } from '../useCommonUseOptions'
 
 /**
@@ -19,6 +20,13 @@ const clipMaskAutoEmbed = useOptionRef('cyClipMaskAutoEmbed', false)
 const linkMode = useOptionRef<string>('cyLinkObject', 'none')
 const deleteNextLayer = useOptionRef('cyDeleteNext', false)
 const dragInToLink = useOptionRef('cyOpenDranInToLinkObject', false)
+
+/**
+ * 两个按钮各一条**无参**命令：官方 `toLinkSmart()` → `cy_smartToLinkSmartObject`（`:35891`）、
+ * `linkToSmart()` → `cy_linkSmartObjectToSmartObject`（`:35871`），两者**不是**同一条 jsx。
+ */
+const toLinkSmartCmd = useCommand('commonUse.smartToLinkSmartObject')
+const linkToSmartCmd = useCommand('commonUse.linkSmartObjectToSmartObject')
 </script>
 
 <template>
@@ -49,8 +57,8 @@ const dragInToLink = useOptionRef('cyOpenDranInToLinkObject', false)
     <hr class="panel-embed__rule" />
 
     <SettingsRow>
-      <GButton width="half">转链接智能对象</GButton>
-      <GButton width="half">转智能对象</GButton>
+      <GButton width="half" @click="toLinkSmartCmd.run()">转链接智能对象</GButton>
+      <GButton width="half" @click="linkToSmartCmd.run()">转智能对象</GButton>
     </SettingsRow>
   </div>
 </template>

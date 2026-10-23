@@ -12,6 +12,8 @@ const cmds = vi.hoisted(() => ({
   exportImages: vi.fn(async (_payload: unknown) => true),
   openExportFolder: vi.fn(async () => true),
   exportPsdFolder: vi.fn(async () => true),
+  smartToLink: vi.fn(async () => true),
+  linkToSmart: vi.fn(async () => true),
 }))
 
 vi.mock('@/components/command/useCommand', () => ({
@@ -23,7 +25,11 @@ vi.mock('@/components/command/useCommand', () => ({
           ? cmds.openExportFolder
           : id === 'commonUse.exportPsdFolder'
             ? cmds.exportPsdFolder
-            : vi.fn(async () => true),
+            : id === 'commonUse.smartToLinkSmartObject'
+              ? cmds.smartToLink
+              : id === 'commonUse.linkSmartObjectToSmartObject'
+                ? cmds.linkToSmart
+                : vi.fn(async () => true),
     disabled: false,
     running: false,
   }),
@@ -42,6 +48,7 @@ import GRadio from '@/components/GRadio.vue'
 import PanelExport from '@/pages/commonUse/components/PanelExport.vue'
 import PanelCustomChange from '@/pages/commonUse/components/PanelCustomChange.vue'
 import PanelImport from '@/pages/commonUse/components/PanelImport.vue'
+import PanelEmbed from '@/pages/commonUse/components/PanelEmbed.vue'
 
 /**
  * T-88b 的公共件与面板：只断言"可观察结果"（分组数据、点击 emit、DOM 数量）。
@@ -236,5 +243,39 @@ describe('A4：导出链路（参数 = 面板写进 cyExport 的整块）', () =
 
     expect(toasts.filter((t) => t.type === 'error')).toHaveLength(1)
     expect(toasts.find((t) => t.type === 'error')?.text).toContain('导出失败')
+  })
+})
+
+describe('T-97-2：两个智能对象按钮（各一条无参命令）', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    fakeStore = { options: ref({}), loadOptions: vi.fn(async () => {}) }
+    cmds.smartToLink.mockClear()
+    cmds.linkToSmart.mockClear()
+  })
+
+  it('「转链接智能对象」→ commonUse.smartToLinkSmartObject，**无参**', async () => {
+    const wrapper = mount(PanelEmbed)
+    const button = wrapper.findAll('button').find((b) => b.text() === '转链接智能对象')
+    expect(button).toBeTruthy()
+
+    await button!.trigger('click')
+
+    expect(cmds.smartToLink).toHaveBeenCalledTimes(1)
+    // `toHaveBeenCalledWith()` 不接受任何实参：多传一个字段这条就红
+    expect(cmds.smartToLink).toHaveBeenCalledWith()
+    expect(cmds.linkToSmart).not.toHaveBeenCalled()
+  })
+
+  it('「转智能对象」→ commonUse.linkSmartObjectToSmartObject，**无参**', async () => {
+    const wrapper = mount(PanelEmbed)
+    const button = wrapper.findAll('button').find((b) => b.text() === '转智能对象')
+    expect(button).toBeTruthy()
+
+    await button!.trigger('click')
+
+    expect(cmds.linkToSmart).toHaveBeenCalledTimes(1)
+    expect(cmds.linkToSmart).toHaveBeenCalledWith()
+    expect(cmds.smartToLink).not.toHaveBeenCalled()
   })
 })
