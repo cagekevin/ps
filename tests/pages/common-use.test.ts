@@ -1,6 +1,6 @@
 ﻿import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ref, type Ref } from 'vue'
-import { mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 
 /**
@@ -13,6 +13,7 @@ import { createPinia, setActivePinia } from 'pinia'
 const commands = vi.hoisted(() => ({
   zoom: vi.fn(async () => true),
   flip: vi.fn(async () => true),
+  setCollapsed: vi.fn(async () => true),
 }))
 
 /** 每个用例换一份新的响应式假 store（`storeToRefs` 需要真响应式对象） */
@@ -32,7 +33,12 @@ vi.mock('@/stores/common-use', () => ({ useCommonUseStore: () => store }))
 
 vi.mock('@/components/command/useCommand', () => ({
   useCommand: (id: string) => ({
-    run: id === 'commonUse.zoom' ? commands.zoom : commands.flip,
+    run:
+      id === 'commonUse.zoom'
+        ? commands.zoom
+        : id === 'commonUse.setCollapsed'
+          ? commands.setCollapsed
+          : commands.flip,
     disabled: false,
     running: false,
     command: undefined,
@@ -71,6 +77,7 @@ beforeEach(() => {
   }
   commands.zoom.mockClear()
   commands.flip.mockClear()
+  commands.setCollapsed.mockClear()
 })
 
 describe('三种状态', () => {
@@ -159,10 +166,75 @@ describe('网格区', () => {
   it('本刀格子没有点击行为：不发任何命令（面板接线在 T-88b）', async () => {
     store.tiles.value = [tile(0, '嵌入图片')]
     const wrapper = mount(Page)
+    await flushPromises() // onMounted 里先 await store.load() 才恢复展开态
 
     await wrapper.find('.use-grid-item').trigger('click')
 
     expect(commands.zoom).not.toHaveBeenCalled()
     expect(commands.flip).not.toHaveBeenCalled()
+  })
+})
+
+describe('展开面板（T-88b）', () => {
+  it('点可展开格：面板出现在该行下方，并把折叠态写成"展开"', async () => {
+    store.tiles.value = [tile(0, '嵌入图片', { isMore: true, comName: 'comembed' })]
+    const wrapper = mount(Page)
+    await flushPromises() // onMounted 里先 await store.load() 才恢复展开态
+
+    await wrapper.find('.use-grid-item').trigger('click')
+
+    expect(wrapper.find('.page-common-use__panel').exists()).toBe(true)
+    expect(commands.setCollapsed).toHaveBeenCalledWith({ id: 't0', collapsed: false })
+  })
+
+  it('再点同一格：面板收起，折叠态写成"收起"（官方 openfun 再点收起，:38193）', async () => {
+    store.tiles.value = [tile(0, '嵌入图片', { isMore: true, comName: 'comembed' })]
+    const wrapper = mount(Page)
+    await flushPromises() // onMounted 里先 await store.load() 才恢复展开态
+
+    await wrapper.find('.use-grid-item').trigger('click')
+    await wrapper.find('.use-grid-item').trigger('click')
+
+    expect(wrapper.find('.page-common-use__panel').exists()).toBe(false)
+    expect(commands.setCollapsed).toHaveBeenLastCalledWith({ id: 't0', collapsed: true })
+  })
+
+  it('点不可展开格：没有面板、也不写折叠态', async () => {
+    store.tiles.value = [tile(0, '修正模糊')]
+    const wrapper = mount(Page)
+    await flushPromises() // onMounted 里先 await store.load() 才恢复展开态
+
+    await wrapper.find('.use-grid-item').trigger('click')
+
+    expect(wrapper.find('.page-common-use__panel').exists()).toBe(false)
+    expect(commands.setCollapsed).not.toHaveBeenCalled()
+  })
+
+  it('同时只开一个：开第二格时第一格面板消失', async () => {
+    store.tiles.value = [
+      tile(0, '嵌入图片', { isMore: true, comName: 'comembed' }),
+      tile(1, '优化文档', { isMore: true, comName: 'comoptimization' }),
+    ]
+    const wrapper = mount(Page)
+    await flushPromises()
+    const items = wrapper.findAll('.use-grid-item')
+
+    await items[0].trigger('click')
+    expect(wrapper.findAll('.page-common-use__panel')).toHaveLength(1)
+
+    await items[1].trigger('click')
+    expect(wrapper.findAll('.page-common-use__panel')).toHaveLength(1)
+    expect(wrapper.find('.panel-optimization').exists()).toBe(true)
+    expect(wrapper.find('.panel-embed').exists()).toBe(false)
+  })
+
+  it('文件里记过 collapsed:false 的那一格启动即展开', async () => {
+    store.tiles.value = [tile(0, '嵌入图片', { isMore: true, comName: 'comembed' })]
+    store.collapsed.value = { t0: false }
+
+    const wrapper = mount(Page)
+    await flushPromises()
+
+    expect(wrapper.find('.page-common-use__panel').exists()).toBe(true)
   })
 })

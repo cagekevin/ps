@@ -1,5 +1,5 @@
 ﻿<script setup lang="ts">
-import { computed, onMounted } from 'vue'
+import { computed, onMounted, ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import EmptyState from '@/components/EmptyState.vue'
 import GButton from '@/components/GButton.vue'
@@ -12,9 +12,17 @@ import {
   ENLARGE_PRESETS,
   FLIP_DIRECTIONS,
   NARROW_PRESETS,
+  type CommonUseTile,
   type FlipDirection,
 } from '@/domain/common-use'
 import { useCommonUseStore } from '@/stores/common-use'
+import PanelCustomChange from './components/PanelCustomChange.vue'
+import PanelEmbed from './components/PanelEmbed.vue'
+import PanelExport from './components/PanelExport.vue'
+import PanelImport from './components/PanelImport.vue'
+import PanelOptimization from './components/PanelOptimization.vue'
+import PanelReference from './components/PanelReference.vue'
+import PanelSpacing from './components/PanelSpacing.vue'
 import UseGridItem from './components/UseGridItem.vue'
 
 /**
@@ -29,10 +37,11 @@ import UseGridItem from './components/UseGridItem.vue'
  */
 
 const store = useCommonUseStore()
-const { tiles, loading, error, degraded } = storeToRefs(store)
+const { tiles, collapsed, loading, error, degraded } = storeToRefs(store)
 
 const zoomCmd = useCommand('commonUse.zoom')
 const flipCmd = useCommand('commonUse.flip')
+const setCollapsedCmd = useCommand('commonUse.setCollapsed')
 
 /**
  * 官方 6 向翻转的图标与提示（`app.v4.js:37567-37591`，18×18，`.svg-18` CSS 位置见规格 35620）。
@@ -52,11 +61,55 @@ const flipItems = FLIP_DIRECTIONS.map((text) => ({ text, ...FLIP_ICONS[text] }))
 
 /** 展开态高亮（官方 `openfun`，`:38193`）：面板本身在 T-88b 才做 */
 
+/** 官方每行 3 个：`open()` 里 `Math.floor(i/3)` 与 `splice(n*3+3, …)`（`app.v4.js:38201`、`:38209`） */
+const GRID_COLUMNS = 3
+
+/** 每行 3 格；面板插在该格所在行的**下一行行首**（官方 `splice(n*3+3, 0, {created})`，`:38209`） */
+const gridRows = computed(() => {
+  const rows: CommonUseTile[][] = []
+  for (const tile of tiles.value) {
+    const last = rows[rows.length - 1]
+    if (!last || last.length === GRID_COLUMNS) rows.push([tile])
+    else last.push(tile)
+  }
+  return rows
+})
+
+/** 展开面板：`comName` → 子组件（官方 `openfun` 保证同时只开一个，`:38193`） */
+const PANELS: Record<string, unknown> = {
+  comembed: PanelEmbed,
+  comimport: PanelImport,
+  comoptimization: PanelOptimization,
+  comcustomChange: PanelCustomChange,
+  comexport: PanelExport,
+  comreference: PanelReference,
+  comspacing: PanelSpacing,
+}
+
+const expandedId = ref('')
+
+/** 该行要显示的面板（该行有格子处于展开态且有 `comName`） */
+function panelOfRow(row: CommonUseTile[]) {
+  const tile = row.find((item) => item.id === expandedId.value)
+  return tile?.comName ? PANELS[tile.comName] : undefined
+}
+
+function toggle(tile: CommonUseTile) {
+  // 没有子面板的格子点了不做事（官方这类格直接执行功能，接线在 T-88c）
+  if (!tile.comName) return
+  const open = expandedId.value !== tile.id
+  expandedId.value = open ? tile.id : ''
+  void setCollapsedCmd.run({ id: tile.id, collapsed: !open })
+}
+
 const ready = computed(() => !loading.value && !error.value)
 
-onMounted(() => {
-  void store.load()
+onMounted(async () => {
+  await store.load()
   store.loadCollapsed()
+  // 缺省收起；文件里显式记过 `collapsed:false` 的那一格恢复展开（同时只开一个，取第一个）
+  const open = tiles.value.find((tile) => tile.comName && collapsed.value[tile.id] === false)
+  expandedId.value = open?.id ?? ''
 })
 
 function zoom(scale: number) {
@@ -126,9 +179,21 @@ function flip(direction: FlipDirection) {
 
       <hr class="page-common-use__rule" />
 
-      <!-- 功能格：顺序来自 sj_commonFunction.json（页面不写任何 id 字面量） -->
+      <!-- 功能格：顺序来自 sj_commonFunction.json（页面不写任何 id 字面量）；每行 3 个 -->
       <div v-if="tiles.length" class="page-common-use__grid">
-        <UseGridItem v-for="tile in tiles" :key="tile.id" :tile="tile" />
+        <template v-for="(row, rowIndex) in gridRows" :key="rowIndex">
+          <div class="page-common-use__grid-row">
+            <UseGridItem v-for="tile in row" :key="tile.id" :tile="tile" @click="toggle(tile)" />
+            <span
+              v-for="pad in GRID_COLUMNS - row.length"
+              :key="pad"
+              class="page-common-use__pad"
+            />
+          </div>
+          <div v-if="panelOfRow(row)" class="page-common-use__panel">
+            <component :is="panelOfRow(row)" />
+          </div>
+        </template>
       </div>
       <EmptyState v-else compact text="还没有常用功能" />
     </template>
@@ -163,12 +228,26 @@ function flip(direction: FlipDirection) {
   background: var(--c-divider);
 }
 
-/* 每行 3 个（官方 `open()` 用 Math.floor(i/3) 算行号，`:38201`；宽度 `.context-one-wrap` 33%，CSS 位置 110803） */
+/* 每行 3 个（官方 `Math.floor(i/3)`，`:38201`；格宽 `.context-one-wrap` 33%，CSS 位置 110803） */
 .page-common-use__grid {
   display: flex;
-  flex-wrap: wrap;
+  flex-direction: column;
+  gap: var(--sp-5);
+}
+
+.page-common-use__grid-row {
+  display: flex;
   align-items: flex-start;
-  row-gap: var(--sp-5);
+}
+
+.page-common-use__pad {
+  width: 33.33%;
+}
+
+/* 面板整体占满一行（官方 `.created{width:100%;height:auto}`，CSS 字符位置 111234） */
+.page-common-use__panel {
+  width: 100%;
+  padding: 0 var(--sp-5);
 }
 
 .page-common-use__warn,

@@ -25,11 +25,11 @@
     }
   },
   "tests": {
-    "files": 106,
-    "cases": 896,
+    "files": 107,
+    "cases": 909,
     "eachSites": 3
   },
-  "components": 29,
+  "components": 31,
   "icons": 189,
   "pages": 8,
   "hostEvents": 4,
@@ -78,8 +78,8 @@
       "lines": 3988
     },
     "components": {
-      "files": 34,
-      "lines": 3081
+      "files": 36,
+      "lines": 3250
     },
     "composables": {
       "files": 10,
@@ -90,8 +90,8 @@
       "lines": 3188
     },
     "pages": {
-      "files": 53,
-      "lines": 11389
+      "files": 60,
+      "lines": 11921
     },
     "selection": {
       "files": 2,
