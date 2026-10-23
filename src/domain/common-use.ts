@@ -1,4 +1,4 @@
-// 是什么：常用页（`/commonUse`）的落盘结构、官方种子与「落盘 → 页面视图」的纯函数
+﻿// 是什么：常用页（`/commonUse`）的落盘结构、官方种子与「落盘 → 页面视图」的纯函数
 // 替代了什么：原版 `V.a.info` 数组上的就地读写（app.v4.js:11088-11261 的存储类与 configReset）
 // 谁在用：`cep/data/common-use.ts`（仓库）、后续 `stores/common-use.ts`（只读投影，T-87）
 // 禁止：不读文件、不调 jsx、不 import Vue；不在这里判断"要不要写"（那是命令层的事）
@@ -28,11 +28,18 @@ export interface CommonUseItem {
   [key: string]: unknown
 }
 
-/** 整个文件：官方就是 `{ info: [...] }`，外面没有别的约定（`app.v4.js:11096` 只传了 path 与默认值） */
-export interface CommonUseFile {
-  info?: CommonUseItem[]
-  [key: string]: unknown
-}
+/**
+ * 整个文件 = **裸数组**（14 项，没有外层对象）。
+ *
+ * 一手依据：官方 `configReset()` 直接 `return [{ id: "div_img_cya1" … }, …]`（`app.v4.js:11112`），
+ * 基类 `this.info = n` 拿的就是这个数组（`:6389`），`updata()` 是 `JSON.stringify(this.info)`（`:6401`），
+ * 读回来用 `Object.assign(this.info, r)` 灌进数组（`:6392`）；真机文件 `%APPDATA%/SheJiZhuLi/sj_commonFunction.json`
+ * 实测 3489 字节、根是数组、14 项（fixture：`tests/fixtures/sj_commonFunction.official.json`）。
+ *
+ * 之前的 `{ info: [...] }` 是错的（写出去官方面板读不到 14 项 → 常用页显示空态），
+ * 现在读侧兼容旧形状、写侧一律归一成数组（见 `readCommonUseItems` 与 `cep/data/common-use.ts` 的 mutator）。
+ */
+export type CommonUseFile = CommonUseItem[]
 
 /** 页面视图的一条：只带页面要用的东西（不带 `created`，不暴露 `sort`） */
 export interface CommonUseTile {
@@ -218,19 +225,26 @@ export const COMMON_USE_SEED: readonly CommonUseItem[] = [
   },
 ]
 
-/** 空文件（没有 info）：`pick()` 的 fallback——**不是**种子，种子只在 `ensure()` 里显式写 */
+/** 空文件：`pick()` 的 fallback——**不是**种子，种子只在 `ensure()` 里显式写 */
 export function createEmptyCommonUseFile(): CommonUseFile {
-  return { info: [] }
+  return []
 }
 
 /** 官方默认那份（深拷贝，避免调用方改到常量） */
 export function createCommonUseSeed(): CommonUseFile {
-  return { info: COMMON_USE_SEED.map((item) => ({ ...item })) }
+  return COMMON_USE_SEED.map((item) => ({ ...item }))
 }
 
-/** 取 `info`；形状不对时给空数组（形状校验在仓库层做，这里不抛） */
+/**
+ * 取项数组；形状不对时给空数组（形状校验在仓库层做，这里不抛）。
+ *
+ * 兼容旧形状：我们早期把文件写成 `{ info: [...] }`（错误），读侧认它、写侧归一成裸数组，
+ * 这样已经跑过旧版本的用户不会丢那 14 项。
+ */
 export function readCommonUseItems(file: CommonUseFile | null | undefined): CommonUseItem[] {
-  return Array.isArray(file?.info) ? file.info : []
+  if (Array.isArray(file)) return file
+  const legacy = (file as { info?: unknown } | null | undefined)?.info
+  return Array.isArray(legacy) ? (legacy as CommonUseItem[]) : []
 }
 
 /**

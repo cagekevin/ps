@@ -12,6 +12,7 @@ import {
   createEmptyCommonUseFile,
   findCommonUseIndex,
   type CommonUseFile,
+  type CommonUseItem,
 } from '@/domain/common-use'
 import { applyListDrop, type DropPosition } from '@/domain/reorder'
 import { CepError } from '@/utils/errors'
@@ -80,22 +81,27 @@ export async function ensureCommonUseFile(): Promise<EnsureResult> {
   } catch {
     throw new CepError('IO', `${FILE_NAME} 内容不是合法 JSON，拒绝覆盖`)
   }
-  const info = (parsed as CommonUseFile | null)?.info
-  if (info !== undefined && !Array.isArray(info)) {
-    throw new CepError('IO', `${FILE_NAME} 的 info 不是数组，拒绝覆盖`)
+  // 根必须是数组（官方 `configReset()` 返回数组、`updata()` 直接 stringify 它，`:11112` / `:6401`）；
+  // 旧形状 `{ info: [...] }` 也接受——那是我们自己写错的历史文件，读得懂、下次写会归一成数组。
+  const legacyInfo = (parsed as { info?: unknown } | null)?.info
+  if (!Array.isArray(parsed) && !Array.isArray(legacyInfo)) {
+    throw new CepError('IO', `${FILE_NAME} 根不是数组，拒绝覆盖`)
   }
   return { created: false }
 }
 
 /**
  * 在 `update` 的 mutator 里取可写数组：形状不对直接抛，不兜底。
- * 返回的就是 `file.info` 本体（不是拷贝），所以原地 `splice` 能落回文件里。
+ * 返回的就是文件里那个数组本体（不是拷贝），所以原地 `splice` 能落回文件里。
+ *
+ * **mutator 必须 `return items`**（不是 `return file`）：写回一律归一成裸数组，
+ * 旧形状 `{ info: [...] }` 在第一次写入时就被转正（官方只认数组，`:6401`）。
  */
-function requireItems(file: CommonUseFile): NonNullable<CommonUseFile['info']> {
-  if (!Array.isArray(file.info)) {
-    throw new CepError('PARSE', `${FILE_NAME} 的 info 不是数组，无法改写`)
-  }
-  return file.info
+function requireItems(file: CommonUseFile): CommonUseItem[] {
+  if (Array.isArray(file)) return file
+  const legacy = (file as unknown as { info?: unknown } | null)?.info
+  if (Array.isArray(legacy)) return legacy as CommonUseItem[]
+  throw new CepError('PARSE', `${FILE_NAME} 根不是数组，无法改写`)
 }
 
 /**
@@ -106,7 +112,7 @@ async function move(from: number, to: number, position: DropPosition): Promise<C
   return base.update((file) => {
     const items = requireItems(file)
     applyListDrop(items, from, to, position)
-    return file
+    return items
   })
 }
 
@@ -117,7 +123,7 @@ async function setShow(id: string, show: boolean): Promise<CommonUseFile> {
     const index = findCommonUseIndex(items, id)
     if (index < 0) throw new CepError('PARSE', `常用项不存在：${id}`)
     items[index].isShow = show
-    return file
+    return items
   })
 }
 
@@ -127,8 +133,10 @@ async function setShow(id: string, show: boolean): Promise<CommonUseFile> {
  */
 async function resetAll(): Promise<CommonUseFile> {
   return base.update((file) => {
-    file.info = createCommonUseSeed().info
-    return file
+    const items = requireItems(file)
+    // 官方 `resetConfig()`：`splice(0, length)` 后 `push(...configReset())`（`:11105-11106`），原地换内容
+    items.splice(0, items.length, ...createCommonUseSeed())
+    return items
   })
 }
 

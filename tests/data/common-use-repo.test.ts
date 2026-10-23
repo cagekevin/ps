@@ -49,52 +49,49 @@ function readDisk(): string {
 
 /** 造一份"官方形状 + 我们没解析过的键"的文件 */
 /** 把给定 info 写进内存文件（A2 用例用） */
-function seed(content: Record<string, unknown>) {
+function seed(content: unknown) {
   state.files.set(PATH, JSON.stringify(content))
 }
 function seedWithUnknownKeys() {
-  return {
-    info: [
-      {
-        id: 'a',
-        isMore: false,
-        ismark: false,
-        isShow: true,
-        title: 'A',
-        svg: '#icona',
-        fillSvg: false,
-        moreId: '',
-        name: 'A 项',
-        sort: 0,
-        openistrue: false,
-      },
-      {
-        id: 'b',
-        isMore: true,
-        ismark: true,
-        isShow: false,
-        title: 'B',
-        svg: '#iconb',
-        fillSvg: '#iconblan',
-        moreId: 'img_b_gd',
-        name: 'B 项',
-        comName: 'comembed',
-        sort: 1,
-        openistrue: true,
-      },
-      {
-        id: 'c',
-        isMore: false,
-        ismark: false,
-        isShow: true,
-        name: 'C 项',
-        sort: 2,
-        openistrue: false,
-      },
-    ],
-    foo: { nested: 1 },
-    outerSort: 'keep-me',
-  }
+  // 官方文件根是**裸数组**（`:11112` / `:6401`）；项内还有官方自己写、我们不解析的键（`sort` / `openistrue`）
+  return [
+    {
+      id: 'a',
+      isMore: false,
+      ismark: false,
+      isShow: true,
+      title: 'A',
+      svg: '#icona',
+      fillSvg: false,
+      moreId: '',
+      name: 'A 项',
+      sort: 0,
+      openistrue: false,
+    },
+    {
+      id: 'b',
+      isMore: true,
+      ismark: true,
+      isShow: false,
+      title: 'B',
+      svg: '#iconb',
+      fillSvg: '#iconblan',
+      moreId: 'img_b_gd',
+      name: 'B 项',
+      comName: 'comembed',
+      sort: 1,
+      openistrue: true,
+    },
+    {
+      id: 'c',
+      isMore: false,
+      ismark: false,
+      isShow: true,
+      name: 'C 项',
+      sort: 2,
+      openistrue: false,
+    },
+  ]
 }
 
 beforeEach(() => {
@@ -107,13 +104,12 @@ describe('ensure() 三态（判据 2）', () => {
     const result = await commonUseRepo.ensure()
 
     expect(result).toEqual({ created: true })
-    const onDisk = JSON.parse(readDisk()) as { info: unknown[] }
-    expect(onDisk.info).toHaveLength(14)
-    expect((onDisk.info[0] as { id: string }).id).toBe('div_img_cya1')
+    const onDisk = JSON.parse(readDisk()) as unknown[]
+    expect(Array.isArray(onDisk)).toBe(true)
+    expect(onDisk).toHaveLength(14)
+    expect((onDisk[0] as { id: string }).id).toBe('div_img_cya1')
     // 种子逐项来自官方 configReset()（判据 6）
-    expect(onDisk.info.map((i) => (i as { id: string }).id)).toEqual(
-      COMMON_USE_SEED.map((i) => i.id),
-    )
+    expect(onDisk.map((i) => (i as { id: string }).id)).toEqual(COMMON_USE_SEED.map((i) => i.id))
   })
 
   it('文件已存在 → 不写，磁盘原文逐字节不变', async () => {
@@ -134,7 +130,7 @@ describe('ensure() 三态（判据 2）', () => {
     expect(readDisk()).toBe(before)
   })
 
-  it('info 不是数组 → 抛 IO，且磁盘原文逐字节不变', async () => {
+  it('根不是数组（也没有 info 数组）→ 抛 IO，且磁盘原文逐字节不变', async () => {
     writeDisk({ info: { nope: true } })
     const before = readDisk()
 
@@ -166,22 +162,18 @@ describe('订阅透出（不自己实现第二套）', () => {
     expect(seen[0].ids).toEqual(['a', 'b', 'c'])
   })
 })
-describe('未知键不丢（判据 3）', () => {
-  it('读-改-写一轮后 foo / sort / openistrue / outerSort 都还在且值没变', async () => {
+describe('项内未知字段不丢（判据 3）', () => {
+  it('读-改-写一轮后 sort / openistrue 都还在且值没变，根仍是数组', async () => {
     writeDisk(seedWithUnknownKeys())
 
     await commonUseRepo.move(0, 1, 'after')
     await commonUseRepo.setShow('b', true)
 
-    const onDisk = JSON.parse(readDisk()) as {
-      info: Array<Record<string, unknown>>
-      foo: unknown
-      outerSort: unknown
-    }
-    const byId = new Map(onDisk.info.map((i) => [i.id, i]))
+    const onDisk = JSON.parse(readDisk()) as Array<Record<string, unknown>>
+    // 防复发：官方只认裸数组（`:6401` 直接 stringify 数组）
+    expect(Array.isArray(onDisk)).toBe(true)
+    const byId = new Map(onDisk.map((i) => [i.id, i]))
 
-    expect(onDisk.foo).toEqual({ nested: 1 })
-    expect(onDisk.outerSort).toBe('keep-me')
     expect(byId.get('a')?.sort).toBe(0)
     expect(byId.get('b')?.sort).toBe(1)
     expect(byId.get('c')?.sort).toBe(2)
@@ -192,15 +184,14 @@ describe('未知键不丢（判据 3）', () => {
     expect(byId.get('b')?.fillSvg).toBe('#iconblan')
   })
 
-  it('resetAll 只换 info，文件顶层的未知键仍保留', async () => {
+  it('resetAll 写回 14 项，且根仍是数组（官方面板读得懂）', async () => {
     writeDisk(seedWithUnknownKeys())
 
     await commonUseRepo.resetAll()
 
-    const onDisk = JSON.parse(readDisk()) as { info: unknown[]; foo: unknown; outerSort: unknown }
-    expect(onDisk.info).toHaveLength(14)
-    expect(onDisk.foo).toEqual({ nested: 1 })
-    expect(onDisk.outerSort).toBe('keep-me')
+    const onDisk = JSON.parse(readDisk()) as unknown[]
+    expect(Array.isArray(onDisk)).toBe(true)
+    expect(onDisk).toHaveLength(14)
   })
 })
 
@@ -224,9 +215,7 @@ describe('move 与 domain/reorder 同源（判据 4）', () => {
 
       expect(readCommonUseItems(next).map((i) => i.id)).toEqual(expected)
       // 落盘与返回值一致
-      expect(
-        (JSON.parse(readDisk()) as { info: Array<{ id: string }> }).info.map((i) => i.id),
-      ).toEqual(expected)
+      expect((JSON.parse(readDisk()) as Array<{ id: string }>).map((i) => i.id)).toEqual(expected)
     },
   )
 
@@ -255,21 +244,19 @@ describe('setShow（判据 3 的次要面）', () => {
 
 describe('toTiles 单向派生（判据 5）', () => {
   it('过滤 created 临时项、不读 sort、index 用落盘下标', () => {
-    const file = {
-      info: [
-        { id: 'a', name: 'A', title: 'A', svg: '#icona', fillSvg: false, isShow: true, sort: 5 },
-        { created: '自定义变换', comName: 'comcustomChange' },
-        {
-          id: 'b',
-          name: 'B',
-          title: 'B',
-          svg: '#iconb',
-          fillSvg: '#iconblan',
-          isShow: false,
-          sort: 1,
-        },
-      ],
-    }
+    const file = [
+      { id: 'a', name: 'A', title: 'A', svg: '#icona', fillSvg: false, isShow: true, sort: 5 },
+      { created: '自定义变换', comName: 'comcustomChange' },
+      {
+        id: 'b',
+        name: 'B',
+        title: 'B',
+        svg: '#iconb',
+        fillSvg: '#iconblan',
+        isShow: false,
+        sort: 1,
+      },
+    ]
 
     const tiles = toTiles(file)
 
@@ -285,8 +272,8 @@ describe('toTiles 单向派生（判据 5）', () => {
     expect(Object.keys(tiles[0])).not.toContain('sort')
   })
 
-  it('形状不对（info 非数组）给空数组，不抛', () => {
-    expect(toTiles({ info: { nope: 1 } as never })).toEqual([])
+  it('形状不对（根不是数组）给空数组，不抛', () => {
+    expect(toTiles({ nope: 1 } as never)).toEqual([])
     expect(toTiles(null)).toEqual([])
   })
 })
@@ -319,22 +306,18 @@ describe('种子（判据 6）', () => {
 
 describe('A2：显隐与重置（设置页用）', () => {
   it('setShow 只改目标项的 isShow，其它项逐字节不变、顺序不变', async () => {
-    seed({ info: COMMON_USE_SEED as unknown as Array<Record<string, unknown>> })
-    const before = JSON.parse(state.files.get(PATH) as string) as {
-      info: Array<Record<string, unknown>>
-    }
+    seed(COMMON_USE_SEED as unknown as Array<Record<string, unknown>>)
+    const before = JSON.parse(state.files.get(PATH) as string) as Array<Record<string, unknown>>
 
     await commonUseRepo.setShow('div_img_cya3', false)
 
-    const after = JSON.parse(state.files.get(PATH) as string) as {
-      info: Array<Record<string, unknown>>
-    }
-    expect(after.info.map((i) => i.id)).toEqual(before.info.map((i) => i.id))
-    expect(after.info[2].isShow).toBe(false)
+    const after = JSON.parse(state.files.get(PATH) as string) as Array<Record<string, unknown>>
+    expect(after.map((i) => i.id)).toEqual(before.map((i) => i.id))
+    expect(after[2].isShow).toBe(false)
     // 其它 13 项与改动前逐字节相同
-    for (let i = 0; i < after.info.length; i += 1) {
+    for (let i = 0; i < after.length; i += 1) {
       if (i === 2) continue
-      expect(JSON.stringify(after.info[i])).toBe(JSON.stringify(before.info[i]))
+      expect(JSON.stringify(after[i])).toBe(JSON.stringify(before[i]))
     }
   })
 
@@ -342,14 +325,12 @@ describe('A2：显隐与重置（设置页用）', () => {
     // 先打乱顺序 + 隐藏一项，模拟用户改过
     const shuffled = [...(COMMON_USE_SEED as unknown as Array<Record<string, unknown>>)]
     shuffled.push(shuffled.shift() as Record<string, unknown>)
-    seed({ info: shuffled })
+    seed(shuffled)
 
     await commonUseRepo.resetAll()
 
-    const after = JSON.parse(state.files.get(PATH) as string) as {
-      info: Array<Record<string, unknown>>
-    }
-    expect(after.info.map((i) => i.id)).toEqual([
+    const after = JSON.parse(state.files.get(PATH) as string) as Array<Record<string, unknown>>
+    expect(after.map((i) => i.id)).toEqual([
       'div_img_cya1',
       'div_img_cya2',
       'div_img_cya3',
@@ -365,20 +346,18 @@ describe('A2：显隐与重置（设置页用）', () => {
       'div_img_cya15',
       'div_img_cya12',
     ])
-    expect(after.info.every((i) => i.isShow !== false)).toBe(true)
+    expect(after.every((i) => i.isShow !== false)).toBe(true)
   })
 })
 
 describe('A3：拖拽落盘', () => {
   it('move 之后数组顺序与界面一致，且 index 连续无空洞', async () => {
-    seed({ info: COMMON_USE_SEED as unknown as Array<Record<string, unknown>> })
+    seed(COMMON_USE_SEED as unknown as Array<Record<string, unknown>>)
 
     await commonUseRepo.move(0, 2, 'after')
 
-    const after = JSON.parse(state.files.get(PATH) as string) as {
-      info: Array<Record<string, unknown>>
-    }
-    expect(after.info.map((i) => i.id)).toEqual([
+    const after = JSON.parse(state.files.get(PATH) as string) as Array<Record<string, unknown>>
+    expect(after.map((i) => i.id)).toEqual([
       'div_img_cya2',
       'div_img_cya3',
       'div_img_cya1',
@@ -395,20 +374,18 @@ describe('A3：拖拽落盘', () => {
       'div_img_cya12',
     ])
     // index 连续无空洞：投影出的 index 就是数组下标
-    const tiles = toTiles({ info: after.info } as never)
+    const tiles = toTiles(after as never)
     expect(tiles.map((t) => t.index)).toEqual(Array.from({ length: 14 }, (_, i) => i))
   })
 
   it('同位移动：数据层是 no-op（顺序与内容都不变）', async () => {
-    seed({ info: COMMON_USE_SEED as unknown as Array<Record<string, unknown>> })
+    seed(COMMON_USE_SEED as unknown as Array<Record<string, unknown>>)
     const before = state.files.get(PATH)
 
     await commonUseRepo.move(3, 3, 'before')
 
-    const after = JSON.parse(state.files.get(PATH) as string) as {
-      info: Array<Record<string, unknown>>
-    }
-    expect(after.info.map((i) => i.id)).toEqual(
+    const after = JSON.parse(state.files.get(PATH) as string) as Array<Record<string, unknown>>
+    expect(after.map((i) => i.id)).toEqual(
       (COMMON_USE_SEED as unknown as Array<Record<string, unknown>>).map((i) => i.id),
     )
     expect(before).toBeTruthy()
