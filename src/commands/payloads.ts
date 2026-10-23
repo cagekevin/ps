@@ -359,11 +359,6 @@ export interface CommonUseOptimizePayload {
   options: CommonUseOptimizeOptions
 }
 
-/** 文件夹批量优化：列表由 `cy_getPsdForFolder()` 自己弹选，payload 里没有目录 */
-export interface CommonUseOptimizeFolderPayload {
-  options: CommonUseOptimizeOptions
-}
-
 /** 批量导出 PSD 图片；`>30` 张要先确认，确认后带 `confirmed: true` 重试 */
 export interface CommonUseExportPsdFolderPayload {
   options?: unknown
@@ -736,7 +731,7 @@ export interface CommandPayloads {
   'commonUse.embedImage': CommonUseEmbedPayload
   'commonUse.importMultipleImages': CommonUseImportPayload
   'commonUse.optimizeOnce': CommonUseOptimizePayload
-  'commonUse.optimizeFolder': CommonUseOptimizeFolderPayload
+  'commonUse.optimizeFolder': CommonUseOptimizePayload
   'commonUse.exportPsdFolder': CommonUseExportPsdFolderPayload
   'commonUse.transform': CommonUseTransformPayload
   'commonUse.referenceGuide': CommonUseReferenceGuidePayload

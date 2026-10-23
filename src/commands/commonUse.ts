@@ -1,4 +1,4 @@
-import { CepError } from '@/utils/errors'
+﻿import { CepError } from '@/utils/errors'
 import { assertJsxOk } from '@/utils/jsx-result'
 import { defineCommand } from './registry'
 import type { Command } from './types'
@@ -104,7 +104,7 @@ async function runPerFile(
       })
     }
   }
-  progress.update(1, label(files.length - 1, files.length))
+  // 末次进度由循环最后一次 `update` 给（i = total-1 时已是 100%），不再补一次
   return { ok: failed.length === 0, done, failed }
 }
 

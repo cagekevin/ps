@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+﻿import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 /**
  * T-85：`sj_commonFunction.json` 仓库与纯函数。
@@ -146,6 +146,22 @@ describe('ensure() 三态（判据 2）', () => {
   })
 })
 
+describe('订阅透出（不自己实现第二套）', () => {
+  it('onChange 会在 update 后触发，且 feed 到写后的值', async () => {
+    writeDisk(seedWithUnknownKeys())
+    const seen: Array<{ ids: string[] }> = []
+    const off = commonUseRepo.onChange((value) => {
+      seen.push({ ids: readCommonUseItems(value).map((i) => i.id ?? '') })
+    })
+
+    await commonUseRepo.setShow('a', false)
+    off()
+    await commonUseRepo.setShow('b', false)
+
+    expect(seen).toHaveLength(1)
+    expect(seen[0].ids).toEqual(['a', 'b', 'c'])
+  })
+})
 describe('未知键不丢（判据 3）', () => {
   it('读-改-写一轮后 foo / sort / openistrue / outerSort 都还在且值没变', async () => {
     writeDisk(seedWithUnknownKeys())

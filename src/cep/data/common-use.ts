@@ -11,7 +11,6 @@ import {
   createCommonUseSeed,
   createEmptyCommonUseFile,
   findCommonUseIndex,
-  readCommonUseItems,
   type CommonUseFile,
 } from '@/domain/common-use'
 import { applyListDrop, type DropPosition } from '@/domain/reorder'
@@ -34,12 +33,6 @@ const base: Repo<CommonUseFile> = pick(
   createEmptyCommonUseFile,
   { requireExisting: true },
 )
-
-const listeners = new Set<(value: CommonUseFile) => void>()
-
-function emit(value: CommonUseFile): void {
-  for (const listener of listeners) listener(value)
-}
 
 /** 内存（无 CEP / dev）下 `ensure()` 只建一次；文件模式下由磁盘内容判定，不用这个 */
 let memoryEnsured = false
@@ -142,25 +135,12 @@ async function resetAll(): Promise<CommonUseFile> {
 export const commonUseRepo = {
   read: (): Promise<RepoRead<CommonUseFile>> => base.read(),
 
-  write: async (value: CommonUseFile): Promise<void> => {
-    await base.write(value)
-    emit(value)
-  },
-
-  update: async (
-    mutator: (value: CommonUseFile) => CommonUseFile | void,
-  ): Promise<CommonUseFile> => {
-    const next = await base.update(mutator)
-    emit(next)
-    return next
-  },
-
-  onChange: (listener: (value: CommonUseFile) => void): (() => void) => {
-    listeners.add(listener)
-    return () => {
-      listeners.delete(listener)
-    }
-  },
+  // 订阅**不自己实现**：`fileRepo` / `memoryRepo` 本来就有 `onChange` + 监听表
+  // （`file-repo.ts:32,45-46,170-173`），这层再包一遍就是同一事件两套总线。
+  write: (value: CommonUseFile): Promise<void> => base.write(value),
+  update: (mutator: (value: CommonUseFile) => CommonUseFile | void): Promise<CommonUseFile> =>
+    base.update(mutator),
+  onChange: (listener: (value: CommonUseFile) => void): (() => void) => base.onChange(listener),
 
   ensure: ensureCommonUseFile,
   move,
@@ -169,8 +149,3 @@ export const commonUseRepo = {
 }
 
 export type CommonUseRepo = typeof commonUseRepo
-
-/** 供命令层/投影用的便利读：拿 `info` 数组（形状不对给空数组） */
-export function readCommonUseInfo(file: CommonUseFile | null | undefined) {
-  return readCommonUseItems(file)
-}
