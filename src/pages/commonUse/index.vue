@@ -53,6 +53,16 @@ const { tiles, collapsed, options, loading, error, degraded } = storeToRefs(stor
 const showZoom = computed(() => options.value.cyShowZoom !== false)
 const showTransformation = computed(() => options.value.cyShowTransformation !== false)
 
+/**
+ * 格子图标要读的两个设置项（官方 render 直接读 `t.set.*`，`:35695` / `:35704`）。
+ * `cyExport.ext` 缺键按 `JPG`（`:65796`）、`cyAutoFillColor` 缺键按开（`:65784`）——
+ * 投影不补默认值，所以这里只把显式 `false` 当关，其余判断在 `domain/common-use.ts` 的 `resolveTileIcon`。
+ */
+const exportExt = computed(
+  () => (options.value.cyExport as Record<string, unknown> | undefined)?.ext,
+)
+const autoFillColor = computed(() => options.value.cyAutoFillColor !== false)
+
 const zoomCmd = useCommand('commonUse.zoom')
 /**
  * 放大 / 缩小两行的本地状态（官方同样是组件本地：`enlargeVal:""`/`enlargeIstrue:false`，`:37551-37557`）。
@@ -428,6 +438,9 @@ function flip(direction: FlipDirection) {
               v-for="tile in row"
               :key="tile.id"
               :tile="tile"
+              :expanded="expandedId === tile.id"
+              :export-ext="exportExt"
+              :auto-fill-color="autoFillColor"
               @click="toggle(tile)"
               @contextmenu="onGridContextMenu(tile)"
               @icon-contextmenu="expandTile(tile)"

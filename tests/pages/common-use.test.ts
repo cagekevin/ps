@@ -3,6 +3,7 @@ import { ref, type Ref } from 'vue'
 import { flushPromises, mount } from '@vue/test-utils'
 import { nextTick } from 'vue'
 import { createPinia, setActivePinia } from 'pinia'
+import Icon from '@/components/Icon.vue'
 
 /**
  * T-88a：常用页外壳 + 网格区。
@@ -605,5 +606,89 @@ describe('T-97-5：两块区域的显隐跟着 sj_set.json 走（官方 cyShowZo
     expect(wrapper.find('.page-common-use__rule').exists()).toBe(false)
     // 网格还在：关掉的是两块区域，不是整页
     expect(wrapper.findAll('.use-grid-item')).toHaveLength(1)
+  })
+})
+
+describe('T-97-6：格子图标的三处动态行为（官方 :35688-35713）', () => {
+  /** 第 i 格现在显示哪个图标名（Icon 的 name prop 就是最终 svg 名） */
+  function iconName(wrapper: ReturnType<typeof mount>, i: number) {
+    return wrapper.findAll('.use-grid-item')[i].findComponent(Icon).props('name')
+  }
+
+  it('悬停换图标：mouseenter → 用 filled，mouseleave → 还原成 rest（官方 :35674-35681 + :35713）', async () => {
+    store.tiles.value = [
+      tile(0, '修正模糊', { icon: { rest: '#iconxiuzhengmohu', filled: '#iconxiuzhengmohulan' } }),
+    ]
+    const wrapper = mount(Page)
+    await flushPromises()
+
+    const block = wrapper.find('.use-grid-item__icon')
+    expect(iconName(wrapper, 0)).toBe('#iconxiuzhengmohu')
+
+    await block.trigger('mouseenter')
+    expect(iconName(wrapper, 0)).toBe('#iconxiuzhengmohulan')
+
+    await block.trigger('mouseleave')
+    expect(iconName(wrapper, 0)).toBe('#iconxiuzhengmohu')
+  })
+
+  it('没有 filled 的格子悬停也不换（官方 `|| !e.fillSvg` 那一支，:35713）', async () => {
+    store.tiles.value = [tile(0, '嵌入图片', { icon: { rest: '#iconqianrutupian', filled: null } })]
+    const wrapper = mount(Page)
+    await flushPromises()
+
+    await wrapper.find('.use-grid-item__icon').trigger('mouseenter')
+    expect(iconName(wrapper, 0)).toBe('#iconqianrutupian')
+  })
+
+  it('展开的那一格带高亮，且图标也换成 filled（官方 `openfun == e.name` 同时管这两处，:35672/:35713）', async () => {
+    store.tiles.value = [
+      tile(0, '自定义变换', {
+        isMore: true,
+        comName: 'comcustomChange',
+        icon: { rest: '#iconzidingyibianhuan', filled: '#iconzidingyibianhuanlan' },
+      }),
+      tile(1, '修正模糊', { icon: { rest: '#iconxiuzhengmohu', filled: '#iconxiuzhengmohulan' } }),
+    ]
+    store.collapsed.value = { t0: false } // 启动即展开（onMounted 读折叠态）
+    const wrapper = mount(Page)
+    await flushPromises()
+
+    const blocks = wrapper.findAll('.use-grid-item__icon')
+    expect(blocks[0].classes()).toContain('is-expanded')
+    expect(blocks[1].classes()).not.toContain('is-expanded')
+    expect(iconName(wrapper, 0)).toBe('#iconzidingyibianhuanlan')
+    // 没展开、也没悬停的那格保持 rest
+    expect(iconName(wrapper, 1)).toBe('#iconxiuzhengmohu')
+  })
+
+  it('「导出图片」的图标随 cyExport.ext 变（官方 :35695，`== "PNG"` 才用第二个）', async () => {
+    store.tiles.value = [tile(0, '导出图片', { icon: { rest: '#icondaochutupian', filled: null } })]
+
+    store.options.value = { cyExport: { ext: 'PNG' } }
+    const png = mount(Page)
+    await flushPromises()
+    expect(iconName(png, 0)).toBe('#icondaochutupian2')
+
+    store.options.value = { cyExport: { ext: 'JPG' } }
+    const jpg = mount(Page)
+    await flushPromises()
+    expect(iconName(jpg, 0)).toBe('#icondaochutupian')
+  })
+
+  it('「自动填充颜色」的图标随 cyAutoFillColor 变（官方 :35704，默认开 :65784）', async () => {
+    store.tiles.value = [
+      tile(0, '自动填充颜色', { icon: { rest: '#iconzidongtianchongyanse', filled: null } }),
+    ]
+
+    // 缺键 = 官方默认 true
+    const on = mount(Page)
+    await flushPromises()
+    expect(iconName(on, 0)).toBe('#iconzidongtianchongsanse')
+
+    store.options.value = { cyAutoFillColor: false }
+    const off = mount(Page)
+    await flushPromises()
+    expect(iconName(off, 0)).toBe('#iconzidongtianchongyanse')
   })
 })

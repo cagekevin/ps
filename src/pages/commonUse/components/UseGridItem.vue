@@ -1,6 +1,7 @@
 <script setup lang="ts">
+import { computed, ref } from 'vue'
 import Icon from '@/components/Icon.vue'
-import type { CommonUseTile } from '@/domain/common-use'
+import { resolveTileIcon, type CommonUseTile } from '@/domain/common-use'
 
 /**
  * 一个功能格（页面私有）。
@@ -10,8 +11,19 @@ import type { CommonUseTile } from '@/domain/common-use'
  * 与 CSS 字符位置 110803 / 110327 / 110725。
  *
  * 只有三层：图标块、文案、角标。**不做 hover 浮层**（官方没有，只换图标）。
+ *
+ * 悬停态是**组件本地**的：官方 `fillSvgName` 也只被 `.context-svg-wrap` 的
+ * `mouseenter`/`mouseleave` 写（`app.v4.js:35674-35681`），逐格本地与"页面一个变量"等价。
  */
-const props = defineProps<{ tile: CommonUseTile }>()
+const props = defineProps<{
+  tile: CommonUseTile
+  /** 本格面板是否展开（官方 `openfun == e.name`） */
+  expanded?: boolean
+  /** `sj_set.json` 的 `cyExport.ext`：导出图片那一格的图标跟着它变（官方 `:35695`） */
+  exportExt?: unknown
+  /** `sj_set.json` 的 `cyAutoFillColor`：自动填充颜色那一格跟着它变（官方 `:35704`） */
+  autoFillColor?: unknown
+}>()
 
 defineEmits<{
   (e: 'click'): void
@@ -20,6 +32,16 @@ defineEmits<{
   /** 图标块右键 → 官方 `.context-svg-wrap` 的 `open`（展开面板，`app.v4.js:35682`） */
   (e: 'icon-contextmenu', ev: MouseEvent): void
 }>()
+
+const hovered = ref(false)
+const iconName = computed(() =>
+  resolveTileIcon(props.tile, {
+    hovered: hovered.value,
+    expanded: props.expanded === true,
+    exportExt: props.exportExt,
+    autoFillColor: props.autoFillColor,
+  }),
+)
 </script>
 
 <template>
@@ -31,8 +53,14 @@ defineEmits<{
     @click="$emit('click')"
     @contextmenu.prevent="$emit('contextmenu', $event)"
   >
-    <span class="use-grid-item__icon" @contextmenu.prevent.stop="$emit('icon-contextmenu', $event)">
-      <Icon :name="tile.icon.rest" size="lg" />
+    <span
+      class="use-grid-item__icon"
+      :class="{ 'is-expanded': props.expanded }"
+      @mouseenter="hovered = true"
+      @mouseleave="hovered = false"
+      @contextmenu.prevent.stop="$emit('icon-contextmenu', $event)"
+    >
+      <Icon :name="iconName" size="lg" />
       <span v-if="tile.ismark" class="use-grid-item__mark" aria-hidden="true" />
     </span>
     <span class="use-grid-item__text">{{ tile.name }}</span>
@@ -65,8 +93,17 @@ defineEmits<{
   color: var(--text-strong);
 }
 
-.use-grid-item:hover .use-grid-item__icon {
+.use-grid-item:hover .use-grid-item__icon,
+/* 展开态高亮：官方 `.contextmenu` 与 `:hover` 是**同一档**（背景 #222 + `svg{fill:#006fff}`，
+   CSS 字符位置 110438 / 110537）。我方基线底色与悬停两档跟官方相反（基线 #222 / 悬停 #363636，
+   既有偏离、不在本刀），所以展开态取"与悬停同底色"的 --c-surface，再单独把图标染蓝，
+   保证展开格与基线格肉眼可分。 */
+.use-grid-item__icon.is-expanded {
   background: var(--c-surface);
+}
+
+.use-grid-item__icon.is-expanded {
+  color: var(--accent);
 }
 
 .use-grid-item__mark {

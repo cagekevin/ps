@@ -1,4 +1,4 @@
-﻿// 是什么：常用页（`/commonUse`）的落盘结构、官方种子与「落盘 → 页面视图」的纯函数
+// 是什么：常用页（`/commonUse`）的落盘结构、官方种子与「落盘 → 页面视图」的纯函数
 // 替代了什么：原版 `V.a.info` 数组上的就地读写（app.v4.js:11088-11261 的存储类与 configReset）
 // 谁在用：`cep/data/common-use.ts`（仓库）、后续 `stores/common-use.ts`（只读投影，T-87）
 // 禁止：不读文件、不调 jsx、不 import Vue；不在这里判断"要不要写"（那是命令层的事）
@@ -286,6 +286,53 @@ export function toTiles(file: CommonUseFile | null | undefined): CommonUseTile[]
 /** 按 `id` 找落盘下标；找不到返回 -1（调用方决定抛不抛） */
 export function findCommonUseIndex(items: readonly CommonUseItem[], id: string): number {
   return items.findIndex((item) => item.id === id)
+}
+
+// ---------- 格子图标：官方三段三元分支的镜像 ----------
+
+/** 官方 `:35695` 两个导出图标名（`cyExport.ext == "PNG"` 时用第二个） */
+const EXPORT_ICON_JPG = '#icondaochutupian'
+const EXPORT_ICON_PNG = '#icondaochutupian2'
+/** 官方 `:35704` 两个填充色图标名（`cyAutoFillColor` 为真用第一个） */
+const AUTO_FILL_ICON_ON = '#iconzidongtianchongsanse'
+const AUTO_FILL_ICON_OFF = '#iconzidongtianchongyanse'
+
+/** 格子图标的三个外部状态；键名对应官方 `set.*` 与组件本地态 */
+export interface TileIconState {
+  /** 鼠标停在本格图标块上（官方 `fillSvgName == a`，`:35674-35681`） */
+  hovered: boolean
+  /** 本格面板展开中（官方 `openfun == e.name`，`:38193`/`:38213`） */
+  expanded: boolean
+  /** `sj_set.json` 的 `cyExport.ext`（官方 `set.cyExport.ext`） */
+  exportExt: unknown
+  /** `sj_set.json` 的 `cyAutoFillColor`（官方默认 `true`，`:65784`） */
+  autoFillColor: unknown
+}
+
+/**
+ * 这一格该显示哪个图标。官方 render 里是**三段并列的三元**，顺序不能换：
+ *
+ * 1. 导出图片：`cyExport.ext == "PNG" ? "#icondaochutupian2" : "#icondaochutupian"`（`:35695`）
+ * 2. 自动填充颜色：`cyAutoFillColor ? "#iconzidongtianchongsanse" : "#iconzidongtianchongyanse"`（`:35704`）
+ * 3. 其余：`(fillSvgName != a && openfun != e.name) || !fillSvg ? e.svg : e.fillSvg`（`:35713`）
+ *    → 只有"悬停本格 **或** 本格展开"且这一格有 `fillSvg` 时才用第二图标
+ *
+ * 前两段是**名字判定**，会盖掉第三段（导出图片的 `fillSvg` 本来就是 `false`，所以悬停不换图标）。
+ *
+ * 两个默认值按官方：`cyExport.ext` 缺键按 `JPG`（`:65796`），`cyAutoFillColor` 缺键按开（`:65784`）——
+ * 我方投影不补默认值，所以这里只把显式 `false` 当关。
+ *
+ * `hovered` 走组件本地态（官方也是组件本地 `fillSvgName`），不是页面状态。
+ */
+export function resolveTileIcon(tile: CommonUseTile, state: TileIconState): string {
+  if (tile.name === '导出图片') {
+    return state.exportExt === 'PNG' ? EXPORT_ICON_PNG : EXPORT_ICON_JPG
+  }
+  if (tile.name === '自动填充颜色') {
+    return state.autoFillColor === false ? AUTO_FILL_ICON_OFF : AUTO_FILL_ICON_ON
+  }
+  const useFilled = (state.hovered || state.expanded) && Boolean(tile.icon.filled)
+  return useFilled && tile.icon.filled ? tile.icon.filled : tile.icon.rest
 }
 
 // ---------- 常用页的固定表（页面与命令层共用，所以放 domain）----------
