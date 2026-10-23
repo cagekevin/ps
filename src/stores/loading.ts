@@ -4,7 +4,8 @@ import { computed, ref } from 'vue'
 /**
  * 全局阻塞 loading。
  *
- * 用于“页面不能继续操作”的短任务；长任务进度仍走 TaskHud。
+ * 用于**无进度可报**的阻塞任务；**有进度可报**（能报 i/n 或百分比）的走 TaskHud。
+ * 判据是"报不报得出进度"，不是 `kind`（见 docs/组件库/页面契约.md T-97-7b）。
  * 用计数而不是布尔，避免并发任务互相提前关掉。
  */
 export const useLoadingStore = defineStore('loading', () => {
