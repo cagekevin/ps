@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 
 /**
  * 通用折叠行（用户批准的「Collapse」，文件名按 G-UI 基础件惯例取 `GCollapse`）。
@@ -19,34 +19,51 @@ const props = withDefaults(
     /** section：一级块（黑底 body）；sub：二级行（透明 body）；plain：原版 baseOpen 说明块 */
     variant?: 'section' | 'sub' | 'plain'
     defaultOpen?: boolean
+    /**
+     * 受控开合（不传 = 组件内自管，行为与以前完全一致）。
+     * `/commonUse` 的 comexport 三个折叠区要把状态落 `sj_set.json` 的 `cyShow*`（官方 `:36664`/`:36757`/`:36787`）。
+     */
+    open?: boolean
   }>(),
-  { variant: 'section', defaultOpen: false },
+  // `open` 必须显式 `undefined` 默认值：Vue 会把缺省的 Boolean prop 强转成 false，
+  // 那样"没传"与"传了 false"无法区分，非受控用法会失效
+  { variant: 'section', defaultOpen: false, open: undefined },
 )
 
-const open = ref(props.defaultOpen)
-const emit = defineEmits<{ (e: 'toggle', open: boolean): void }>()
+const inner = ref(props.defaultOpen)
+/** 受控优先：传了 `open` 就只读 prop，改状态走 `update:open` */
+const isOpen = computed(() => props.open ?? inner.value)
+const emit = defineEmits<{
+  (e: 'toggle', open: boolean): void
+  (e: 'update:open', open: boolean): void
+}>()
 
 function toggle() {
-  open.value = !open.value
-  emit('toggle', open.value)
+  if (props.open !== undefined) {
+    emit('update:open', !props.open)
+    emit('toggle', !props.open)
+    return
+  }
+  inner.value = !inner.value
+  emit('toggle', inner.value)
 }
 </script>
 
 <template>
   <section class="g-collapse" :class="`g-collapse--${variant}`">
-    <button class="g-collapse__head" type="button" :aria-expanded="open" @click="toggle">
+    <button class="g-collapse__head" type="button" :aria-expanded="isOpen" @click="toggle">
       <span
         v-if="variant === 'sub'"
         class="g-collapse__arrow g-collapse__arrow--left"
-        :class="{ 'is-open': open }"
+        :class="{ 'is-open': isOpen }"
       />
       <span v-if="title" class="g-collapse__title">{{ title }}</span>
       <!-- sub 变体只画左箭头（原版 `.setting-section--sub` 只有左箭头）；
            plain 是 /custom 的 baseOpen 说明块，折叠 affordance 用右箭头 -->
-      <span v-if="variant !== 'sub'" class="g-collapse__arrow" :class="{ 'is-open': open }" />
+      <span v-if="variant !== 'sub'" class="g-collapse__arrow" :class="{ 'is-open': isOpen }" />
     </button>
 
-    <div v-show="open" class="g-collapse__body">
+    <div v-show="isOpen" class="g-collapse__body">
       <slot />
     </div>
   </section>

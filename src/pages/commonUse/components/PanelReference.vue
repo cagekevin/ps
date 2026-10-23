@@ -1,10 +1,11 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { ref } from 'vue'
 import CheckBox from '@/components/CheckBox.vue'
 import GButton from '@/components/GButton.vue'
 import GInput from '@/components/GInput.vue'
 import SettingsRow from '@/components/SettingsRow.vue'
 import { useCommand } from '@/components/command/useCommand'
+import { useFeedbackStore } from '@/stores/feedback'
 
 /**
  * ⑪ 参考线工具（官方 `comreference`，render `Bp()` `app.v4.js:37097`）。
@@ -14,9 +15,17 @@ import { useCommand } from '@/components/command/useCommand'
 const smartReference = ref(false)
 const width = ref('20')
 
+const feedback = useFeedbackStore()
 const guideCmd = useCommand('commonUse.referenceGuide')
 const sliceCmd = useCommand('commonUse.referenceSlice')
-const applyGuide = () => void guideCmd.run({})
+/** 官方 `useGuide()`：宽度空则提示「请输入宽度」，否则 `cy_createSafeAreaGuide([width])`（`app.v4.js:37224-37228`） */
+const applyGuide = () => {
+  if (!width.value) {
+    feedback.warn('请输入宽度')
+    return
+  }
+  void guideCmd.run({ options: width.value })
+}
 const clearGuide = () => void sliceCmd.run({ options: { mode: 'clear' } })
 const makeSlice = () => void sliceCmd.run({ options: { mode: 'slice' } })
 </script>

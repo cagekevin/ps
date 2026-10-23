@@ -33,6 +33,14 @@ const useLayerName = useOptionRef('cyExport.userLayerName', false)
 const autoNumber = useOptionRef('cyExport.autoNumber', false)
 const exportMode = useOptionRef<string>('cyExport.mode', 'web')
 const exportOriginal = useOptionRef('cyExport.compress.exportOriginalGraph', false)
+// 官方 render：导出宽度 :36686、导出高度 :36706、水印文件 :36724（都在 cyExport.compress.*）
+const compressWidth = useOptionRef<string>('cyExport.compress.width', '')
+const compressHeight = useOptionRef<string>('cyExport.compress.height', '')
+const compressWatermark = useOptionRef<string>('cyExport.compress.watermark', '')
+// 三个折叠区状态：官方 set.cyShowCompress（:36664）/ cyShowSetFolder（:36757）/ cyShowBatch（:36787）
+const showCompress = useOptionRef('cyShowCompress', false)
+const showSetFolder = useOptionRef('cyShowSetFolder', false)
+const showBatch = useOptionRef('cyShowBatch', false)
 const openAfterSave = useOptionRef('cyExport.autoOpenFolder', false)
 
 const exportCmd = useCommand('commonUse.exportImages')
@@ -106,18 +114,28 @@ async function exportImages(mode: 'image' | 'first' | 'second') {
 
     <hr class="panel-export__rule" />
 
-    <GCollapse variant="plain" title="压缩尺寸 & 加水印">
+    <GCollapse
+      variant="plain"
+      title="压缩尺寸 & 加水印"
+      :open="showCompress"
+      @update:open="showCompress = $event"
+    >
       <SettingsRow>
-        <GInput size="small" class="u-fill" />
-        <GInput size="small" class="u-fill" />
+        <GInput v-model="compressWidth" size="small" class="u-fill" />
+        <GInput v-model="compressHeight" size="small" class="u-fill" />
       </SettingsRow>
-      <SettingsRow><GInput size="small" class="u-fill" /></SettingsRow>
+      <SettingsRow><GInput v-model="compressWatermark" size="small" class="u-fill" /></SettingsRow>
       <SettingsRow><CheckBox v-model="exportOriginal">同时导出原图</CheckBox></SettingsRow>
     </GCollapse>
 
     <hr class="panel-export__rule" />
 
-    <GCollapse variant="plain" title="所在目录设置">
+    <GCollapse
+      variant="plain"
+      title="所在目录设置"
+      :open="showSetFolder"
+      @update:open="showSetFolder = $event"
+    >
       <SettingsRow>
         <GButton type="primary" width="full" @click="openFolderCmd.run()">打开所在目录</GButton>
       </SettingsRow>
@@ -126,7 +144,12 @@ async function exportImages(mode: 'image' | 'first' | 'second') {
 
     <hr class="panel-export__rule" />
 
-    <GCollapse variant="plain" title="批量导出功能">
+    <GCollapse
+      variant="plain"
+      title="批量导出功能"
+      :open="showBatch"
+      @update:open="showBatch = $event"
+    >
       <SettingsRow>
         <GButton width="half" @click="exportImages('first')">导出一级图层</GButton>
         <GButton width="half" @click="exportImages('second')">导出二级图层</GButton>

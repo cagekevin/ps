@@ -1,4 +1,4 @@
-﻿// 是什么：原面板 sj_set.json 的字体面板字段（读 + 局部写）
+// 是什么：原面板 sj_set.json 的字体面板字段（读 + 局部写）
 // 唯一入口：只有这里读写 sj_set.json；命令层 import 这里的函数，不拼路径
 // 替代了什么：原版 `V.a.info`（全局设置对象，app.v4.js:65835-65866）
 // 谁在用：commands/fontSet.ts、stores/font-set.ts
@@ -140,6 +140,10 @@ export const COMMON_USE_SETTING_KEYS = [
   'cyDeleteNext',
   'cyDragInAutoEmbed',
   'cyExport',
+  // comexport 三个折叠区状态（官方 set.cyShowCompress :36664 / cyShowSetFolder :36757 / cyShowBatch :36787）
+  'cyShowBatch',
+  'cyShowCompress',
+  'cyShowSetFolder',
   'cyImportToLinkObject',
   'cyLinkObject',
   'cyOpenDranInToLinkObject',

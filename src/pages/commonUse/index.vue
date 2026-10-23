@@ -1,4 +1,4 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import EmptyState from '@/components/EmptyState.vue'
@@ -161,17 +161,16 @@ function panelOfRow(row: CommonUseTile[]) {
  * 左键执行器：**命令 id → 实参构造**。命令 id 全部来自 `LEFT_CLICK_BY_NAME`（官方分派表的镜像），
  * 这里只负责"这条命令要什么参数"，不再判断"哪一格该干什么"（那是 domain 表的事）。
  *
- * 参数来源：面板写进 `sj_set.json` 的值（`options` 投影）。`bLink2` / `bDelete` 的推导是
- * **推断**（官方 `getEmbedImageObject()` 内部组装，形状未提取）：`cyLinkObject !== 'none'` 视为要链接、
- * `cyDeleteNext` 直接取布尔。
+ * 参数来源：面板写进 `sj_set.json` 的值（`options` 投影）。`bLink2` / `bDelete` 是**原值直传**：
+ * 官方 `dragInImage()` 就是 `{path:"", bLink2: cyLinkObject, bDelete: cyDeleteNext}`（`app.v4.js:37751-37755`）。
  */
 const COMMAND_RUNNERS: Record<string, () => Promise<boolean>> = {
   'commonUse.embedImage': () =>
     embedImageCmd.run({
       options: {
         path: '',
-        bLink2: options.value.cyLinkObject != null && options.value.cyLinkObject !== 'none',
-        bDelete: Boolean(options.value.cyDeleteNext),
+        bLink2: options.value.cyLinkObject,
+        bDelete: options.value.cyDeleteNext,
       },
     }),
   'commonUse.embedMultipleImages': () => embedMultiCmd.run(),

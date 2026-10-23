@@ -455,3 +455,19 @@ describe('T-97-1b：右键三层（图标区 → 展开；其它区 → 加入�
     expect(texts).toContain('请添加展开后的功能')
   })
 })
+
+describe('T-97-3：点格子那条路径的 bLink2 是官方原值直传', () => {
+  it('嵌入图片格子 → bLink2 = cyLinkObject 原值、bDelete = cyDeleteNext 原值（官方 :37751-37755）', async () => {
+    store.options.value = { cyLinkObject: 'sameFolder', cyDeleteNext: false }
+    store.tiles.value = [tile(0, '嵌入图片', { isMore: true, comName: 'comembed' })]
+    const wrapper = mount(Page)
+    await flushPromises()
+
+    await wrapper.find('.use-grid-item').trigger('click')
+    await flushPromises()
+
+    expect(commands.embedImage).toHaveBeenCalledWith({
+      options: { path: '', bLink2: 'sameFolder', bDelete: false },
+    })
+  })
+})

@@ -1,4 +1,4 @@
-﻿import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 /**
  * T-86b：常用页在 `sj_set.json` 里的 8 个 `cy*` 键（唯一入口 = `cep/data/legacy-settings.ts`）。
@@ -67,14 +67,17 @@ describe('读那 8 个键', () => {
     expect(value).toEqual({})
   })
 
-  it('白名单就是那 12 个键（T-88b2 补上 4 个自动嵌入开关）', () => {
-    expect(COMMON_USE_SETTING_KEYS).toHaveLength(12)
+  it('白名单就是那 15 个键（T-88b2 补 4 个自动嵌入开关；T-97-3 补 3 个 cyShow*）', () => {
+    expect(COMMON_USE_SETTING_KEYS).toHaveLength(15)
     expect([...COMMON_USE_SETTING_KEYS]).toEqual([
       'cyAutoFillColor',
       'cyClipMaskAutoEmbed',
       'cyDeleteNext',
       'cyDragInAutoEmbed',
       'cyExport',
+      'cyShowBatch',
+      'cyShowCompress',
+      'cyShowSetFolder',
       'cyImportToLinkObject',
       'cyLinkObject',
       'cyOpenDranInToLinkObject',

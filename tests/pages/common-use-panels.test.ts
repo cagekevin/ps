@@ -1,4 +1,4 @@
-﻿import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ref, type Ref } from 'vue'
 import { createPinia, setActivePinia } from 'pinia'
 import { mount } from '@vue/test-utils'
@@ -12,6 +12,8 @@ const cmds = vi.hoisted(() => ({
   exportImages: vi.fn(async (_payload: unknown) => true),
   openExportFolder: vi.fn(async () => true),
   exportPsdFolder: vi.fn(async () => true),
+  setOption: vi.fn(async (_payload: unknown) => true),
+  referenceGuide: vi.fn(async (_payload: unknown) => true),
   smartToLink: vi.fn(async () => true),
   linkToSmart: vi.fn(async () => true),
 }))
@@ -25,11 +27,15 @@ vi.mock('@/components/command/useCommand', () => ({
           ? cmds.openExportFolder
           : id === 'commonUse.exportPsdFolder'
             ? cmds.exportPsdFolder
-            : id === 'commonUse.smartToLinkSmartObject'
-              ? cmds.smartToLink
-              : id === 'commonUse.linkSmartObjectToSmartObject'
-                ? cmds.linkToSmart
-                : vi.fn(async () => true),
+            : id === 'commonUse.setOption'
+              ? cmds.setOption
+              : id === 'commonUse.referenceGuide'
+                ? cmds.referenceGuide
+                : id === 'commonUse.smartToLinkSmartObject'
+                  ? cmds.smartToLink
+                  : id === 'commonUse.linkSmartObjectToSmartObject'
+                    ? cmds.linkToSmart
+                    : vi.fn(async () => true),
     disabled: false,
     running: false,
   }),
@@ -40,7 +46,7 @@ vi.mock('@/stores/feedback', () => ({
   useFeedbackStore: () => ({
     ok: (text: string) => toasts.push({ type: 'ok', text }),
     error: (text: string) => toasts.push({ type: 'error', text }),
-    warn: () => {},
+    warn: (text: string) => toasts.push({ type: 'warn', text }),
     info: () => {},
   }),
 }))
@@ -49,6 +55,7 @@ import PanelExport from '@/pages/commonUse/components/PanelExport.vue'
 import PanelCustomChange from '@/pages/commonUse/components/PanelCustomChange.vue'
 import PanelImport from '@/pages/commonUse/components/PanelImport.vue'
 import PanelEmbed from '@/pages/commonUse/components/PanelEmbed.vue'
+import PanelReference from '@/pages/commonUse/components/PanelReference.vue'
 
 /**
  * T-88b 的公共件与面板：只断言"可观察结果"（分组数据、点击 emit、DOM 数量）。
@@ -277,5 +284,59 @@ describe('T-97-2：两个智能对象按钮（各一条无参命令）', () => {
     expect(cmds.linkToSmart).toHaveBeenCalledTimes(1)
     expect(cmds.linkToSmart).toHaveBeenCalledWith()
     expect(cmds.smartToLink).not.toHaveBeenCalled()
+  })
+})
+
+describe('T-97-3：参数落盘（官方键名）', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    fakeStore = { options: ref({}), loadOptions: vi.fn(async () => {}) }
+    cmds.setOption.mockClear()
+    cmds.referenceGuide.mockClear()
+  })
+
+  it.each([
+    ['导出宽度', 'cyExport.compress.width'],
+    ['导出高度', 'cyExport.compress.height'],
+    ['水印文件', 'cyExport.compress.watermark'],
+  ])('压缩区「%s」→ 写 %s', async (_label, path) => {
+    const wrapper = mount(PanelExport)
+    const inputs = wrapper.findAll('.panel-export input')
+    // 压缩区三个输入在折叠区里，按顺序取最后三个（前三个是品质/保存到/命名）
+    const target = inputs[inputs.length - 3 + ['导出宽度', '导出高度', '水印文件'].indexOf(_label)]
+    await target.setValue('800')
+    expect(cmds.setOption).toHaveBeenCalledWith({ path, value: '800' })
+  })
+
+  it.each([
+    ['压缩尺寸 & 加水印', 'cyShowCompress'],
+    ['所在目录设置', 'cyShowSetFolder'],
+    ['批量导出功能', 'cyShowBatch'],
+  ])('折叠标题「%s」→ 写 %s', async (title, path) => {
+    const wrapper = mount(PanelExport)
+    const head = wrapper.findAll('.g-collapse__head').find((b) => b.text().includes(title))
+    expect(head).toBeTruthy()
+    await head!.trigger('click')
+    expect(cmds.setOption).toHaveBeenCalledWith({ path, value: true })
+  })
+
+  it('参考线「应用」→ 宽度真进命令实参（官方 cy_createSafeAreaGuide([width])，:37228）', async () => {
+    const wrapper = mount(PanelReference)
+    const input = wrapper.find('.panel-reference input')
+    await input.setValue('30')
+    const button = wrapper.findAll('button').find((b) => b.text() === '应用')
+    await button!.trigger('click')
+
+    expect(cmds.referenceGuide).toHaveBeenCalledWith({ options: '30' })
+  })
+
+  it('参考线宽度为空 → 提示「请输入宽度」且不发命令（官方 :37225-37227）', async () => {
+    const wrapper = mount(PanelReference)
+    await wrapper.find('.panel-reference input').setValue('')
+    const button = wrapper.findAll('button').find((b) => b.text() === '应用')
+    await button!.trigger('click')
+
+    expect(cmds.referenceGuide).not.toHaveBeenCalled()
+    expect(toasts.some((t) => t.text === '请输入宽度')).toBe(true)
   })
 })
