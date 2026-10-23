@@ -19,12 +19,12 @@ const sortBy = ref<'layer' | 'coordinate'>('layer')
   <div class="panel-spacing">
     <SettingsRow>
       <GInput v-model="gap" size="small" class="u-fill" />
-      <!-- UNVERIFIED: 官方这两颗 baseIcon 的具体图标名未提取（render 里走变量） -->
-      <GButton type="text" size="small" aria-label="按间距">
-        <Icon name="#iconanjianjufenbu" size="lg" />
+      <!-- 两颗按钮的图标名与行为：`#iconshuipingjuzhongfenbu` → handle(1)、`#iconchuizhijuzhongfenbu` → handle(2)（app.v4.js:37275 / :37291） -->
+      <GButton type="text" size="small" aria-label="按间距水平分布">
+        <Icon name="#iconshuipingjuzhongfenbu" size="lg" />
       </GButton>
-      <GButton type="text" size="small" aria-label="定位">
-        <Icon name="#iconweizhiduihuan" size="lg" />
+      <GButton type="text" size="small" aria-label="按间距垂直分布">
+        <Icon name="#iconchuizhijuzhongfenbu" size="lg" />
       </GButton>
     </SettingsRow>
 
