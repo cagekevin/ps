@@ -171,3 +171,28 @@ describe('jsx 派发表快照', () => {
     }
   })
 })
+
+describe('key ≠ 真实函数名（G0b）：我方调用名必须命中 jsxName，不许命中 key', () => {
+  /** key 与 jsxName 不同的条目：这些 key 是"自由面板项标识"，不是函数名 */
+  const divergedKeys = snapshot.dispatch.filter((d) => d.jsxName !== d.key)
+
+  it('快照里确实存在分叉（key ≠ jsxName），否则这条断言就是空转', () => {
+    expect(divergedKeys.length).toBeGreaterThan(0)
+    expect(divergedKeys.map((d) => d.key)).toContain('cy_coorectBlur')
+  })
+
+  it('我方 src/cep/jsx 里没有任何地方把 key 当函数名调用', () => {
+    const offenders: string[] = []
+    for (const [name, where] of ourNames) {
+      const hit = divergedKeys.find((d) => d.key === name)
+      if (hit) offenders.push(`${name}（${where}）应改用 jsxName=${hit.jsxName}`)
+    }
+    expect(offenders, `把派发表 key 当 jsx 函数名了：\n${offenders.join('\n')}`).toEqual([])
+  })
+
+  it('每个分叉 key 的 jsxName 都在官方名单里（名字不是编的）', () => {
+    for (const d of divergedKeys) {
+      expect(official.has(d.jsxName), `${d.key} 的 jsxName=${d.jsxName} 不在官方名单`).toBe(true)
+    }
+  })
+})
