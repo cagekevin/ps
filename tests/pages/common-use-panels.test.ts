@@ -8,8 +8,35 @@ let fakeStore: { options: Ref<Record<string, unknown>>; loadOptions: () => Promi
 
 vi.mock('@/stores/common-use', () => ({ useCommonUseStore: () => fakeStore }))
 
+const cmds = vi.hoisted(() => ({
+  exportImages: vi.fn(async (_payload: unknown) => true),
+  openExportFolder: vi.fn(async () => true),
+  exportPsdFolder: vi.fn(async () => true),
+}))
+
 vi.mock('@/components/command/useCommand', () => ({
-  useCommand: () => ({ run: vi.fn(async () => true), disabled: false, running: false }),
+  useCommand: (id: string) => ({
+    run:
+      id === 'commonUse.exportImages'
+        ? cmds.exportImages
+        : id === 'commonUse.openExportFolder'
+          ? cmds.openExportFolder
+          : id === 'commonUse.exportPsdFolder'
+            ? cmds.exportPsdFolder
+            : vi.fn(async () => true),
+    disabled: false,
+    running: false,
+  }),
+}))
+
+const toasts = vi.hoisted(() => [] as Array<{ type: string; text: string }>)
+vi.mock('@/stores/feedback', () => ({
+  useFeedbackStore: () => ({
+    ok: (text: string) => toasts.push({ type: 'ok', text }),
+    error: (text: string) => toasts.push({ type: 'error', text }),
+    warn: () => {},
+    info: () => {},
+  }),
 }))
 import GRadio from '@/components/GRadio.vue'
 import PanelExport from '@/pages/commonUse/components/PanelExport.vue'
@@ -134,5 +161,80 @@ describe('comcustomChange 六输入的商品名与配对', () => {
 
     expect(rows).toHaveLength(4) // 3 行输入 + 1 行按钮
     expect(wrapper.findAll('.g-input')).toHaveLength(6)
+  })
+})
+
+describe('A4：导出链路（参数 = 面板写进 cyExport 的整块）', () => {
+  beforeEach(() => {
+    setActivePinia(createPinia())
+    fakeStore = {
+      options: ref({
+        cyExport: { ext: 'JPG', quality: '100', path: '', compress: { level: 60, enable: true } },
+      }),
+      loadOptions: vi.fn(async () => {}),
+    }
+    toasts.length = 0
+    cmds.exportImages.mockClear()
+    cmds.exportImages.mockResolvedValue(true)
+  })
+
+  it('点「导出一级图层」→ 命令 id + 实参就是当前 cyExport 那份（未被面板管的子键也带上）', async () => {
+    const wrapper = mount(PanelExport)
+    const button = wrapper.findAll('button').find((b) => b.text() === '导出一级图层')
+    expect(button).toBeTruthy()
+
+    await button!.trigger('click')
+
+    expect(cmds.exportImages).toHaveBeenCalledTimes(1)
+    const payload = cmds.exportImages.mock.calls[0][0] as {
+      mode: string
+      options: Record<string, unknown>
+    }
+    expect(payload.mode).toBe('first')
+    expect(payload.options).toEqual({
+      ext: 'JPG',
+      quality: '100',
+      path: '',
+      saveMode: 'desktop',
+      name: '',
+      userLayerName: false,
+      autoNumber: false,
+      mode: 'web',
+      autoOpenFolder: false,
+      compress: { level: 60, enable: true, exportOriginalGraph: false },
+    })
+  })
+
+  it('改了品质再点：第二次实参与第一次逐字段不同，且只有品质变了', async () => {
+    const wrapper = mount(PanelExport)
+    const button = wrapper.findAll('button').find((b) => b.text() === '导出一级图层')
+
+    await button!.trigger('click')
+    const seg = wrapper.findAll('.g-segment__item').find((b) => b.text() === 'PNG')
+    await seg!.trigger('click')
+    await button!.trigger('click')
+
+    const first = (cmds.exportImages.mock.calls[0][0] as { options: Record<string, unknown> })
+      .options
+    const second = (cmds.exportImages.mock.calls[1][0] as { options: Record<string, unknown> })
+      .options
+    expect(second.ext).toBe('PNG')
+    expect(second.ext).not.toBe(first.ext)
+    // 其余字段逐个相同
+    for (const key of Object.keys(first)) {
+      if (key === 'ext') continue
+      expect(second[key]).toEqual(first[key])
+    }
+  })
+
+  it('导出失败：命令返回 false → 出现用户可见的错误提示（不静默）', async () => {
+    cmds.exportImages.mockResolvedValue(false)
+    const wrapper = mount(PanelExport)
+    const button = wrapper.findAll('button').find((b) => b.text() === '导出一级图层')
+
+    await button!.trigger('click')
+
+    expect(toasts.filter((t) => t.type === 'error')).toHaveLength(1)
+    expect(toasts.find((t) => t.type === 'error')?.text).toContain('导出失败')
   })
 })
