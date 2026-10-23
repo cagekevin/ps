@@ -45,8 +45,8 @@ const SET_FILE = '/user/sj_set.json'
 const UI_FILE = '/user/sj_v5_ui.json'
 
 const { setActivePinia, createPinia } = await import('pinia')
-const { useCommonUseStore, provideCommonUseSource, bindCommonUseData } =
-  await import('@/stores/common-use')
+const { useCommonUseStore, installCommonUseSource } = await import('@/stores/common-use')
+await import('@/stores/common-use')
 const { getCommonUseCollapsed, flushPrefs, __resetSettingsForTest } =
   await import('@/cep/data/settings')
 await import('@/commands')
@@ -62,12 +62,26 @@ beforeEach(() => {
   state.files.clear()
   __resetSettingsForTest()
   // 端口只暴露 read / onChange：store 拿不到任何写入口
-  provideCommonUseSource({
+  installCommonUseSource({
     read: () => commonUseRepo.read(),
     onChange: (listener) => commonUseRepo.onChange(listener),
   })
 })
 
+describe('装配缺失', () => {
+  it('没装配数据源时 load 报明确错误，不假装成功', async () => {
+    // 换一份模块实例，模拟"还没调 installCommonUseSource"的启动早期
+    vi.resetModules()
+    const fresh = await import('@/stores/common-use')
+    setActivePinia(createPinia())
+
+    const store = fresh.useCommonUseStore()
+    await store.load()
+
+    expect(store.error).toContain('数据源未装配')
+    expect(store.tiles).toEqual([])
+  })
+})
 describe('只读投影', () => {
   it('load 把落盘文件派生成 tiles（含隐藏态与图标成对字段）', async () => {
     writeCommonUseFile([
@@ -111,7 +125,6 @@ describe('装配绑定', () => {
       { id: 'a', name: '嵌入图片', svg: '#icona', fillSvg: false, isShow: true },
       { id: 'b', name: '优化文档', svg: '#iconb', fillSvg: false, isShow: true },
     ])
-    bindCommonUseData()
     const store = useCommonUseStore()
     await store.load()
     expect(store.tiles[1].visible).toBe(true)

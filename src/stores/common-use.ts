@@ -1,4 +1,4 @@
-import { defineStore } from 'pinia'
+﻿import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { getCommonUseCollapsed } from '@/cep/data/settings'
 import { toTiles, type CommonUseFile, type CommonUseTile } from '@/domain/common-use'
@@ -17,10 +17,19 @@ export interface CommonUseSource {
 }
 
 let source: CommonUseSource | null = null
+let unsubscribe: (() => void) | null = null
 
-/** 装配层调用一次（`main.ts`）；测试里换成假源即可 */
-export function provideCommonUseSource(next: CommonUseSource): void {
+/**
+ * 装配层调用一次（`main.ts`）：注入数据源**并**接上刷新订阅——两件事本来就是一件事
+ * （有源才有事件），拆成两个函数只会多一个"注入了但没订阅"的半装状态。
+ * 重复调用（测试换源）会先退掉旧订阅。
+ */
+export function installCommonUseSource(next: CommonUseSource): void {
   source = next
+  unsubscribe?.()
+  unsubscribe = next.onChange((value) => {
+    useCommonUseStore().tiles = toTiles(value)
+  })
 }
 
 function requireSource(): CommonUseSource {
@@ -62,19 +71,5 @@ export const useCommonUseStore = defineStore('common-use', () => {
     }
   }
 
-  const isCollapsed = (id: string): boolean => collapsed.value[id] === true
-
-  return { tiles, collapsed, loading, error, degraded, load, loadCollapsed, isCollapsed }
+  return { tiles, collapsed, loading, error, degraded, load, loadCollapsed }
 })
-
-let bound = false
-
-/** 装配层调用一次（main.ts）：命令写成功后刷新只读投影 */
-export function bindCommonUseData() {
-  if (bound) return
-  bound = true
-
-  requireSource().onChange((value) => {
-    useCommonUseStore().tiles = toTiles(value)
-  })
-}
