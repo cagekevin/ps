@@ -1,4 +1,4 @@
-import { hasCep } from '@/cep/transport'
+﻿import { hasCep } from '@/cep/transport'
 import { readTextFile, userDir, writeTextFile, writeTextFileAtomic } from '@/cep/fs'
 import { log } from '@/utils/logger'
 
@@ -140,4 +140,28 @@ export function flushPrefs() {
 
 if (typeof window !== 'undefined') {
   window.addEventListener('beforeunload', flushPrefs)
+}
+
+/**
+ * 常用页折叠态：键名 `commonUse.collapsed`，值是 `{ [面板或项 id]: boolean }`。
+ *
+ * **落在这里（`sj_v5_ui.json`），不落官方 `sj_set.json`**：折叠是我们的界面偏好，
+ * 官方文件是同装的原面板也在写的，混进去等于给别人的数据加字段（决策 D2=A）。
+ */
+export const COMMON_USE_COLLAPSED_KEY = 'commonUse.collapsed'
+
+/** 读折叠态；坏值当空对象（不抛——偏好丢了只影响展开状态，不影响数据） */
+export function getCommonUseCollapsed(): Record<string, boolean> {
+  const raw = getPref<unknown>(COMMON_USE_COLLAPSED_KEY, {})
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return {}
+  const result: Record<string, boolean> = {}
+  for (const [id, value] of Object.entries(raw as Record<string, unknown>)) {
+    if (typeof value === 'boolean') result[id] = value
+  }
+  return result
+}
+
+/** 写折叠态（整体替换这一项；`setPref` 自带 300ms 防抖 + 关面板 flush） */
+export function setCommonUseCollapsed(next: Record<string, boolean>): void {
+  setPref(COMMON_USE_COLLAPSED_KEY, next)
 }

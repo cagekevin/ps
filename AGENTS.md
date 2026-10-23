@@ -1,4 +1,4 @@
-# 给后续 AI / 开发者的规则
+﻿# 给后续 AI / 开发者的规则
 
 这个文件是**硬约束**，不是建议。改代码前先读完。
 
@@ -90,6 +90,19 @@ grep -rn "export .*<概念词>" src  # 有哪些导出叫这个名字
 
 **判定**：你新建的文件名，全仓库只出现一次。
 
+**查邻居（2026-10-23 加，因为吃过一次亏）**——新建 `data/` / `utils/` / `composables/` 文件前，三个动作缺一不可：
+
+1. 看目录邻居 + 搜机制：
+   ```powershell
+   ls src/cep/data src/utils src/composables
+   grep -rn "onChange\|deepClone\|deepMerge\|debounce\|subscribeHostEvent" src/utils src/cep/data
+   ```
+   理由：`utils/clone.ts` 的 `deepClone`、`file-repo.ts` 的 `onChange` 都在那儿，我却在 `common-use.ts` 里又写了一整套订阅总线（T-86c 删掉）。
+2. **commit message 里写一行"查过哪些邻居文件"**。写不出来 = 没查，等于没做。
+3. 打开 `docs/生成/横切能力.md` 对应小节看一眼（`npm run registry` 生成，谁有什么都写在那儿）。
+
+**判定**：这次 diff 若新增了上述目录的文件，commit body 里能搜到"邻居："这一行。
+
 ### 动作 2：建文件 = 一次替换，不是一次追加
 
 新增入口（文件 / 导出 / 组件 / store 方法）时，**当次删掉它替代的那个**。
@@ -161,17 +174,17 @@ grep -rn "export .*<概念词>" src  # 有哪些导出叫这个名字
 | 层 | 规模 | 放什么 |
 | --- | --- | --- |
 | `src/pages/` | <!-- stats:begin layers.pages -->51 文件 / 11112 行<!-- stats:end layers.pages --> | 11 个页面（含 `_atoms` `_probe` `_placeholder` 三个内部页） |
-| `src/cep/` | <!-- stats:begin layers.cep -->52 文件 / 5545 行<!-- stats:end layers.cep --> | PS 出口：`transport` / `jsx/<域>` / `data/`（仓库层）/ `cloud` / `dialog` / `events` |
+| `src/cep/` | <!-- stats:begin layers.cep -->52 文件 / 5612 行<!-- stats:end layers.cep --> | PS 出口：`transport` / `jsx/<域>` / `data/`（仓库层）/ `cloud` / `dialog` / `events` |
 | `src/components/` | <!-- stats:begin layers.components -->33 文件 / 2996 行<!-- stats:end layers.components --> | 跨页组件；`G` 前缀 = UI 基础件 |
 | `src/domain/` | <!-- stats:begin layers.domain -->22 文件 / 3164 行<!-- stats:end layers.domain --> | 纯函数与类型，零 IO、零 Vue |
-| `src/commands/` | <!-- stats:begin layers.commands -->15 文件 / 3971 行<!-- stats:end layers.commands --> | 命令注册表 + 分域命令 |
+| `src/commands/` | <!-- stats:begin layers.commands -->15 文件 / 3998 行<!-- stats:end layers.commands --> | 命令注册表 + 分域命令 |
 | `src/composables/` | <!-- stats:begin layers.composables -->10 文件 / 918 行<!-- stats:end layers.composables --> | 组合式（`useCommand` 在 `components/command/`） |
-| `src/stores/` | <!-- stats:begin layers.stores -->13 文件 / 803 行<!-- stats:end layers.stores --> | 只读投影 + 少量 UI 状态 |
+| `src/stores/` | <!-- stats:begin layers.stores -->14 文件 / 883 行<!-- stats:end layers.stores --> | 只读投影 + 少量 UI 状态 |
 | `src/utils/` | <!-- stats:begin layers.utils -->10 文件 / 505 行<!-- stats:end layers.utils --> | 无依赖工具 |
 | `src/cloud/` | <!-- stats:begin layers.cloud -->4 文件 / 881 行<!-- stats:end layers.cloud --> | 同步引擎与台账 |
 | `src/selection/` | <!-- stats:begin layers.selection -->2 文件 / 292 行<!-- stats:end layers.selection --> | 选区 / 当前文字快照 |
 
-**测试**：<!-- stats:begin tests -->**103 个文件、878 处用例**（静态计数 `it()`/`test()`；非通过数）<!-- stats:end tests -->（`tests/{cep,cloud,commands,components,composables,data,domain,pages,selection,stores,utils}`）。
+**测试**：<!-- stats:begin tests -->**105 个文件、887 处用例**（静态计数 `it()`/`test()`；非通过数）<!-- stats:end tests -->（`tests/{cep,cloud,commands,components,composables,data,domain,pages,selection,stores,utils}`）。
 
 ### 3. 一手证据已入库，别再问"路径在不在"
 
@@ -202,7 +215,7 @@ grep -rn "export .*<概念词>" src  # 有哪些导出叫这个名字
 | 命令 | 干什么 | 状态 |
 | --- | --- | --- |
 | `npm run check` | style-guard + ledger + stats --check + lint + format:check | ✅ **不含测试、不含 tests 类型检查** |
-| `npm test` | vitest run（`<!-- stats:begin tests -->**103 个文件、878 处用例**（静态计数 `it()`/`test()`；非通过数）<!-- stats:end tests -->`） | ✅ 单独一条，`check` 不调它 |
+| `npm test` | vitest run（`<!-- stats:begin tests -->**105 个文件、887 处用例**（静态计数 `it()`/`test()`；非通过数）<!-- stats:end tests -->`） | ✅ 单独一条，`check` 不调它 |
 | `npm run deploy` | check → typecheck → build → verify:dist | ✅ 跑全的入口；**不含测试**，测试是流程不是脚本 |
 | `npm run build` | `vite build`，**只此一步** | ✅ 不带任何检查；检查归 `check` / `typecheck` / `verify:dist` |
 | `npm run stats` | 生成规模数字，改写 `进度.md` 与本文的注入块 | ✅ |

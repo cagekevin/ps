@@ -893,6 +893,24 @@
       "when": "（待补：什么时候用）",
       "status": "todo",
       "since": "2026-10-23"
+    },
+    {
+      "id": "cep-data-common-use-ts",
+      "name": "（待补：中文名）",
+      "entry": "src/cep/data/common-use.ts",
+      "api": "（待补：怎么调）",
+      "when": "（待补：什么时候用）",
+      "status": "todo",
+      "since": "2026-10-23"
+    },
+    {
+      "id": "stores-common-use-ts",
+      "name": "（待补：中文名）",
+      "entry": "src/stores/common-use.ts",
+      "api": "（待补：怎么调）",
+      "when": "（待补：什么时候用）",
+      "status": "todo",
+      "since": "2026-10-23"
     }
   ]
 }

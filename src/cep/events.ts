@@ -1,4 +1,4 @@
-import { hasCep } from './transport'
+﻿import { hasCep } from './transport'
 import { log } from '@/utils/logger'
 
 /**
@@ -149,6 +149,49 @@ export function onPhotoshopCallback(handler: (payload: PhotoshopEventPayload) =>
   return () => {
     b.removeEventListener?.(type, listener)
   }
+}
+
+// ---------- setd 分支（官方 :69412-69423）----------
+
+/**
+ * `setd`（1936028772）的官方四分支，**逐条照抄** `app.v4.js:69412-69423`：
+ *
+ * | 判据 | 官方处理 |
+ * |---|---|
+ * | `null._property === 'foregroundColor'` | `ysDrawColorToGroup` + `cyAutoFillColor('foregroundColor')` |
+ * | `null._property === 'backgroundColor'` | `cyAutoFillColor('backgroundColor')` |
+ * | `to._obj === 'textStyle'` | `ztSelectLayer(layerID)` |
+ * | `to._obj === 'singleRow' / 'singleColumn'` | `cySmartReferenceLine(to._obj)` |
+ * | 其它 | 什么都不做 |
+ *
+ * 顺序就是官方的 if-else 顺序（`null._property` 先判），所以这是一张**有序表**。
+ * 谁改这张表，`tests/cep/setd-router.test.ts` 会拿官方源码重算一遍来对——不是自证。
+ */
+export const SETD_ROUTES = [
+  { field: 'null._property', value: 'foregroundColor' },
+  { field: 'null._property', value: 'backgroundColor' },
+  { field: 'to._obj', value: 'textStyle' },
+  { field: 'to._obj', value: 'singleRow' },
+  { field: 'to._obj', value: 'singleColumn' },
+] as const
+
+export type SetdKind = (typeof SETD_ROUTES)[number]['value']
+
+/**
+ * 判定一个 `setd` 事件属于官方哪一支；认不出返回 null（官方那支就是"什么都不做"）。
+ *
+ * 为什么必须按判据分：以前 `style.pickColorToGroup` 把**任何** `setd` 都当吸色完成，
+ * 于是改背景色 / 选文字 / 拖出单行选区都会把它当成"吸色好了"去读前景色。
+ */
+export function classifySetd(payload: PhotoshopEventPayload | undefined): SetdKind | null {
+  if (!payload) return null
+  const property = payload.eventData?.null?._property
+  const object = payload.eventData?.to?._obj
+  for (const route of SETD_ROUTES) {
+    const actual = route.field === 'null._property' ? property : object
+    if (actual === route.value) return route.value
+  }
+  return null
 }
 
 // ---------- 订阅层 ----------

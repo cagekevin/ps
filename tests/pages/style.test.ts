@@ -1,4 +1,4 @@
-import { flushPromises, mount } from '@vue/test-utils'
+﻿import { flushPromises, mount } from '@vue/test-utils'
 import { nextTick } from 'vue'
 import { createPinia, setActivePinia, type Pinia } from 'pinia'
 import { readFileSync } from 'node:fs'
@@ -111,12 +111,18 @@ const jsx = vi.hoisted(() => ({
 vi.mock('@/cep/jsx', () => ({ jsx }))
 
 // T-66：命令要等 PS 的「吸色完成」事件；页面测试里让 setd 立刻触发，避免 60s 超时
-vi.mock('@/cep/events', () => ({
-  subscribeHostEvent: async (name: string, listener: () => void) => {
-    if (name === 'setd') listener()
-    return () => {}
-  },
-}))
+vi.mock('@/cep/events', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/cep/events')>()
+  const foreground = { eventID: 1936028772, eventData: { null: { _property: 'foregroundColor' } } }
+  return {
+    // `classifySetd` 用真的：T-87 起只有「改前景色」才算吸色完成，页面测试也必须喂对 payload
+    classifySetd: actual.classifySetd,
+    subscribeHostEvent: async (name: string, listener: (payload?: unknown) => void) => {
+      if (name === 'setd') listener(foreground)
+      return () => {}
+    },
+  }
+})
 
 const selection = vi.hoisted(() => ({ hasSelection: true, typeNumber: 2 }))
 vi.mock('@/selection', () => ({

@@ -1,4 +1,4 @@
-import { createApp } from 'vue'
+﻿import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import App from './App.vue'
 import router from './router'
@@ -12,6 +12,8 @@ import { bindFontData } from './stores/font'
 import { bindActionData } from './stores/action'
 import { bindFreePanelData } from './stores/free-panel'
 import { bindFontSetData } from './stores/font-set'
+import { bindCommonUseData, provideCommonUseSource } from './stores/common-use'
+import { commonUseRepo } from './cep/data/common-use'
 import { bindRenameData } from './stores/rename'
 import { useTaskStore } from './stores/tasks'
 import { setProgressPort } from './commands/runtime'
@@ -36,6 +38,8 @@ bindFontData()
 bindActionData()
 bindFreePanelData()
 bindFontSetData()
+provideCommonUseSource(commonUseRepo)
+bindCommonUseData()
 bindRenameData()
 
 // 长任务状态由 store 实现，命令层只依赖端口（commands 不许依赖 stores）

@@ -1,5 +1,6 @@
 ﻿import { CepError } from '@/utils/errors'
 import { assertJsxOk } from '@/utils/jsx-result'
+import { getCommonUseCollapsed, setCommonUseCollapsed } from '@/cep/data/settings'
 import { defineCommand } from './registry'
 import type { Command } from './types'
 
@@ -272,6 +273,19 @@ export const commonUseCommands: Command<unknown>[] = [
     },
   }),
 
+  // ---------- 折叠态（我们自己的偏好，不写官方 sj_set.json） ----------
+
+  defineCommand({
+    id: 'commonUse.setCollapsed',
+    title: '展开 / 收起',
+    group: 'system',
+    requires: 'none',
+    kind: 'instant',
+    async run(_ctx, { id, collapsed }) {
+      // 落 `sj_v5_ui.json`（`data/settings.ts` 的 `commonUse.collapsed`）；`sj_set.json` 一个字节不碰
+      setCommonUseCollapsed({ ...getCommonUseCollapsed(), [id]: collapsed })
+    },
+  }),
   // ---------- 变换 / 参考线 / 分布 ----------
 
   defineCommand({

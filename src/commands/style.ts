@@ -1,4 +1,4 @@
-import { openFile, saveFile } from '@/cep/dialog'
+﻿import { openFile, saveFile } from '@/cep/dialog'
 import { exportKuArchive, importKuArchive, kuArchiveDefaultName } from '@/cep/data/style-library-io'
 import {
   addKuGroup,
@@ -23,7 +23,7 @@ import {
   sendKuItemToSwatch,
   setKuGroupShow,
 } from '@/cep/data/style-library-repo'
-import { subscribeHostEvent } from '@/cep/events'
+import { classifySetd, subscribeHostEvent } from '@/cep/events'
 import { asJsxResult, assertJsxOk } from '@/utils/jsx-result'
 import { encodeText } from '@/domain/translate'
 import { CepError } from '@/utils/errors'
@@ -77,7 +77,13 @@ async function pickColorToGroup(ctx: CommandContext, groupIndex: number): Promis
 
   try {
     // 先订阅再切工具：切工具之后用户可能立刻吸色，晚订阅会漏事件
-    unsubscribers.push(await subscribeHostEvent('setd', () => settle('done')))
+    // 只有"改了前景色"才算吸色完成（官方 `ysDrawColorToGroup` 的判据，`app.v4.js:69413`）。
+    // 以前任何 setd（改背景色 / 选文字 / 单行选区）都会把它当成吸色完成，见 T-87 的行为变更。
+    unsubscribers.push(
+      await subscribeHostEvent('setd', (payload) => {
+        if (classifySetd(payload) === 'foregroundColor') settle('done')
+      }),
+    )
     unsubscribers.push(await subscribeHostEvent('selection', () => settle('cancelled')))
     timer = setTimeout(() => settle('timeout'), EYEDROPPER_TIMEOUT)
 

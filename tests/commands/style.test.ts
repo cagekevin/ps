@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+﻿import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { encodeText } from '@/domain/translate'
 
@@ -50,13 +50,18 @@ vi.mock('@/cep/jsx', () => ({ jsx }))
  * 快速吸色到组（T-66）要等 PS 事件。这里把订阅换成可手动触发的表：
  * 测试先等命令订阅上，再按名字触发「吸色完成 / 取消」，或交给超时。
  */
-const hostEvents = vi.hoisted(() => ({ listeners: new Map<string, () => void>() }))
-vi.mock('@/cep/events', () => ({
-  subscribeHostEvent: async (name: string, listener: () => void) => {
-    hostEvents.listeners.set(name, listener)
-    return () => hostEvents.listeners.delete(name)
-  },
-}))
+const hostEvents = vi.hoisted(() => ({ listeners: new Map<string, (payload?: unknown) => void>() }))
+vi.mock('@/cep/events', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/cep/events')>()
+  return {
+    // 只换订阅通道；`classifySetd` 用真的——判据本身由 `tests/cep/setd-router.test.ts` 对官方源码校验
+    classifySetd: actual.classifySetd,
+    subscribeHostEvent: async (name: string, listener: (payload?: unknown) => void) => {
+      hostEvents.listeners.set(name, listener)
+      return () => hostEvents.listeners.delete(name)
+    },
+  }
+})
 
 /** 样式库的磁盘读写：测试里换内存实现，命令与 jsx 都走真的 */
 const store = vi.hoisted(() => {
@@ -395,6 +400,20 @@ describe('style.addFont（原版 addFont：ys_getFontInfo 的 data 整份入库�
   })
 })
 
+/** 官方判定"吸色完成"的那一支：`null._property === 'foregroundColor'`（`app.v4.js:69413`） */
+const FOREGROUND_SETD = {
+  eventID: 1936028772,
+  eventData: { null: { _property: 'foregroundColor' } },
+}
+
+/** T-87 靶点⑰：除了「改前景色」，其它 setd 都不是吸色完成 */
+const NON_PICK_SETD = [
+  ['改背景色', { eventID: 1936028772, eventData: { null: { _property: 'backgroundColor' } } }],
+  ['选了文字图层', { eventID: 1936028772, eventData: { to: { _obj: 'textStyle' } } }],
+  ['单行选区', { eventID: 1936028772, eventData: { to: { _obj: 'singleRow' } } }],
+  ['单列选区', { eventID: 1936028772, eventData: { to: { _obj: 'singleColumn' } } }],
+  ['认不出的 setd', { eventID: 1936028772, eventData: { null: { _property: 'layerSection' } } }],
+] as const
 describe('style.pickColorToGroup（T-66：切吸色工具 + 等 PS 事件）', () => {
   it('吸色完成（setd）→ 读前景色并加进该组', async () => {
     jsx.style.setTool.mockResolvedValue(null)
@@ -408,7 +427,7 @@ describe('style.pickColorToGroup（T-66：切吸色工具 + 等 PS 事件）', (
     await vi.waitFor(() => expect(hostEvents.listeners.has('setd')).toBe(true))
     expect(jsx.style.setTool).toHaveBeenCalledWith('eyedropperTool')
 
-    hostEvents.listeners.get('setd')?.()
+    hostEvents.listeners.get('setd')?.(FOREGROUND_SETD)
     await expect(pending).resolves.toMatchObject({ ok: true })
 
     const groups = (await read(COLOR_LIB)) as Array<{ list: unknown[] }>
@@ -421,6 +440,22 @@ describe('style.pickColorToGroup（T-66：切吸色工具 + 等 PS 事件）', (
     expect(hostEvents.listeners.size).toBe(0)
   })
 
+  it.each(NON_PICK_SETD)('%s 的 setd 不算吸色完成：继续等，不读前景色', async (_label, payload) => {
+    jsx.style.setTool.mockResolvedValue(null)
+    const pending = execute('style.pickColorToGroup', { kind: 'color', groupIndex: 0 })
+    await vi.waitFor(() => expect(hostEvents.listeners.has('setd')).toBe(true))
+
+    hostEvents.listeners.get('setd')?.(payload)
+    // 让微任务跑完，确认还没结算
+    await Promise.resolve()
+    await Promise.resolve()
+    expect(jsx.style.getForegroundColor).not.toHaveBeenCalled()
+
+    // 之后真正吸色（前景色）才完成
+    hostEvents.listeners.get('setd')?.(FOREGROUND_SETD)
+    await expect(pending).resolves.toMatchObject({ ok: true })
+    expect(jsx.style.getForegroundColor).toHaveBeenCalledTimes(1)
+  })
   it('取消（selection）→ 提示「快速吸色到组已取消」，不写库', async () => {
     const pending = execute('style.pickColorToGroup', { kind: 'color', groupIndex: 0 })
 

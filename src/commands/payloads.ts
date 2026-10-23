@@ -389,6 +389,12 @@ export interface CommonUseDistributePayload {
   params: [number, number, number]
 }
 
+/** 折叠态：id 是面板名或项 id（comembed、div_img_cya1…） */
+export interface CommonUseCollapsePayload {
+  id: string
+  collapsed: boolean
+}
+
 /** 导出图片：first = 一级图层，second = 二级图层，image = 单张导出 */
 export interface CommonUseExportPayload {
   mode: 'image' | 'first' | 'second'
@@ -733,6 +739,7 @@ export interface CommandPayloads {
   'commonUse.optimizeOnce': CommonUseOptimizePayload
   'commonUse.optimizeFolder': CommonUseOptimizePayload
   'commonUse.exportPsdFolder': CommonUseExportPsdFolderPayload
+  'commonUse.setCollapsed': CommonUseCollapsePayload
   'commonUse.transform': CommonUseTransformPayload
   'commonUse.referenceGuide': CommonUseReferenceGuidePayload
   'commonUse.referenceSlice': CommonUseReferenceSlicePayload
