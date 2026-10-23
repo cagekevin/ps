@@ -173,6 +173,8 @@ export interface CommonUseJsx {
   embedImage(options: { path: string; bLink2: unknown; bDelete: unknown }): Promise<unknown>
   /** cy_embedMultipleImage([])：嵌入多图片，无参（`:37902`） */
   embedMultipleImages(): Promise<unknown>
+  /** 置入后重链到源文件（官方 Layer_placedLayerRelinkToFile，:37760） */
+  relinkToFile(path: string): Promise<unknown>
   /** 转链接智能对象（官方 cy_smartToLinkSmartObject，:35891，无参） */
   smartToLinkSmartObject(): Promise<unknown>
   /** 转智能对象（官方 cy_linkSmartObjectToSmartObject，:35871，无参） */

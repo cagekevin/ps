@@ -8,7 +8,8 @@ import { log } from '@/utils/logger'
  * （app.v4.js:42473-42476）直接写死十进制。这里保持同一份值，
  * **不再经过 `charIDToTypeID` 之类的二次转换**。
  */
-export type HostEventName = 'selection' | 'transform' | 'make' | 'setd'
+export type HostEventName =
+  'selection' | 'transform' | 'make' | 'setd' | 'placeImage' | 'pasteImage' | 'clipMask'
 
 /**
  * 样式页「快速吸色到组」（T-66）复用已有两个事件：
@@ -18,15 +19,19 @@ export type HostEventName = 'selection' | 'transform' | 'make' | 'setd'
  * 这条约束有两处兜底：`tests/cep/events.test.ts` 的「value 不得重复」断言，
  * 与 `register()` 里的 `describeEventIdConflict` 运行期拦截。
  *
- * 拖入事件 `1349280544` 已随 /commonUse 页面撤销一并移除（台账 T-80）；
- * 重做该页时再按需接入，接入前先用一手源码确认 PS 是否真回该 ID。
- * 粘贴 / 剪贴蒙版 / 智能填色不在本表（台账 T-73，blocked）。
+ * 常用页三个「置入类」事件（T-97-1c，一手依据 `app.v4.js:37606-37615`、`:38222-38225`）：
+ * `1349280544` 拖入、`1885434740` 粘贴、`1198682188` 剪贴蒙版——官方三条都绑 `dragInImage`，
+ * 且 `1349280544` 额外绑 `toLinkObject`。智能填色仍不在本表（台账 T-73）。
  */
 const EVENT_IDS: Record<HostEventName, string> = {
   selection: '1936483188', // slct
   transform: '1416785510', // Trnf
   make: '1298866208', // Mk
   setd: '1936028772', // setd
+  // 官方 :37606 / :37609 / :37612 三条 setEvent 的十进制 ID
+  placeImage: '1349280544',
+  pasteImage: '1885434740',
+  clipMask: '1198682188',
 }
 
 /** 供测试断言「一个 ID 只能有一个语义名」；生产代码只经 `subscribeHostEvent` 访问 */

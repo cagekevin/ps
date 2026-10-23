@@ -37,6 +37,11 @@ export function createCommonUseJsx(): CommonUseJsx {
     embedImage: (options: { path: string; bLink2: unknown; bDelete: unknown }) =>
       jsxCall('cy_insertionImage', [options], { label: '嵌入图片', timeout: LONG }),
 
+    // 置入后重新链接到源文件：官方 `toLinkObject()` 直接 `$cep.jsx("Layer_placedLayerRelinkToFile", [path])`
+    // （`app.v4.js:37758-37761`），**不是** jsxHistory。`path` 已被官方把反斜杠换成斜杠（`:37759`）。
+    relinkToFile: (path: string) =>
+      jsxCall('Layer_placedLayerRelinkToFile', [path], { label: '转链接智能对象', timeout: LONG }),
+
     // 嵌入多图片：`cy_embedMultipleImage([])`，官方无参（`:37902`）
     embedMultipleImages: () =>
       jsxCall('cy_embedMultipleImage', [], { label: '嵌入多图片', timeout: LONG }),

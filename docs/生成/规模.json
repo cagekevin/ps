@@ -10,11 +10,11 @@
     "组件表行数": "docs/页面/<页>.md「一、组件展开」小节表格的数据行数"
   },
   "commands": {
-    "total": 135,
+    "total": 136,
     "byDomain": {
       "action": 19,
       "cloud": 4,
-      "commonUse": 26,
+      "commonUse": 27,
       "font": 9,
       "fontSet": 20,
       "freePanel": 9,
@@ -25,14 +25,14 @@
     }
   },
   "tests": {
-    "files": 113,
-    "cases": 961,
+    "files": 114,
+    "cases": 966,
     "eachSites": 5
   },
   "components": 31,
   "icons": 189,
   "pages": 8,
-  "hostEvents": 4,
+  "hostEvents": 7,
   "componentTableRows": {
     "fontManage": 33,
     "fontSet": 9,
@@ -67,7 +67,7 @@
   "layers": {
     "cep": {
       "files": 52,
-      "lines": 5692
+      "lines": 5708
     },
     "cloud": {
       "files": 4,
@@ -75,7 +75,7 @@
     },
     "commands": {
       "files": 15,
-      "lines": 4161
+      "lines": 4276
     },
     "components": {
       "files": 36,
@@ -91,7 +91,7 @@
     },
     "pages": {
       "files": 61,
-      "lines": 12282
+      "lines": 12285
     },
     "selection": {
       "files": 2,

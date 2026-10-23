@@ -196,6 +196,10 @@ export function createMockJsx(): JsxPort {
         log.info('mock', 'cy_embedMultipleImage', null)
         return null
       },
+      relinkToFile: async (path) => {
+        log.info('mock', 'Layer_placedLayerRelinkToFile', path)
+        return null
+      },
       smartToLinkSmartObject: async () => {
         log.info('mock', 'cy_smartToLinkSmartObject', null)
         return null

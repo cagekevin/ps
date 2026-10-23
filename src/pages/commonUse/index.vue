@@ -59,6 +59,7 @@ const exportImagesCmd = useCommand('commonUse.exportImages')
 const swapWireframeCmd = useCommand('commonUse.swapWireframeFill')
 const setOptionCmd = useCommand('commonUse.setOption')
 const moveCmd = useCommand('commonUse.move')
+const watchPlaceCmd = useCommand('commonUse.watchPlaceImage')
 const drag = useLongPressDrag()
 const feedback = useFeedbackStore()
 const freePanel = useFreePanelStore()
@@ -263,6 +264,8 @@ onMounted(async () => {
   await store.load()
   await store.loadOptions()
   store.loadCollapsed()
+  // 置入图片的宿主事件监听（官方 mounted 里按开关注册，:37606-37615）
+  void watchPlaceCmd.run()
   // 缺省收起；文件里显式记过 `collapsed:false` 的那一格恢复展开（同时只开一个，取第一个）
   const open = tiles.value.find((tile) => tile.comName && collapsed.value[tile.id] === false)
   expandedId.value = open?.id ?? ''

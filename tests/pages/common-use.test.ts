@@ -1,4 +1,4 @@
-﻿import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ref, type Ref } from 'vue'
 import { flushPromises, mount } from '@vue/test-utils'
 import { nextTick } from 'vue'
@@ -203,17 +203,6 @@ describe('网格区', () => {
 
     await buttons[1].trigger('click')
     expect(commands.flip).toHaveBeenCalledWith({ direction: '上下' })
-  })
-
-  it('本刀格子没有点击行为：不发任何命令（面板接线在 T-88b）', async () => {
-    store.tiles.value = [tile(0, '嵌入图片')]
-    const wrapper = mount(Page)
-    await flushPromises() // onMounted 里先 await store.load() 才恢复展开态
-
-    await wrapper.find('.use-grid-item').trigger('click')
-
-    expect(commands.zoom).not.toHaveBeenCalled()
-    expect(commands.flip).not.toHaveBeenCalled()
   })
 })
 

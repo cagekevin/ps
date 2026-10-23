@@ -2,6 +2,8 @@
 import { CepError } from '@/utils/errors'
 import { assertJsxOk } from '@/utils/jsx-result'
 import { commonUseRepo } from '@/cep/data/common-use'
+import { readCommonUseOptions } from '@/cep/data/legacy-settings'
+import { subscribeHostEvent, type HostEventName } from '@/cep/events'
 import {
   COMMON_USE_SETTING_KEYS,
   updateCommonUseOptions,
@@ -185,6 +187,30 @@ export const commonUseCommands: Command<unknown>[] = [
     async run(ctx) {
       // 官方 `cy_embedMultipleImage` 无参（`:37902`）
       assertJsxOk(await ctx.jsx.commonUse.embedMultipleImages(), '嵌入多图片失败')
+    },
+  }),
+
+  /**
+   * 恢复"置入图片后本页有反应"（T-97-1c）。官方在组件 mounted 里按开关注册（`app.v4.js:37606-37615`、
+   * 开关变化时重注册 `:38222-38225`，注册本身由 `setEvent` 按 `this.set[key]` 决定 `:37743-37749`）。
+   *
+   * 我方等价实现：**订阅一次，回调里读两个开关分流**——同一个 ID `1349280544` 在官方被绑了两次
+   * （`dragInImage` 与 `toLinkObject`），合成一个回调行为一致且不会有双份注册。
+   *
+   * 分流（官方原文）：
+   * - `cyOpenDranInToLinkObject` 为真 → `toLinkObject()`：`Layer_placedLayerRelinkToFile([path])`（`:37758-37761`）
+   * - 否则 `cyDragInAutoEmbed` / `cyPasetImageAutoEmbed` / `cyClipMaskAutoEmbed` 各自为真 →
+   *   `dragInImage()`：`cy_insertionImage([{path:"", bLink2: cyLinkObject, bDelete: cyDeleteNext}])`（`:37750-37757`）
+   * - 都不勾 → 什么都不做
+   */
+  defineCommand({
+    id: 'commonUse.watchPlaceImage',
+    title: '监听置入图片',
+    group: 'file',
+    requires: 'none',
+    kind: 'instant',
+    async run(ctx) {
+      await startPlaceImageWatch(ctx)
     },
   }),
 
@@ -509,3 +535,91 @@ export const commonUseCommands: Command<unknown>[] = [
     },
   }),
 ]
+/**
+ * 「置入图片」监听（T-97-1c）。官方三个事件 → 两个处理器（`app.v4.js:37606-37615`）：
+ * - `1349280544`（placeImage）→ `dragInImage` **和** `toLinkObject`
+ * - `1885434740`（pasteImage）/ `1198682188`（clipMask）→ 只有 `dragInImage`
+ * 开关不勾时官方**不注册**（`setEvent`，`:37743-37749`）；我方订阅一次、回调里按开关分流。
+ */
+export interface PlaceImageDeps {
+  readOptions: () => Record<string, unknown>
+  embedImage: (options: { path: string; bLink2: unknown; bDelete: unknown }) => Promise<unknown>
+  relinkToFile: (path: string) => Promise<unknown>
+}
+
+/** 事件载荷里的路径：官方 `t.eventData.null._path` 后把反斜杠换成斜杠（`:37759`） */
+export function placeImagePath(payload: unknown): string {
+  const raw = (payload as { eventData?: { null?: { _path?: unknown } } } | null)?.eventData?.null
+    ?._path
+  return typeof raw === 'string' ? raw.replace(/\\/g, '/') : ''
+}
+
+/** 官方 `dragInImage()` 的实参：`path` 是**空串**，`bLink2`/`bDelete` 取设置原值（`:37751-37755`） */
+export function buildDragInPayload(options: Record<string, unknown>) {
+  return { path: '', bLink2: options.cyLinkObject, bDelete: options.cyDeleteNext }
+}
+
+/** 一条事件该走哪条路径：`'relink' | 'embed' | 'none'`（顺序即官方优先级：先 `toLinkObject`） */
+export function placeImageAction(
+  name: HostEventName,
+  options: Record<string, unknown>,
+): 'relink' | 'embed' | 'none' {
+  if (name === 'placeImage' && options.cyOpenDranInToLinkObject) return 'relink'
+  const key =
+    name === 'placeImage'
+      ? 'cyDragInAutoEmbed'
+      : name === 'pasteImage'
+        ? 'cyPasetImageAutoEmbed'
+        : 'cyClipMaskAutoEmbed'
+  return options[key] ? 'embed' : 'none'
+}
+
+/** 分派一条置入事件（导出给测试直接调，不依赖订阅时序） */
+export async function dispatchPlaceImage(
+  name: HostEventName,
+  payload: unknown,
+  deps: PlaceImageDeps,
+): Promise<'relink' | 'embed' | 'none'> {
+  const options = deps.readOptions()
+  const action = placeImageAction(name, options)
+  if (action === 'relink') {
+    await deps.relinkToFile(placeImagePath(payload))
+    return 'relink'
+  }
+  if (action === 'embed') {
+    await deps.embedImage(buildDragInPayload(options))
+    return 'embed'
+  }
+  return 'none'
+}
+
+let stopPlaceImage: Array<() => void> | null = null
+
+/** 订阅三个置入事件；重复调用只订阅一次（页面 mounted 与设置变化都会调） */
+export async function startPlaceImageWatch(ctx: {
+  jsx: {
+    commonUse: {
+      embedImage: PlaceImageDeps['embedImage']
+      relinkToFile: PlaceImageDeps['relinkToFile']
+    }
+  }
+}): Promise<void> {
+  if (stopPlaceImage) return
+  const deps: PlaceImageDeps = {
+    readOptions: () => readCommonUseOptions() as unknown as Record<string, unknown>,
+    embedImage: (options) => ctx.jsx.commonUse.embedImage(options),
+    relinkToFile: (path) => ctx.jsx.commonUse.relinkToFile(path),
+  }
+  const names: HostEventName[] = ['placeImage', 'pasteImage', 'clipMask']
+  stopPlaceImage = await Promise.all(
+    names.map((name) =>
+      subscribeHostEvent(name, (payload) => void dispatchPlaceImage(name, payload, deps)),
+    ),
+  )
+}
+
+/** 仅供测试清理：停止订阅 */
+export function stopPlaceImageWatch(): void {
+  for (const stop of stopPlaceImage ?? []) stop()
+  stopPlaceImage = null
+}

@@ -1,4 +1,4 @@
-import type {
+﻿import type {
   CreateButtonConfig,
   FontSetSettings,
   PasteFontConfig,
@@ -761,6 +761,7 @@ export interface CommandPayloads {
   'commonUse.zoom': CommonUseZoomPayload
   'commonUse.flip': CommonUseFlipPayload
   'commonUse.embedImage': CommonUseEmbedPayload
+  'commonUse.watchPlaceImage': CommonUseNoArgPayload
   'commonUse.smartToLinkSmartObject': CommonUseNoArgPayload
   'commonUse.linkSmartObjectToSmartObject': CommonUseNoArgPayload
   'commonUse.importMultipleImages': CommonUseImportPayload
