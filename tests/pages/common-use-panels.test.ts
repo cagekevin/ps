@@ -25,8 +25,14 @@ describe('GAnchorGrid 的分组是数据', () => {
   it('锚点分两行、每行 6 个，共 12 个（官方 svgOne/svgTwo 各 6 项，:36278-36315）', () => {
     expect(ANCHOR_ROWS.map((row) => row.length)).toEqual([6, 6])
     expect(ANCHOR_ROWS.flat()).toHaveLength(12)
-    // 官方 svgTwo 后四项重复 weizhi9，所以去重后是 9 种图标（照抄官方，不是抄错）
+    // 12 格 / 9 个不同图标：svgTwo = [7,8,9,9,9,9]，展平下标 8/9/10/11 复用 weizhi9（app.v4.js:36304-36314）
     expect(new Set(ANCHOR_ROWS.flat()).size).toBe(9)
+    expect(ANCHOR_ROWS.flat().slice(8)).toEqual([
+      'iconmaodianbianhuandianweizhi9',
+      'iconmaodianbianhuandianweizhi9',
+      'iconmaodianbianhuandianweizhi9',
+      'iconmaodianbianhuandianweizhi9',
+    ])
   })
 
   it('按 rows 渲染：两行、每行格子数 = 分组长度，点格子 emit 锚点名', async () => {
