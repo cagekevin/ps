@@ -11,11 +11,7 @@ import type { CommonUseTile } from '@/domain/common-use'
  *
  * 只有三层：图标块、文案、角标。**不做 hover 浮层**（官方没有，只换图标）。
  */
-defineProps<{
-  tile: CommonUseTile
-  /** 展开态（面板打开时该格高亮，官方 `.contextmenu` 类，`:35672`） */
-  active?: boolean
-}>()
+defineProps<{ tile: CommonUseTile }>()
 
 defineEmits<{ (e: 'click'): void; (e: 'contextmenu', ev: MouseEvent): void }>()
 </script>
@@ -23,7 +19,6 @@ defineEmits<{ (e: 'click'): void; (e: 'contextmenu', ev: MouseEvent): void }>()
 <template>
   <button
     class="use-grid-item"
-    :class="{ 'is-active': active }"
     type="button"
     :title="tile.title"
     @click="$emit('click')"
@@ -63,7 +58,6 @@ defineEmits<{ (e: 'click'): void; (e: 'contextmenu', ev: MouseEvent): void }>()
   color: var(--text-strong);
 }
 
-.use-grid-item.is-active .use-grid-item__icon,
 .use-grid-item:hover .use-grid-item__icon {
   background: var(--c-surface);
 }

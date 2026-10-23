@@ -1,4 +1,5 @@
-﻿import { CepError } from '@/utils/errors'
+﻿import { FLIP_DIRECTIONS, type FlipDirection } from '@/domain/common-use'
+import { CepError } from '@/utils/errors'
 import { assertJsxOk } from '@/utils/jsx-result'
 import { getCommonUseCollapsed, setCommonUseCollapsed } from '@/cep/data/settings'
 import { defineCommand } from './registry'
@@ -19,19 +20,8 @@ import type { Command } from './types'
  * 命令层因此只经 `utils/jsx-result` 判成败，**不读任何返回字段**。
  */
 
-/** 翻转 6 向（原版 `CommonUse.md:67-91` 的常量表：左右/上下/左/右/下/上） */
-export const FLIP_DIRECTIONS = ['左右', '上下', '左', '右', '下', '上'] as const
-
-export type FlipDirection = (typeof FLIP_DIRECTIONS)[number]
-
-/** 放大预设（`docs/页面/05-常用.md:42`：`[105,110,150,200]`） */
-export const ENLARGE_PRESETS = [105, 110, 150, 200] as const
-/** 整体放大预设（`:42`：`[101,102,103,120,140,250,300,350,400,500]`） */
-export const ENLARGE_ALL_PRESETS = [101, 102, 103, 120, 140, 250, 300, 350, 400, 500] as const
-/** 缩小预设（`:42`：`[95,90,80,50]`） */
-export const NARROW_PRESETS = [95, 90, 80, 50] as const
-/** 整体缩小预设（`:42`：`[99,98,97,70,60,50,33,25,20,10]`） */
-export const NARROW_ALL_PRESETS = [99, 98, 97, 70, 60, 50, 33, 25, 20, 10] as const
+// 固定表（方向 / 预设倍率）在 `domain/common-use.ts`——页面也要用；**不在这里 re-export**，
+// 否则页面又能值导入命令层（T-88a 教训，守卫 `scripts/page-boundary.mjs` 会拦）。
 
 /** 变换参数顺序（`docs/页面/05-常用.md:57`） */
 export const TRANSFORM_KEYS = [

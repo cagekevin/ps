@@ -309,7 +309,7 @@ export interface FontSetHierarchyPresetPayload {
 
 /**
  * 缩放。`scale` 是倍数（>100 放大，<100 缩小）。
- * 预设倍率见 `commands/commonUse.ts` 的 `ENLARGE_PRESETS` 等常量。
+ * 预设倍率见 `domain/common-use.ts` 的 `ENLARGE_PRESETS` 等常量（页面与命令共用一份）。
  */
 export interface CommonUseZoomPayload {
   scale: number

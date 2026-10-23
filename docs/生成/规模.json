@@ -75,7 +75,7 @@
     },
     "commands": {
       "files": 15,
-      "lines": 3998
+      "lines": 3988
     },
     "components": {
       "files": 34,
@@ -87,11 +87,11 @@
     },
     "domain": {
       "files": 22,
-      "lines": 3164
+      "lines": 3188
     },
     "pages": {
       "files": 53,
-      "lines": 11404
+      "lines": 11389
     },
     "selection": {
       "files": 2,

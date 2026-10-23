@@ -1,5 +1,5 @@
 ﻿<script setup lang="ts">
-import { computed, onMounted, ref } from 'vue'
+import { computed, onMounted } from 'vue'
 import { storeToRefs } from 'pinia'
 import EmptyState from '@/components/EmptyState.vue'
 import GButton from '@/components/GButton.vue'
@@ -13,7 +13,7 @@ import {
   FLIP_DIRECTIONS,
   NARROW_PRESETS,
   type FlipDirection,
-} from '@/commands/commonUse'
+} from '@/domain/common-use'
 import { useCommonUseStore } from '@/stores/common-use'
 import UseGridItem from './components/UseGridItem.vue'
 
@@ -34,15 +34,9 @@ const { tiles, loading, error, degraded } = storeToRefs(store)
 const zoomCmd = useCommand('commonUse.zoom')
 const flipCmd = useCommand('commonUse.flip')
 
-/** 官方「放大 ▾」/「缩小 ▾」胶囊：一个选项 = 当前值展示（点开是否弹选项未实测，见 GSegment） */
-const ZOOM_LABEL = [
-  { value: 'scale', label: '放大' },
-  { value: 'narrow', label: '缩小' },
-] as const
-
 /**
  * 官方 6 向翻转的图标与提示（`app.v4.js:37567-37591`，18×18，`.svg-18` CSS 位置见规格 35620）。
- * **方向文本只从 `commands/commonUse.ts` 的 `FLIP_DIRECTIONS` 来**（与命令校验同一份），
+ * **方向文本只从 `domain/common-use.ts` 的 `FLIP_DIRECTIONS` 来**（命令层校验用的也是这一份），
  * 这里只补"图标 + 悬停标题"这层表现信息。
  */
 const FLIP_ICONS: Record<string, { svg: string; title: string }> = {
@@ -57,7 +51,6 @@ const FLIP_ICONS: Record<string, { svg: string; title: string }> = {
 const flipItems = FLIP_DIRECTIONS.map((text) => ({ text, ...FLIP_ICONS[text] }))
 
 /** 展开态高亮（官方 `openfun`，`:38193`）：面板本身在 T-88b 才做 */
-const activeId = ref('')
 
 const ready = computed(() => !loading.value && !error.value)
 
@@ -97,7 +90,11 @@ function flip(direction: FlipDirection) {
       >
         <GSegment
           :model-value="row"
-          :options="row === 'scale' ? [ZOOM_LABEL[0]] : [ZOOM_LABEL[1]]"
+          :options="
+            row === 'scale'
+              ? [{ value: 'scale', label: '放大' }]
+              : [{ value: 'narrow', label: '缩小' }]
+          "
           chevron
           :aria-label="row === 'scale' ? '放大倍数' : '缩小倍数'"
         />
@@ -131,13 +128,7 @@ function flip(direction: FlipDirection) {
 
       <!-- 功能格：顺序来自 sj_commonFunction.json（页面不写任何 id 字面量） -->
       <div v-if="tiles.length" class="page-common-use__grid">
-        <UseGridItem
-          v-for="tile in tiles"
-          :key="tile.id"
-          :tile="tile"
-          :active="activeId === tile.id"
-          @click="activeId = activeId === tile.id ? '' : tile.id"
-        />
+        <UseGridItem v-for="tile in tiles" :key="tile.id" :tile="tile" />
       </div>
       <EmptyState v-else compact text="还没有常用功能" />
     </template>

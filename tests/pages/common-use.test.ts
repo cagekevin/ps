@@ -1,5 +1,5 @@
 ﻿import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { ref } from 'vue'
+import { ref, type Ref } from 'vue'
 import { mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 
@@ -16,7 +16,17 @@ const commands = vi.hoisted(() => ({
 }))
 
 /** 每个用例换一份新的响应式假 store（`storeToRefs` 需要真响应式对象） */
-let store: Record<string, unknown> = {}
+interface FakeStore {
+  tiles: Ref<unknown[]>
+  collapsed: Ref<Record<string, boolean>>
+  loading: Ref<boolean>
+  error: Ref<string>
+  degraded: Ref<string>
+  load: () => Promise<void>
+  loadCollapsed: () => void
+}
+
+let store!: FakeStore
 
 vi.mock('@/stores/common-use', () => ({ useCommonUseStore: () => store }))
 
@@ -146,13 +156,12 @@ describe('网格区', () => {
     expect(commands.flip).toHaveBeenCalledWith({ direction: '上下' })
   })
 
-  it('点格子只切高亮，不发命令（面板接线在 T-88b）', async () => {
+  it('本刀格子没有点击行为：不发任何命令（面板接线在 T-88b）', async () => {
     store.tiles.value = [tile(0, '嵌入图片')]
     const wrapper = mount(Page)
 
     await wrapper.find('.use-grid-item').trigger('click')
 
-    expect(wrapper.find('.use-grid-item').classes()).toContain('is-active')
     expect(commands.zoom).not.toHaveBeenCalled()
     expect(commands.flip).not.toHaveBeenCalled()
   })

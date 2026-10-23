@@ -1,4 +1,4 @@
-// 是什么：常用页（`/commonUse`）的落盘结构、官方种子与「落盘 → 页面视图」的纯函数
+﻿// 是什么：常用页（`/commonUse`）的落盘结构、官方种子与「落盘 → 页面视图」的纯函数
 // 替代了什么：原版 `V.a.info` 数组上的就地读写（app.v4.js:11088-11261 的存储类与 configReset）
 // 谁在用：`cep/data/common-use.ts`（仓库）、后续 `stores/common-use.ts`（只读投影，T-87）
 // 禁止：不读文件、不调 jsx、不 import Vue；不在这里判断"要不要写"（那是命令层的事）
@@ -273,3 +273,27 @@ export function toTiles(file: CommonUseFile | null | undefined): CommonUseTile[]
 export function findCommonUseIndex(items: readonly CommonUseItem[], id: string): number {
   return items.findIndex((item) => item.id === id)
 }
+
+// ---------- 常用页的固定表（页面与命令层共用，所以放 domain）----------
+
+/**
+ * 翻转 6 向。**唯一一份**：命令层用它校验 payload，页面用它渲染 6 颗按钮。
+ *
+ * 官方 `app.v4.js:37805-37810`（`cyLeftRight→"左右"` … `cyToTop→"上"`）；
+ * 传给 jsx 的就是这里的文本（`cy_transformPosition`，`:38122`）。
+ */
+export const FLIP_DIRECTIONS = ['左右', '上下', '左', '右', '下', '上'] as const
+
+export type FlipDirection = (typeof FLIP_DIRECTIONS)[number]
+
+/** 放大预设（`docs/页面/05-常用.md:42`：`[105,110,150,200]`） */
+export const ENLARGE_PRESETS = [105, 110, 150, 200] as const
+
+/** 整体放大预设（`:42`：`[101,102,103,120,140,250,300,350,400,500]`） */
+export const ENLARGE_ALL_PRESETS = [101, 102, 103, 120, 140, 250, 300, 350, 400, 500] as const
+
+/** 缩小预设（`:42`：`[95,90,80,50]`） */
+export const NARROW_PRESETS = [95, 90, 80, 50] as const
+
+/** 整体缩小预设（`:42`：`[99,98,97,70,60,50,33,25,20,10]`） */
+export const NARROW_ALL_PRESETS = [99, 98, 97, 70, 60, 50, 33, 25, 20, 10] as const
