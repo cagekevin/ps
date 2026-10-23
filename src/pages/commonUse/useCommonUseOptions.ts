@@ -1,4 +1,4 @@
-﻿import { ref, watch, type Ref } from 'vue'
+import { ref, watch, type Ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useCommand } from '@/components/command/useCommand'
 import { useCommonUseStore } from '@/stores/common-use'
@@ -7,7 +7,7 @@ import { useCommonUseStore } from '@/stores/common-use'
  * 常用页设置项的读 + 写（页面私有）。
  *
  * 读：`stores/common-use.ts` 的 `options` 投影（`readCommonUseOptions` 的唯一出口在数据层）。
- * 写：`useCommand('commonUse.setOption')`，一条命令覆盖 12 个键（含 `cyExport.ext` 这类点路径）。
+ * 写：`useCommand('commonUse.setOption')`，一条命令覆盖 17 个键（含 `cyExport.ext` 这类点路径）。
  *
  * 为什么要有这一层：面板里 20 多个控件都要"显示当前值 + 改了立刻落盘"，
  * 每个控件各写一遍 `:model-value` + `@update:model-value` 会出现 20 份一样的样板。

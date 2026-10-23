@@ -128,7 +128,7 @@ export async function patchFontSetSettings(
 }
 
 /**
- * 常用页在 `sj_set.json` 里的 8 个键。
+ * 常用页在 `sj_set.json` 里的 17 个键。
  *
  * 来源：原版各子面板调 `getKey("cy…")` 的实参（`cyAutoFillColor` / `cyDeleteNext` / `cyExport` /
  * `cyImportToLinkObject` / `cyLinkObject` / `cyOptimizeAll` / `cyOptimizeDeleteAllEmpty` /
@@ -144,6 +144,10 @@ export const COMMON_USE_SETTING_KEYS = [
   'cyShowBatch',
   'cyShowCompress',
   'cyShowSetFolder',
+  // 常用页两块区域的显隐：官方 `:35430`/`:35522` 两行绑 cyShowZoom、`:35614` 变换区绑 cyShowTransformation；
+  // 开关在 /set「常用功能面板」`:61445-61449`/`:61454-61458`，默认值 `:65813`/`:65814` 都是 true
+  'cyShowTransformation',
+  'cyShowZoom',
   'cyImportToLinkObject',
   'cyLinkObject',
   'cyOpenDranInToLinkObject',

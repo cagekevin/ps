@@ -67,8 +67,8 @@ describe('读那 8 个键', () => {
     expect(value).toEqual({})
   })
 
-  it('白名单就是那 15 个键（T-88b2 补 4 个自动嵌入开关；T-97-3 补 3 个 cyShow*）', () => {
-    expect(COMMON_USE_SETTING_KEYS).toHaveLength(15)
+  it('白名单就是那 17 个键（T-88b2 补 4 个自动嵌入开关；T-97-3 补 3 个 cyShow*；T-97-5 补 2 个区域显隐）', () => {
+    expect(COMMON_USE_SETTING_KEYS).toHaveLength(17)
     expect([...COMMON_USE_SETTING_KEYS]).toEqual([
       'cyAutoFillColor',
       'cyClipMaskAutoEmbed',
@@ -78,6 +78,8 @@ describe('读那 8 个键', () => {
       'cyShowBatch',
       'cyShowCompress',
       'cyShowSetFolder',
+      'cyShowTransformation',
+      'cyShowZoom',
       'cyImportToLinkObject',
       'cyLinkObject',
       'cyOpenDranInToLinkObject',

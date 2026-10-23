@@ -1,4 +1,4 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import CheckBox from '@/components/CheckBox.vue'
@@ -32,13 +32,25 @@ const copyShortcutScripts = useCommand('system.copyToScripts')
 const resetShortcutScripts = useCommand('system.resetQuickKeys')
 const setShowCmd = useCommand('commonUse.setShow')
 const resetAllCmd = useCommand('commonUse.resetAll')
+const setOptionCmd = useCommand('commonUse.setOption')
 
 const commonUse = useCommonUseStore()
-const { tiles: commonUseTiles } = storeToRefs(commonUse)
+const { tiles: commonUseTiles, options: commonUseOptions } = storeToRefs(commonUse)
 
 function setShow(id: string, show: boolean) {
   void setShowCmd.run({ id, show })
 }
+
+/**
+ * `/commonUse` 两块区域的显隐开关（官方「常用功能面板」里最上面两个勾选：
+ * 显示缩放 `:61445-61449` / 显示变换元素 `:61454-61458`，键名 `set.cyShowZoom` / `set.cyShowTransformation`）。
+ * 官方默认都是 true（`:65813`/`:65814`），所以缺键 = 勾上。写回落 `sj_set.json`，写完重读投影。
+ */
+function setCommonUseOption(path: string, value: boolean) {
+  void setOptionCmd.run({ path, value }).then(() => commonUse.loadOptions())
+}
+const showZoom = computed(() => commonUseOptions.value.cyShowZoom !== false)
+const showTransformation = computed(() => commonUseOptions.value.cyShowTransformation !== false)
 
 function resetCommonUse() {
   void resetAllCmd.run()
@@ -47,6 +59,7 @@ function resetCommonUse() {
 // 设置页打开时读一次（命令写成功后由 store 的订阅刷新）
 onMounted(() => {
   void commonUse.load()
+  void commonUse.loadOptions()
 })
 const buildTime = __BUILD_TIME__
 
@@ -240,6 +253,24 @@ onUnmounted(() => {
         底部一个「恢复默认」按钮走官方种子重置（`cya1…cya12`，`cya12` 在最后）。
         页面只经 `useCommand`，不 import 数据层。
       -->
+      <!-- 最上面两个勾选是 /commonUse 两块区域的显隐（官方 `:61443-61460`，写 `sj_set.json`） -->
+      <SettingsRow>
+        <CheckBox
+          :model-value="showZoom"
+          @update:model-value="(show: boolean) => setCommonUseOption('cyShowZoom', show)"
+        >
+          显示缩放
+        </CheckBox>
+      </SettingsRow>
+      <SettingsRow>
+        <CheckBox
+          :model-value="showTransformation"
+          @update:model-value="(show: boolean) => setCommonUseOption('cyShowTransformation', show)"
+        >
+          显示变换元素
+        </CheckBox>
+      </SettingsRow>
+
       <SettingsRow v-for="tile in commonUseTiles" :key="tile.id">
         <CheckBox
           :model-value="tile.visible"

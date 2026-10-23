@@ -1,4 +1,4 @@
-﻿import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 import { reactive, ref } from 'vue'
@@ -16,6 +16,28 @@ vi.mock('@/stores/cloud', () => ({
     queuedUnits: ref(0),
   }),
 }))
+/** 设置页要用到的命令：只留"点了写什么"这一层可观察结果 */
+const cmds = vi.hoisted(() => ({
+  setOption: vi.fn(async (_payload: unknown) => true),
+  setShow: vi.fn(async (_payload: unknown) => true),
+  resetAll: vi.fn(async () => true),
+}))
+vi.mock('@/components/command/useCommand', () => ({
+  useCommand: (id: string) => ({
+    run:
+      id === 'commonUse.setOption'
+        ? cmds.setOption
+        : id === 'commonUse.setShow'
+          ? cmds.setShow
+          : id === 'commonUse.resetAll'
+            ? cmds.resetAll
+            : vi.fn(async () => true),
+    disabled: false,
+    running: false,
+  }),
+}))
+/** `/commonUse` 的 sj_set.json 投影：T-97-5 的两个显隐键从这里读 */
+const commonUseOptions = ref<Record<string, unknown>>({})
 vi.mock('@/stores/common-use', () => ({
   useCommonUseStore: () => ({
     tiles: ref([
@@ -48,7 +70,7 @@ vi.mock('@/stores/common-use', () => ({
     loadOptions: vi.fn(async () => {}),
     loadCollapsed: vi.fn(),
     collapsed: ref({}),
-    options: ref({}),
+    options: commonUseOptions,
   }),
 }))
 
@@ -104,5 +126,54 @@ describe('常用功能面板区块（A2）', () => {
     expect(text).toContain('常用功能面板')
     expect(text).toContain('嵌入图片')
     expect(text).toContain('恢复默认')
+  })
+})
+
+describe('T-97-5：两块区域的显隐开关（官方 :61445-61449 / :61454-61458）', () => {
+  beforeEach(() => {
+    commonUseOptions.value = {}
+    cmds.setOption.mockClear()
+  })
+
+  function checkboxOf(wrapper: ReturnType<typeof mount>, label: string) {
+    return wrapper.findAll('.check-box').find((el) => el.text().includes(label))
+  }
+
+  it('两个勾选在「常用功能面板」里，缺键 = 官方默认 true → 都勾上', () => {
+    const wrapper = mount(SetPage, {
+      global: { stubs: { PageShell: { template: '<div><slot/></div>' } } },
+    })
+
+    for (const label of ['显示缩放', '显示变换元素']) {
+      const box = checkboxOf(wrapper, label)
+      expect(box, `应有「${label}」勾选`).toBeTruthy()
+      expect(box!.find('[role="checkbox"]').attributes('aria-checked')).toBe('true')
+    }
+  })
+
+  it('文件里是 false → 对应勾选不勾', () => {
+    commonUseOptions.value = { cyShowZoom: false, cyShowTransformation: true }
+    const wrapper = mount(SetPage, {
+      global: { stubs: { PageShell: { template: '<div><slot/></div>' } } },
+    })
+
+    expect(
+      checkboxOf(wrapper, '显示缩放')!.find('[role="checkbox"]').attributes('aria-checked'),
+    ).toBe('false')
+    expect(
+      checkboxOf(wrapper, '显示变换元素')!.find('[role="checkbox"]').attributes('aria-checked'),
+    ).toBe('true')
+  })
+
+  it('点一下 → 写回 sj_set.json 的那个键（真值取反）', async () => {
+    const wrapper = mount(SetPage, {
+      global: { stubs: { PageShell: { template: '<div><slot/></div>' } } },
+    })
+
+    await checkboxOf(wrapper, '显示缩放')!.find('[role="checkbox"]').trigger('click')
+    expect(cmds.setOption).toHaveBeenCalledWith({ path: 'cyShowZoom', value: false })
+
+    await checkboxOf(wrapper, '显示变换元素')!.find('[role="checkbox"]').trigger('click')
+    expect(cmds.setOption).toHaveBeenCalledWith({ path: 'cyShowTransformation', value: false })
   })
 })

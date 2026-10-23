@@ -558,3 +558,52 @@ describe('T-97-4：放大/缩小两行（官方 baseInput + 展开箭头 + 4 颗
     expect(rows[1].attributes('style') ?? '').toContain('display: none')
   })
 })
+
+describe('T-97-5：两块区域的显隐跟着 sj_set.json 走（官方 cyShowZoom :35430 / cyShowTransformation :35614）', () => {
+  it('文件里没有这两个键（= 官方默认 true）→ 两行与翻转区都显示，分隔线也在', async () => {
+    store.tiles.value = [tile(0, '修正模糊')]
+    const wrapper = mount(Page)
+    await flushPromises()
+
+    expect(wrapper.findAll('.page-common-use__row')).toHaveLength(2)
+    expect(wrapper.findAll('.page-common-use__flip button')).toHaveLength(6)
+    expect(wrapper.find('.page-common-use__rule').exists()).toBe(true)
+  })
+
+  it('cyShowZoom:false → 放大/缩小两行消失（含输入框与预设），翻转区与分隔线仍在', async () => {
+    store.options.value = { cyShowZoom: false }
+    store.tiles.value = [tile(0, '修正模糊')]
+    const wrapper = mount(Page)
+    await flushPromises()
+
+    expect(wrapper.findAll('.page-common-use__row')).toHaveLength(0)
+    expect(wrapper.find('button[aria-label="展开放大档位"]').exists()).toBe(false)
+    expect(wrapper.findAll('input')).toHaveLength(0)
+    expect(wrapper.findAll('.page-common-use__flip button')).toHaveLength(6)
+    expect(wrapper.find('.page-common-use__rule').exists()).toBe(true)
+  })
+
+  it('cyShowTransformation:false → 翻转 6 颗消失，两行仍在', async () => {
+    store.options.value = { cyShowTransformation: false }
+    store.tiles.value = [tile(0, '修正模糊')]
+    const wrapper = mount(Page)
+    await flushPromises()
+
+    expect(wrapper.find('.page-common-use__flip').exists()).toBe(false)
+    expect(wrapper.findAll('.page-common-use__row')).toHaveLength(2)
+    expect(wrapper.find('.page-common-use__rule').exists()).toBe(true)
+  })
+
+  it('两个都关掉 → 网格区上方整块消失，分隔线也没有（官方 `:35633` 的 or 判断）', async () => {
+    store.options.value = { cyShowZoom: false, cyShowTransformation: false }
+    store.tiles.value = [tile(0, '嵌入图片')]
+    const wrapper = mount(Page)
+    await flushPromises()
+
+    expect(wrapper.findAll('.page-common-use__row')).toHaveLength(0)
+    expect(wrapper.find('.page-common-use__flip').exists()).toBe(false)
+    expect(wrapper.find('.page-common-use__rule').exists()).toBe(false)
+    // 网格还在：关掉的是两块区域，不是整页
+    expect(wrapper.findAll('.use-grid-item')).toHaveLength(1)
+  })
+})

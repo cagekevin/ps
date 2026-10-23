@@ -45,6 +45,14 @@ import UseGridItem from './components/UseGridItem.vue'
 const store = useCommonUseStore()
 const { tiles, collapsed, options, loading, error, degraded } = storeToRefs(store)
 
+/**
+ * 两块区域的显隐 = `sj_set.json` 的 `cyShowZoom` / `cyShowTransformation`。
+ * 官方默认都是 true（`:65813`/`:65814`），所以**文件里缺键 = 显示**，只有显式 `false` 才隐藏。
+ * 开关在 /set「常用功能面板」（官方 `:61445-61449`/`:61454-61458`）。
+ */
+const showZoom = computed(() => options.value.cyShowZoom !== false)
+const showTransformation = computed(() => options.value.cyShowTransformation !== false)
+
 const zoomCmd = useCommand('commonUse.zoom')
 /**
  * 放大 / 缩小两行的本地状态（官方同样是组件本地：`enlargeVal:""`/`enlargeIstrue:false`，`:37551-37557`）。
@@ -323,70 +331,79 @@ function flip(direction: FlipDirection) {
     <template v-else-if="ready">
       <!-- 放大行 / 缩小行：左胶囊 + 4 颗 25% 预设（官方 `.partBtn-wrap` + `.btn-small-4`，`:35485-35489`） -->
       <!-- 放大 / 缩小两行：官方 `baseInput`（可键入、回车执行）+ 右侧展开箭头 + 4 颗预设（`:35430-35499`）；
-           箭头展开第二排 10 颗整体档位（`enlargeAll`/`narrowAll`，`v-show` `:35500`/`:35522`）；两行互斥（`:38163-38170`） -->
-      <SettingsRow class="page-common-use__row">
-        <span class="page-common-use__label">放大</span>
-        <GInput
-          v-model="enlargeVal"
-          size="small"
-          class="page-common-use__size"
-          aria-label="放大倍数"
-          @enter="inputSize('enlarge')"
-        />
-        <GButton size="small" type="text" aria-label="展开放大档位" @click="toggleEnlarge">
-          <Icon name="#iconzhankaizhedie" size="xs" />
-        </GButton>
-        <GButton
-          v-for="scale in ENLARGE_PRESETS"
-          :key="scale"
-          size="small"
-          width="quarter"
-          @click="zoom(scale)"
-        >
-          {{ scale }}
-        </GButton>
-      </SettingsRow>
-      <div v-show="enlargeOpen" class="page-common-use__zoom-all">
-        <GButton
-          v-for="scale in ENLARGE_ALL_PRESETS"
-          :key="scale"
-          size="small"
-          @click="zoom(scale)"
-        >
-          {{ scale }}
-        </GButton>
-      </div>
+           箭头展开第二排 10 颗整体档位（`enlargeAll`/`narrowAll`，`v-show` `:35500`/`:35522`）；两行互斥（`:38163-38170`）。
+           整块由 `set.cyShowZoom` 控制（`:35430`、`:35522` 两处三元分支）。 -->
+      <template v-if="showZoom">
+        <SettingsRow class="page-common-use__row">
+          <span class="page-common-use__label">放大</span>
+          <GInput
+            v-model="enlargeVal"
+            size="small"
+            class="page-common-use__size"
+            aria-label="放大倍数"
+            @enter="inputSize('enlarge')"
+          />
+          <GButton size="small" type="text" aria-label="展开放大档位" @click="toggleEnlarge">
+            <Icon name="#iconzhankaizhedie" size="xs" />
+          </GButton>
+          <GButton
+            v-for="scale in ENLARGE_PRESETS"
+            :key="scale"
+            size="small"
+            width="quarter"
+            @click="zoom(scale)"
+          >
+            {{ scale }}
+          </GButton>
+        </SettingsRow>
+        <div v-show="enlargeOpen" class="page-common-use__zoom-all">
+          <GButton
+            v-for="scale in ENLARGE_ALL_PRESETS"
+            :key="scale"
+            size="small"
+            @click="zoom(scale)"
+          >
+            {{ scale }}
+          </GButton>
+        </div>
 
-      <SettingsRow class="page-common-use__row">
-        <span class="page-common-use__label">缩小</span>
-        <GInput
-          v-model="narrowVal"
-          size="small"
-          class="page-common-use__size"
-          aria-label="缩小倍数"
-          @enter="inputSize('narrow')"
-        />
-        <GButton size="small" type="text" aria-label="展开缩小档位" @click="toggleNarrow">
-          <Icon name="#iconzhankaizhedie" size="xs" />
-        </GButton>
-        <GButton
-          v-for="scale in NARROW_PRESETS"
-          :key="scale"
-          size="small"
-          width="quarter"
-          @click="zoom(scale)"
-        >
-          {{ scale }}
-        </GButton>
-      </SettingsRow>
-      <div v-show="narrowOpen" class="page-common-use__zoom-all">
-        <GButton v-for="scale in NARROW_ALL_PRESETS" :key="scale" size="small" @click="zoom(scale)">
-          {{ scale }}
-        </GButton>
-      </div>
+        <SettingsRow class="page-common-use__row">
+          <span class="page-common-use__label">缩小</span>
+          <GInput
+            v-model="narrowVal"
+            size="small"
+            class="page-common-use__size"
+            aria-label="缩小倍数"
+            @enter="inputSize('narrow')"
+          />
+          <GButton size="small" type="text" aria-label="展开缩小档位" @click="toggleNarrow">
+            <Icon name="#iconzhankaizhedie" size="xs" />
+          </GButton>
+          <GButton
+            v-for="scale in NARROW_PRESETS"
+            :key="scale"
+            size="small"
+            width="quarter"
+            @click="zoom(scale)"
+          >
+            {{ scale }}
+          </GButton>
+        </SettingsRow>
+        <div v-show="narrowOpen" class="page-common-use__zoom-all">
+          <GButton
+            v-for="scale in NARROW_ALL_PRESETS"
+            :key="scale"
+            size="small"
+            @click="zoom(scale)"
+          >
+            {{ scale }}
+          </GButton>
+        </div>
+      </template>
 
-      <!-- 翻转 6 颗：图标按钮，18px（官方 `baseIcon svgWidth:18px`，`:35617-35621`） -->
-      <div class="page-common-use__flip">
+      <!-- 翻转 6 颗：图标按钮，18px（官方 `baseIcon svgWidth:18px`，`:35617-35621`）。
+           整块由 `set.cyShowTransformation` 控制（`:35614`）。 -->
+      <div v-if="showTransformation" class="page-common-use__flip">
         <GButton
           v-for="item in flipItems"
           :key="item.text"
@@ -400,7 +417,8 @@ function flip(direction: FlipDirection) {
         </GButton>
       </div>
 
-      <hr class="page-common-use__rule" />
+      <!-- 分隔线只在两块里至少一块显示时才出（官方 `cyShowTransformation || cyShowZoom ? <hr>`，`:35633`） -->
+      <hr v-if="showZoom || showTransformation" class="page-common-use__rule" />
 
       <!-- 功能格：顺序来自 sj_commonFunction.json（页面不写任何 id 字面量）；每行 3 个 -->
       <div ref="gridRef" v-if="tiles.length" class="page-common-use__grid">
@@ -442,7 +460,9 @@ function flip(direction: FlipDirection) {
 /* 行距：官方 `.theme-mt` 8px / `.theme-mt-row` 12px（CSS 位置见规格 35523 / 35615） */
 .page-common-use__row + .page-common-use__row,
 .page-common-use__row + .page-common-use__flip,
-.page-common-use__flip + .page-common-use__rule {
+.page-common-use__flip + .page-common-use__rule,
+/* 只显示放大/缩小、不显示翻转时，分隔线的上一个兄弟是第二排档位块 */
+.page-common-use__zoom-all + .page-common-use__rule {
   margin-top: var(--sp-4);
 }
 
