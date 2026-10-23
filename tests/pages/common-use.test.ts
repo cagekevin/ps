@@ -27,6 +27,7 @@ const commands = vi.hoisted(() => ({
   exportImages: vi.fn(async () => true),
   swapWireframeFill: vi.fn(async () => true),
   setOption: vi.fn(async () => true),
+  addToPanel: vi.fn(async (_payload: unknown) => true),
 }))
 
 /** 每个用例换一份新的响应式假 store（`storeToRefs` 需要真响应式对象） */
@@ -46,6 +47,11 @@ let store!: FakeStore
 
 vi.mock('@/stores/common-use', () => ({ useCommonUseStore: () => store }))
 
+// 页面右键只读 locks[0].id（官方 $freePanelBox.show 的弹层我们还没有，D-45）
+vi.mock('@/stores/free-panel', () => ({
+  useFreePanelStore: () => ({ blocks: [{ id: 'b1' }] }),
+}))
+
 vi.mock('@/components/command/useCommand', () => ({
   useCommand: (id: string) => {
     const map: Record<string, unknown> = {
@@ -63,6 +69,7 @@ vi.mock('@/components/command/useCommand', () => ({
       'commonUse.exportImages': commands.exportImages,
       'commonUse.swapWireframeFill': commands.swapWireframeFill,
       'commonUse.setOption': commands.setOption,
+      'freePanel.add': commands.addToPanel,
     }
     return {
       run: map[id] ?? commands.flip,
@@ -72,6 +79,7 @@ vi.mock('@/components/command/useCommand', () => ({
     }
   },
 }))
+const { useFeedbackStore } = await import('@/stores/feedback')
 const Page = (await import('@/pages/commonUse/index.vue')).default
 
 function tile(index: number, name: string, extra: Record<string, unknown> = {}) {
@@ -408,5 +416,53 @@ describe('T-97-1：14 格左键逐格断言（对齐官方 :37894 分派表）',
     expect(commands[item.command as keyof typeof commands]).toHaveBeenCalledTimes(1)
     // 官方这 10 格都不展开面板
     expect(wrapper.find('.page-common-use__panel').exists()).toBe(false)
+  })
+})
+
+describe('T-97-1b：右键三层（图标区 → 展开；其它区 → 加入自由面板）', () => {
+  it('图标块右键 → 展开面板（官方 .context-svg-wrap 的 open，:35682）', async () => {
+    store.tiles.value = [tile(0, '自定义变换', { isMore: true, comName: 'comcustomChange' })]
+    const wrapper = mount(Page)
+    await flushPromises()
+
+    await wrapper.find('.use-grid-item__icon').trigger('contextmenu')
+    await flushPromises()
+
+    expect(wrapper.find('.page-common-use__panel').exists()).toBe(true)
+    expect(commands.setCollapsed).toHaveBeenCalledWith({ id: 't0', collapsed: false })
+    // `.stop`：图标区右键不许冒泡到外层的"加入自由面板"
+    expect(commands.addToPanel).not.toHaveBeenCalled()
+  })
+
+  it('格子其它区域右键 → 加入自由面板（官方 .context-one-wrap 的 fpFunction，:35648）', async () => {
+    store.tiles.value = [tile(0, '修正模糊')]
+    const wrapper = mount(Page)
+    await flushPromises()
+
+    await wrapper.find('.use-grid-item').trigger('contextmenu')
+    await flushPromises()
+
+    expect(commands.addToPanel).toHaveBeenCalledTimes(1)
+    expect(commands.addToPanel.mock.calls[0][0]).toMatchObject({
+      blockId: 'b1',
+      items: [{ text: '修正模糊', key: expect.any(String) }],
+    })
+    expect(commands.setCollapsed).not.toHaveBeenCalled()
+  })
+
+  it('两条官方提示：自动填充颜色 / 有子面板的格子 → 只提示，不加入', async () => {
+    store.tiles.value = [tile(0, '自动填充颜色'), tile(1, '嵌入图片', { comName: 'comembed' })]
+    const wrapper = mount(Page)
+    await flushPromises()
+
+    const items = wrapper.findAll('.use-grid-item')
+    await items[0].trigger('contextmenu')
+    await items[1].trigger('contextmenu')
+    await flushPromises()
+
+    expect(commands.addToPanel).not.toHaveBeenCalled()
+    const texts = useFeedbackStore().toasts.map((t) => t.text)
+    expect(texts).toContain('不支持添加自定义面板')
+    expect(texts).toContain('请添加展开后的功能')
   })
 })

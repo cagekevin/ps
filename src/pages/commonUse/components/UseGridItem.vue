@@ -1,4 +1,4 @@
-﻿<script setup lang="ts">
+<script setup lang="ts">
 import Icon from '@/components/Icon.vue'
 import type { CommonUseTile } from '@/domain/common-use'
 
@@ -13,7 +13,13 @@ import type { CommonUseTile } from '@/domain/common-use'
  */
 const props = defineProps<{ tile: CommonUseTile }>()
 
-defineEmits<{ (e: 'click'): void; (e: 'contextmenu', ev: MouseEvent): void }>()
+defineEmits<{
+  (e: 'click'): void
+  /** 格子非图标区右键 → 官方 `fpFunction`（加入自由面板 / 两条提示） */
+  (e: 'contextmenu', ev: MouseEvent): void
+  /** 图标块右键 → 官方 `.context-svg-wrap` 的 `open`（展开面板，`app.v4.js:35682`） */
+  (e: 'icon-contextmenu', ev: MouseEvent): void
+}>()
 </script>
 
 <template>
@@ -25,7 +31,7 @@ defineEmits<{ (e: 'click'): void; (e: 'contextmenu', ev: MouseEvent): void }>()
     @click="$emit('click')"
     @contextmenu.prevent="$emit('contextmenu', $event)"
   >
-    <span class="use-grid-item__icon">
+    <span class="use-grid-item__icon" @contextmenu.prevent.stop="$emit('icon-contextmenu', $event)">
       <Icon :name="tile.icon.rest" size="lg" />
       <span v-if="tile.ismark" class="use-grid-item__mark" aria-hidden="true" />
     </span>

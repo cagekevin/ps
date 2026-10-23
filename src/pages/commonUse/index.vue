@@ -222,6 +222,16 @@ function onGridMouseDown(event: MouseEvent) {
   })
 }
 /**
+ * 展开/收起一格的面板 = 官方 `open(e)`（`app.v4.js:38192-38213` 的 `openfun` 再点收起）。
+ * 两个入口都调它：左键（仅 3 格，case 22 `:37923`）与**图标块右键**（`:35682-35683`）。
+ */
+function expandTile(tile: CommonUseTile) {
+  const open = expandedId.value !== tile.id
+  expandedId.value = open ? tile.id : ''
+  void setCollapsedCmd.run({ id: tile.id, collapsed: !open })
+}
+
+/**
  * 左键：**只查官方分派表**（`domain/common-use-dispatch.ts`，表来自 `app.v4.js:37894`）。
  * 四种动作：执行命令 / 翻转设置 / 展开面板 / 什么都不做——不在这里写"有子面板就展开"。
  */
@@ -231,9 +241,7 @@ function toggle(tile: CommonUseTile) {
 
   if (action.kind === 'expand') {
     // 官方 `open(e)`（`:37923`）：只有"自定义变换 / 参考线工具 / 按间距分布"三格走这里
-    const open = expandedId.value !== tile.id
-    expandedId.value = open ? tile.id : ''
-    void setCollapsedCmd.run({ id: tile.id, collapsed: !open })
+    expandTile(tile)
     return
   }
 
@@ -337,6 +345,7 @@ function flip(direction: FlipDirection) {
               :tile="tile"
               @click="toggle(tile)"
               @contextmenu="onGridContextMenu(tile)"
+              @icon-contextmenu="expandTile(tile)"
               @mousedown="onGridMouseDown($event)"
             />
             <span
