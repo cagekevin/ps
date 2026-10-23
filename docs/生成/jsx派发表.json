@@ -1,0 +1,941 @@
+{
+  "generatedFrom": "docs/原版/01-原版源码/panel/js/app.v4.js",
+  "sourceLineCount": 73946,
+  "dispatchTableLine": 17058,
+  "dispatchCount": 36,
+  "callCount": 114,
+  "dispatch": [
+    {
+      "key": "cmm_useRename",
+      "caseNo": 98,
+      "jsxName": "cmm_batchName",
+      "successText": "重命名成功",
+      "channel": "jsxHistory",
+      "readsResult": true,
+      "line": 17058,
+      "bodyLine": 17227
+    },
+    {
+      "key": "cy_bacthExportPsdToImage",
+      "caseNo": 48,
+      "jsxName": "cy_bacthExportPsdToImage",
+      "successText": "",
+      "channel": "jsxHistory",
+      "readsResult": false,
+      "line": 17058,
+      "bodyLine": null
+    },
+    {
+      "key": "cy_batchExportLayer",
+      "caseNo": 44,
+      "jsxName": "cy_BatchExportLayer",
+      "successText": "导出成功",
+      "channel": "jsxHistoryNoCheck",
+      "readsResult": true,
+      "line": 17058,
+      "bodyLine": 17111
+    },
+    {
+      "key": "cy_batchExportSecondLayer",
+      "caseNo": 46,
+      "jsxName": "cy_BatchExportSecondLayer",
+      "successText": "导出成功",
+      "channel": "jsxHistoryNoCheck",
+      "readsResult": true,
+      "line": 17058,
+      "bodyLine": 17114
+    },
+    {
+      "key": "cy_clearCutGuide",
+      "caseNo": 61,
+      "jsxName": "cy_guideFunction",
+      "successText": "执行成功",
+      "channel": "jsxHistoryNoCheck",
+      "readsResult": false,
+      "line": 17058,
+      "bodyLine": 17171
+    },
+    {
+      "key": "cy_coorectBlur",
+      "caseNo": 34,
+      "jsxName": "cy_correctRectangleBlur",
+      "successText": "",
+      "channel": "jsxHistory",
+      "readsResult": false,
+      "line": 17058,
+      "bodyLine": 17096
+    },
+    {
+      "key": "cy_distributedByPitch",
+      "caseNo": 63,
+      "jsxName": "cy_distributedByPitch",
+      "successText": "执行成功",
+      "channel": "jsxHistory",
+      "readsResult": false,
+      "line": 17058,
+      "bodyLine": 17175
+    },
+    {
+      "key": "cy_embedImage",
+      "caseNo": 28,
+      "jsxName": "cy_insertionImage",
+      "successText": "",
+      "channel": "jsxHistory",
+      "readsResult": false,
+      "line": 17058,
+      "bodyLine": 17087
+    },
+    {
+      "key": "cy_embedMultipleImage",
+      "caseNo": 30,
+      "jsxName": "cy_embedMultipleImage",
+      "successText": "",
+      "channel": "jsxHistory",
+      "readsResult": false,
+      "line": 17058,
+      "bodyLine": null
+    },
+    {
+      "key": "cy_exchangeLayerColor",
+      "caseNo": 70,
+      "jsxName": "cy_exchangeLayerColor",
+      "successText": "执行成功",
+      "channel": "jsxHistory",
+      "readsResult": false,
+      "line": 17058,
+      "bodyLine": 17184
+    },
+    {
+      "key": "cy_exportImage",
+      "caseNo": 40,
+      "jsxName": "cy_ExportImage",
+      "successText": "导出成功",
+      "channel": "jsxHistoryNoCheck",
+      "readsResult": true,
+      "line": 17058,
+      "bodyLine": 17105
+    },
+    {
+      "key": "cy_exportOpenFolder",
+      "caseNo": 42,
+      "jsxName": "cy_openDirectory",
+      "successText": "打开成功",
+      "channel": "jsxNoCheck",
+      "readsResult": false,
+      "line": 17058,
+      "bodyLine": 17108
+    },
+    {
+      "key": "cy_importMultipleImage",
+      "caseNo": 32,
+      "jsxName": "cy_importMultipleImage",
+      "successText": "",
+      "channel": "jsxHistory",
+      "readsResult": false,
+      "line": 17058,
+      "bodyLine": null
+    },
+    {
+      "key": "cy_layerReplace",
+      "caseNo": 66,
+      "jsxName": "cy_LayerReplace",
+      "successText": "执行成功",
+      "channel": "jsxHistory",
+      "readsResult": false,
+      "line": 17058,
+      "bodyLine": 17178
+    },
+    {
+      "key": "cy_locationTrade",
+      "caseNo": 68,
+      "jsxName": "cy_locationTrade",
+      "successText": "执行成功",
+      "channel": "jsxHistory",
+      "readsResult": false,
+      "line": 17058,
+      "bodyLine": 17181
+    },
+    {
+      "key": "cy_optimizeDoc",
+      "caseNo": 38,
+      "jsxName": "cy_optimizeDoc",
+      "successText": "优化成功",
+      "channel": "jsxHistoryNoCheck",
+      "readsResult": true,
+      "line": 17058,
+      "bodyLine": 17102
+    },
+    {
+      "key": "cy_swapWireframeFill",
+      "caseNo": 36,
+      "jsxName": "cy_swapWireframeFill",
+      "successText": "",
+      "channel": "jsxHistory",
+      "readsResult": false,
+      "line": 17058,
+      "bodyLine": 17099
+    },
+    {
+      "key": "cy_transformPosition",
+      "caseNo": 26,
+      "jsxName": "cy_transformPosition",
+      "successText": "",
+      "channel": "jsxHistory",
+      "readsResult": false,
+      "line": 17058,
+      "bodyLine": 17084
+    },
+    {
+      "key": "cy_useGride",
+      "caseNo": 59,
+      "jsxName": "cy_createSafeAreaGuide",
+      "successText": "生成成功",
+      "channel": "jsxHistoryNoCheck",
+      "readsResult": false,
+      "line": 17058,
+      "bodyLine": 17168
+    },
+    {
+      "key": "cy_zoom",
+      "caseNo": 24,
+      "jsxName": "cy_zoom",
+      "successText": "缩放成功",
+      "channel": "jsx",
+      "readsResult": false,
+      "line": 17058,
+      "bodyLine": 17081
+    },
+    {
+      "key": "dz_useAction",
+      "caseNo": 96,
+      "jsxName": "dz_callAction",
+      "successText": "执行成功",
+      "channel": "jsxHistoryNoCheck",
+      "readsResult": false,
+      "line": 17058,
+      "bodyLine": 17223
+    },
+    {
+      "key": "zdy_customBuildTransform",
+      "caseNo": 56,
+      "jsxName": "cy_customBuildTransform",
+      "successText": "生成成功",
+      "channel": "jsxHistory",
+      "readsResult": true,
+      "line": 17058,
+      "bodyLine": 17165
+    },
+    {
+      "key": "zdy_generate",
+      "caseNo": 12,
+      "jsxName": "zdy_generate",
+      "successText": "生成成功",
+      "channel": "jsxHistory",
+      "readsResult": true,
+      "line": 17058,
+      "bodyLine": 17061
+    },
+    {
+      "key": "zdy_mergeRectangles",
+      "caseNo": 14,
+      "jsxName": "zdy_mergeRectangles",
+      "successText": "",
+      "channel": "jsxHistory",
+      "readsResult": false,
+      "line": 17058,
+      "bodyLine": null
+    },
+    {
+      "key": "zt_changeTextBranchMerge",
+      "caseNo": 94,
+      "jsxName": "zt_textBranchMerge",
+      "successText": "",
+      "channel": "jsxHistory",
+      "readsResult": false,
+      "line": 17058,
+      "bodyLine": 17220
+    },
+    {
+      "key": "zt_copyFontInfo",
+      "caseNo": 82,
+      "jsxName": "zt_copyFontInfo",
+      "successText": "",
+      "channel": "jsxHistory",
+      "readsResult": false,
+      "line": 17058,
+      "bodyLine": null
+    },
+    {
+      "key": "zt_createButton",
+      "caseNo": 80,
+      "jsxName": "zt_createButton",
+      "successText": "创建按钮成功",
+      "channel": "jsxHistory",
+      "readsResult": false,
+      "line": 17058,
+      "bodyLine": 17199
+    },
+    {
+      "key": "zt_pasteFontInfo",
+      "caseNo": 84,
+      "jsxName": "zt_pasteFontInfo",
+      "successText": "",
+      "channel": "jsxHistory",
+      "readsResult": false,
+      "line": 17058,
+      "bodyLine": null
+    },
+    {
+      "key": "zt_setBackgroudAlign",
+      "caseNo": 92,
+      "jsxName": "zt_setBackrgoudAlign",
+      "successText": "",
+      "channel": "jsxHistory",
+      "readsResult": false,
+      "line": 17058,
+      "bodyLine": 17217
+    },
+    {
+      "key": "zt_setFontLeading",
+      "caseNo": 74,
+      "jsxName": "zt_setFontLeading",
+      "successText": "",
+      "channel": "jsxHistory",
+      "readsResult": false,
+      "line": 17058,
+      "bodyLine": null
+    },
+    {
+      "key": "zt_setFontSize",
+      "caseNo": 72,
+      "jsxName": "zt_setFontSize",
+      "successText": "",
+      "channel": "jsxHistory",
+      "readsResult": false,
+      "line": 17058,
+      "bodyLine": null
+    },
+    {
+      "key": "zt_setFontTracking",
+      "caseNo": 76,
+      "jsxName": "zt_setFontTracking",
+      "successText": "",
+      "channel": "jsxHistory",
+      "readsResult": false,
+      "line": 17058,
+      "bodyLine": null
+    },
+    {
+      "key": "zt_setLeftRightAlign",
+      "caseNo": 88,
+      "jsxName": "zt_setLeftRightAlign",
+      "successText": "",
+      "channel": "jsxHistory",
+      "readsResult": false,
+      "line": 17058,
+      "bodyLine": null
+    },
+    {
+      "key": "zt_setUpDownAlign",
+      "caseNo": 90,
+      "jsxName": "zt_setUpDownAlign",
+      "successText": "",
+      "channel": "jsxHistory",
+      "readsResult": false,
+      "line": 17058,
+      "bodyLine": null
+    },
+    {
+      "key": "zt_switchFontDirection",
+      "caseNo": 86,
+      "jsxName": "zt_switchFontDirection",
+      "successText": "",
+      "channel": "jsxHistory",
+      "readsResult": false,
+      "line": 17058,
+      "bodyLine": 17208
+    },
+    {
+      "key": "zt_translate",
+      "caseNo": 78,
+      "jsxName": "zt_translate",
+      "successText": "",
+      "channel": "jsxHistory",
+      "readsResult": false,
+      "line": 17058,
+      "bodyLine": null
+    }
+  ],
+  "calls": [
+    {
+      "name": "cmm_batchName",
+      "channel": "jsxHistory",
+      "line": 57234
+    },
+    {
+      "name": "cmm_setLayerColor",
+      "channel": "jsx",
+      "line": 57220
+    },
+    {
+      "name": "cy_BacthExportPsdToImage",
+      "channel": "jsxHistoryNoCheck",
+      "line": 17139
+    },
+    {
+      "name": "cy_BatchExportLayer",
+      "channel": "jsxHistoryNoCheck",
+      "line": 37831
+    },
+    {
+      "name": "cy_BatchExportSecondLayer",
+      "channel": "jsxHistoryNoCheck",
+      "line": 37860
+    },
+    {
+      "name": "cy_batchOptimizeDoc",
+      "channel": "jsxNoCheck",
+      "line": 36040
+    },
+    {
+      "name": "cy_changeStyleColor",
+      "channel": "jsxNoCheck",
+      "line": 50150
+    },
+    {
+      "name": "cy_correctRectangleBlur",
+      "channel": "jsxHistory",
+      "line": 37965
+    },
+    {
+      "name": "cy_createSafeAreaGuide",
+      "channel": "jsxHistoryNoCheck",
+      "line": 37228
+    },
+    {
+      "name": "cy_customBuildTransform",
+      "channel": "jsxHistory",
+      "line": 36417
+    },
+    {
+      "name": "cy_distributedByPitch",
+      "channel": "jsxHistory",
+      "line": 37356
+    },
+    {
+      "name": "cy_embedMultipleImage",
+      "channel": "jsxHistory",
+      "line": 37902
+    },
+    {
+      "name": "cy_exchangeLayerColor",
+      "channel": "jsxHistory",
+      "line": 37956
+    },
+    {
+      "name": "cy_ExportImage",
+      "channel": "jsxHistoryNoCheck",
+      "line": 37993
+    },
+    {
+      "name": "cy_getImagePath",
+      "channel": "jsx",
+      "line": 38090
+    },
+    {
+      "name": "cy_getPsdForFolder",
+      "channel": "jsxNoCheck",
+      "line": 17119
+    },
+    {
+      "name": "cy_guideFunction",
+      "channel": "jsxNoCheck",
+      "line": 37231
+    },
+    {
+      "name": "cy_importMultipleImage",
+      "channel": "jsxHistory",
+      "line": 38106
+    },
+    {
+      "name": "cy_insertionImage",
+      "channel": "jsxHistory",
+      "line": 37756
+    },
+    {
+      "name": "cy_LayerReplace",
+      "channel": "jsxHistory",
+      "line": 37959
+    },
+    {
+      "name": "cy_linkSmartObjectToSmartObject",
+      "channel": "jsxHistory",
+      "line": 35871
+    },
+    {
+      "name": "cy_locationTrade",
+      "channel": "jsxHistory",
+      "line": 37953
+    },
+    {
+      "name": "cy_openDirectory",
+      "channel": "jsxNoCheck",
+      "line": 37020
+    },
+    {
+      "name": "cy_optimizeDoc",
+      "channel": "jsxHistoryNoCheck",
+      "line": 38057
+    },
+    {
+      "name": "cy_smartFillColor",
+      "channel": "jsxHistoryNoCheck",
+      "line": 37877
+    },
+    {
+      "name": "cy_smartFillLineColor",
+      "channel": "jsxHistoryNoCheck",
+      "line": 37879
+    },
+    {
+      "name": "cy_smartReferenceLine",
+      "channel": "jsxHistoryNoCheck",
+      "line": 37219
+    },
+    {
+      "name": "cy_smartToLinkSmartObject",
+      "channel": "jsxHistory",
+      "line": 35891
+    },
+    {
+      "name": "cy_swapWireframeFill",
+      "channel": "jsxHistory",
+      "line": 17907
+    },
+    {
+      "name": "cy_transformPosition",
+      "channel": "jsxHistory",
+      "line": 38122
+    },
+    {
+      "name": "cy_zoom",
+      "channel": "jsx",
+      "line": 38144
+    },
+    {
+      "name": "doc_openPsdAsDuplicate",
+      "channel": "jsxNoCheck",
+      "line": 15223
+    },
+    {
+      "name": "dz_callAction",
+      "channel": "jsxHistoryNoCheck",
+      "line": 56163
+    },
+    {
+      "name": "dz_getActionList",
+      "channel": "jsxNoCheck",
+      "line": 55523
+    },
+    {
+      "name": "exportCurrentLayerToImage",
+      "channel": "jsxNoCheck",
+      "line": 54639
+    },
+    {
+      "name": "f_getScriptEventId",
+      "channel": "jsxNoCheck",
+      "line": 17775
+    },
+    {
+      "name": "File_copy",
+      "channel": "jsxNoCheck",
+      "line": 68030
+    },
+    {
+      "name": "File_openImage",
+      "channel": "jsxNoCheck",
+      "line": 37062
+    },
+    {
+      "name": "Fs_copyFolder",
+      "channel": "jsxNoCheck",
+      "line": 30820
+    },
+    {
+      "name": "Fs_deleteFolder",
+      "channel": "jsxNoCheck",
+      "line": 17368
+    },
+    {
+      "name": "Fs_openFolder",
+      "channel": "jsx",
+      "line": 25373
+    },
+    {
+      "name": "Fs_selectFolder",
+      "channel": "jsxNoCheck",
+      "line": 25243
+    },
+    {
+      "name": "layer_font_setFontSize",
+      "channel": "jsx",
+      "line": 42394
+    },
+    {
+      "name": "layer_font_setLeading",
+      "channel": "jsx",
+      "line": 42326
+    },
+    {
+      "name": "Layer_getTypeNumber",
+      "channel": "jsxNoCheck",
+      "line": 17929
+    },
+    {
+      "name": "Layer_isSelectLayer",
+      "channel": "evalScript",
+      "line": 4888
+    },
+    {
+      "name": "Layer_onIdSelectLayer",
+      "channel": "jsxNoCheck",
+      "line": 58031
+    },
+    {
+      "name": "Layer_placedLayerRelinkToFile",
+      "channel": "jsx",
+      "line": 37760
+    },
+    {
+      "name": "ls_znpb_DanDuTiaoZhengJianJu",
+      "channel": "jsxHistory",
+      "line": 39900
+    },
+    {
+      "name": "mb_amendPreview",
+      "channel": "jsxHistoryNoCheck",
+      "line": 27074
+    },
+    {
+      "name": "mb_copyTemplatePsd",
+      "channel": "jsxNoCheck",
+      "line": 27046
+    },
+    {
+      "name": "mb_getFolderList",
+      "channel": "jsxNoCheck",
+      "line": 31516
+    },
+    {
+      "name": "mb_openTemplatePsd",
+      "channel": "jsxNoCheck",
+      "line": 66815
+    },
+    {
+      "name": "mb_useTemplate",
+      "channel": "jsxHistoryNoCheck",
+      "line": 30701
+    },
+    {
+      "name": "overprint_getAllLayers",
+      "channel": "jsxNoCheck",
+      "line": 60504
+    },
+    {
+      "name": "overprint_getSelectedLayerByItemIndex",
+      "channel": "jsxNoCheck",
+      "line": 60613
+    },
+    {
+      "name": "overprint_useOverprint",
+      "channel": "jsxNoCheck",
+      "line": 61060
+    },
+    {
+      "name": "ps_exportGif",
+      "channel": "jsxNoCheck",
+      "line": 38015
+    },
+    {
+      "name": "ps_mbAddPsd",
+      "channel": "jsxNoCheck",
+      "line": 66538
+    },
+    {
+      "name": "ps_mbAddPsdSplit",
+      "channel": "jsxNoCheck",
+      "line": 66575
+    },
+    {
+      "name": "ps_mbImportPsd",
+      "channel": "jsxNoCheck",
+      "line": 68038
+    },
+    {
+      "name": "ps_onJsx",
+      "channel": "evalScript",
+      "line": 4923
+    },
+    {
+      "name": "ps_ysBtnUseStyle",
+      "channel": "jsxHistory",
+      "line": 51511
+    },
+    {
+      "name": "Sys_setSystemEnvInfo",
+      "channel": "jsxNoCheck",
+      "line": 17339
+    },
+    {
+      "name": "tb_getOverprintInfo",
+      "channel": "jsxNoCheck",
+      "line": 58507
+    },
+    {
+      "name": "tb_openPsdFolder",
+      "channel": "jsxNoCheck",
+      "line": 58239
+    },
+    {
+      "name": "tb_setInfoToXmp",
+      "channel": "jsxNoCheck",
+      "line": 58489
+    },
+    {
+      "name": "tb_useOverprint",
+      "channel": "jsxNoCheck",
+      "line": 58219
+    },
+    {
+      "name": "testJsx",
+      "channel": "jsxNoCheck",
+      "line": 60582
+    },
+    {
+      "name": "Tool_set",
+      "channel": "jsxNoCheck",
+      "line": 37215
+    },
+    {
+      "name": "ys_AddStyle",
+      "channel": "jsx",
+      "line": 51538
+    },
+    {
+      "name": "ys_checkUseFont",
+      "channel": "jsx",
+      "line": 43422
+    },
+    {
+      "name": "ys_getFontInfo",
+      "channel": "jsx",
+      "line": 43357
+    },
+    {
+      "name": "ys_getForegroundColor",
+      "channel": "jsx",
+      "line": 50193
+    },
+    {
+      "name": "ys_getGradientInfo",
+      "channel": "jsx",
+      "line": 50752
+    },
+    {
+      "name": "ys_rgbToMyColor",
+      "channel": "jsxNoCheck",
+      "line": 54249
+    },
+    {
+      "name": "ys_setBorderColor",
+      "channel": "jsxHistory",
+      "line": 17903
+    },
+    {
+      "name": "ys_setForegroundColor",
+      "channel": "jsxNoCheck",
+      "line": 17899
+    },
+    {
+      "name": "ys_useFont",
+      "channel": "jsxHistory",
+      "line": 43433
+    },
+    {
+      "name": "ys_useGradient",
+      "channel": "jsxHistory",
+      "line": 50791
+    },
+    {
+      "name": "ys_useShapeFill",
+      "channel": "jsxHistory",
+      "line": 50133
+    },
+    {
+      "name": "ys_useStyleColor",
+      "channel": "jsxHistory",
+      "line": 17897
+    },
+    {
+      "name": "zdy_checkMergeRectangles",
+      "channel": "jsxNoCheck",
+      "line": 17066
+    },
+    {
+      "name": "zdy_checkStatus",
+      "channel": "jsx",
+      "line": 35281
+    },
+    {
+      "name": "zdy_generate",
+      "channel": "jsxHistory",
+      "line": 35292
+    },
+    {
+      "name": "zdy_mergeRectangles",
+      "channel": "jsxHistoryNoCheck",
+      "line": 17076
+    },
+    {
+      "name": "zt_alignHorizontal",
+      "channel": "jsxHistory",
+      "line": 43001
+    },
+    {
+      "name": "zt_changeTextBranchMerge",
+      "channel": "jsx",
+      "line": 38916
+    },
+    {
+      "name": "zt_createButton",
+      "channel": "jsxHistory",
+      "line": 39070
+    },
+    {
+      "name": "zt_getCurrentFontInfo",
+      "channel": "jsx",
+      "line": 40306
+    },
+    {
+      "name": "zt_getCurrentText",
+      "channel": "jsx",
+      "line": 43249
+    },
+    {
+      "name": "zt_getFontSimpleInfo",
+      "channel": "jsxNoCheck",
+      "line": 42494
+    },
+    {
+      "name": "zt_setBackrgoudAlign",
+      "channel": "jsxHistory",
+      "line": 43104
+    },
+    {
+      "name": "zt_setFauxItali",
+      "channel": "jsx",
+      "line": 42459
+    },
+    {
+      "name": "zt_setFontAddBold",
+      "channel": "jsx",
+      "line": 42470
+    },
+    {
+      "name": "zt_setFontAllCaps",
+      "channel": "jsx",
+      "line": 42441
+    },
+    {
+      "name": "zt_setFontColor",
+      "channel": "jsx",
+      "line": 42264
+    },
+    {
+      "name": "zt_setFontJustified",
+      "channel": "jsxHistory",
+      "line": 42429
+    },
+    {
+      "name": "zt_setFontName",
+      "channel": "jsx",
+      "line": 40336
+    },
+    {
+      "name": "zt_setFontSize",
+      "channel": "jsx",
+      "line": 39979
+    },
+    {
+      "name": "zt_setFontVision",
+      "channel": "jsx",
+      "line": 42449
+    },
+    {
+      "name": "zt_setFontWordSpacing",
+      "channel": "jsx",
+      "line": 42297
+    },
+    {
+      "name": "zt_setHorizontalCenters",
+      "channel": "jsx",
+      "line": 43134
+    },
+    {
+      "name": "zt_setTextAlignment",
+      "channel": "jsxHistory",
+      "line": 39904
+    },
+    {
+      "name": "zt_setTranslateText",
+      "channel": "jsxHistory",
+      "line": 43327
+    },
+    {
+      "name": "zt_setUpDownAlign",
+      "channel": "jsxHistory",
+      "line": 43178
+    },
+    {
+      "name": "zt_smartTypesetting",
+      "channel": "jsxHistory",
+      "line": 39932
+    },
+    {
+      "name": "zt_switchFontDirection",
+      "channel": "jsx",
+      "line": 43379
+    },
+    {
+      "name": "zt_textBranchMerge",
+      "channel": "jsxHistory",
+      "line": 38925
+    },
+    {
+      "name": "zt_verticalCenter",
+      "channel": "jsx",
+      "line": 43169
+    },
+    {
+      "name": "ztgl_create_or_replace",
+      "channel": "jsxNoCheck",
+      "line": 49592
+    },
+    {
+      "name": "ztgl_initSystemList",
+      "channel": "jsxNoCheck",
+      "line": 10110
+    },
+    {
+      "name": "ztgl_read_text",
+      "channel": "jsxNoCheck",
+      "line": 49567
+    },
+    {
+      "name": "ztgl_setFont",
+      "channel": "jsx",
+      "line": 41986
+    }
+  ]
+}

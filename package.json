@@ -11,6 +11,7 @@
     "format": "prettier --write \"src/**/*.{ts,vue,css}\" \"tests/**/*.ts\" \"scripts/*.mjs\" \"*.{ts,js,json}\"",
     "format:check": "prettier --check \"src/**/*.{ts,vue,css}\" \"tests/**/*.ts\" \"scripts/*.mjs\" \"*.{ts,js,json}\"",
     "style:guard": "node scripts/style-guard.mjs",
+    "jsx:dispatch": "node scripts/jsx-dispatch.mjs",
     "stats:check": "node scripts/stats.mjs --check",
     "check": "npm run style:guard && npm run ledger && npm run stats:check && npm run lint && npm run format:check",
     "test": "vitest run",
