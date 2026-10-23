@@ -11,7 +11,7 @@ import type { CommonUseTile } from '@/domain/common-use'
  *
  * 只有三层：图标块、文案、角标。**不做 hover 浮层**（官方没有，只换图标）。
  */
-defineProps<{ tile: CommonUseTile }>()
+const props = defineProps<{ tile: CommonUseTile }>()
 
 defineEmits<{ (e: 'click'): void; (e: 'contextmenu', ev: MouseEvent): void }>()
 </script>
@@ -20,6 +20,7 @@ defineEmits<{ (e: 'click'): void; (e: 'contextmenu', ev: MouseEvent): void }>()
   <button
     class="use-grid-item"
     type="button"
+    :data-drop-idx="props.tile.index"
     :title="tile.title"
     @click="$emit('click')"
     @contextmenu.prevent="$emit('contextmenu', $event)"

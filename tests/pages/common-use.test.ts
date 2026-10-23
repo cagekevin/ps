@@ -1,6 +1,7 @@
 ﻿import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { ref, type Ref } from 'vue'
 import { flushPromises, mount } from '@vue/test-utils'
+import { nextTick } from 'vue'
 import { createPinia, setActivePinia } from 'pinia'
 
 /**
@@ -18,6 +19,7 @@ const commands = vi.hoisted(() => ({
   layerReplace: vi.fn(async () => true),
   locationTrade: vi.fn(async () => true),
   exchangeLayerColor: vi.fn(async () => true),
+  move: vi.fn(async () => true),
 }))
 
 /** 每个用例换一份新的响应式假 store（`storeToRefs` 需要真响应式对象） */
@@ -38,27 +40,24 @@ let store!: FakeStore
 vi.mock('@/stores/common-use', () => ({ useCommonUseStore: () => store }))
 
 vi.mock('@/components/command/useCommand', () => ({
-  useCommand: (id: string) => ({
-    run:
-      id === 'commonUse.zoom'
-        ? commands.zoom
-        : id === 'commonUse.setCollapsed'
-          ? commands.setCollapsed
-          : id === 'commonUse.correctBlur'
-            ? commands.correctBlur
-            : id === 'commonUse.layerReplace'
-              ? commands.layerReplace
-              : id === 'commonUse.locationTrade'
-                ? commands.locationTrade
-                : id === 'commonUse.exchangeLayerColor'
-                  ? commands.exchangeLayerColor
-                  : commands.flip,
-    disabled: false,
-    running: false,
-    command: undefined,
-  }),
+  useCommand: (id: string) => {
+    const map: Record<string, unknown> = {
+      'commonUse.zoom': commands.zoom,
+      'commonUse.setCollapsed': commands.setCollapsed,
+      'commonUse.correctBlur': commands.correctBlur,
+      'commonUse.layerReplace': commands.layerReplace,
+      'commonUse.locationTrade': commands.locationTrade,
+      'commonUse.exchangeLayerColor': commands.exchangeLayerColor,
+      'commonUse.move': commands.move,
+    }
+    return {
+      run: map[id] ?? commands.flip,
+      disabled: false,
+      running: false,
+      command: undefined,
+    }
+  },
 }))
-
 const Page = (await import('@/pages/commonUse/index.vue')).default
 
 function tile(index: number, name: string, extra: Record<string, unknown> = {}) {
@@ -98,6 +97,7 @@ beforeEach(() => {
   commands.layerReplace.mockClear()
   commands.locationTrade.mockClear()
   commands.exchangeLayerColor.mockClear()
+  commands.move.mockClear()
 })
 
 describe('三种状态', () => {
@@ -289,5 +289,58 @@ describe('A2：显隐立刻反映在网格', () => {
 
     const names = wrapper.findAll('.use-grid-item__text').map((el) => el.text())
     expect(names).toEqual(['嵌入图片'])
+  })
+})
+
+describe('A3：长按拖拽排序', () => {
+  /** 完整链路：mousedown(ctrl) → 300ms → 50ms → 目标 mousemove → document mouseup（同 /style 范本） */
+  async function dragTile(from: number, to: number, ctrlKey = true, root?: HTMLElement) {
+    const items = (root ?? document).querySelectorAll('.use-grid-item')
+    const source = items[from] as HTMLElement
+    const target = items[to] as HTMLElement
+    source.dispatchEvent(new MouseEvent('mousedown', { ctrlKey, bubbles: true }))
+    vi.advanceTimersByTime(300)
+    await nextTick()
+    vi.advanceTimersByTime(50)
+    target.dispatchEvent(new MouseEvent('mousemove', { clientX: 30, clientY: 30, bubbles: true }))
+    document.dispatchEvent(new MouseEvent('mouseup'))
+    vi.useRealTimers()
+    await flushPromises()
+  }
+
+  it('ctrl 长按拖到第 3 格之后 → move({from:0,to:2,position:"after"})，且只写一次', async () => {
+    store.tiles.value = [tile(0, '嵌入图片'), tile(1, '修正模糊'), tile(2, '元素替换')]
+    const wrapper = mount(Page)
+    await flushPromises()
+
+    vi.useFakeTimers()
+    await dragTile(0, 2, true, wrapper.element as HTMLElement)
+
+    expect(commands.move).toHaveBeenCalledTimes(1)
+    expect(commands.move).toHaveBeenCalledWith({ from: 0, to: 2, position: 'after' })
+    expect(commands.setCollapsed).not.toHaveBeenCalled()
+    expect(wrapper.exists()).toBe(true)
+  })
+
+  it('没按 ctrl：闸门不过，不进拖拽态也不发命令', async () => {
+    store.tiles.value = [tile(0, '嵌入图片'), tile(1, '修正模糊')]
+    const w1 = mount(Page)
+    await flushPromises()
+
+    vi.useFakeTimers()
+    await dragTile(0, 1, false, w1.element as HTMLElement)
+
+    expect(commands.move).not.toHaveBeenCalled()
+  })
+
+  it('拖到自己身上：不写盘', async () => {
+    store.tiles.value = [tile(0, '嵌入图片'), tile(1, '修正模糊')]
+    const w2 = mount(Page)
+    await flushPromises()
+
+    vi.useFakeTimers()
+    await dragTile(0, 0, true, w2.element as HTMLElement)
+
+    expect(commands.move).not.toHaveBeenCalled()
   })
 })

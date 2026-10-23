@@ -402,6 +402,13 @@ export interface CommonUseSetShowPayload {
   show: boolean
 }
 
+/** 常用项拖拽排序：落盘下标（	oTiles 的 index），position 与 domain/reorder 同源 */
+export interface CommonUseMovePayload {
+  from: number
+  to: number
+  position: 'before' | 'after'
+}
+
 export interface CommonUseSetOptionPayload {
   path: string
   value: unknown
@@ -759,6 +766,7 @@ export interface CommandPayloads {
   'commonUse.exchangeLayerColor': void
   'commonUse.setShow': CommonUseSetShowPayload
   'commonUse.resetAll': void
+  'commonUse.move': CommonUseMovePayload
   'commonUse.transform': CommonUseTransformPayload
   'commonUse.referenceGuide': CommonUseReferenceGuidePayload
   'commonUse.referenceSlice': CommonUseReferenceSlicePayload

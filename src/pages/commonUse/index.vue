@@ -8,6 +8,7 @@ import Icon from '@/components/Icon.vue'
 import NewSpin from '@/components/NewSpin.vue'
 import SettingsRow from '@/components/SettingsRow.vue'
 import { useCommand } from '@/components/command/useCommand'
+import { useLongPressDrag } from '@/composables/useLongPressDrag'
 import { useFeedbackStore } from '@/stores/feedback'
 import { useFreePanelStore } from '@/stores/free-panel'
 import {
@@ -49,6 +50,8 @@ const correctBlurCmd = useCommand('commonUse.correctBlur')
 const layerReplaceCmd = useCommand('commonUse.layerReplace')
 const locationTradeCmd = useCommand('commonUse.locationTrade')
 const exchangeLayerColorCmd = useCommand('commonUse.exchangeLayerColor')
+const moveCmd = useCommand('commonUse.move')
+const drag = useLongPressDrag()
 const feedback = useFeedbackStore()
 const freePanel = useFreePanelStore()
 
@@ -137,6 +140,7 @@ const PANELS: Record<string, unknown> = {
 }
 
 const expandedId = ref('')
+const gridRef = ref<HTMLElement | null>(null)
 
 /** 该行要显示的面板（该行有格子处于展开态且有 `comName`） */
 function panelOfRow(row: CommonUseTile[]) {
@@ -150,6 +154,31 @@ const DIRECT_ACTIONS: Record<string, { run: () => Promise<boolean> }> = {
   元素替换: { run: () => layerReplaceCmd.run() },
   位置对换: { run: () => locationTradeCmd.run() },
   图层颜色互换: { run: () => exchangeLayerColorCmd.run() },
+}
+/**
+ * 长按拖拽排序：闸门 = 按住 ctrl/meta（官方 `am()` 的 `ft.f()`，`:37418`；`useLongPressDrag` 内部同判）。
+ * 落点候选 = 全部功能格节点（`data-drop-idx` = `toTiles` 的落盘下标）；轴 `x` 与 `/style` 的项拖拽一致。
+ */
+function onGridMouseDown(event: MouseEvent) {
+  const grid = gridRef.value
+  const node = event.currentTarget as HTMLElement | null
+  if (!grid || !node) return
+  // 拖起时的落盘下标**当场取**：`event.currentTarget` 只在派发期间有效，mouseup 时已是 null
+  const from = Number(node.dataset.dropIdx)
+  drag.start({
+    event,
+    node,
+    targets: () => Array.from(grid.querySelectorAll('[data-drop-idx]')) as HTMLElement[],
+    axis: 'x',
+    onEnd(result) {
+      // 没真的拖起来（300ms 内抬起）= 官方按普通点击处理，什么都不能改
+      if (!result.dragged || !result.target) return
+      const to = Number(result.target.dataset.dropIdx)
+      // 落到自己 = 原版 `t != moveEndIndex` 判等（`app.v4.js:50053`），不写盘
+      if (!Number.isInteger(from) || !Number.isInteger(to) || to === from) return
+      void moveCmd.run({ from, to, position: result.position })
+    },
+  })
 }
 function toggle(tile: CommonUseTile) {
   // 没有子面板的格子 = 直接执行功能（官方 :37953-37965 的 4 个无参 jsx）
@@ -241,7 +270,7 @@ function flip(direction: FlipDirection) {
       <hr class="page-common-use__rule" />
 
       <!-- 功能格：顺序来自 sj_commonFunction.json（页面不写任何 id 字面量）；每行 3 个 -->
-      <div v-if="tiles.length" class="page-common-use__grid">
+      <div ref="gridRef" v-if="tiles.length" class="page-common-use__grid">
         <template v-for="(row, rowIndex) in gridRows" :key="rowIndex">
           <div class="page-common-use__grid-row">
             <UseGridItem
@@ -250,6 +279,8 @@ function flip(direction: FlipDirection) {
               :tile="tile"
               @click="toggle(tile)"
               @contextmenu="onGridContextMenu(tile)"
+              `n
+              @mousedown="onGridMouseDown($event)"
             />
             <span
               v-for="pad in GRID_COLUMNS - row.length"

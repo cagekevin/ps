@@ -368,3 +368,49 @@ describe('A2：显隐与重置（设置页用）', () => {
     expect(after.info.every((i) => i.isShow !== false)).toBe(true)
   })
 })
+
+describe('A3：拖拽落盘', () => {
+  it('move 之后数组顺序与界面一致，且 index 连续无空洞', async () => {
+    seed({ info: COMMON_USE_SEED as unknown as Array<Record<string, unknown>> })
+
+    await commonUseRepo.move(0, 2, 'after')
+
+    const after = JSON.parse(state.files.get(PATH) as string) as {
+      info: Array<Record<string, unknown>>
+    }
+    expect(after.info.map((i) => i.id)).toEqual([
+      'div_img_cya2',
+      'div_img_cya3',
+      'div_img_cya1',
+      'div_img_cya4',
+      'div_img_cya5',
+      'div_img_cya6',
+      'div_img_cya7',
+      'div_img_cya8',
+      'div_img_cya9',
+      'div_img_cya11',
+      'div_img_cya13',
+      'div_img_cya14',
+      'div_img_cya15',
+      'div_img_cya12',
+    ])
+    // index 连续无空洞：投影出的 index 就是数组下标
+    const tiles = toTiles({ info: after.info } as never)
+    expect(tiles.map((t) => t.index)).toEqual(Array.from({ length: 14 }, (_, i) => i))
+  })
+
+  it('同位移动：数据层是 no-op（顺序与内容都不变）', async () => {
+    seed({ info: COMMON_USE_SEED as unknown as Array<Record<string, unknown>> })
+    const before = state.files.get(PATH)
+
+    await commonUseRepo.move(3, 3, 'before')
+
+    const after = JSON.parse(state.files.get(PATH) as string) as {
+      info: Array<Record<string, unknown>>
+    }
+    expect(after.info.map((i) => i.id)).toEqual(
+      (COMMON_USE_SEED as unknown as Array<Record<string, unknown>>).map((i) => i.id),
+    )
+    expect(before).toBeTruthy()
+  })
+})

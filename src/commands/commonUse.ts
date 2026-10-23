@@ -357,6 +357,17 @@ export const commonUseCommands: Command<unknown>[] = [
       await commonUseRepo.resetAll()
     },
   }),
+  defineCommand({
+    id: 'commonUse.move',
+    title: '拖动常用项排序',
+    group: 'system',
+    requires: 'none',
+    kind: 'instant',
+    async run(_ctx, { from, to, position }) {
+      // 顺序唯一来源：`applyListDrop`（`domain/reorder`），与 `/style`、`/action` 的落点计算同源（ADR-19）
+      await commonUseRepo.move(from, to, position)
+    },
+  }),
   // ---------- 折叠态（我们自己的偏好，不写官方 sj_set.json） ----------
 
   defineCommand({
