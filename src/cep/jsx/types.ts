@@ -1,4 +1,4 @@
-/**
+﻿/**
  * PS 能力的**接口**。真实实现与 mock 实现都必须满足它（`satisfies`）。
  *
  * 这样新增一个 PS 函数时，漏写 mock 会直接编译失败，而不是"浏览器里崩"（ADR-16 的机制前提）。
@@ -151,34 +151,44 @@ export interface StyleJsx {
 /**
  * 常用页域（`/commonUse`）。
  *
- * UNVERIFIED: 本域函数的**参数形状与返回结构基本未实测**。
- * 分三档（依据见 `src/cep/jsx/commonUse.ts` 头部注释）：
- * - 有锚点：`cy_zoom` / `cy_batchOptimizeDoc` / `cy_getPsdForFolder`
- *   （`docs/生成/jsx返回结构复原.md:608,610`）
- * - 名字推断（依据事件前缀与参数顺序表）：`cy_flipLayer` / `cy_embedImage` /
- *   `cy_importMultipleImage` / `cy_customTransform` / `cy_referenceLine` / `cy_distribute`
- * - 参数顺序有据：`cy_customTransform` = `[number, angle, leftRigth, topBottom, pointIndex, scale, opacity]`
- *   （`docs/页面/05-常用.md:57`）；`cy_distribute` = `[t, width, mode]`（`:63`）
- *
+ * 名字与实参全部**照官方派发表与调用点**（T-86a 已核，不再有"名字推断"）：
+ * - key → jsx 名的两跳表见 `app.v4.js:17061-17184`；例 `cy_embedImage` → `cy_insertionImage`（`:17087`）、
+ *   `cy_useGride` → `cy_createSafeAreaGuide`（`:17168`）、`cy_clearCutGuide` → `cy_guideFunction`（`:17171`）
+ * - 参数形状有据：`cy_insertionImage` = `{path,bLink2,bDelete}`（`:38070-38074`）、
+ *   `cy_importMultipleImage` = `{path,toLinkObject}`（`:38101-38104`）、
+ *   `cy_customBuildTransform` = 7 个值（`:17165`，顺序同 `docs/页面/05-常用.md:57`）、
+ *   `cy_batchOptimizeDoc` = `[配置, 单个文件]`（`:36040`）
+ * - 返回结构只有 `cy_zoom` / `cy_batchOptimizeDoc` / `cy_getPsdForFolder` 有锚点
+ *   （`docs/生成/jsx返回结构复原.md:608,610`）；其余一律 `unknown`，命令层只判成败。
+ * - **通道**：原版分 jsx / jsxHistory / jsxNoCheck / jsxHistoryNoCheck，我方 transport 只有一个入口，
+ *   差异清单钉在 `tests/cep/jsx-dispatch.test.ts` 的「通道对照」用例里。
  * 返回一律 `unknown`，命令层只判成败。
  */
 export interface CommonUseJsx {
-  /** cy_zoom([倍数])：放大 / 缩小 */
+  /** cy_zoom([倍数])：放大 / 缩小（`:38144`） */
   zoom(scale: number): Promise<unknown>
-  /** cy_flipLayer([方向])：左右 / 上下 / 左 / 右 / 下 / 上（名字推断） */
+  /** cy_transformPosition([方向文本])：翻转 6 向（`:38122`，文本映射 `:37803-37812`） */
   flip(direction: string): Promise<unknown>
-  /** cy_embedImage([选项])：嵌入图片（名字推断） */
-  embedImage(options: unknown): Promise<unknown>
-  /** cy_importMultipleImage([路径数组])：导入多图片（名字推断） */
-  importMultipleImages(paths: string[]): Promise<unknown>
-  /** cy_batchOptimizeDoc([选项])：批量优化文档 */
-  optimizeDoc(options: unknown): Promise<unknown>
-  /** cy_customTransform([参数数组])：自定义变换（名字推断） */
-  transform(params: unknown[]): Promise<unknown>
-  /** cy_referenceLine([动作, 选项])：参考线（名字推断） */
-  referenceLines(action: string, options: unknown): Promise<unknown>
-  /** cy_distribute([t, width, mode])：按间距分布（名字推断） */
-  distribute(params: unknown[]): Promise<unknown>
+  /** cy_insertionImage([{path,bLink2,bDelete}])：嵌入图片（`:37756` / 形状 `:38070-38074`） */
+  embedImage(options: { path: string; bLink2: unknown; bDelete: unknown }): Promise<unknown>
+  /** cy_embedMultipleImage([])：嵌入多图片，无参（`:37902`） */
+  embedMultipleImages(): Promise<unknown>
+  /** cy_importMultipleImage([{path,toLinkObject}])：导入多图片（`:38106`） */
+  importMultipleImages(options: { path: unknown; toLinkObject: unknown }): Promise<unknown>
+  /** cy_getImagePath()：取导入路径；取消返回 -1（`:38099`），返回形状未实测 */
+  getImagePath(): Promise<unknown>
+  /** cy_optimizeDoc([配置])：单文档优化（`:38057`） */
+  optimizeOnce(options: unknown): Promise<unknown>
+  /** cy_batchOptimizeDoc([配置, 单个文件])：文件夹批量优化，循环在命令层（`:36040`） */
+  optimizeFolder(options: unknown, file: string): Promise<unknown>
+  /** cy_customBuildTransform(7 个平铺参数)：自定义变换（`:17165` 顺序同 `05-常用.md:57`） */
+  transform(params: [number, number, string, string, number, number, number]): Promise<unknown>
+  /** cy_createSafeAreaGuide([选项])：参考线工具（派发表 key `cy_useGride`，`:17168`） */
+  referenceGuide(options?: unknown): Promise<unknown>
+  /** cy_guideFunction([选项])：清除参考线 / 基于参考线切片（key `cy_clearCutGuide`，`:17171`） */
+  referenceSlice(options?: unknown): Promise<unknown>
+  /** cy_distributedByPitch([option])：按间距分布（`:17173`） */
+  distribute(options: unknown): Promise<unknown>
   /** cy_getPsdForFolder([目录])：文件夹里的 PSD 列表（返回有数据） */
   getPsdList(folder: string): Promise<unknown>
 }

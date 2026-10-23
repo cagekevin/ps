@@ -10,10 +10,14 @@ const commonUse = vi.hoisted(() => ({
   zoom: vi.fn(async () => null),
   flip: vi.fn(async () => null),
   embedImage: vi.fn(async () => null),
+  embedMultipleImages: vi.fn(async () => null),
   importMultipleImages: vi.fn(async () => null),
-  optimizeDoc: vi.fn(async () => null),
+  getImagePath: vi.fn(async () => -1 as unknown),
+  optimizeOnce: vi.fn(async () => null),
+  optimizeFolder: vi.fn(async () => null),
   transform: vi.fn(async () => null),
-  referenceLines: vi.fn(async () => null),
+  referenceGuide: vi.fn(async () => null),
+  referenceSlice: vi.fn(async () => null),
   distribute: vi.fn(async () => null),
   getPsdList: vi.fn(async () => []),
 }))
@@ -27,6 +31,7 @@ const { execute } = await import('@/commands/registry')
 
 beforeEach(() => {
   for (const fn of Object.values(commonUse)) fn.mockClear()
+  commonUse.getImagePath.mockResolvedValue(-1)
   legacy.call.mockClear()
 })
 
@@ -55,29 +60,56 @@ describe('常用页命令', () => {
     expect(commonUse.flip).not.toHaveBeenCalled()
   })
 
-  it('embedImage 把开关集合原样传给 jsx', async () => {
-    const options = { autoEmbedOnDrop: true, linkMode: 'sameFolder' as const }
+  it('embedImage 把官方实参原样传给 jsx', async () => {
+    const options = { path: 'C:/a.png', bLink2: -1, bDelete: false }
 
     await execute('commonUse.embedImage', { options })
 
     expect(commonUse.embedImage).toHaveBeenCalledWith(options)
   })
 
-  it('importMultipleImages 空路径被拒绝', async () => {
-    const result = await execute('commonUse.importMultipleImages', { paths: [] })
+  it('embedMultipleImages 无参调用', async () => {
+    await execute('commonUse.embedMultipleImages', undefined)
 
-    expect(result).toMatchObject({ ok: false })
+    expect(commonUse.embedMultipleImages).toHaveBeenCalledWith()
+  })
+
+  it('importMultipleImages 未给 path 时先取路径；返回 -1（取消）就不导入', async () => {
+    const result = await execute('commonUse.importMultipleImages', { toLinkObject: true })
+
+    expect(result).toMatchObject({ ok: true })
+    expect(commonUse.getImagePath).toHaveBeenCalledTimes(1)
     expect(commonUse.importMultipleImages).not.toHaveBeenCalled()
   })
 
-  it('optimizeDoc 是长任务：上报进度并带上三个开关', async () => {
+  it('importMultipleImages 把取到的 path 原样透传（数组与单张都行）', async () => {
+    commonUse.getImagePath.mockResolvedValueOnce(['a.png', 'b.png'])
+    await execute('commonUse.importMultipleImages', { toLinkObject: false })
+    expect(commonUse.importMultipleImages).toHaveBeenCalledWith({
+      path: ['a.png', 'b.png'],
+      toLinkObject: false,
+    })
+
+    commonUse.importMultipleImages.mockClear()
+    await execute('commonUse.importMultipleImages', {
+      path: 'C:/x.png',
+      toLinkObject: true,
+    })
+    expect(commonUse.getImagePath).toHaveBeenCalledTimes(1) // 只在上一条调过
+    expect(commonUse.importMultipleImages).toHaveBeenCalledWith({
+      path: 'C:/x.png',
+      toLinkObject: true,
+    })
+  })
+
+  it('optimizeDoc 是单文档优化：走 optimizeOnce 并上报进度', async () => {
     const result = await execute('commonUse.optimizeDoc', {
       options: { optimizeAll: true, deleteAllEmpty: false, deleteAllHide: true },
       total: 3,
     })
 
     expect(result).toMatchObject({ ok: true })
-    expect(commonUse.optimizeDoc).toHaveBeenCalledWith({
+    expect(commonUse.optimizeOnce).toHaveBeenCalledWith({
       optimizeAll: true,
       deleteAllEmpty: false,
       deleteAllHide: true,
@@ -105,10 +137,13 @@ describe('常用页命令', () => {
     expect(commonUse.distribute).toHaveBeenCalledWith([0, 10, 1])
   })
 
-  it('referenceLines 透传动作与选项', async () => {
-    await execute('commonUse.referenceLines', { action: 'clear', options: { width: '100' } })
+  it('参考线拆成两条命令：cy_useGride / cy_clearCutGuide 各走各的 jsx', async () => {
+    await execute('commonUse.referenceGuide', { options: { width: '100' } })
+    expect(commonUse.referenceGuide).toHaveBeenCalledWith({ width: '100' })
 
-    expect(commonUse.referenceLines).toHaveBeenCalledWith('clear', { width: '100' })
+    await execute('commonUse.referenceSlice', { options: undefined })
+    expect(commonUse.referenceSlice).toHaveBeenCalledWith(undefined)
+    expect(commonUse.referenceGuide).toHaveBeenCalledTimes(1)
   })
 
   it('exportImages 三种模式分别走三条既有白名单 key', async () => {

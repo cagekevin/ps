@@ -1,4 +1,4 @@
-import type {
+﻿import type {
   CreateButtonConfig,
   FontSetSettings,
   PasteFontConfig,
@@ -321,22 +321,13 @@ export interface CommonUseFlipPayload {
 }
 
 /**
- * 嵌入图片的开关集合（原版 comembed 的 4 个勾选 + 3 选 1 单选）。
- * 字段名沿用原版语义；UNVERIFIED：jsx 侧的实际参数形状未实测。
+ * 嵌入图片的实参：官方就是 `{path, bLink2, bDelete}`（`app.v4.js:38070-38074`，调用 `:37756`）。
+ * `bLink2` / `bDelete` 分别来自设置里的 `cyLinkObject` / `cyDeleteNext`（`getKey(...)`）。
  */
 export interface CommonUseEmbedOptions {
-  /** 拖入图片自动嵌入图片 */
-  autoEmbedOnDrop?: boolean
-  /** 粘贴图片自动嵌入图片 */
-  autoEmbedOnPaste?: boolean
-  /** 使用剪贴蒙版时自动嵌入图片 */
-  autoEmbedOnClipboardMask?: boolean
-  /** 嵌入时是否存链接对象：none / original / sameFolder */
-  linkMode?: 'none' | 'original' | 'sameFolder'
-  /** 嵌入时删除下一图层 */
-  deleteNextLayer?: boolean
-  /** 拖入图片转成链接智能对象 */
-  linkSmartObject?: boolean
+  path: string
+  bLink2: unknown
+  bDelete: unknown
 }
 
 /** 嵌入图片命令的 payload */
@@ -344,9 +335,13 @@ export interface CommonUseEmbedPayload {
   options: CommonUseEmbedOptions
 }
 
-/** 导入多图片 */
+/**
+ * 导入多图片：官方 `{path, toLinkObject}`（`:38101-38104`），`path` 来自 `cy_getImagePath()`。
+ * `path` 不传时命令内部先调 `cy_getImagePath`；返回 `-1` 表示取消（`:38099`）。
+ */
 export interface CommonUseImportPayload {
-  paths: string[]
+  path?: unknown
+  toLinkObject?: unknown
 }
 
 /** 批量优化文档的三个开关（原版 comoptimization） */
@@ -374,9 +369,13 @@ export interface CommonUseTransformPayload {
   params: [number, number, string, string, number, number, number]
 }
 
-/** 参考线动作：开关 / 清除 / 切片 / 安全区 */
-export interface CommonUseReferencePayload {
-  action: 'toggle' | 'clear' | 'slice' | 'safeArea'
+/** 参考线工具（官方 key `cy_useGride` → `cy_createSafeAreaGuide`，`:17168`） */
+export interface CommonUseReferenceGuidePayload {
+  options?: unknown
+}
+
+/** 清除参考线 / 切片（官方 key `cy_clearCutGuide` → `cy_guideFunction`，`:17171`） */
+export interface CommonUseReferenceSlicePayload {
   options?: unknown
 }
 
@@ -728,7 +727,9 @@ export interface CommandPayloads {
   'commonUse.importMultipleImages': CommonUseImportPayload
   'commonUse.optimizeDoc': CommonUseOptimizePayload
   'commonUse.transform': CommonUseTransformPayload
-  'commonUse.referenceLines': CommonUseReferencePayload
+  'commonUse.referenceGuide': CommonUseReferenceGuidePayload
+  'commonUse.referenceSlice': CommonUseReferenceSlicePayload
+  'commonUse.embedMultipleImages': void
   'commonUse.distribute': CommonUseDistributePayload
   'commonUse.exportImages': CommonUseExportPayload
   'commonUse.openExportFolder': void

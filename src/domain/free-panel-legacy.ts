@@ -1,4 +1,4 @@
-import type { FreePanelItem } from './free-panel'
+﻿import type { FreePanelItem } from './free-panel'
 
 /**
  * 自由面板旧数据 key → 命令 id + payload。
@@ -17,8 +17,11 @@ function asRecord(value: unknown): Record<string, unknown> {
 
 export function adaptFreePanelItem(item: FreePanelItem): LegacyCommand | null {
   const option = item.option
+  // 旧自造 key（`commonUse.embed` 等）先在别名表里换成官方 key，再走同一张 switch。
+  // 一张表 = 一处，不为旧 key 再开一套分支（见文件末尾 LEGACY_KEY_ALIASES 的删除条件）。
+  const key = LEGACY_KEY_ALIASES[item.key] ?? item.key
 
-  switch (item.key) {
+  switch (key) {
     case 'dz_useAction':
       return { id: 'action.call', payload: option }
 
@@ -76,76 +79,106 @@ export function adaptFreePanelItem(item: FreePanelItem): LegacyCommand | null {
         payload: { key: 'cy_openDirectory', args: [] },
       }
 
+    // ---------- 常用页（/commonUse）----------
+    //
+    // 官方自由面板项的 `key` **就是**派发表里的 key（`$freePanelBox.show(名, key, option)`
+    // → `option.key`，`app.v4.js:2163-2180`），不是我们自造的名字。所以这里按官方 key 收编，
+    // 这样**原面板写进 `sj_appFreePanel.json` 的项，我方也能执行**。
+    //
+    // 注意 key ≠ jsx 名：`cy_embedImage` 的 jsx 是 `cy_insertionImage`、`cy_useGride` 是
+    // `cy_createSafeAreaGuide`……两跳映射（key → 命令 id → jsx 名），别合并。
+
+    case 'cy_embedImage':
+      // 官方 option 就是 `{path, bLink2, bDelete}`（`:38070-38074`）
+      return { id: 'commonUse.embedImage', payload: { options: asRecord(option) } }
+
+    case 'cy_embedMultipleImage':
+      // 官方 `cy_embedMultipleImage` 无参（`:37902`）
+      return { id: 'commonUse.embedMultipleImages', payload: undefined }
+
+    case 'cy_importMultipleImage':
+      // 官方 option 是 `{path, toLinkObject}`（`:38101-38104`）；path 原样透传，不加工
+      return {
+        id: 'commonUse.importMultipleImages',
+        payload: { path: asRecord(option).path, toLinkObject: asRecord(option).toLinkObject },
+      }
+
+    case 'cy_optimizeDoc':
+      return { id: 'commonUse.optimizeDoc', payload: { options: asRecord(option) } }
+
+    case 'zdy_customBuildTransform': {
+      // 官方 option 是 7 个具名字段，按定序拼成数组（`:17165`；顺序见 `05-常用.md:57`）
+      const cfg = asRecord(option)
+      return {
+        id: 'commonUse.transform',
+        payload: {
+          params: [
+            cfg.number,
+            cfg.angle,
+            cfg.leftRigth,
+            cfg.topBottom,
+            cfg.pointIndex,
+            cfg.scale,
+            cfg.opacity,
+          ] as [number, number, string, string, number, number, number],
+        },
+      }
+    }
+
+    case 'cy_exportImage':
+      return {
+        id: 'commonUse.exportImages',
+        payload: { mode: 'image', options: option ?? undefined },
+      }
+
     case 'cy_batchExportLayer':
       return {
-        id: 'legacy.call',
-        payload: {
-          key: 'cy_BatchExportLayer',
-          args: option == null ? [] : [option],
-        },
+        id: 'commonUse.exportImages',
+        payload: { mode: 'first', options: option ?? undefined },
       }
 
     case 'cy_batchExportSecondLayer':
       return {
-        id: 'legacy.call',
-        payload: {
-          key: 'cy_BatchExportSecondLayer',
-          args: option == null ? [] : [option],
-        },
-      }
-
-    case 'cy_exportImage':
-      return {
-        id: 'legacy.call',
-        payload: {
-          key: 'cy_ExportImage',
-          args: option == null ? [] : [option],
-        },
-      }
-
-    // ---------- 常用页（/commonUse）----------
-    //
-    // 常用页的 7 个子面板可以「添加到自由面板」（C-2：复用自由面板数据）。
-    // 面板在添加时把自己的状态存进 `option`，这里按 key 还原成命令 id + payload。
-    // 依据：`docs/页面/05-常用.md` 的 7 个子组件与参数顺序表（`:57` 变换、`:63` 分布）。
-
-    case 'commonUse.embed':
-      return { id: 'commonUse.embedImage', payload: { options: asRecord(option) } }
-
-    case 'commonUse.import':
-      return {
-        id: 'commonUse.importMultipleImages',
-        payload: { paths: Array.isArray(option) ? option : [] },
-      }
-
-    case 'commonUse.optimization':
-      return { id: 'commonUse.optimizeDoc', payload: { options: asRecord(option) } }
-
-    case 'commonUse.customChange':
-      return {
-        id: 'commonUse.transform',
-        payload: { params: asRecord(option).params ?? [] },
-      }
-
-    case 'commonUse.export':
-      return {
         id: 'commonUse.exportImages',
-        payload: {
-          mode: asRecord(option).mode ?? 'image',
-          options: asRecord(option).options ?? {},
-        },
+        payload: { mode: 'second', options: option ?? undefined },
       }
 
-    case 'commonUse.reference':
+    case 'cy_useGride':
+      // key `cy_useGride` → jsx `cy_createSafeAreaGuide`（`:17168`）
+      return { id: 'commonUse.referenceGuide', payload: { options: option ?? undefined } }
+
+    case 'cy_clearCutGuide':
+      // key `cy_clearCutGuide` → jsx `cy_guideFunction`（`:17171`）
+      return { id: 'commonUse.referenceSlice', payload: { options: option ?? undefined } }
+
+    case 'cy_distributedByPitch':
+      // 官方 `i = a.option` 原样透传（`:17173`）；我方命令要 `[t, width, mode]`
       return {
-        id: 'commonUse.referenceLines',
-        payload: { action: asRecord(option).action ?? 'toggle', options: asRecord(option).options },
+        id: 'commonUse.distribute',
+        payload: { params: Array.isArray(option) ? option : [option] },
       }
-
-    case 'commonUse.spacing':
-      return { id: 'commonUse.distribute', payload: { params: asRecord(option).params ?? [] } }
 
     default:
       return null
   }
+}
+
+/**
+ * 旧 key 别名表（T-86a 收编官方 key 时留下的兼容层）。
+ *
+ * **为什么有**：2026-10 之前我方自由面板项用自造 key（`commonUse.embed` 等），
+ * 用户机器上 `sj_appFreePanel.json` 里可能还留着这种项；直接删表会让这些项变成"key 未适配"。
+ *
+ * **什么时候能删**：我方生成的面板项已全部换成官方 key（写入侧只产官方 key），
+ * 且统计确认用户机不再有旧 key 的项（可用台账统计一次）。删前先跑
+ * `tests/domain/free-panel-common-use.test.ts` 的别名用例，删完要同步删掉对应断言。
+ */
+export const LEGACY_KEY_ALIASES: Record<string, string> = {
+  'commonUse.embed': 'cy_embedImage',
+  'commonUse.import': 'cy_importMultipleImage',
+  'commonUse.optimization': 'cy_optimizeDoc',
+  'commonUse.customChange': 'zdy_customBuildTransform',
+  'commonUse.export': 'cy_exportImage',
+  'commonUse.reference': 'cy_useGride',
+  'commonUse.spacing': 'cy_distributedByPitch',
 }

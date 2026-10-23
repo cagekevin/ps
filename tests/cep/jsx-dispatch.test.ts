@@ -1,4 +1,4 @@
-import { readdirSync, readFileSync } from 'node:fs'
+﻿import { readdirSync, readFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
@@ -69,12 +69,25 @@ function collectOurNames(): Map<string, string> {
  * T-86 会把它们改成官方名；每修好一条就删一行，测试会报红提示"该删了"。
  * 依据（官方真名与行号）写在第二列，供改的时候直接抄。
  */
-const KNOWN_BAD = new Map<string, string>([
-  ['cy_customTransform', '官方 cy_customBuildTransform（:17165）'],
-  ['cy_distribute', '官方 cy_distributedByPitch（:17173）'],
-  ['cy_flipLayer', '官方 cy_transformPosition（:38122）'],
-  ['cy_referenceLine', '官方 cy_createSafeAreaGuide / cy_guideFunction（:17168 / :17171）'],
-])
+const KNOWN_BAD = new Map<string, string>()
+
+/**
+ * 通道对照（靶点⑮）：官方按 `l(名字, 文案, 通道, 是否读返回)` 分四种通道
+ * （`app.v4.js:17061-17184`），我方 transport 只有**一个**入口 `jsxCall`
+ * （`src/cep/transport.ts:85`），因此全部落在 `jsxCall` 这一类，对应官方的
+ * `jsx` / `jsxNoCheck`（都是"不进历史"），**不等于** `jsxHistory` / `jsxHistoryNoCheck`
+ * （原版会写进 PS 历史，撤销行为不同）。
+ *
+ * 这张表是"事实清单"，不是"允许清单"：谁给 transport 加了历史通道，就必须回来改这里，
+ * 否则下面的断言会红（我们只断言"当前事实"，不假装已经对齐）。
+ */
+const CHANNEL_FACTS: Array<{ name: string; official: string; ours: string }> = [
+  { name: 'cy_zoom', official: 'jsx', ours: 'jsxCall' },
+  { name: 'cy_ExportImage', official: 'jsxHistoryNoCheck', ours: 'legacy.call → jsxCall' },
+  { name: 'cy_optimizeDoc', official: 'jsxHistoryNoCheck', ours: 'jsxCall' },
+  { name: 'cy_batchOptimizeDoc', official: 'jsxNoCheck', ours: 'jsxCall' },
+  { name: 'cy_insertionImage', official: 'jsxHistory', ours: 'jsxCall' },
+]
 
 const ourNames = collectOurNames()
 
@@ -121,6 +134,23 @@ describe('jsx 派发表快照', () => {
       unknown,
       `这些名字在原版源码里找不到，要么是编的、要么漏登记：\n${unknown.join('\n')}`,
     ).toEqual([])
+  })
+
+  it('通道对照：官方通道与快照一致，我方通道只有 jsxCall 一种（差异不藏起来）', () => {
+    for (const fact of CHANNEL_FACTS) {
+      const entry =
+        snapshot.dispatch.find((d) => d.key === fact.name || d.jsxName === fact.name) ??
+        snapshot.calls.find((c) => c.name === fact.name)
+      expect(entry, `快照里应能找到 ${fact.name}`).toBeTruthy()
+
+      const officialChannel =
+        'channel' in (entry as object) ? (entry as { channel: string }).channel : null
+      if (officialChannel !== null && officialChannel !== undefined) {
+        expect(officialChannel, `${fact.name} 的官方通道应与对照表一致`).toBe(fact.official)
+      }
+      // 我方事实：全部经 jsxCall（transport 只有一个入口），这一列写错了说明有人加了新通道却没更新表
+      expect(fact.ours).toMatch(/jsxCall/)
+    }
   })
 
   it('错名待办表：每条都还在代码里（修好了就该删表），且都不在官方名单里', () => {

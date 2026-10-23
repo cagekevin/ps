@@ -87,7 +87,21 @@ export const commonUseCommands: Command<unknown>[] = [
     requires: 'none',
     kind: 'long',
     async run(ctx, { options }) {
+      // 官方实参 `{path, bLink2, bDelete}`（`app.v4.js:38070-38074`）：`bLink2`/`bDelete`
+      // 分别对应设置里的 `cyLinkObject` / `cyDeleteNext`，由调用方（子面板/命令）传入
       assertJsxOk(await ctx.jsx.commonUse.embedImage(options), '嵌入图片失败')
+    },
+  }),
+
+  defineCommand({
+    id: 'commonUse.embedMultipleImages',
+    title: '嵌入多图片',
+    group: 'layer',
+    requires: 'none',
+    kind: 'long',
+    async run(ctx) {
+      // 官方 `cy_embedMultipleImage` 无参（`:37902`）
+      assertJsxOk(await ctx.jsx.commonUse.embedMultipleImages(), '嵌入多图片失败')
     },
   }),
 
@@ -97,11 +111,18 @@ export const commonUseCommands: Command<unknown>[] = [
     group: 'layer',
     requires: 'none',
     kind: 'long',
-    async run(ctx, { paths }) {
-      if (!Array.isArray(paths) || !paths.length) {
-        throw new CepError('PARSE', '没有可导入的图片')
+    async run(ctx, { path, toLinkObject }) {
+      // `path` 未给时先走 `cy_getImagePath()`；官方用 `!== -1` 判取消并**静默返回**（`:38096-38106`）。
+      // 取到的 path **原样透传**，不做任何加工（数组/单张两种形状都对）。
+      let picked = path
+      if (picked === undefined) {
+        picked = await ctx.jsx.commonUse.getImagePath()
+        if (picked === -1) return
       }
-      assertJsxOk(await ctx.jsx.commonUse.importMultipleImages(paths), '导入多图片失败')
+      assertJsxOk(
+        await ctx.jsx.commonUse.importMultipleImages({ path: picked, toLinkObject }),
+        '导入多图片失败',
+      )
     },
   }),
 
@@ -114,9 +135,10 @@ export const commonUseCommands: Command<unknown>[] = [
     requires: 'none',
     kind: 'long',
     async run(ctx, { options, total }) {
-      // 原版进度文案：`"正在优化文档：" + (i+1) + "/" + n.length`（`05-常用.md:60`）
+      // 单文档优化：官方 `cy_optimizeDoc([配置])`（`:38057`）。
+      // 文件夹批量（`cy_batchOptimizeDoc` + 前端循环）在 T-86b 落成 `commonUse.optimizeFolder`
       ctx.progress.update(undefined, total ? `正在优化文档：1/${total}` : undefined)
-      assertJsxOk(await ctx.jsx.commonUse.optimizeDoc(options), '优化文档失败')
+      assertJsxOk(await ctx.jsx.commonUse.optimizeOnce(options), '优化文档失败')
       ctx.progress.update(1, total ? `正在优化文档：${total}/${total}` : undefined)
     },
   }),
@@ -138,13 +160,26 @@ export const commonUseCommands: Command<unknown>[] = [
   }),
 
   defineCommand({
-    id: 'commonUse.referenceLines',
-    title: '参考线',
+    id: 'commonUse.referenceGuide',
+    title: '参考线工具',
     group: 'layer',
     requires: 'none',
     kind: 'instant',
-    async run(ctx, { action, options }) {
-      assertJsxOk(await ctx.jsx.commonUse.referenceLines(action, options), '参考线操作失败')
+    async run(ctx, { options }) {
+      // 官方 key `cy_useGride` → jsx `cy_createSafeAreaGuide`（`:17168`）
+      assertJsxOk(await ctx.jsx.commonUse.referenceGuide(options), '参考线工具失败')
+    },
+  }),
+
+  defineCommand({
+    id: 'commonUse.referenceSlice',
+    title: '清除参考线 / 切片',
+    group: 'layer',
+    requires: 'none',
+    kind: 'instant',
+    async run(ctx, { options }) {
+      // 官方 key `cy_clearCutGuide` → jsx `cy_guideFunction`（`:17171`）
+      assertJsxOk(await ctx.jsx.commonUse.referenceSlice(options), '参考线操作失败')
     },
   }),
 

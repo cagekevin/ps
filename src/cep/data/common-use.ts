@@ -6,6 +6,7 @@
 
 import { hasCep } from '@/cep/transport'
 import { readTextSmart, userDir } from '@/cep/fs'
+import { DATA_FILES } from '@/cep/env'
 import {
   createCommonUseSeed,
   createEmptyCommonUseFile,
@@ -18,11 +19,8 @@ import { CepError } from '@/utils/errors'
 import { pick } from './pick'
 import type { Repo, RepoRead } from './types'
 
-/**
- * 文件名。**没有进 `env.ts` 的 `DATA_FILES`**：本轮只允许新增三个文件，改 `env.ts` 要单独一轮。
- * 值本身是一手证据：原版路径常量 `cyCommonFunction: s + "/sj_commonFunction.json"`（`app.v4.js:5218`）。
- */
-const FILE_NAME = 'sj_commonFunction.json'
+/** 文件名与路径都来自 `env.ts` 的 `DATA_FILES`（唯一来源；原版 `app.v4.js:5218`） */
+const FILE_NAME = DATA_FILES.cyCommonFunction
 
 const resolvePath = (): string => `${userDir()}/${FILE_NAME}`
 
@@ -74,8 +72,8 @@ export async function ensureCommonUseFile(): Promise<EnsureResult> {
   let text: string | null
   try {
     text = await readTextSmart(resolvePath())
-  } catch (e) {
-    throw new CepError('IO', `${FILE_NAME} 读取失败，拒绝写入`, e)
+  } catch {
+    throw new CepError('IO', `${FILE_NAME} 读取失败，拒绝写入`)
   }
 
   if (text === null) {
@@ -86,8 +84,8 @@ export async function ensureCommonUseFile(): Promise<EnsureResult> {
   let parsed: unknown
   try {
     parsed = JSON.parse(text)
-  } catch (e) {
-    throw new CepError('IO', `${FILE_NAME} 内容不是合法 JSON，拒绝覆盖`, e)
+  } catch {
+    throw new CepError('IO', `${FILE_NAME} 内容不是合法 JSON，拒绝覆盖`)
   }
   const info = (parsed as CommonUseFile | null)?.info
   if (info !== undefined && !Array.isArray(info)) {

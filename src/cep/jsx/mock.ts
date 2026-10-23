@@ -1,4 +1,4 @@
-import { getFontList } from '@/cep/mock'
+﻿import { getFontList } from '@/cep/mock'
 import { log } from '@/utils/logger'
 import type { JsxPort } from './types'
 
@@ -185,31 +185,47 @@ export function createMockJsx(): JsxPort {
         return null
       },
       flip: async (direction) => {
-        log.info('mock', 'cy_flipLayer', direction)
+        log.info('mock', 'cy_transformPosition', direction)
         return null
       },
       embedImage: async (options) => {
-        log.info('mock', 'cy_embedImage', options)
+        log.info('mock', 'cy_insertionImage', options)
         return null
       },
-      importMultipleImages: async (paths) => {
-        log.info('mock', 'cy_importMultipleImage', paths)
+      embedMultipleImages: async () => {
+        log.info('mock', 'cy_embedMultipleImage', null)
         return null
       },
-      optimizeDoc: async (options) => {
-        log.info('mock', 'cy_batchOptimizeDoc', options)
+      importMultipleImages: async (options) => {
+        log.info('mock', 'cy_importMultipleImage', options)
+        return null
+      },
+      getImagePath: async () => {
+        log.info('mock', 'cy_getImagePath', null)
+        return -1
+      },
+      optimizeOnce: async (options) => {
+        log.info('mock', 'cy_optimizeDoc', options)
+        return null
+      },
+      optimizeFolder: async (options, file) => {
+        log.info('mock', 'cy_batchOptimizeDoc', { options, file })
         return null
       },
       transform: async (params) => {
-        log.info('mock', 'cy_customTransform', params)
+        log.info('mock', 'cy_customBuildTransform', params)
         return null
       },
-      referenceLines: async (action, options) => {
-        log.info('mock', 'cy_referenceLine', { action, options })
+      referenceGuide: async (options) => {
+        log.info('mock', 'cy_createSafeAreaGuide', options ?? null)
         return null
       },
-      distribute: async (params) => {
-        log.info('mock', 'cy_distribute', params)
+      referenceSlice: async (options) => {
+        log.info('mock', 'cy_guideFunction', options ?? null)
+        return null
+      },
+      distribute: async (options) => {
+        log.info('mock', 'cy_distributedByPitch', options)
         return null
       },
       getPsdList: async (folder) => {

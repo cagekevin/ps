@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest'
+﻿import { describe, expect, it } from 'vitest'
 import { adaptFreePanelItem } from '@/domain/free-panel-legacy'
 import type { FreePanelItem } from '@/domain/free-panel'
 
@@ -50,11 +50,13 @@ describe('free-panel legacy adapter', () => {
     })
   })
 
-  it('cy_batchExportLayer 把 option 作为参数', () => {
+  // T-86a 起，三个导出 key 不再走 `legacy.call` 直通，而是统一走 `commonUse.exportImages`
+  // （一条命令内部分流到同样的三条白名单 key）——同一操作只有一个入口。
+  it('cy_batchExportLayer 走 commonUse.exportImages 的 first 模式', () => {
     const option = { path: 'D:/out' }
     expect(adaptFreePanelItem(item('cy_batchExportLayer', option))).toEqual({
-      id: 'legacy.call',
-      payload: { key: 'cy_BatchExportLayer', args: [option] },
+      id: 'commonUse.exportImages',
+      payload: { mode: 'first', options: option },
     })
   })
 

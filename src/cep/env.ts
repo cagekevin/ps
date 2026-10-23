@@ -1,4 +1,4 @@
-/**
+﻿/**
  * 原面板启动时注入给 jsx 的环境变量。
  * 字段名不能改——jsx 内部按这些 key 取路径和开关。
  * 其中 VUE_APP_USER_DIR 最关键，jsx 用它拼数据文件目录（%APPDATA%\SheJiZhuLi）。
@@ -40,6 +40,8 @@ export const DATA_FILES = {
   actionLibrary: 'sj_dzStoreInfo.json',
   /** 自由面板：{ uid, btnId, obj:{version,type,list:Block[]} } */
   appFreePanel: 'sj_appFreePanel.json',
+  /** 常用项列表：{ info: CommonUseItem[] }；原版路径 key cyCommonFunction（app.v4.js:5218） */
+  cyCommonFunction: 'sj_commonFunction.json',
   /** 重命名预设：[{ name, show, list:string[] }]；原版路径 key 是 `path.rename`（app.v4.js:5219） */
   cmmRename: 'sj_cmmRename.ini',
   /**
