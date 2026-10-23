@@ -25,8 +25,8 @@
     }
   },
   "tests": {
-    "files": 108,
-    "cases": 929,
+    "files": 109,
+    "cases": 936,
     "eachSites": 4
   },
   "components": 31,
