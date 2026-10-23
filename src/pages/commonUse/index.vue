@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { computed, onMounted, ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import EmptyState from '@/components/EmptyState.vue'
@@ -9,6 +9,7 @@ import NewSpin from '@/components/NewSpin.vue'
 import SettingsRow from '@/components/SettingsRow.vue'
 import { useCommand } from '@/components/command/useCommand'
 import { useLongPressDrag } from '@/composables/useLongPressDrag'
+import { leftClickOf } from '@/domain/common-use-dispatch'
 import { useFeedbackStore } from '@/stores/feedback'
 import { useFreePanelStore } from '@/stores/free-panel'
 import {
@@ -40,7 +41,7 @@ import UseGridItem from './components/UseGridItem.vue'
  */
 
 const store = useCommonUseStore()
-const { tiles, collapsed, loading, error, degraded } = storeToRefs(store)
+const { tiles, collapsed, options, loading, error, degraded } = storeToRefs(store)
 
 const zoomCmd = useCommand('commonUse.zoom')
 const flipCmd = useCommand('commonUse.flip')
@@ -50,6 +51,13 @@ const correctBlurCmd = useCommand('commonUse.correctBlur')
 const layerReplaceCmd = useCommand('commonUse.layerReplace')
 const locationTradeCmd = useCommand('commonUse.locationTrade')
 const exchangeLayerColorCmd = useCommand('commonUse.exchangeLayerColor')
+const embedImageCmd = useCommand('commonUse.embedImage')
+const embedMultiCmd = useCommand('commonUse.embedMultipleImages')
+const importMultiCmd = useCommand('commonUse.importMultipleImages')
+const optimizeOnceCmd = useCommand('commonUse.optimizeOnce')
+const exportImagesCmd = useCommand('commonUse.exportImages')
+const swapWireframeCmd = useCommand('commonUse.swapWireframeFill')
+const setOptionCmd = useCommand('commonUse.setOption')
 const moveCmd = useCommand('commonUse.move')
 const drag = useLongPressDrag()
 const feedback = useFeedbackStore()
@@ -148,13 +156,46 @@ function panelOfRow(row: CommonUseTile[]) {
   return tile?.comName ? PANELS[tile.comName] : undefined
 }
 
-/** 4 个"点一下直接干活"的格子：官方 `fpFunction` 的 name→key 表与 `:37953-37965` 的调用点一一对应 */
-const DIRECT_ACTIONS: Record<string, { run: () => Promise<boolean> }> = {
-  修正模糊: { run: () => correctBlurCmd.run() },
-  元素替换: { run: () => layerReplaceCmd.run() },
-  位置对换: { run: () => locationTradeCmd.run() },
-  图层颜色互换: { run: () => exchangeLayerColorCmd.run() },
+/**
+ * 左键执行器：**命令 id → 实参构造**。命令 id 全部来自 `LEFT_CLICK_BY_NAME`（官方分派表的镜像），
+ * 这里只负责"这条命令要什么参数"，不再判断"哪一格该干什么"（那是 domain 表的事）。
+ *
+ * 参数来源：面板写进 `sj_set.json` 的值（`options` 投影）。`bLink2` / `bDelete` 的推导是
+ * **推断**（官方 `getEmbedImageObject()` 内部组装，形状未提取）：`cyLinkObject !== 'none'` 视为要链接、
+ * `cyDeleteNext` 直接取布尔。
+ */
+const COMMAND_RUNNERS: Record<string, () => Promise<boolean>> = {
+  'commonUse.embedImage': () =>
+    embedImageCmd.run({
+      options: {
+        path: '',
+        bLink2: options.value.cyLinkObject != null && options.value.cyLinkObject !== 'none',
+        bDelete: Boolean(options.value.cyDeleteNext),
+      },
+    }),
+  'commonUse.embedMultipleImages': () => embedMultiCmd.run(),
+  'commonUse.importMultipleImages': () =>
+    importMultiCmd.run({ toLinkObject: options.value.cyImportToLinkObject }),
+  'commonUse.optimizeOnce': () =>
+    optimizeOnceCmd.run({
+      options: {
+        optimizeAll: Boolean(options.value.cyOptimizeAll),
+        deleteAllEmpty: Boolean(options.value.cyOptimizeDeleteAllEmpty),
+        deleteAllHide: Boolean(options.value.cyOptimizeDeleteAllHide),
+      },
+    }),
+  'commonUse.exportImages': () =>
+    exportImagesCmd.run({
+      mode: 'image',
+      options: { ...(options.value.cyExport as Record<string, unknown> | undefined) },
+    }),
+  'commonUse.correctBlur': () => correctBlurCmd.run(),
+  'commonUse.swapWireframeFill': () => swapWireframeCmd.run(),
+  'commonUse.layerReplace': () => layerReplaceCmd.run(),
+  'commonUse.locationTrade': () => locationTradeCmd.run(),
+  'commonUse.exchangeLayerColor': () => exchangeLayerColorCmd.run(),
 }
+
 /**
  * 长按拖拽排序：闸门 = 按住 ctrl/meta（官方 `am()` 的 `ft.f()`，`:37418`；`useLongPressDrag` 内部同判）。
  * 落点候选 = 全部功能格节点（`data-drop-idx` = `toTiles` 的落盘下标）；轴 `x` 与 `/style` 的项拖拽一致。
@@ -180,15 +221,32 @@ function onGridMouseDown(event: MouseEvent) {
     },
   })
 }
+/**
+ * 左键：**只查官方分派表**（`domain/common-use-dispatch.ts`，表来自 `app.v4.js:37894`）。
+ * 四种动作：执行命令 / 翻转设置 / 展开面板 / 什么都不做——不在这里写"有子面板就展开"。
+ */
 function toggle(tile: CommonUseTile) {
-  // 没有子面板的格子 = 直接执行功能（官方 :37953-37965 的 4 个无参 jsx）
-  if (!tile.comName) {
-    void DIRECT_ACTIONS[tile.name]?.run()
+  const action = leftClickOf(tile.name)
+  if (action.kind === 'none') return
+
+  if (action.kind === 'expand') {
+    // 官方 `open(e)`（`:37923`）：只有"自定义变换 / 参考线工具 / 按间距分布"三格走这里
+    const open = expandedId.value !== tile.id
+    expandedId.value = open ? tile.id : ''
+    void setCollapsedCmd.run({ id: tile.id, collapsed: !open })
     return
   }
-  const open = expandedId.value !== tile.id
-  expandedId.value = open ? tile.id : ''
-  void setCollapsedCmd.run({ id: tile.id, collapsed: !open })
+
+  if (action.kind === 'toggle-setting') {
+    // 官方 case 13（`:37910-37911`）：翻转设置 + 一句提示，**不展开面板**
+    const next = !options.value[action.path]
+    void setOptionCmd.run({ path: action.path, value: next })
+    feedback.ok(next ? '开启智能填色' : '已关闭')
+    return
+  }
+
+  const runner = COMMAND_RUNNERS[action.command]
+  if (runner) void runner()
 }
 
 const ready = computed(() => !loading.value && !error.value)

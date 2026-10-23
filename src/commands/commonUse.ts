@@ -163,8 +163,16 @@ export const commonUseCommands: Command<unknown>[] = [
     kind: 'long',
     async run(ctx, { options }) {
       // 官方实参 `{path, bLink2, bDelete}`（`app.v4.js:38070-38074`）：`bLink2`/`bDelete`
-      // 分别对应设置里的 `cyLinkObject` / `cyDeleteNext`，由调用方（子面板/命令）传入
-      assertJsxOk(await ctx.jsx.commonUse.embedImage(options), '嵌入图片失败')
+      // 分别对应设置里的 `cyLinkObject` / `cyDeleteNext`，由调用方（子面板/命令）传入。
+      // `path` 为空时先走 `cy_getImagePath()` 选图——官方 `embedImage()` 也是先选图再嵌入
+      // （`app.v4.js:38063` 起），取消（`-1`）则静默返回。
+      let picked = options?.path
+      if (!picked) {
+        const got = await ctx.jsx.commonUse.getImagePath()
+        if (got === -1) return
+        picked = got as string
+      }
+      assertJsxOk(await ctx.jsx.commonUse.embedImage({ ...options, path: picked }), '嵌入图片失败')
     },
   }),
 

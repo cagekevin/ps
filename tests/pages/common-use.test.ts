@@ -20,6 +20,13 @@ const commands = vi.hoisted(() => ({
   locationTrade: vi.fn(async () => true),
   exchangeLayerColor: vi.fn(async () => true),
   move: vi.fn(async () => true),
+  embedImage: vi.fn(async () => true),
+  embedMultipleImages: vi.fn(async () => true),
+  importMultipleImages: vi.fn(async () => true),
+  optimizeOnce: vi.fn(async () => true),
+  exportImages: vi.fn(async () => true),
+  swapWireframeFill: vi.fn(async () => true),
+  setOption: vi.fn(async () => true),
 }))
 
 /** 每个用例换一份新的响应式假 store（`storeToRefs` 需要真响应式对象） */
@@ -49,6 +56,13 @@ vi.mock('@/components/command/useCommand', () => ({
       'commonUse.locationTrade': commands.locationTrade,
       'commonUse.exchangeLayerColor': commands.exchangeLayerColor,
       'commonUse.move': commands.move,
+      'commonUse.embedImage': commands.embedImage,
+      'commonUse.embedMultipleImages': commands.embedMultipleImages,
+      'commonUse.importMultipleImages': commands.importMultipleImages,
+      'commonUse.optimizeOnce': commands.optimizeOnce,
+      'commonUse.exportImages': commands.exportImages,
+      'commonUse.swapWireframeFill': commands.swapWireframeFill,
+      'commonUse.setOption': commands.setOption,
     }
     return {
       run: map[id] ?? commands.flip,
@@ -197,7 +211,7 @@ describe('网格区', () => {
 
 describe('展开面板（T-88b）', () => {
   it('点可展开格：面板出现在该行下方，并把折叠态写成"展开"', async () => {
-    store.tiles.value = [tile(0, '嵌入图片', { isMore: true, comName: 'comembed' })]
+    store.tiles.value = [tile(0, '自定义变换', { isMore: true, comName: 'comcustomChange' })]
     const wrapper = mount(Page)
     await flushPromises() // onMounted 里先 await store.load() 才恢复展开态
 
@@ -208,7 +222,7 @@ describe('展开面板（T-88b）', () => {
   })
 
   it('再点同一格：面板收起，折叠态写成"收起"（官方 openfun 再点收起，:38193）', async () => {
-    store.tiles.value = [tile(0, '嵌入图片', { isMore: true, comName: 'comembed' })]
+    store.tiles.value = [tile(0, '自定义变换', { isMore: true, comName: 'comcustomChange' })]
     const wrapper = mount(Page)
     await flushPromises() // onMounted 里先 await store.load() 才恢复展开态
 
@@ -232,8 +246,8 @@ describe('展开面板（T-88b）', () => {
 
   it('同时只开一个：开第二格时第一格面板消失', async () => {
     store.tiles.value = [
-      tile(0, '嵌入图片', { isMore: true, comName: 'comembed' }),
-      tile(1, '优化文档', { isMore: true, comName: 'comoptimization' }),
+      tile(0, '自定义变换', { isMore: true, comName: 'comcustomChange' }),
+      tile(1, '参考线工具', { isMore: true, comName: 'comreference' }),
     ]
     const wrapper = mount(Page)
     await flushPromises()
@@ -244,12 +258,12 @@ describe('展开面板（T-88b）', () => {
 
     await items[1].trigger('click')
     expect(wrapper.findAll('.page-common-use__panel')).toHaveLength(1)
-    expect(wrapper.find('.panel-optimization').exists()).toBe(true)
-    expect(wrapper.find('.panel-embed').exists()).toBe(false)
+    expect(wrapper.find('.panel-reference').exists()).toBe(true)
+    expect(wrapper.find('.panel-custom').exists()).toBe(false)
   })
 
   it('文件里记过 collapsed:false 的那一格启动即展开', async () => {
-    store.tiles.value = [tile(0, '嵌入图片', { isMore: true, comName: 'comembed' })]
+    store.tiles.value = [tile(0, '自定义变换', { isMore: true, comName: 'comcustomChange' })]
     store.collapsed.value = { t0: false }
 
     const wrapper = mount(Page)
@@ -342,5 +356,57 @@ describe('A3：长按拖拽排序', () => {
     await dragTile(0, 0, true, w2.element as HTMLElement)
 
     expect(commands.move).not.toHaveBeenCalled()
+  })
+})
+
+describe('T-97-1：14 格左键逐格断言（对齐官方 :37894 分派表）', () => {
+  type Case = {
+    name: string
+    comName?: string
+    command?: string
+    expand?: boolean
+    toggle?: string
+  }
+  const CASES: Case[] = [
+    { name: '嵌入图片', comName: 'comembed', command: 'embedImage' },
+    { name: '嵌入多图片', command: 'embedMultipleImages' },
+    { name: '导入多图片', comName: 'comimport', command: 'importMultipleImages' },
+    { name: '自动填充颜色', toggle: 'cyAutoFillColor' },
+    { name: '修正模糊', command: 'correctBlur' },
+    { name: '填充线框互换', command: 'swapWireframeFill' },
+    { name: '优化文档', comName: 'comoptimization', command: 'optimizeOnce' },
+    { name: '自定义变换', comName: 'comcustomChange', expand: true },
+    { name: '参考线工具', comName: 'comreference', expand: true },
+    { name: '按间距分布', comName: 'comspacing', expand: true },
+    { name: '导出图片', comName: 'comexport', command: 'exportImages' },
+    { name: '元素替换', command: 'layerReplace' },
+    { name: '位置对换', command: 'locationTrade' },
+    { name: '图层颜色互换', command: 'exchangeLayerColor' },
+  ]
+
+  it.each(CASES)('$name → 按官方分派表执行', async (item) => {
+    store.tiles.value = [
+      tile(0, item.name, item.comName ? { comName: item.comName, isMore: true } : {}),
+    ]
+    const wrapper = mount(Page)
+    await flushPromises()
+
+    await wrapper.find('.use-grid-item').trigger('click')
+    await flushPromises()
+
+    if (item.expand) {
+      expect(wrapper.find('.page-common-use__panel').exists()).toBe(true)
+      expect(commands.setCollapsed).toHaveBeenCalledWith({ id: 't0', collapsed: false })
+      return
+    }
+    if (item.toggle) {
+      expect(commands.setOption).toHaveBeenCalledWith({ path: item.toggle, value: true })
+      expect(wrapper.find('.page-common-use__panel').exists()).toBe(false)
+      expect(commands.setCollapsed).not.toHaveBeenCalled()
+      return
+    }
+    expect(commands[item.command as keyof typeof commands]).toHaveBeenCalledTimes(1)
+    // 官方这 10 格都不展开面板
+    expect(wrapper.find('.page-common-use__panel').exists()).toBe(false)
   })
 })

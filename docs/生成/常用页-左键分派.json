@@ -1,0 +1,90 @@
+{
+  "generatedFrom": "docs/原版/01-原版源码/panel/js/app.v4.js",
+  "chainLine": 37894,
+  "entries": [
+    {
+      "name": "嵌入图片",
+      "caseNo": 4,
+      "kind": "command",
+      "target": "embedImage"
+    },
+    {
+      "name": "嵌入多图片",
+      "caseNo": 6,
+      "kind": "command",
+      "target": "cy_embedMultipleImage"
+    },
+    {
+      "name": "导入多图片",
+      "caseNo": 11,
+      "kind": "command",
+      "target": "importMultipleImage"
+    },
+    {
+      "name": "自动填充颜色",
+      "caseNo": 13,
+      "kind": "toggle-setting",
+      "target": "cyAutoFillColor"
+    },
+    {
+      "name": "修正模糊",
+      "caseNo": 16,
+      "kind": "command",
+      "target": "coorectBlur"
+    },
+    {
+      "name": "填充线框互换",
+      "caseNo": 18,
+      "kind": "command",
+      "target": "swapWireframeFill"
+    },
+    {
+      "name": "优化文档",
+      "caseNo": 20,
+      "kind": "command",
+      "target": "optimizeDoc"
+    },
+    {
+      "name": "自定义变换",
+      "caseNo": 22,
+      "kind": "expand",
+      "target": "open"
+    },
+    {
+      "name": "参考线工具",
+      "caseNo": 22,
+      "kind": "expand",
+      "target": "open"
+    },
+    {
+      "name": "按间距分布",
+      "caseNo": 22,
+      "kind": "expand",
+      "target": "open"
+    },
+    {
+      "name": "导出图片",
+      "caseNo": 24,
+      "kind": "command",
+      "target": "exportImage"
+    },
+    {
+      "name": "元素替换",
+      "caseNo": 26,
+      "kind": "command",
+      "target": "layerReplace"
+    },
+    {
+      "name": "位置对换",
+      "caseNo": 28,
+      "kind": "command",
+      "target": "locationTrade"
+    },
+    {
+      "name": "图层颜色互换",
+      "caseNo": 30,
+      "kind": "command",
+      "target": "exchangeLayerColor"
+    }
+  ]
+}

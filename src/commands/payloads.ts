@@ -325,7 +325,8 @@ export interface CommonUseFlipPayload {
  * `bLink2` / `bDelete` 分别来自设置里的 `cyLinkObject` / `cyDeleteNext`（`getKey(...)`）。
  */
 export interface CommonUseEmbedOptions {
-  path: string
+  /** 空 = 命令内部先调 `cy_getImagePath()` 选图（官方 `embedImage()` 也是先选图，`:38063` 起） */
+  path?: string
   bLink2: unknown
   bDelete: unknown
 }
