@@ -280,3 +280,14 @@ describe('4 个直连格子（A1）', () => {
     expect(commands.setCollapsed).not.toHaveBeenCalled()
   })
 })
+
+describe('A2：显隐立刻反映在网格', () => {
+  it('visible:false 的项不进网格（隐藏项在设置页管）', async () => {
+    store.tiles.value = [tile(0, '嵌入图片'), tile(1, '修正模糊', { visible: false })]
+    const wrapper = mount(Page)
+    await flushPromises()
+
+    const names = wrapper.findAll('.use-grid-item__text').map((el) => el.text())
+    expect(names).toEqual(['嵌入图片'])
+  })
+})

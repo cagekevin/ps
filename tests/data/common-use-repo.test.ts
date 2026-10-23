@@ -48,6 +48,10 @@ function readDisk(): string {
 }
 
 /** 造一份"官方形状 + 我们没解析过的键"的文件 */
+/** 把给定 info 写进内存文件（A2 用例用） */
+function seed(content: Record<string, unknown>) {
+  state.files.set(PATH, JSON.stringify(content))
+}
 function seedWithUnknownKeys() {
   return {
     info: [
@@ -310,5 +314,57 @@ describe('种子（判据 6）', () => {
     expect(COMMON_USE_SEED.filter((i) => typeof i.comName === 'string')).toHaveLength(7)
     // fillSvg 既有 false 也有字符串（官方就是这样）
     expect(COMMON_USE_SEED.filter((i) => typeof i.fillSvg === 'string')).toHaveLength(4)
+  })
+})
+
+describe('A2：显隐与重置（设置页用）', () => {
+  it('setShow 只改目标项的 isShow，其它项逐字节不变、顺序不变', async () => {
+    seed({ info: COMMON_USE_SEED as unknown as Array<Record<string, unknown>> })
+    const before = JSON.parse(state.files.get(PATH) as string) as {
+      info: Array<Record<string, unknown>>
+    }
+
+    await commonUseRepo.setShow('div_img_cya3', false)
+
+    const after = JSON.parse(state.files.get(PATH) as string) as {
+      info: Array<Record<string, unknown>>
+    }
+    expect(after.info.map((i) => i.id)).toEqual(before.info.map((i) => i.id))
+    expect(after.info[2].isShow).toBe(false)
+    // 其它 13 项与改动前逐字节相同
+    for (let i = 0; i < after.info.length; i += 1) {
+      if (i === 2) continue
+      expect(JSON.stringify(after.info[i])).toBe(JSON.stringify(before.info[i]))
+    }
+  })
+
+  it('resetAll 回到官方种子顺序（cya12 在最后）', async () => {
+    // 先打乱顺序 + 隐藏一项，模拟用户改过
+    const shuffled = [...(COMMON_USE_SEED as unknown as Array<Record<string, unknown>>)]
+    shuffled.push(shuffled.shift() as Record<string, unknown>)
+    seed({ info: shuffled })
+
+    await commonUseRepo.resetAll()
+
+    const after = JSON.parse(state.files.get(PATH) as string) as {
+      info: Array<Record<string, unknown>>
+    }
+    expect(after.info.map((i) => i.id)).toEqual([
+      'div_img_cya1',
+      'div_img_cya2',
+      'div_img_cya3',
+      'div_img_cya4',
+      'div_img_cya5',
+      'div_img_cya6',
+      'div_img_cya7',
+      'div_img_cya8',
+      'div_img_cya9',
+      'div_img_cya11',
+      'div_img_cya13',
+      'div_img_cya14',
+      'div_img_cya15',
+      'div_img_cya12',
+    ])
+    expect(after.info.every((i) => i.isShow !== false)).toBe(true)
   })
 })

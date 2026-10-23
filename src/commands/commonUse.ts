@@ -1,6 +1,7 @@
 ﻿import { buildOptionPatch, FLIP_DIRECTIONS, type FlipDirection } from '@/domain/common-use'
 import { CepError } from '@/utils/errors'
 import { assertJsxOk } from '@/utils/jsx-result'
+import { commonUseRepo } from '@/cep/data/common-use'
 import {
   COMMON_USE_SETTING_KEYS,
   updateCommonUseOptions,
@@ -329,6 +330,31 @@ export const commonUseCommands: Command<unknown>[] = [
       }
       // 嵌套补丁 + `assignDeep`：改 `cyExport.ext` 时 `compress` 等兄弟键逐字节不变（靶点⑤）
       await updateCommonUseOptions(buildOptionPatch(path, value))
+    },
+  }),
+  // ---------- 常用项显隐 / 重置（写 sj_commonFunction.json，不碰 sj_set.json） ----------
+
+  defineCommand({
+    id: 'commonUse.setShow',
+    title: '显示 / 隐藏常用项',
+    group: 'system',
+    requires: 'none',
+    kind: 'instant',
+    async run(_ctx, { id, show }) {
+      // 只改这一项的 `isShow`，其它项与顺序由 `setShow` 内部按落盘下标处理（不重排数组）
+      await commonUseRepo.setShow(id, show)
+    },
+  }),
+
+  defineCommand({
+    id: 'commonUse.resetAll',
+    title: '重置常用项',
+    group: 'system',
+    requires: 'none',
+    kind: 'instant',
+    async run() {
+      // 恢复成官方种子（14 项，顺序同 `configReset()`：cya1…cya9、cya11、cya13、cya14、cya15、cya12）
+      await commonUseRepo.resetAll()
     },
   }),
   // ---------- 折叠态（我们自己的偏好，不写官方 sj_set.json） ----------

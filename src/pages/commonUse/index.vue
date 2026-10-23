@@ -116,7 +116,8 @@ function onGridContextMenu(tile: CommonUseTile) {
 }
 const gridRows = computed(() => {
   const rows: CommonUseTile[][] = []
-  for (const tile of tiles.value) {
+  // 只排显示项：isShow:false 的项在设置页管，不进网格（官方 showContext 过滤 isShow，:37595-37599）
+  for (const tile of tiles.value.filter((item) => item.visible)) {
     const last = rows[rows.length - 1]
     if (!last || last.length === GRID_COLUMNS) rows.push([tile])
     else last.push(tile)

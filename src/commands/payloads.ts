@@ -396,6 +396,12 @@ export interface CommonUseCollapsePayload {
 }
 
 /** 子面板设置项写入：`path` 是点路径（最多两段），值原样交给 `assignDeep` */
+/** 常用项显隐：id 是项 id（`div_img_cya1`…，不是面板名） */
+export interface CommonUseSetShowPayload {
+  id: string
+  show: boolean
+}
+
 export interface CommonUseSetOptionPayload {
   path: string
   value: unknown
@@ -751,6 +757,8 @@ export interface CommandPayloads {
   'commonUse.layerReplace': void
   'commonUse.locationTrade': void
   'commonUse.exchangeLayerColor': void
+  'commonUse.setShow': CommonUseSetShowPayload
+  'commonUse.resetAll': void
   'commonUse.transform': CommonUseTransformPayload
   'commonUse.referenceGuide': CommonUseReferenceGuidePayload
   'commonUse.referenceSlice': CommonUseReferenceSlicePayload

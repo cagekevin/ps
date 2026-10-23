@@ -1,4 +1,4 @@
-<script setup lang="ts">
+﻿<script setup lang="ts">
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import CheckBox from '@/components/CheckBox.vue'
@@ -13,6 +13,7 @@ import { usePersistedRef } from '@/composables/usePersisted'
 import { useCloudStore } from '@/stores/cloud'
 import { UNITS } from '@/domain/units'
 import { formatPresetText } from '@/domain/font-preset-text'
+import { useCommonUseStore } from '@/stores/common-use'
 import { useFontSetStore } from '@/stores/font-set'
 import { useNavStore } from '@/stores/nav'
 import AddcomDialog from './components/AddcomDialog.vue'
@@ -29,6 +30,24 @@ const downloadCmd = useCommand('cloud.download')
 const saveFontSettings = useCommand('fontSet.saveSettings')
 const copyShortcutScripts = useCommand('system.copyToScripts')
 const resetShortcutScripts = useCommand('system.resetQuickKeys')
+const setShowCmd = useCommand('commonUse.setShow')
+const resetAllCmd = useCommand('commonUse.resetAll')
+
+const commonUse = useCommonUseStore()
+const { tiles: commonUseTiles } = storeToRefs(commonUse)
+
+function setShow(id: string, show: boolean) {
+  void setShowCmd.run({ id, show })
+}
+
+function resetCommonUse() {
+  void resetAllCmd.run()
+}
+
+// 设置页打开时读一次（命令写成功后由 store 的订阅刷新）
+onMounted(() => {
+  void commonUse.load()
+})
 const buildTime = __BUILD_TIME__
 
 const navTips = usePersistedRef('nav.tips', true)
@@ -215,7 +234,23 @@ onUnmounted(() => {
     </SettingsSection>
 
     <SettingsSection title="常用功能面板">
-      <EmptyState compact>当前版本未提供常用功能面板配置。</EmptyState>
+      <!--
+        原版这一块是 `addcom` 弹层（`docs/生成/页面规格/08-设置.md:69-76`），我们做成同区块内的行：
+        每项一个勾选控制显隐（写 `sj_commonFunction.json` 的 `isShow`，不碰 `sj_set.json`），
+        底部一个「恢复默认」按钮走官方种子重置（`cya1…cya12`，`cya12` 在最后）。
+        页面只经 `useCommand`，不 import 数据层。
+      -->
+      <SettingsRow v-for="tile in commonUseTiles" :key="tile.id">
+        <CheckBox
+          :model-value="tile.visible"
+          @update:model-value="(show: boolean) => setShow(tile.id, show)"
+        >
+          {{ tile.name }}
+        </CheckBox>
+      </SettingsRow>
+      <SettingsRow>
+        <GButton width="half" @click="resetCommonUse">恢复默认</GButton>
+      </SettingsRow>
     </SettingsSection>
 
     <SettingsSection title="字体面板">
