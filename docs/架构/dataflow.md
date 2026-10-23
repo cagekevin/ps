@@ -1,4 +1,4 @@
-# 数据流总览
+﻿# 数据流总览
 
 > 只写**跨页不变量**：分层、唯一入口、存储归属、跨页机制、写入边界。
 > 单页细节 → `docs/页面/0N-*.md`；待办 → `docs/状态/台账.md`；机制选型 → `docs/架构/决策记录.md`。
@@ -113,6 +113,7 @@ useCommand.run(payload, successText)
 | 动作仓库索引 | `sj_dzStoreInfo.json` | `cep/data/actions.ts`（`actionIndexRepo`） | `action` |
 | 动作仓库文件 | `sj_dz*.json` | `cep/data/actions.ts`（`actionLibraryRepo`） | `action` |
 | 自由面板 | `sj_appFreePanel.json` | `cep/data/free-panel.ts` | `free-panel` |
+| 常用项列表（项 / 顺序 / 显隐） | `sj_commonFunction.json` | `cep/data/common-use.ts` | `common-use` |
 | 重命名预设 | `sj_cmmRename.ini` | `cep/data/rename.ts` | `rename` |
 | 样式仓库索引 | `sj_kuStoreInfo.ini` | `cep/data/style-library-repo.ts` | `style-library` |
 | 四库文件 | 索引里的 `sj_ku*.json` | `cep/data/style-library-repo.ts` + `style-library-io.ts` | `style-library` |
@@ -194,7 +195,7 @@ mousedown + Ctrl/Meta + 300ms
 | `/freePanel` | 见 §7 | 本文 §7（没有单页文档） | 独立面板 |
 | `/style` | 页面 → `style.*` → `commands/style.ts` → `style-library-repo` / `style-library-io` → `store.load()` | `docs/页面/06-样式.md` §三；`docs/生成/库文件格式契约.md` | 部分实现（T-65） |
 | `/rename` | 页面 → `rename.*` → `commands/rename.ts` → `renameRepo` → `bindRenameData` → `stores/rename` | `docs/页面/07-重命名.md` §三 / §8.2 | 部分实现（T-49） |
-| `/commonUse` | 占位；设计态见 `docs/页面/05-常用.md` §四（尚无实现） | `docs/页面/05-常用.md` §四 | 占位（T-47） |
+| `/commonUse` | 契约见 ADR-22、计划见 `docs/架构/常用页-实施计划.md`（**未实现**，页面仍是占位） | 同上 | 占位（T-47 / T-83…T-89） |
 | `/set` | `cloud.setAutoSync` → `cep/cloud/config` → `sj_v5_ui.json`；`cloud.upload/download` → `cloudEngine`；`stores/cloud` 只读状态 | `docs/页面/08-设置.md` §三 / 五；`docs/架构/云同步契约.md` §11 | 部分实现（T-50） |
 | `/custom` | 占位；设计态见 `docs/页面/04-自定义.md` | `docs/页面/04-自定义.md` | 占位（T-46） |
 | 云同步（非页面） | `cloud.*` → `cep/cloud` → GAS；本地台账 `sj_v5_cloud_sync.json` | `docs/架构/云同步契约.md` §7 / 8；`docs/架构/云同步底层设施.md` §8 / 11 | T-55 / 56 |
