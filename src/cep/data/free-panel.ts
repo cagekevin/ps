@@ -6,7 +6,12 @@
 
 import { DATA_FILES } from '@/cep/env'
 import { userDir } from '@/cep/fs'
-import { createEmptyFreePanel, type FreePanelBlock, type FreePanelFile } from '@/domain/free-panel'
+import {
+  createEmptyFreePanel,
+  readFreePanelFile,
+  type FreePanelBlock,
+  type FreePanelFile,
+} from '@/domain/free-panel'
 import { deepClone } from '@/utils/clone'
 import { pick } from './pick'
 import type { Repo, RepoRead } from './types'
@@ -81,10 +86,16 @@ function applySessionShowText(blocks: FreePanelBlock[]): void {
   }
 }
 
+/**
+ * `normalize` 接在读边界：磁盘内容是 `unknown`，只有 `readFreePanelFile` 认得的那一种形状才变成
+ * `FreePanelFile`；认不出 → `degraded`，页面提示，绝不当空面板用。所以下面每处都可以直接
+ * `value.obj.list`，不再需要 `?.` / `?? []`。
+ */
 const base: Repo<FreePanelFile> = pick(
   () => `${userDir()}/${DATA_FILES.appFreePanel}`,
   createEmptyFreePanel,
   createEmptyFreePanel,
+  { normalize: readFreePanelFile },
 )
 
 const listeners = new Set<(value: FreePanelFile) => void>()
@@ -103,7 +114,7 @@ function emit(value: FreePanelFile): void {
 export const freePanelRepo: Repo<FreePanelFile> = {
   async read(): Promise<RepoRead<FreePanelFile>> {
     const result = await base.read()
-    const blocks = result.value.obj?.list ?? []
+    const blocks = result.value.obj.list
     seedShowText(blocks)
     stripShowText(blocks)
     applySessionShowText(blocks)
@@ -112,15 +123,15 @@ export const freePanelRepo: Repo<FreePanelFile> = {
 
   async write(value: FreePanelFile): Promise<void> {
     const onDisk = deepClone(value)
-    captureShowText(onDisk.obj?.list ?? [])
+    captureShowText(onDisk.obj.list)
     await base.write(onDisk)
-    applySessionShowText(value.obj?.list ?? [])
+    applySessionShowText(value.obj.list)
     emit(value)
   },
 
   async update(mutator: (value: FreePanelFile) => FreePanelFile | void): Promise<FreePanelFile> {
     const persisted = await base.update((file) => {
-      const blocks = file.obj?.list ?? []
+      const blocks = file.obj.list
       // mutator 要看到 showText（命令层按 block.showText 写）：磁盘值只作种子，会话态优先
       seedShowText(blocks)
       stripShowText(blocks)
@@ -128,15 +139,15 @@ export const freePanelRepo: Repo<FreePanelFile> = {
 
       const next = mutator(file) ?? file
       // mutator 改过的 showText 是权威值，更新会话态
-      captureShowText(next.obj?.list ?? [])
+      captureShowText(next.obj.list)
 
       // 落盘的是剥掉 showText 的副本
       const onDisk = deepClone(next)
-      stripShowText(onDisk.obj?.list ?? [])
+      stripShowText(onDisk.obj.list)
       return onDisk
     })
 
-    applySessionShowText(persisted.obj?.list ?? [])
+    applySessionShowText(persisted.obj.list)
     emit(persisted)
     return persisted
   },

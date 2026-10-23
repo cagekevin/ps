@@ -127,13 +127,25 @@ function normalizeBlock(raw: unknown, fallbackId: number): FreePanelBlock | null
   }
 }
 
-/** 只做结构归一，不丢 block；非法项丢弃 */
+/**
+ * 形状判据：`obj.list` 必须是数组。这是 `FreePanelFile` 唯一的结构前提，
+ * 也是页面/命令能直接写 `file.obj.list` 的全部依据。
+ *
+ * **只写这一份**：`normalizeFreePanel` 与读边界 `readFreePanelFile` 都走这里；
+ * 在别处再写一次 `obj?.list ?? []` 就是第二份"什么算合法文件"。
+ */
+function hasPanelList(raw: unknown): raw is { obj: { list: unknown[] } } {
+  if (!raw || typeof raw !== 'object') return false
+  const obj = (raw as Record<string, unknown>).obj
+  return Boolean(obj) && typeof obj === 'object' && Array.isArray((obj as { list?: unknown }).list)
+}
+
+/** 只做结构归一，不丢 block；非法项丢弃。形状不认识时给一个空面板 */
 export function normalizeFreePanel(raw: unknown): FreePanelFile {
-  if (!raw || typeof raw !== 'object') return createEmptyFreePanel()
+  if (!hasPanelList(raw)) return createEmptyFreePanel()
   const file = raw as Record<string, unknown>
-  const obj = file.obj as Record<string, unknown> | undefined
-  const list = obj && Array.isArray(obj.list) ? obj.list : []
-  const blocks = list
+  const obj = raw.obj as Record<string, unknown>
+  const blocks = raw.obj.list
     .map((block, index) => normalizeBlock(block, index + 1))
     .filter((block): block is FreePanelBlock => Boolean(block))
 
@@ -144,13 +156,24 @@ export function normalizeFreePanel(raw: unknown): FreePanelFile {
     btnId: typeof file.btnId === 'number' ? file.btnId : 0,
     obj: {
       // 保留 obj 未知字段
-      ...(obj ?? {}),
-      version: typeof obj?.version === 'string' ? obj.version : '1.0',
-      type: typeof obj?.type === 'string' ? obj.type : 'row',
-      // 空 list 也是合法状态；只有文件缺失/非法时才用默认 block
+      ...obj,
+      version: typeof obj.version === 'string' ? obj.version : '1.0',
+      type: typeof obj.type === 'string' ? obj.type : 'row',
+      // 空 list 也是合法状态；只有文件缺失/形状不认识时才用默认 block
       list: blocks,
     },
   }
+}
+
+/**
+ * 读边界归一（`data/free-panel.ts` 传给 `fileRepo` 的 `normalize`）。
+ *
+ * 与 `normalizeFreePanel` 的唯一区别：**形状不认识返回 `null`**，由 `file-repo` 转成
+ * `degraded` + fallback，页面据此提示。在这里补一个空面板就等于静默回退——
+ * 坏文件和"面板本来就是空的"从此分不开（硬规则 20(b)）。
+ */
+export function readFreePanelFile(raw: unknown): FreePanelFile | null {
+  return hasPanelList(raw) ? normalizeFreePanel(raw) : null
 }
 
 /** 深度优先遍历 block；回调返回 true 可提前停止 */

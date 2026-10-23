@@ -1,4 +1,4 @@
-﻿# 数据流总览
+# 数据流总览
 
 > 只写**跨页不变量**：分层、唯一入口、存储归属、跨页机制、写入边界。
 > 单页细节 → `docs/页面/0N-*.md`；待办 → `docs/状态/台账.md`；机制选型 → `docs/架构/决策记录.md`。
@@ -180,7 +180,7 @@ mousedown + Ctrl/Meta + 300ms
 | 5 | `legacy.call` 只走 `jsxCall` | 不写 `jsxHistory/jsxHistoryNoCheck`，历史记录与原版不同 |
 | 6 | `freePanel.setDisplay` 对所有 block 写 `showNumber/showIcon/showText` | 不能按区域单独设置；`showNumber` 同时是列数（2/3/4） |
 | 7 | `freePanel.clear` 用 `createEmptyFreePanel()` 重置 `uid=1`；`addBlock` 用 `uid += 1` | id 不保证全局唯一；不要假设旧 id 不会复用 |
-| 8 | ~~`free-panel` store 的 `degraded` 只在 `load()` 更新~~ | **已销（D-40）**：该字段已删除。写路径在 `degraded` 时由 `file-repo.update` 直接抛 `IO` 拒绝，页面本就没有消费方，留着只会误导。 |
+| 8 | `free-panel` store 的 `degraded` 由 `load()` 写入，`onChange` 不更新 | D-40 曾判"无消费方"删掉；**T-99-2 加回来**：读边界归一（`normalize: readFreePanelFile`）后 `degraded` 才真正表示"磁盘那份文件不能当数据用"，页面空态靠它区分"文件坏了"与"面板是空的"。写后不刷新是对的——`degraded` 时 `file-repo.update` 直接抛 `IO`，不会有成功写入 |
 | 9 | `settingsSnapshot()` 是命令执行时的快照 | 命令运行中再改偏好，不影响当前 `ctx.settings` |
 | 10 | `freePanel.add` 的 option 规则：`undefined → {}`，`null` 原样保留 | 原版实际存在 `option:null`，不要统一成 `{}` |
 | 11 | `actionIndexRepo.onChange` 里写当前文件指针 | 这是带副作用的读模型监听；新增监听不要照抄 |

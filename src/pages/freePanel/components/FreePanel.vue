@@ -23,7 +23,15 @@ import FreePanelBlock from './FreePanelBlock.vue'
  * 只消费 freePanel store；执行/删除走命令。
  */
 const store = useFreePanelStore()
-const { blocks } = storeToRefs(store)
+const { blocks, degraded } = storeToRefs(store)
+
+/**
+ * 空态文案。读坏（`degraded`）时**不能**还显示"还没有自由面板区域"——
+ * 那等于把"文件坏了"说成"面板是空的"。原文件仍在磁盘上（写路径 D-42 会拒绝覆盖）。
+ */
+const emptyText = computed(() =>
+  degraded.value ? `${degraded.value}，自由面板数据未载入（原文件已保留）` : '还没有自由面板区域。',
+)
 
 const executeCmd = useCommand('freePanel.execute')
 const removeCmd = useCommand('freePanel.remove')
@@ -300,12 +308,7 @@ onMounted(() => {
       </ul>
     </header>
 
-    <EmptyState
-      v-if="!blocks.length"
-      compact
-      class="free-panel__empty"
-      text="还没有自由面板区域。"
-    />
+    <EmptyState v-if="!blocks.length" compact class="free-panel__empty" :text="emptyText" />
 
     <div v-else class="free-panel__tree">
       <FreePanelBlock

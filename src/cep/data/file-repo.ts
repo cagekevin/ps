@@ -3,13 +3,22 @@ import { CepError } from '@/utils/errors'
 import { log } from '@/utils/logger'
 import type { Repo, RepoRead } from './types'
 
-export interface FileRepoOptions {
+export interface FileRepoOptions<T = unknown> {
   /** 写之前把原文备份成 .bak，默认开（ADR-12） */
   backup?: boolean
   /** 文件不存在时 update 直接报错，禁止用 fallback 覆盖写 */
   requireExisting?: boolean
   /** 写前发现文件被别的面板改过时的重试次数，默认 5（D-26） */
   retries?: number
+  /**
+   * 读边界归一：把 `JSON.parse` 出来的 `unknown` 变成 `T`。
+   *
+   * **形状不认识必须返回 `null`**——`readRaw` 会把它转成 `degraded` + fallback，用户能在界面上看到。
+   * 归一器里不许补默认值：那等于把坏文件变成"看起来能用"（硬规则 20(b) 的静默回退）。
+   *
+   * 不传 = 仍把解析结果直接当 `T`（未接归一的仓库，剩余清单见台账 T-99-2）。
+   */
+  normalize?: (raw: unknown) => T | null
 }
 
 /**
@@ -25,10 +34,11 @@ export interface FileRepoOptions {
 export function fileRepo<T>(
   resolvePath: () => string,
   fallback: () => T,
-  opts: FileRepoOptions = {},
+  opts: FileRepoOptions<T> = {},
 ): Repo<T> {
   const backup = opts.backup !== false
   const retries = opts.retries ?? 5
+  const normalize = opts.normalize
   const listeners = new Set<(value: T) => void>()
   let queue: Promise<unknown> = Promise.resolve()
 
@@ -61,12 +71,25 @@ export function fileRepo<T>(
     // 文件不存在是首次使用的正常状态，不算 degraded
     if (!text) return { value: fallback(), text: null }
 
+    let parsed: unknown
     try {
-      return { value: JSON.parse(text) as T, text }
+      parsed = JSON.parse(text)
     } catch (e) {
-      log.warn('repo', `${target} 不是合法 JSON，使用默认值`, e)
+      // 坏文件是错误不是警告：与 `style-library-repo.ts:136` 同一档（用户能在「打开日志」里查到）
+      log.error('repo', `${target} 不是合法 JSON，使用默认值`, e)
       return { value: fallback(), text, degraded: '内容不是合法 JSON' }
     }
+
+    // 没接归一的仓库：解析结果直接当 T。这是"形状"的第二份真相，逐仓库接归一后消失（T-99-2）
+    if (!normalize) return { value: parsed as T, text }
+
+    const value = normalize(parsed)
+    if (value === null) {
+      // 结构不认识 ≠ 文件不存在：两者必须能分辨，否则坏文件在页面上就是"空面板"
+      log.error('repo', `${target} 内容结构不认识，使用默认值`)
+      return { value: fallback(), text, degraded: '内容结构不认识' }
+    }
+    return { value, text }
   }
 
   /**
