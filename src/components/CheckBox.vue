@@ -62,8 +62,11 @@ function toggle() {
 
 .check-box__box {
   display: inline-flex;
-  width: var(--icon-sm);
-  height: var(--icon-sm);
+  /* 方框 12×12：原版 `.base-check div div` / `svg div` 宽高 12（`app.bf68b505.css` 字符位置
+     19060；组件模块 `07ea` 在 `app.8565afb8.js`）。用户 2026-10-23 定「全仓 12×12」。
+     不走 `--icon-sm`（14px）：那档被 FontSetIcon 等共用，改 token 会牵连别的控件。 */
+  width: var(--checkbox-size, 12px);
+  height: var(--checkbox-size, 12px);
   align-items: center;
   justify-content: center;
   padding: 0;
