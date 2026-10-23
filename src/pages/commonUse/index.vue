@@ -3,7 +3,7 @@ import { computed, onMounted, ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import EmptyState from '@/components/EmptyState.vue'
 import GButton from '@/components/GButton.vue'
-import GSegment from '@/components/GSegment.vue'
+import GInput from '@/components/GInput.vue'
 import Icon from '@/components/Icon.vue'
 import NewSpin from '@/components/NewSpin.vue'
 import SettingsRow from '@/components/SettingsRow.vue'
@@ -13,8 +13,10 @@ import { leftClickOf } from '@/domain/common-use-dispatch'
 import { useFeedbackStore } from '@/stores/feedback'
 import { useFreePanelStore } from '@/stores/free-panel'
 import {
+  ENLARGE_ALL_PRESETS,
   ENLARGE_PRESETS,
   FLIP_DIRECTIONS,
+  NARROW_ALL_PRESETS,
   NARROW_PRESETS,
   type CommonUseTile,
   type FlipDirection,
@@ -44,6 +46,32 @@ const store = useCommonUseStore()
 const { tiles, collapsed, options, loading, error, degraded } = storeToRefs(store)
 
 const zoomCmd = useCommand('commonUse.zoom')
+/**
+ * 放大 / 缩小两行的本地状态（官方同样是组件本地：`enlargeVal:""`/`enlargeIstrue:false`，`:37551-37557`）。
+ * 互斥由两个 toggle 保证（官方 `enlargeOpen`/`narrowOpen` 互置 false，`:38163-38170`）。
+ */
+const enlargeVal = ref('')
+const narrowVal = ref('')
+const enlargeOpen = ref(false)
+const narrowOpen = ref(false)
+function toggleEnlarge() {
+  enlargeOpen.value = !enlargeOpen.value
+  narrowOpen.value = false
+}
+function toggleNarrow() {
+  narrowOpen.value = !narrowOpen.value
+  enlargeOpen.value = false
+}
+/**
+ * 回车执行：官方 `inputSize()` 先 `t.replace(/[^\d]/g,"")` 再 `changeSize`（`cy_zoom([t])`，`:38128-38144`）。
+ * **有意偏离**：官方对空值不做拦截、会把空串发给 jsx；我方命令层要求"倍数必须是正数"，所以空值不发。
+ */
+function inputSize(kind: 'enlarge' | 'narrow') {
+  const raw = kind === 'enlarge' ? enlargeVal.value : narrowVal.value
+  const digits = raw.replace(/[^\d]/g, '')
+  if (!digits) return
+  void zoom(Number(digits))
+}
 const flipCmd = useCommand('commonUse.flip')
 const setCollapsedCmd = useCommand('commonUse.setCollapsed')
 const addToPanelCmd = useCommand('freePanel.add')
@@ -294,23 +322,22 @@ function flip(direction: FlipDirection) {
 
     <template v-else-if="ready">
       <!-- 放大行 / 缩小行：左胶囊 + 4 颗 25% 预设（官方 `.partBtn-wrap` + `.btn-small-4`，`:35485-35489`） -->
-      <SettingsRow
-        v-for="row in ['scale', 'narrow'] as const"
-        :key="row"
-        class="page-common-use__row"
-      >
-        <GSegment
-          :model-value="row"
-          :options="
-            row === 'scale'
-              ? [{ value: 'scale', label: '放大' }]
-              : [{ value: 'narrow', label: '缩小' }]
-          "
-          chevron
-          :aria-label="row === 'scale' ? '放大倍数' : '缩小倍数'"
+      <!-- 放大 / 缩小两行：官方 `baseInput`（可键入、回车执行）+ 右侧展开箭头 + 4 颗预设（`:35430-35499`）；
+           箭头展开第二排 10 颗整体档位（`enlargeAll`/`narrowAll`，`v-show` `:35500`/`:35522`）；两行互斥（`:38163-38170`） -->
+      <SettingsRow class="page-common-use__row">
+        <span class="page-common-use__label">放大</span>
+        <GInput
+          v-model="enlargeVal"
+          size="small"
+          class="page-common-use__size"
+          aria-label="放大倍数"
+          @enter="inputSize('enlarge')"
         />
+        <GButton size="small" type="text" aria-label="展开放大档位" @click="toggleEnlarge">
+          <Icon name="#iconzhankaizhedie" size="xs" />
+        </GButton>
         <GButton
-          v-for="scale in row === 'scale' ? ENLARGE_PRESETS : NARROW_PRESETS"
+          v-for="scale in ENLARGE_PRESETS"
           :key="scale"
           size="small"
           width="quarter"
@@ -319,6 +346,44 @@ function flip(direction: FlipDirection) {
           {{ scale }}
         </GButton>
       </SettingsRow>
+      <div v-show="enlargeOpen" class="page-common-use__zoom-all">
+        <GButton
+          v-for="scale in ENLARGE_ALL_PRESETS"
+          :key="scale"
+          size="small"
+          @click="zoom(scale)"
+        >
+          {{ scale }}
+        </GButton>
+      </div>
+
+      <SettingsRow class="page-common-use__row">
+        <span class="page-common-use__label">缩小</span>
+        <GInput
+          v-model="narrowVal"
+          size="small"
+          class="page-common-use__size"
+          aria-label="缩小倍数"
+          @enter="inputSize('narrow')"
+        />
+        <GButton size="small" type="text" aria-label="展开缩小档位" @click="toggleNarrow">
+          <Icon name="#iconzhankaizhedie" size="xs" />
+        </GButton>
+        <GButton
+          v-for="scale in NARROW_PRESETS"
+          :key="scale"
+          size="small"
+          width="quarter"
+          @click="zoom(scale)"
+        >
+          {{ scale }}
+        </GButton>
+      </SettingsRow>
+      <div v-show="narrowOpen" class="page-common-use__zoom-all">
+        <GButton v-for="scale in NARROW_ALL_PRESETS" :key="scale" size="small" @click="zoom(scale)">
+          {{ scale }}
+        </GButton>
+      </div>
 
       <!-- 翻转 6 颗：图标按钮，18px（官方 `baseIcon svgWidth:18px`，`:35617-35621`） -->
       <div class="page-common-use__flip">

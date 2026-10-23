@@ -471,3 +471,90 @@ describe('T-97-3：点格子那条路径的 bLink2 是官方原值直传', () =>
     })
   })
 })
+
+describe('T-97-4：放大/缩小两行（官方 baseInput + 展开箭头 + 4 颗 + 第二排 10 颗）', () => {
+  it('放大行输入 120 回车 → 命令实参就是 120', async () => {
+    store.tiles.value = [tile(0, '修正模糊')]
+    const wrapper = mount(Page)
+    await flushPromises()
+
+    const input = wrapper.findAll('input')[0]
+    await input.setValue('120')
+    await input.trigger('keydown', { key: 'Enter' })
+    await flushPromises()
+
+    expect(commands.zoom).toHaveBeenCalledWith({ scale: 120 })
+  })
+
+  it('非数字被剔掉：输入 "a1b2c" 回车 → 发 12（官方 replace(/[^\\d]/g,"")，:38129）', async () => {
+    store.tiles.value = [tile(0, '修正模糊')]
+    const wrapper = mount(Page)
+    await flushPromises()
+
+    const input = wrapper.findAll('input')[1]
+    await input.setValue('a1b2c')
+    await input.trigger('keydown', { key: 'Enter' })
+    await flushPromises()
+
+    expect(commands.zoom).toHaveBeenCalledWith({ scale: 12 })
+  })
+
+  it('放大行 4 颗预设各自执行（105/110/150/200，官方 :37552）', async () => {
+    store.tiles.value = [tile(0, '修正模糊')]
+    const wrapper = mount(Page)
+    await flushPromises()
+
+    for (const scale of [105, 110, 150, 200]) {
+      const button = wrapper.findAll('button').find((b) => b.text() === String(scale))
+      await button!.trigger('click')
+      expect(commands.zoom).toHaveBeenCalledWith({ scale })
+    }
+  })
+
+  it('点箭头展开第二排、再点收起（官方 enlargeIstrue，:38163-38166）', async () => {
+    store.tiles.value = [tile(0, '修正模糊')]
+    const wrapper = mount(Page)
+    await flushPromises()
+
+    expect(wrapper.findAll('.page-common-use__zoom-all')[0].attributes('style') ?? '').toContain(
+      'display: none',
+    )
+    await wrapper.find('button[aria-label="展开放大档位"]').trigger('click')
+    expect(
+      wrapper.findAll('.page-common-use__zoom-all')[0].attributes('style') ?? '',
+    ).not.toContain('display: none')
+    await wrapper.find('button[aria-label="展开放大档位"]').trigger('click')
+    expect(wrapper.findAll('.page-common-use__zoom-all')[0].attributes('style') ?? '').toContain(
+      'display: none',
+    )
+  })
+
+  it('第二排 10 颗可执行（101…500，官方 :37553）', async () => {
+    store.tiles.value = [tile(0, '修正模糊')]
+    const wrapper = mount(Page)
+    await flushPromises()
+
+    await wrapper.find('button[aria-label="展开放大档位"]').trigger('click')
+    const second = wrapper.find('.page-common-use__zoom-all')
+    for (const scale of [101, 500]) {
+      const button = second.findAll('button').find((b) => b.text() === String(scale))
+      await button!.trigger('click')
+      expect(commands.zoom).toHaveBeenCalledWith({ scale })
+    }
+  })
+
+  it('两行互斥：展开放大行 → 缩小行收起；反之亦然', async () => {
+    store.tiles.value = [tile(0, '修正模糊')]
+    const wrapper = mount(Page)
+    await flushPromises()
+
+    await wrapper.find('button[aria-label="展开缩小档位"]').trigger('click')
+    const rows = wrapper.findAll('.page-common-use__zoom-all')
+    expect(rows[0].attributes('style') ?? '').toContain('display: none')
+    expect(rows[1].attributes('style') ?? '').not.toContain('display: none')
+
+    await wrapper.find('button[aria-label="展开放大档位"]').trigger('click')
+    expect(rows[0].attributes('style') ?? '').not.toContain('display: none')
+    expect(rows[1].attributes('style') ?? '').toContain('display: none')
+  })
+})
