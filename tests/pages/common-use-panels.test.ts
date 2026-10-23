@@ -3,6 +3,7 @@ import { mount } from '@vue/test-utils'
 import GAnchorGrid, { ANCHOR_ROWS } from '@/components/GAnchorGrid.vue'
 import GRadio from '@/components/GRadio.vue'
 import PanelExport from '@/pages/commonUse/components/PanelExport.vue'
+import PanelCustomChange from '@/pages/commonUse/components/PanelCustomChange.vue'
 import PanelImport from '@/pages/commonUse/components/PanelImport.vue'
 
 /**
@@ -93,5 +94,24 @@ describe('面板形态', () => {
 
     expect(wrapper.findAll('input[type="checkbox"], .check-box, label')).not.toHaveLength(0)
     expect(wrapper.find('.g-collapse').exists()).toBe(false)
+  })
+})
+
+describe('comexport 折叠区标题是官方原文', () => {
+  it('三个标题逐字来自 app.v4.js:36661 / :36754 / :36784', () => {
+    const wrapper = mount(PanelExport)
+    const titles = wrapper.findAll('.g-collapse__title').map((el) => el.text())
+
+    expect(titles).toEqual(['压缩尺寸 & 加水印', '所在目录设置', '批量导出功能'])
+  })
+})
+
+describe('comcustomChange 六输入的商品名与配对', () => {
+  it('六项官方 data 名各出现一次（app.v4.js:36316-36323）', () => {
+    const wrapper = mount(PanelCustomChange)
+    const rows = wrapper.findAll('.setting-row')
+
+    expect(rows).toHaveLength(4) // 3 行输入 + 1 行按钮
+    expect(wrapper.findAll('.g-input')).toHaveLength(6)
   })
 })
