@@ -23,6 +23,27 @@ interface CepBridge {
   removeEventListener?(type: string, listener: (event: unknown) => void, obj?: unknown): void
 }
 
+/**
+ * CEP 的 Node 侧文件对话框 API（CEP 文档化接口，只在 --enable-nodejs 下存在）。
+ * 声明在这里而不是 `cep/dialog.ts`：`window.cep` 是**运行时注入**的第三方形状（硬规则 20(a)）。
+ */
+interface CepFs {
+  showOpenDialogEx(
+    allowMultiple: boolean,
+    chooseDirectory: boolean,
+    title: string,
+    initialPath: string,
+    fileTypes: string[],
+  ): { err: number; data: string[] }
+  showSaveDialogEx(
+    title: string,
+    initialPath: string,
+    fileTypes: string[],
+    defaultName: string,
+    friendlyFileTypes?: string,
+  ): { err: number; data: string }
+}
+
 interface Window {
   __adobe_cep__?: CepBridge
   /** 构建信息，启动自检写入；用于控制台/支持排查 */
@@ -30,4 +51,8 @@ interface Window {
   /** CEP 开了 --enable-nodejs 后可用 */
   require?: (id: string) => unknown
   cep_node?: { require: (id: string) => unknown }
+  /** CEP 的 Node 侧 API（文件对话框在 `cep.fs`，见 `CepFs`） */
+  cep?: { fs?: CepFs }
+  /** 日志导出的调试入口，由 `utils/logger.ts` 挂上去 */
+  __pszDump?: () => string
 }

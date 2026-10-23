@@ -85,11 +85,9 @@ export function fileRepo<T>(
    */
   function compareSync(target: string, expected: string | null): 'same' | 'diff' | 'unknown' {
     if (!hasNode()) return 'unknown'
-    try {
-      return readTextFile(target) === expected ? 'same' : 'diff'
-    } catch {
-      return 'diff'
-    }
+    // 原来的 `catch { return 'diff' }` 不可达：`readTextFile`（fs.ts:55-64）自带 try/catch、
+    // 失败只 return null，从不抛；`===` 比两个原始值也不会抛。
+    return readTextFile(target) === expected ? 'same' : 'diff'
   }
 
   /**

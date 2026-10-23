@@ -174,10 +174,10 @@ grep -rn "export .*<概念词>" src  # 有哪些导出叫这个名字
 | 层 | 规模 | 放什么 |
 | --- | --- | --- |
 | `src/pages/` | <!-- stats:begin layers.pages -->61 文件 / 12519 行<!-- stats:end layers.pages --> | 11 个页面（含 `_atoms` `_probe` `_placeholder` 三个内部页） |
-| `src/cep/` | <!-- stats:begin layers.cep -->52 文件 / 5716 行<!-- stats:end layers.cep --> | PS 出口：`transport` / `jsx/<域>` / `data/`（仓库层）/ `cloud` / `dialog` / `events` |
+| `src/cep/` | <!-- stats:begin layers.cep -->52 文件 / 5703 行<!-- stats:end layers.cep --> | PS 出口：`transport` / `jsx/<域>` / `data/`（仓库层）/ `cloud` / `dialog` / `events` |
 | `src/components/` | <!-- stats:begin layers.components -->36 文件 / 3286 行<!-- stats:end layers.components --> | 跨页组件；`G` 前缀 = UI 基础件 |
 | `src/domain/` | <!-- stats:begin layers.domain -->23 文件 / 3335 行<!-- stats:end layers.domain --> | 纯函数与类型，零 IO、零 Vue |
-| `src/commands/` | <!-- stats:begin layers.commands -->15 文件 / 4293 行<!-- stats:end layers.commands --> | 命令注册表 + 分域命令 |
+| `src/commands/` | <!-- stats:begin layers.commands -->15 文件 / 4292 行<!-- stats:end layers.commands --> | 命令注册表 + 分域命令 |
 | `src/composables/` | <!-- stats:begin layers.composables -->10 文件 / 918 行<!-- stats:end layers.composables --> | 组合式（`useCommand` 在 `components/command/`） |
 | `src/stores/` | <!-- stats:begin layers.stores -->14 文件 / 888 行<!-- stats:end layers.stores --> | 只读投影 + 少量 UI 状态 |
 | `src/utils/` | <!-- stats:begin layers.utils -->10 文件 / 505 行<!-- stats:end layers.utils --> | 无依赖工具 |

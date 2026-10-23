@@ -10,7 +10,7 @@ import type { FontItem, LayerState, SysFontFile } from './types'
  * fonts.json 是从 %APPDATA%\SheJiZhuLi\SysFont2.json 直接拷来的真实数据（259 条），
  * 不是编的——所以浏览器里调出来的列表和 PS 里一致，只是键名要转成页面用的形态。
  */
-const file = fontsJson as unknown as SysFontFile
+const file: SysFontFile = fontsJson
 
 const wait = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms))
 

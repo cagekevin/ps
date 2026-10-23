@@ -7,7 +7,7 @@ import { USER_DIR } from './env'
 type RequireFn = (id: string) => any
 
 function getRequire(): RequireFn | null {
-  const w = window as unknown as { require?: RequireFn; cep_node?: { require?: RequireFn } }
+  const w = window
   if (typeof w.require === 'function') return w.require
   if (typeof w.cep_node?.require === 'function') return w.cep_node.require
   return null
@@ -43,8 +43,9 @@ export function extensionDir(): string {
 
 /** 用户数据目录，如 C:/Users/x/AppData/Roaming/SheJiZhuLi */
 export function userDir(): string {
-  const g = globalThis as unknown as { process?: { env?: Record<string, string | undefined> } }
-  const env = g.process?.env ?? {}
+  // `process` 由 CEP 的 --enable-nodejs 注入（形状在 types/cep-node.d.ts）；
+  // 无 Node 时它不存在，`?? {}` 保留：下一行 `nodeRequire('path')` 会抛 NO_NODE。
+  const env = globalThis.process?.env ?? {}
   const path = nodeRequire('path')
   const os = nodeRequire('os')
   const roaming = env.APPDATA ?? path.join(os.homedir(), 'Library', 'Application Support')
@@ -207,8 +208,9 @@ let tmpSeq = 0
  * 带 pid + 进程内序号 + 随机串后两个进程互不覆盖；同一文件系统内 rename 仍是原子的。
  */
 function uniqueTmpPath(absPath: string): string {
-  const g = globalThis as unknown as { process?: { pid?: number } }
-  const pid = g.process?.pid ?? 0
+  // 不可达分支已删：两个调用点（`saveExportedText:251` 的 `nodeRequire('fs')`、
+  // `writeTextFileAtomic:261` 的 `hasNode()`）都先证明 Node 在，`process` 必然存在。
+  const pid = globalThis.process.pid
   tmpSeq += 1
   return `${absPath}.${pid}-${tmpSeq}-${Math.random().toString(36).slice(2, 8)}.tmp`
 }

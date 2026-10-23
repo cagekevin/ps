@@ -63,5 +63,5 @@ export const log = {
   },
 }
 
-// 方便在 CEP 的 devtools 里直接敲 __pszDump()
-;(window as unknown as { __pszDump?: () => string }).__pszDump = () => log.dump()
+// 方便在 CEP 的 devtools 里直接敲 __pszDump()（类型在 src/env.d.ts 的 Window）
+window.__pszDump = () => log.dump()

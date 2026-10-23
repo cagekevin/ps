@@ -616,8 +616,7 @@ export async function startPlaceImageWatch(ctx: {
   const deps: PlaceImageDeps = {
     // `readCommonUseOptions()` 是 async 且返回 `{ value, degraded }`：**必须 await 再取 `.value`**。
     // 少任何一个都会让 `placeImageAction` 读到 `undefined` → 静默走 `'none'`（T-97-8 的真因）。
-    readOptions: async () =>
-      (await readCommonUseOptions()).value as unknown as Record<string, unknown>,
+    readOptions: async () => (await readCommonUseOptions()).value,
     embedImage: (options) => ctx.jsx.commonUse.embedImage(options),
     relinkToFile: (path) => ctx.jsx.commonUse.relinkToFile(path),
   }

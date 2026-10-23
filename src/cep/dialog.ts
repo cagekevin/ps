@@ -5,26 +5,10 @@ import { CepError } from '@/utils/errors'
  *
  * 原版 `D.a.saveFile / openFile` 走 `window.cep.fs.showSaveDialogEx / showOpenDialogEx`
  * （app.v4.js:2465528 附近），不是 ExtendScript File。
+ * `CepFs` 的形状声明在 `src/env.d.ts`：`window.cep` 是 CEP 运行时注入的第三方形状（硬规则 20(a)）。
  */
-interface CepFs {
-  showOpenDialogEx(
-    allowMultiple: boolean,
-    chooseDirectory: boolean,
-    title: string,
-    initialPath: string,
-    fileTypes: string[],
-  ): { err: number; data: string[] }
-  showSaveDialogEx(
-    title: string,
-    initialPath: string,
-    fileTypes: string[],
-    defaultName: string,
-    friendlyFileTypes?: string,
-  ): { err: number; data: string }
-}
-
 function cepFs(): CepFs {
-  const fs = (window as unknown as { cep?: { fs?: CepFs } }).cep?.fs
+  const fs = window.cep?.fs
   if (!fs) throw new CepError('NO_CEP', 'CEP 文件对话框不可用')
   return fs
 }

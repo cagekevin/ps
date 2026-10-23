@@ -41,6 +41,9 @@ export function jsonp(
   script.async = true
   script.src = `${url}?${query.toString()}`
 
+  // JSONP 的回调名是运行时拼的（`__pszJsonp…`），`window[回调名]` 要类型化，只能给全局
+  // `Window` 加字符串索引签名——那会让全仓 `window.xxx` 的拼写检查一起失效，比这一处转型更坏。
+  // 断言理由：这是 20(a) 第 2 步留的第三方边界口子，.d.ts 补不了，故保留转型并登记在此
   const win = window as unknown as CallbackWindow
   const head = document.head || document.getElementsByTagName('head')[0]
 
