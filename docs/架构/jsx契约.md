@@ -1,4 +1,4 @@
-# jsx 契约（实测记录）
+﻿# jsx 契约（实测记录）
 
 > `BUILD-SPEC/06-jsx契约.md` 只有**调用侧参数**，没有返回结构。
 > 这份文档记录**实测过的真实返回**，写新页面前先查这里，别猜。
@@ -96,3 +96,22 @@ console.log(raw)
 - 异常统一 `ERR:<message>` 前缀回传，`jsxCall` 转成 `CepError`
 - `$.evalFile` 必须是**顶层语句**，包进 IIFE 会导致函数定义落在局部作用域
 - 大返回值（> 100KB）不要走 `evalScript` 字符串回传，写临时文件再用 Node 读
+## 七、G0 探针（2026-10-23）：常用页 4 个薄封装 + 导出参数的真实来源
+
+> 全部**读原版源码**（`app.v4.js` 美化版），非 decrypted、非真机。
+> `public/lib/all.decrypted.js` 对这 5 个名字 **0 命中**（0.32MB 文件整档搜索），故 jsx 侧实现读不到。
+
+| 名字（派发表 key） | 真实 jsx 名 | 行号 | 实参形状 | 结论 | 我读的是什么 |
+|---|---|---|---|---|---|
+| `cy_coorectBlur`（官方拼错 coorect） | **`cy_correctRectangleBlur`** | key `:17058`、case `:17096`、调用点 `:37965` | `[]`（空数组） | 空参；**包装函数名必须用 `cy_correctRectangleBlur`**，用 key 会调不到 | 原版源码 |
+| `cy_layerReplace` | **`cy_LayerReplace`（大写 L）** | key `:17058`、case `:17178`、调用点 `:37959` | `[]` | 空参；jsx 名大小写与 key 不同 | 原版源码 |
+| `cy_locationTrade` | `cy_locationTrade` | `:17181`、`:37953` | `[]` | 空参 | 原版源码 |
+| `cy_exchangeLayerColor` | `cy_exchangeLayerColor` | `:17184`、`:37956` | `[]` | 空参 | 原版源码 |
+| `getExportImage`（不是 jsx，是面板方法） | — | 定义 `:37967-37975`、消费 `:37993` | 返回 `V.a.getKey("cyExport")` **整块设置对象**；`path` 非空且不是目录时返回 `null` 并提示 | **导出参数 = `cyExport` 设置对象本身**，不是由 UI 另拼一个新对象；`exportJpg/exportPng` 先改 `cyExport.ext` 再调（`:38006`、`:38010`） | 原版源码 |
+
+**实参个数的一致证据**：`l(名字, 文案, 通道, 是否读返回)` 的 `hasOption` 在这 4 个 case 里都没传（`:17096`、`:17178`、`:17181`、`:17184`），而取参数的表达式是 `i = a.option == null ? [] : [a.option]`（`:17046`）→ 参数是 `[]`。
+
+**每条的"读错了会怎么被发现"**
+1. 名字错（用 key 当 jsx 名）→ 真机报"函数不存在"，且 `tests/cep/jsx-dispatch.test.ts` 的派发表快照断言会红（它比对 `:17058` 的 key 与我们封装的名字）。
+2. 实参错（多传一个 `option`）→ jsx 收到 `[undefined]`，真机行为与空参不同；jsdom 抓不到，靠 `mock.ts` 的"参数非法就抛"用例兜。
+3. `getExportImage` 若返回的是"另拼对象"而不是设置块 → 我们用 `cyExport` 落盘值直接传，字段会缺；发现方式是导出结果缺字段（如命名规则不生效），不可自动测。
