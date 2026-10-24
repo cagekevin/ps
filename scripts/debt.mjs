@@ -73,6 +73,7 @@
  *   node scripts/debt.mjs reopen --from-reverify [--dry]           # 直接吃 reverify 的「无凭证」那批
  *                                                                  # 只降「已解决」：裁定类不降、有凭证的不降
  *                                                                  # 归档行降级时**搬回主表**（否则 = 假降级）
+ *                                                                  # 原结账句逐字进 `原记「…」`（不截断）
  * 测试夹具：`--root=<dir>`（任意位置）—— 把账本指到已知答案的夹具，见 `tests/scripts/debt-*.test.ts`。
  */
 import { readFileSync, writeFileSync, existsSync, readdirSync } from 'node:fs'
@@ -1521,7 +1522,9 @@ function cmdReverify(argv) {
  *      降级它们 = 把自己的裁定翻掉、复活明确判过的东西。要翻裁定走 `edit --field solution`。
  *   ② **不要求 `--evidence`，但必须有 `--why`**（单条模式必填；`--from-reverify` 按分组派生三档）——
  *      撤销也得留理由，否则等于无声抹账。
- *   ③ **状态格统一前缀** `[待还 <date> · 凭证缺失 · <why>]` ⇒ `debt search 凭证缺失` 一次拉全。
+ *   ③ **状态格统一前缀** `[待还 <date> · 凭证缺失 · <why> · 原记「<原结账句>」]` ⇒
+ *      `debt search 凭证缺失` 一次拉全；**原结账句逐字保留、不截断**（降级是为说真话，
+ *      不是为了销毁历史 —— "原文在 git 历史里可查"不算留存，账本里搜不到就等于没有了）。
  *   ④ **有凭证的债不许 reopen**：状态格里出现 `evidence:v1{…}` 就是可复算的真账，
  *      降级它 = 把真账删掉。命中即整批拒改并列出 ID（不部分执行，不留半态）。
  *
@@ -1542,6 +1545,26 @@ const REOPEN_GROUPS = [
   ['无结论无命令', 'bare'],
 ]
 const reopenWhy = (group) => `reverify: 无凭证（${group}）`
+
+/**
+ * 原结账句 —— **逐字保留**，只剥开头的状态词与日期。
+ *
+ * 【为什么必须保留】降级是为了说真话，不是为了销毁历史。"原文在 git 历史里可查"**不算留存**：
+ *   账本里搜不到就等于没有了（下一个人不会去翻 commit）。所以降级把原句整段搬进 `原记「…」`，
+ *   **不截断、不改写** —— 仓里已经有 350 字的状态格，长了不是新问题，**丢了才是新问题**。
+ *   注：`]` 不撑破表格（列分隔是 `|`），内嵌 ASCII 方括号与〔〕标注一律原样保留。
+ */
+function originalSettlement(statusCell) {
+  const cell = String(statusCell ?? '')
+    .trim()
+    .replace(/^\*{0,2}\[/, '')
+    .replace(/\]\s*$/, '')
+  return cell
+    .replace(/^\s*(?:已裁定非债|已解决|已裁定|待用户拍板|待翻新|已退役|待还|不做)\s*/, '')
+    .replace(/^\d{4}-\d{2}-\d{2}\s*/, '')
+    .replace(/^[·：:]\s*/, '')
+    .trim()
+}
 
 /** 被排除的裁定类：**列出 ID**，不猜、不改（要翻裁定走 `edit`） */
 function printExcludedRulings(excluded) {
@@ -1665,7 +1688,11 @@ function cmdReopen(argv) {
     if (!f) fail(`${r.fields.id} 的来源 ${r.src} 无法定位（内部错误）`)
     const C = MAP[r.kind]
     const oldCell = String(f.lines[r.li].split('|')[1 + C.status] || '').trim()
-    const newCell = `[${REOPEN_TO} ${date} · ${REOPEN_MARK} · ${p.why}]`
+    // 原结账句逐字搬进 `原记「…」`：降级不许销毁历史（否则"账本里搜不到"= 没有了）
+    const orig = originalSettlement(oldCell)
+    const newCell = `[${REOPEN_TO} ${date} · ${REOPEN_MARK} · ${p.why}${
+      orig ? ` · 原记「${orig}」` : ''
+    }]`
     const parts = f.lines[r.li].split('|')
     parts[1 + C.status] = ` ${newCell} `
     const newRow = parts.join('|')

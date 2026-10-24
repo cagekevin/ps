@@ -49,6 +49,8 @@ const WITH_EV =
 /** 裁定类：**不是"我说它修好了"**，是人的判断 ⇒ 不许被降级 */
 const RULING = '[已裁定非债 2026-10-24 · 实码 9 个全在 CepError 枚举内，无枚举外语义码被静默吞]'
 const NO_DO = '[不做 2026-10-24 · 撞冻结页，做它不划算]'
+/** 长结账句（≈300 字口径 + 末尾锚点 + 内嵌 ASCII 方括号）：降级必须**逐字保留**，不许截断 */
+const LONG = `[已解决 2026-10-24 · 已修：page-boundary.mjs 由两档改三档——type-only 一律放行、写出口硬黑名单（writeTextFile/writeTextFileAtomic/writeBase64File/saveExportedText/removeFile）、只读白名单按来源+导出名（fs/env/open-url/types），未登记即拦；补 tests/scripts/page-boundary.test.ts 6 例。实测：改前 writeTextFile 放行、import type 误拦，改后前者拦后者放行，现存 4 处页面 cep 导入全绿；另见〔复核 2026-10-25：口径未窄化〕与 [TD-17-6] 的交叉核对；末尾锚点 TAIL_MARK_42]`
 
 const ARCH_HEAD = (n: number): string[] => [
   '# 债务账本 · 归档（已解决 / 已裁定 / 已退役 / 不做）',
@@ -134,7 +136,9 @@ describe('debt reopen 撤销结账（TD-09-38）', () => {
     const r = run(root, ['reopen', 'TD-01-2', '--why', WHY])
     expect(r.code).toBe(0)
     const after = readLedger(root)
-    expect(after).toMatch(/\[待还 \d{4}-\d{2}-\d{2} · 凭证缺失 · reverify: 无凭证（旧台账迁移）\]/)
+    expect(after).toMatch(
+      /\[待还 \d{4}-\d{2}-\d{2} · 凭证缺失 · reverify: 无凭证（旧台账迁移）(?: · 原记「[^\n]*」)?\]/,
+    )
     // `debt search 凭证缺失` 要能一次拉全
     const s = run(root, ['search', '凭证缺失', '--all'])
     expect(s.out).toContain('TD-01-2')
@@ -195,6 +199,34 @@ describe('debt reopen 撤销结账（TD-09-38）', () => {
     expect(r.code).toBe(1)
     expect(r.out).toContain('裁定')
     expect(r.out).toContain('edit')
+    expect(readLedger(root)).toBe(before)
+  })
+
+  it('降级**逐字保留**原结账句（长句不截断、内嵌方括号也在）', () => {
+    const root = fixture([row('TD-01-7', LONG)])
+    const r = run(root, ['reopen', 'TD-01-7', '--why', WHY])
+    expect(r.code).toBe(0)
+    const after = readLedger(root)
+    // 格式：… · 原记「<原文>」
+    expect(after).toMatch(/· 原记「已修：page-boundary\.mjs 由两档改三档/)
+    // 开头与**末尾**都还在 ⇒ 没截断
+    expect(after).toContain('只读白名单按来源+导出名')
+    expect(after).toContain('末尾锚点 TAIL_MARK_42')
+    // 内嵌 ASCII 方括号与〔〕标注逐字保留
+    expect(after).toContain('[TD-17-6] 的交叉核对')
+    expect(after).toContain('〔复核 2026-10-25：口径未窄化〕')
+    // 只剥状态词与日期，不许把状态词也塞进「原记」
+    expect(after).not.toContain('原记「已解决')
+    expect(after).not.toContain('原记「2026-10-24')
+  })
+
+  it('--dry 预览里能看到完整改后状态格（原文没被切）', () => {
+    const root = fixture([row('TD-01-7', LONG)])
+    const before = readLedger(root)
+    const r = run(root, ['reopen', 'TD-01-7', '--why', WHY, '--dry'])
+    expect(r.code).toBe(0)
+    expect(r.out).toContain('原记「已修：page-boundary.mjs')
+    expect(r.out).toContain('末尾锚点 TAIL_MARK_42')
     expect(readLedger(root)).toBe(before)
   })
 
