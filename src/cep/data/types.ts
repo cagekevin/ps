@@ -14,9 +14,14 @@ export interface RepoReadOk<T> {
   /**
    * 非空 = `value` **可用但不完整**，UI 仍要提示。
    *
-   * 只有 `classification-repo.ts` 的「分类数据里没有可用分组」会这么返回：文件是合法 JSON，
-   * 只是 `categories` 为空——把整份 `value` 降成 `ok: false` 会连 `presets` / `commercials`
-   * 一起丢掉（字体管理页的"免费商用"筛选会跟着空），所以留这个口子。
+   * 目前两处会这么返回，都在 `classification-repo.ts`：
+   * - 「分类数据里没有可用分组」：文件是合法 JSON，只是 `categories` 为空——把整份 `value`
+   *   降成 `ok: false` 会连 `presets` / `commercials` 一起丢掉（字体管理页的"免费商用"
+   *   筛选会跟着空），所以留这个口子。
+   * - 「分类数据文件不存在」（T-103）：与 `file-repo.ts:71-72`「文件不存在是首次使用的正常
+   *   状态，不算读失败」同一条规则。原版 `app.v4.js:45717-45721` 对 `ENOENT` 也是去下载、
+   *   不报错；`classification.json` 不随面板分发（`getClassificationURL` → `v1/font/link`，
+   *   `:49501`），首次使用真的不存在。值给空分类，但 reason 保留——不留就是静默回退（20(b)）。
    * **其余仓库一律 `ok: false` 表示"`value` 不可用"**；新增 `ok: true` + `reason` 要先证明
    * "丢掉 value 就是功能变化"。
    */

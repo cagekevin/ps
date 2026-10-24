@@ -21,9 +21,10 @@ export const useClassificationStore = defineStore('classification', () => {
   async function load(force = false) {
     if (loaded.value && !force) return
     const result = await getClassification()
-    // `reason` 两种分支都有：`ok: true` + reason 表示"有数据但不完整"（分组为空），
-    // `ok: false` 表示整份不可用。两种情况页面都要提示，所以这里不判 `ok` 就能取 reason
-    data.value = result.ok ? result.value : emptyClassification()
+    // `reason` 两种分支都有：`ok: true` + reason 表示"有数据但不完整"（分组为空 / 文件不存在），
+    // `ok: false` 表示整份不可用。两种情况页面都要提示，所以这里不判 `ok` 就能取 reason。
+    // 坏读的默认值取生产者的 `fallback`，不在这里再写一份空分类（T-103 / ADR-24）
+    data.value = result.ok ? result.value : result.fallback
     degraded.value = result.reason ?? ''
     loaded.value = true
   }
