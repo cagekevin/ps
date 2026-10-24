@@ -298,6 +298,10 @@ function onRenamePreset(index: number, name: string) {
 <template>
   <div class="fontset">
     <div class="fontset__scroll">
+      <!-- ADR-14 扩展二 / T-111：读坏时必须让用户看见。原句来自 store（页面不补结论，ADR-23）；
+           首次使用时 store 的 degraded 为空，这里不渲染——"没有"与"坏了"分得开 -->
+      <p v-if="store.degraded" class="fontset__degraded">{{ store.degraded }}</p>
+
       <FontQuick
         :show="settings.ztShowQuick"
         :fonts="store.quickFonts.list"
@@ -497,6 +501,15 @@ function onRenamePreset(index: number, name: string) {
   height: 100%;
   overflow-y: auto;
   padding: 0 0 var(--sp-exact-10);
+}
+
+/* ADR-14 扩展二 / T-111：数据降级提示。只在读坏时出现（首次使用不渲染），
+   与 fontManage 的 `.data-warning` 同类信息，不抢视觉。左右缩进跟 `.fontset__line` 一致 */
+.fontset__degraded {
+  margin: 0;
+  padding: var(--sp-exact-10) var(--sp-exact-15) 0;
+  color: var(--c-warn);
+  font-size: var(--fs-sm);
 }
 
 /* 原版 hr.line：width:calc(100% - 30px) + padding:0 15px + background-clip:content-box，
