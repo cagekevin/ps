@@ -317,3 +317,86 @@ export function __resetEventsForTest(): void {
   callbackInstalled = false
   lastDispatch = 0
 }
+
+// ---------- 通用 app event 通道（T-125）----------
+
+/**
+ * 色板面板的频道名。原版四处 `sendMessageToSeBan()` 都写死这一串
+ * （`app.v4.js:50217` / `:52917`），所以它是契约不是我们起的名字。
+ */
+export const APP_EVENT_SEBAN = 'com.fengzi.event.seban'
+
+/**
+ * **发**一个 app event。原版 `$cep.sendAppEvent(type, data)`
+ * （`app.v4.js:5031-5039`）：
+ *
+ * ```js
+ * var a = new CSEvent();
+ * a.type = t; a.scope = "APPLICATION"; a.data = e;
+ * CSInterface.dispatchEvent(a);
+ * ```
+ *
+ * **与 PS 宿主事件那条（`registerPhotoshopEvent:121`）的差别只有 extensionId**：
+ * 宿主事件那条要设 `extensionId = getExtensionId()`，因为 `PhotoshopRegisterEvent`
+ * 的接收方是**宿主自己**，靠 extensionId 认出"哪来的、回哪儿去"；回调频道名也因此
+ * 必须是 `com.adobe.PhotoshopJSONCallback<extensionId>`（`onPhotoshopCallback:143`）。
+ * app event 的接收方是**另一个 CEP 扩展**（色板面板 `ps.sf.SheJiZhuLi.seban`），
+ * 它 `addEventListener(type)` 时不知道我们的 extensionId，所以官方**不设**。
+ * 设了反而收不到：官方 `bindAppEvent`（`:5025-5029`）只按 type 匹配，
+ * 多带的字段在这里不被用作匹配键。
+ *
+ * data 原样透传（对象不 stringify）：CSInterface.dispatchEvent 收到对象会
+ * `JSON.stringify`（`CSInterface.js` 的 `dispatchEvent`），到对端解析回对象；
+ * 我们这里不做二次序列化，交给桥。
+ *
+ * **UNVERIFIED：本仓没有接收方**（色板面板是独立扩展 `ps.sf.SheJiZhuLi.seban`，
+ * 面板真身 `%APPDATA%/fz.FengZi3Hao/` 不在仓库）。本函数只保证"按官方形状把事件
+ * 交给 CEP 桥"，"发出去有没有人收、收不收得到"未验。见 T-125。
+ */
+export function sendAppEvent(channel: string, data: unknown): boolean {
+  const b = bridge()
+  if (!b?.dispatchEvent) return false
+
+  b.dispatchEvent({
+    type: channel,
+    scope: 'APPLICATION',
+    // 原版 CSEvent 构造后 appId / extensionId 都是 undefined（own property）
+    appId: undefined,
+    extensionId: undefined,
+    data,
+  })
+  return true
+}
+
+/**
+ * **收**一个 app event。原版 `$cep.bindAppEvent(type, handler)`
+ * （`app.v4.js:5025-5029`）：`CSInterface.addEventListener(type, handler)`。
+ *
+ * 与 `onPhotoshopCallback` 的差别：那条挂在**带 extensionId 的回调频道**上、payload
+ * 要 `substring(5)` 再 `JSON.parse`（`parseEventData:109`）；这条挂在**调用方给的频道**
+ * 上，`event.data` 已经是对象，不解析、不加前缀。
+ *
+ * 每个订阅者各挂一个桥监听（不共用）：桥的 `addEventListener` 是 type → listener 的
+ * 1:1 注册，共用时后挂的会覆盖先挂的。多个订阅者各自收到同一份 data。
+ * 返回取消函数；非 CEP 环境返回 no-op（与 `subscribeHostEvent` 同规矩）。
+ */
+export function onAppEvent(channel: string, handler: (data: unknown) => void): () => void {
+  const b = bridge()
+  if (!b?.addEventListener) {
+    log.warn('app-event', '桥上没有 addEventListener，跳过订阅', { channel })
+    return () => {}
+  }
+
+  const listener = (event: unknown) => {
+    const data = (event as { data?: unknown } | undefined)?.data
+    log.info('app-event', '收到 app event', { channel, data })
+    handler(data)
+  }
+
+  // 原版 CSInterface.addEventListener(type, handler) 不传第三个参数；
+  // 这里也不传，避免宿主把 false 当成 listener 对象
+  b.addEventListener(channel, listener)
+  return () => {
+    b.removeEventListener?.(channel, listener)
+  }
+}

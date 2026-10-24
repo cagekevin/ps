@@ -1,4 +1,4 @@
-﻿import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 const transport = vi.hoisted(() => ({
   hasCep: vi.fn(() => true),
@@ -9,13 +9,16 @@ vi.mock('@/cep/transport', () => ({
 }))
 
 import {
+  APP_EVENT_SEBAN,
   __resetEventsForTest,
   describeEventIdConflict,
   hasCepEvents,
   listHostEventIds,
+  onAppEvent,
   onPhotoshopCallback,
   parseEventData,
   registerPhotoshopEvent,
+  sendAppEvent,
   subscribeHostEvent,
 } from '@/cep/events'
 
@@ -24,11 +27,15 @@ const CALLBACK = `com.adobe.PhotoshopJSONCallback${EXT}`
 // slct 的十进制 ID，原版 $psEvent.add("1936483188", …)
 const EVENT_ID = '1936483188'
 
-let listeners: Map<string, (event: unknown) => void>
+/** 同一 type 可挂多个 listener：数组而非单个（见 installBridge 注释） */
+let listeners: Map<string, ((event: unknown) => void)[]>
 let dispatched: Record<string, unknown>[]
 
 function installBridge() {
   listeners = new Map()
+  // 同一 type 可挂多个 listener（数组，不是 Map.set 覆盖）：
+  // CEP 桥对 addEventListener 的真实语义未在文档里确认，这里按"广播"建模，
+  // 因为色板面板与主面板在同一频道上各挂各的（sf.js:172 / app.v4.js:17773）。
   dispatched = []
   window.__adobe_cep__ = {
     evalScript: () => {},
@@ -40,17 +47,27 @@ function installBridge() {
       dispatched.push(event as Record<string, unknown>)
     },
     addEventListener: (type, handler) => {
-      listeners.set(type, handler)
+      const arr = listeners.get(type) ?? []
+      arr.push(handler)
+      listeners.set(type, arr)
     },
-    removeEventListener: (type) => {
-      listeners.delete(type)
+    removeEventListener: (type, handler) => {
+      const arr = listeners.get(type) ?? []
+      const next = arr.filter((fn) => fn !== handler)
+      if (next.length > 0) listeners.set(type, next)
+      else listeners.delete(type)
     },
   }
 }
 
 /** 模拟 PS 推来一个事件 */
 function emit(eventID: number | string = EVENT_ID) {
-  listeners.get(CALLBACK)?.({ data: `xxxxx{"eventID":${eventID}}` })
+  for (const fn of listeners.get(CALLBACK) ?? []) fn({ data: `xxxxx{"eventID":${eventID}}` })
+}
+
+/** 模拟对端（色板面板）推来一个 app event */
+function emitApp(channel: string, data: unknown) {
+  for (const fn of listeners.get(channel) ?? []) fn({ data })
 }
 
 beforeEach(() => {
@@ -155,7 +172,7 @@ describe('onPhotoshopCallback', () => {
     const off = onPhotoshopCallback(handler)
 
     expect(listeners.has(CALLBACK)).toBe(true)
-    listeners.get(CALLBACK)?.({ data: 'xxxxx{"eventID":1}' })
+    listeners.get(CALLBACK)?.[0]({ data: 'xxxxx{"eventID":1}' })
     expect(handler).toHaveBeenCalledWith({ eventID: 1 })
 
     off()
@@ -262,5 +279,111 @@ describe('hasCepEvents', () => {
   it('桥上没有 dispatchEvent 时为 false', () => {
     delete window.__adobe_cep__!.dispatchEvent
     expect(hasCepEvents()).toBe(false)
+  })
+})
+
+/**
+ * 通用 app event 通道（T-125）。
+ *
+ * 这三个用例钉的是**官方形状**（`app.v4.js:5025-5039`）：
+ * 发 = `{type, scope:'APPLICATION', data}`，**不带 extensionId**；收 = 按 type 挂监听。
+ * 与 PS 宿主事件那条（`registerPhotoshopEvent`）的差别就在 extensionId，见源码注释。
+ */
+describe('sendAppEvent', () => {
+  it('按官方形状 dispatch：APPLICATION + data 原样，不设 extensionId', () => {
+    expect(sendAppEvent(APP_EVENT_SEBAN, 'GengXin')).toBe(true)
+
+    const payload = dispatched[0]
+    expect(payload).toEqual({
+      type: APP_EVENT_SEBAN,
+      scope: 'APPLICATION',
+      appId: undefined,
+      extensionId: undefined,
+      data: 'GengXin',
+    })
+    // 官方 sendAppEvent 不读 getExtensionId；这里显式钉住"没有偷偷带上"
+    expect(payload).not.toHaveProperty('extensionId', EXT)
+  })
+
+  it('data 是对象时原样交给桥，不 stringify（序列化归 CSInterface.dispatchEvent）', () => {
+    const data = { type: 'setColor', data: { c: 0, m: 0, y: 0, k: 100, hex: 'FFFFFF' } }
+    sendAppEvent(APP_EVENT_SEBAN, data)
+
+    expect(dispatched[0]!.data).toBe(data)
+  })
+
+  it('桥上没有 dispatchEvent 时返回 false，不抛', () => {
+    delete window.__adobe_cep__!.dispatchEvent
+    expect(sendAppEvent(APP_EVENT_SEBAN, 'GengXin')).toBe(false)
+  })
+})
+
+describe('onAppEvent', () => {
+  it('发 → 同进程订阅方收得到，data 原样', () => {
+    const seen: unknown[] = []
+    const off = onAppEvent(APP_EVENT_SEBAN, (data) => seen.push(data))
+
+    sendAppEvent(APP_EVENT_SEBAN, 'GengXin')
+    // 对端不在本仓：这里由测试自己把派发对象喂回监听，只验"桥形状 → 订阅方"这一段
+    const sent = dispatched[0] as { type?: string; data?: unknown }
+    emitApp(sent.type ?? '', sent.data)
+
+    expect(seen).toEqual(['GengXin'])
+    off()
+  })
+
+  it('data 是对象时原样到订阅方（不经 JSON 往返）', () => {
+    const seen: unknown[] = []
+    const off = onAppEvent(APP_EVENT_SEBAN, (data) => seen.push(data))
+
+    const data = { type: 'setColor', data: { c: 0, m: 0, y: 0, k: 100, hex: 'FFFFFF' } }
+    sendAppEvent(APP_EVENT_SEBAN, data)
+    emitApp(APP_EVENT_SEBAN, (dispatched[0] as { data?: unknown }).data)
+
+    expect(seen).toEqual([data])
+    off()
+  })
+
+  it('同频道多个订阅者各挂各的，都收到；取消一个后另一个仍收到', () => {
+    const first = vi.fn()
+    const second = vi.fn()
+    const offFirst = onAppEvent(APP_EVENT_SEBAN, first)
+    const offSecond = onAppEvent(APP_EVENT_SEBAN, second)
+
+    emitApp(APP_EVENT_SEBAN, 1)
+    expect(first).toHaveBeenCalledWith(1)
+    expect(second).toHaveBeenCalledWith(1)
+
+    offFirst()
+    emitApp(APP_EVENT_SEBAN, 2)
+    expect(first).toHaveBeenCalledTimes(1)
+    expect(second).toHaveBeenCalledTimes(2)
+    expect(second).toHaveBeenLastCalledWith(2)
+
+    offSecond()
+  })
+
+  it('别的频道不触发', () => {
+    const handler = vi.fn()
+    const off = onAppEvent(APP_EVENT_SEBAN, handler)
+
+    emitApp('com.fengzi.event.other', 'x')
+
+    expect(handler).not.toHaveBeenCalled()
+    off()
+  })
+
+  it('取消后桥上的监听也摘掉（不留死函数）', () => {
+    const off = onAppEvent(APP_EVENT_SEBAN, () => {})
+    expect(listeners.get(APP_EVENT_SEBAN)).toHaveLength(1)
+
+    off()
+    expect(listeners.has(APP_EVENT_SEBAN)).toBe(false)
+  })
+
+  it('没有 addEventListener 的桥 → no-op，不抛', () => {
+    delete window.__adobe_cep__!.addEventListener
+    const off = onAppEvent(APP_EVENT_SEBAN, () => {})
+    off()
   })
 })
