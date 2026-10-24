@@ -1,26 +1,40 @@
 import { setAutoSyncEnabled, setCloudUrl } from '@/cep/cloud/config'
 import { cloudEngine } from '@/cep/cloud/setup'
-import { CepError } from '@/utils/errors'
+import { CepError, type CepErrorCode } from '@/utils/errors'
 import { defineCommand } from './registry'
 import type { Command } from './types'
 
 /**
- * 命令结果码 → CepError。**只有"用户该做什么不同"的才换码**（§四点三五 第 3 条）：
- * - 取消：用户自己点的，不该弹失败提示（12-22 的消费点）→ `CANCELLED`
- * - 未配置：去设置页填地址 → `INIT`
- * - 其余（冲突 / 写盘 / 读盘 / 网络 / 权限…）：一律 `NETWORK`，**文案原样透传**
- *   （`describeCepError` 对 NETWORK 用 `e.message`，所以引擎那句具体原因一个字都不丢）；
- *   再细分错误码没有任何消费者按它做不同的事——分了就是死码（TD-12-23 的判据）。
+ * 引擎错误码 → 命令层码（TD-12-23）。
+ *
+ * **只列"用户该做什么不同"的**（阶段单 §四点三五 第 3 条）。云同步有 8 个 `CLOUD_*` 码，
+ * 但命令层只有两个消费者按码分流：`useCommand` 的「取消不提示」和设置页的「未配置去填地址」。
+ * 其余（冲突 / 写盘 / 读盘 / 解析 / 权限 / 网络）用户看到的都是**同一件事**：失败了、
+ * 原因是什么——所以它们折成 `NETWORK`，而 `describeCepError` 对 NETWORK **原样透传 `e.message`**，
+ * 引擎那句具体原因一个字都不丢（`tests/commands/cloud-codes.test.ts` 逐码钉住）。
+ * 再往下细分＝造死码：没有任何人按它做不同的事。
  */
-function throwIfFailed(ok: boolean, error?: string, errorCode?: string, cancelled?: boolean): void {
-  if (ok) return
-  if (cancelled || errorCode === 'CLOUD_CANCELLED') {
-    throw new CepError('CANCELLED', error ?? '已取消')
-  }
-  if (errorCode === 'CLOUD_NOT_CONFIGURED') {
-    throw new CepError('INIT', error ?? '未配置云同步地址')
-  }
-  throw new CepError('NETWORK', error ?? '云同步失败')
+const COMMAND_CODE: Record<string, CepErrorCode> = {
+  CLOUD_CANCELLED: 'CANCELLED',
+  // `CLOUD_NOT_CONFIGURED` 以前映射成 INIT，于是"没填同步地址"被文案层说成
+  // 「Photoshop 脚本初始化失败：未配置同步地址」——两件事没关系，用户会去查 PS 脚本。
+  // INIT 也没有任何按码分流的消费者，所以它和其余码一样走 NETWORK + 原话透传。
+}
+
+function throwIfFailed(result: {
+  ok: boolean
+  error?: string
+  errorCode?: string
+  cancelled?: boolean
+}): void {
+  if (result.ok) return
+  const fallback = result.error ?? '云同步失败'
+  // `cancelled` 位与 `CLOUD_CANCELLED` 码是同一件事的两种写法（引擎两处都置），任一条都算
+  const code: CepErrorCode =
+    result.cancelled && !result.errorCode
+      ? 'CANCELLED'
+      : (COMMAND_CODE[result.errorCode ?? ''] ?? 'NETWORK')
+  throw new CepError(code, fallback)
 }
 
 export const cloudCommands: Command<unknown>[] = [
@@ -54,7 +68,7 @@ export const cloudCommands: Command<unknown>[] = [
     kind: 'long',
     async run(_ctx, { force, onConfirm }) {
       const result = await cloudEngine.upload({ force, onConfirm })
-      throwIfFailed(result.ok, result.error, result.errorCode, result.cancelled)
+      throwIfFailed(result)
     },
   }),
 
@@ -66,7 +80,7 @@ export const cloudCommands: Command<unknown>[] = [
     kind: 'long',
     async run(_ctx, { onConfirm }) {
       const result = await cloudEngine.download({ onConfirm })
-      throwIfFailed(result.ok, result.error, result.errorCode, result.cancelled)
+      throwIfFailed(result)
     },
   }),
 ]
