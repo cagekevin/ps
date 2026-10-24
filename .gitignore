@@ -9,3 +9,5 @@ Thumbs.db
 !.vscode/extensions.json
 .tmp-*/
 probe-*
+# 探针 journal（存源码全文，临时产物，禁止提交）
+scripts/.probe/

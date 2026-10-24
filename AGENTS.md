@@ -218,7 +218,8 @@ grep -rn "export .*<概念词>" src  # 有哪些导出叫这个名字
 
 | 命令 | 干什么 | 状态 |
 | --- | --- | --- |
-| `npm run check` | **12 步**：style-guard → template-guard → assert-guard → dispatch:check → boundary:pages → **layer:boundary** → spec:check → ledger → stats:check → lint → format:check | ✅ **不含测试、不含类型检查** |
+| `npm run check` | **12 步**：style-guard → template-guard → assert-guard → dispatch:check → boundary:pages → **layer:boundary** → spec:check → ledger → stats:check → lint → format:check | ✅ **不含测试、不含类型检查、不含 `scripts/`** |
+| `npm run check:tools` | **2 步**（**工具层**）：`lint:tools`（eslint scripts）→ `format:check:tools`（prettier scripts/**） | ✅ **不进 `deploy`** —— 工具脚本的风格问题不许卡产品交付（2026-10-24 裁定） |
 | `npm run layer:boundary` | 层间方向守卫：store 只读 / 命令不自取选区 / 适配层不引文案层 / domain 不反向依赖 `@/cep` | ✅ 已进 `check`；判据见 `docs/架构/目标架构.md` §4.7 |
 | `npm test` | vitest run（`<!-- stats:begin tests -->**135 个文件、1200 处用例**（静态计数 `it()`/`test()`；非通过数）<!-- stats:end tests -->`） | ✅ 单独一条，`check` 不调它 |
 | `npm run deploy` | check → typecheck → build → verify:dist | ✅ 跑全的入口；**不含测试**，测试是流程不是脚本 |
@@ -234,9 +235,14 @@ grep -rn "export .*<概念词>" src  # 有哪些导出叫这个名字
 | `npm run interactions` | 从原版 render 提取交互点 | ⚠️ 数据源（webcrack 解包输出）不在仓库；缺时退出码 2 说明缺哪条路径 |
 | `npm run audit:page -- Action --cross` | 从原版 AST 提组件树（`--cross` 再与 `08-模板` 交叉核对） | ✅ 读 `docs/原版/01-原版源码/panel/js/app.v4.js` 与 `docs/原版/02-组件文档/08-模板`（均已在库） |
 | `node scripts/probe.mjs` | 「先红后绿」探针：临时注入一处违规 → 跑命令 → 精确断言 → **自动还原**（journal 兜底 + 还原 sha 自校验 + 并发编辑守卫） | ✅ 2026-10-24 自 maomao 仓搬入；**会临时改文件**（用完即还原，不许 `--keep`）；journal 在 `scripts/.probe/`（已 gitignore，存源码全文） |
+| `node scripts/mv-sync-refs.mjs` | 引用图与搬移：`refs`（谁 import 它 + 字符串残留引用）· `find-dead`（孤儿）· `rename` / `move` / `move-dir`（**自动全库改写 import**，含 `.vue` 的 `<script>` 块；`move-dir` 支持 `--undo`） | ✅ 2026-10-24 自 maomao 仓搬入并按本仓改造（别名 `@/→src/`、扫描根 `src/`+`tests/`、**补 `.vue` 支持**、解析器换成本仓已有的 `typescript`）；**它改 import 不改字符串** ⇒ 字符串引用仍要人工同步 |
 
 **这门禁缺什么，写清楚**（不要以为绿的就没问题）：
 
+- **门禁分两层（2026-10-24 裁定：作者即上游）**：**产品层** = `npm run check`（12 步，只管 `src/**` + `tests/**` + 根配置）；**工具层** = `npm run check:tools`（`lint:tools` + `format:check:tools`，只管 `scripts/**`）。
+  - **工具层不许卡产品层**：`deploy` 链里**没有** `check:tools` ⇒ 往 `scripts/` 搬一个脚本、或脚本有风格问题，**不会让面板构建变红**。
+  - 判据落点：**功能坏 = 产品闸红**（node 非零退出即中断，工具坏了当场被发现）；**风格脏 = 工具闸红**（自己跑 `npm run check:tools`，不阻塞交付）。
+  - 依据：`daily/架构日志/17-文档与门禁治理-2026-10-24.md` §九。
 - **没有一条命令会自动跑测试**（`check` / `build` / `deploy` 都不跑）。**测试是纪律，不是门禁**：交付前必须先 `npm test` 再 build，这一条靠人（和 AI）执行，脚本不管。
 - **`tests/` 现在也做类型检查**（2026-10-23 起；原来那条「把 `tests/**` 加进去会冒出 83 条错误、没修」已清零）。`npm run typecheck` 依次跑两个 tsconfig：`tsconfig.json`（`src/**`，`lib: ES2019`，`types` 只有 `vite/client`）与 `tsconfig.tests.json`（`tests/**`，`lib: ES2022` + `@types/node`，并带上 `src/**/*.d.ts` 拿全局声明）。**分成两个文件不是绕路**：TS 的 `types` 是**整个 program** 的，没法按文件收窄；合成一个 program 就等于让 `Buffer` / `process` / `node:fs` 在 `src/` 里也能编译通过，而 `src/` 跑在 CEP 里没有 Node（`window.require` 要 `--enable-nodejs`），这类误用没有任何门禁能拦。`typecheck` 是独立一条；`check` 不跑它，`deploy` 会调它。`build` 里没有 `vue-tsc`——构建不负责检查。
 - **没有 CI**。没有 `.github/`，所有门禁都靠人工手动跑。

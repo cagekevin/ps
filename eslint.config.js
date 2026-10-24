@@ -25,11 +25,7 @@ export default tseslint.config(
       '*.log',
       '.tmp-*/**',
       'probe-*',
-      // 原样拷自 maomao（2026-10-24，T-122/T-123）：逻辑一个字符都不改，所以不按本仓风格 lint。
-      // 改它们就等于与上游分叉，下次上游更新就合不回来。
-      'scripts/adr.mjs',
-      'scripts/debt.mjs',
-      'scripts/arch-index.mjs',
+      // 自 maomao 拷入的历史脚本已整理到本仓风格（2026-10-24，TD-17-15 已还）⇒ 不再豁免。
     ],
   },
 
@@ -109,7 +105,13 @@ export default tseslint.config(
       '@typescript-eslint/no-explicit-any': 'error',
       '@typescript-eslint/no-unused-vars': [
         'error',
-        { argsIgnorePattern: '^_', varsIgnorePattern: '^_' },
+        {
+          argsIgnorePattern: '^_',
+          varsIgnorePattern: '^_',
+          // `const { text, ...r } = obj` 是**故意**把某个字段剔出去（ADR 的 `--json` 输出不带正文）。
+          // 这是本仓的既定写法，不该被报成"未使用变量"。
+          ignoreRestSiblings: true,
+        },
       ],
     },
   },
