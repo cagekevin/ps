@@ -5,9 +5,10 @@
 // 禁止：这里不做业务判断（冲突、重试都归 engine 与队列）；页面/组件不许 import
 
 import { createSyncQueue } from '@/cloud/change-sync'
-import type { SyncOutcome } from '@/cloud/change-sync'
+import type { SyncIntent, SyncOutcome } from '@/cloud/change-sync'
 import { CLOUD_SYNC_BACKOFF_MS } from '@/config/cloud'
 import { createCloudEngine, type CloudEngine } from '@/cloud/engine'
+import { log } from '@/utils/logger'
 import { cloudEntries } from './entries'
 import { isAutoSyncEnabled, isCloudUrlUsable } from './config'
 import { readCloudLedger, writeCloudLedger } from './ledger'
@@ -92,17 +93,38 @@ function retryPolicy(errorCode?: string): Pick<SyncOutcome, 'retry' | 'retryAfte
 }
 
 /**
- * 闸门挡下时的痕迹（TD-11-7）。
+ * 离线 sweep 的留痕是否已经写过（TD-11-14）。
+ *
+ * 日志记**跃迁**不记心跳（TD-11-9）：离线持续一小时会按最大等待慢轮询十几轮，
+ * 每轮都 warn 一遍同样的字，等于把 warn 降级成心跳。闸门放行时清零，下次离线重新留一句。
+ */
+let offlineSweepWarned = false
+
+/**
+ * 闸门挡下时的痕迹（TD-11-7 / TD-11-14）。
  *
  * **离线不算失败**（ADR-21：闸门返回 skip，不消耗退避），但它必须可观测：
  * 否则"离线期间本地改了没上去"与"全部已同步"在界面与日志里逐字相同。
  * 只给离线留 pending：其它四个理由（未配置 / 自动同步关 / 无台账 / 坏台账）
  * 用户能在设置页直接看到状态，写 5 条"待同步"只会让痕迹变得没用。
  *
- * sweep（没有具体 unit）不记：那时确实没有"哪一项被卡住"可指，日志里那一句就够。
+ * sweep **不记 pending**：那时确实没有"哪一项被卡住"可指，塞进去会把「待推送 N 项」
+ * 从"哪一项推失败了"变成噪音（TD-11-2）。但**必须留一句 warn**——上一版按
+ * `units.length === 0` 早退，于是"离线 + 本轮是 sweep"既不记 pending 也不留日志，
+ * 用户与开发者都无痕（TD-11-14）。sweep 与否看队列传下来的 `intent`，
+ * 不看 `units` 长短：空数组是 sweep 的结果，不是判据。
  */
-function markSkipped(outcome: SyncOutcome, units: string[]): void {
-  if (outcome.errorCode !== 'CLOUD_OFFLINE' || units.length === 0) return
+function markSkipped(outcome: SyncOutcome, units: string[], intent: SyncIntent): void {
+  if (outcome.errorCode !== 'CLOUD_OFFLINE') return
+  if (intent === 'sweep') {
+    if (offlineSweepWarned) return
+    offlineSweepWarned = true
+    log.warn(
+      'cloud',
+      '离线，本轮全量补偿同步没有执行：所有项都没推上去（sweep 没有具体项，未记入待同步；联网后按最大等待自动重试）',
+    )
+    return
+  }
   recordPendingChanges(units, 'network', 'CLOUD_OFFLINE')
 }
 
@@ -111,13 +133,16 @@ function markSkipped(outcome: SyncOutcome, units: string[]): void {
  * 手动整包（upload/download）走 `cloudSyncQueue.runSerial`，与自动推送共用一条串行链。
  */
 export const cloudSyncQueue = createSyncQueue({
-  async sync(units) {
+  async sync(units, intent) {
     const blocked = await gate()
     if (blocked) {
-      markSkipped(blocked, units)
+      markSkipped(blocked, units, intent)
       return blocked
     }
-    const result = await engine.pushUnits(units.length > 0 ? units : allSyncUnitIds())
+    // 闸门放行 = 上一轮"离线 sweep 无痕"那句话作废，下次离线要重新留一句
+    offlineSweepWarned = false
+    // 全量还是这一批，同样只看 `intent`：`units` 为空是 sweep 的结果，不是它的判据
+    const result = await engine.pushUnits(intent === 'sweep' ? allSyncUnitIds() : units)
     return { ...result, ...retryPolicy(result.errorCode) }
   },
   // 结局与异常都必须有接收者（TD-11-6）：以前这两个钩子全空转，失败只剩 attempts++

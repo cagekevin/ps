@@ -1,6 +1,6 @@
 // 契约测试，非实机：队列是真的，sync 是假实现，全程零网络
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
-import type { SyncOutcome } from '@/cloud/change-sync'
+import type { SyncIntent, SyncOutcome } from '@/cloud/change-sync'
 
 const holder = vi.hoisted(() => ({ queue: undefined as unknown }))
 
@@ -26,7 +26,7 @@ const ok: SyncOutcome = { ok: true }
 
 type Queue = ReturnType<typeof createSyncQueue>
 /** 队列只认这个签名（`cloud/change-sync.ts` 的 `sync`）；mock 也要按它标注 */
-let sync: Mock<(units: string[]) => Promise<SyncOutcome>>
+let sync: Mock<(units: string[], intent: SyncIntent) => Promise<SyncOutcome>>
 let queue: Queue
 let visibility: 'visible' | 'hidden'
 
@@ -47,7 +47,7 @@ describe('启动装配：启动补偿 + 可见性信号，没有定时器（ADR-
       get: () => visibility,
     })
 
-    sync = vi.fn<(units: string[]) => Promise<SyncOutcome>>(async () => ok)
+    sync = vi.fn<(units: string[], intent: SyncIntent) => Promise<SyncOutcome>>(async () => ok)
     queue = createSyncQueue({ sync })
     holder.queue = queue
   })
@@ -68,8 +68,8 @@ describe('启动装配：启动补偿 + 可见性信号，没有定时器（ADR-
 
     await vi.advanceTimersByTimeAsync(1)
     expect(sync).toHaveBeenCalledTimes(1)
-    // 空数组 = 全量 sweep，用哪些 unit 由队列的调用方决定
-    expect(sync).toHaveBeenCalledWith([])
+    // 空数组 + intent='sweep'：全量，用哪些 unit 由队列的调用方决定（TD-11-14：不看长度反推）
+    expect(sync).toHaveBeenCalledWith([], 'sweep')
   })
 
   it('变隐藏：有脏立刻推一次，不等 60 秒静默期', async () => {
@@ -80,7 +80,7 @@ describe('启动装配：启动补偿 + 可见性信号，没有定时器（ADR-
     await vi.advanceTimersByTimeAsync(0)
 
     expect(sync).toHaveBeenCalledTimes(1)
-    expect(sync).toHaveBeenCalledWith(['action.library'])
+    expect(sync).toHaveBeenCalledWith(['action.library'], 'dirty')
   })
 
   it('变隐藏但没脏：不发请求', async () => {
@@ -100,7 +100,7 @@ describe('启动装配：启动补偿 + 可见性信号，没有定时器（ADR-
     await vi.advanceTimersByTimeAsync(0)
 
     expect(sync).toHaveBeenCalledTimes(1)
-    expect(sync).toHaveBeenCalledWith([])
+    expect(sync).toHaveBeenCalledWith([], 'sweep')
   })
 
   it('没有 2 小时定时器：没事件时推进两小时也不会自己同步', async () => {

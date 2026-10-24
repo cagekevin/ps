@@ -86,6 +86,8 @@ describe('离线走闸门', () => {
     expect(queue.attempts()).toBe(0) // 没发请求 ⇒ 不吃退避额度
     expect(log.dump()).toContain('CLOUD_OFFLINE')
     expect(log.dump()).toContain('不消耗退避')
+    // 反向对照（TD-11-14）：有具体 unit 时不写 sweep 那句——两句不能互相顶替
+    expect(log.dump()).not.toContain('全量补偿同步没有执行')
 
     // 不弹 toast：后台行为不打断用户
     expect(feedback.error).not.toHaveBeenCalled()
@@ -103,8 +105,11 @@ describe('离线走闸门', () => {
     queue.requestSync('boot')
     await vi.advanceTimersByTimeAsync(0)
     expect(log.dump()).toContain('CLOUD_OFFLINE')
+    // TD-11-14：sweep 离线必须留下**自己的**可观察痕迹。旧实现按 `units.length === 0`
+    // 早退，只剩 reportSyncOutcome 那句通用的"本轮跳过"，看不出"这一轮是全量补偿没跑"
+    expect(log.dump()).toContain('全量补偿同步没有执行')
 
-    // sweep 没有具体 unit：不记 pending（没有"哪一项"可指）
+    // sweep 没有具体 unit：不记 pending（没有"哪一项"可指），也不许造 '*' / 'all' 伪 unit
     expect(pending.record).not.toHaveBeenCalled()
 
     // 旧实现到这里就永远不动了；现在按最大等待慢轮询，网络回来能自己恢复
@@ -113,6 +118,44 @@ describe('离线走闸门', () => {
     await vi.advanceTimersByTimeAsync(MAX_WAIT)
 
     expect(log.dump()).toContain('云同步恢复正常')
+    queue.stop()
+    vi.useRealTimers()
+  })
+
+  /**
+   * TD-11-14 的第二半：留痕要能看见，但**不许变成心跳**。
+   *
+   * 离线会按最大等待慢轮询，一小时十几轮；每轮都 warn 一遍同样的字，等于把 warn 降级成
+   * 噪音（TD-11-9 的"记跃迁不记心跳"）。判据：离线连续两轮只留一句；恢复在线后再离线，
+   * 重新留一句（跃迁两头都要有）。
+   */
+  it('离线 sweep 的留痕只写跃迁：连续两轮一句，恢复后再离线重新一句', async () => {
+    vi.useFakeTimers()
+    setOnline(false)
+    const { log, queue } = await boot()
+
+    const timesWarned = () => log.dump().split('全量补偿同步没有执行').length - 1
+
+    queue.requestSync('boot')
+    await vi.advanceTimersByTimeAsync(0)
+    expect(timesWarned()).toBe(1)
+
+    // 第二轮慢轮询（还是离线）：不许再写一遍
+    await vi.advanceTimersByTimeAsync(MAX_WAIT)
+    expect(timesWarned()).toBe(1)
+    // 而且始终没有把 sweep 记成 pending（两轮都没记）
+    expect(pending.record).not.toHaveBeenCalled()
+
+    // 恢复在线：这一轮真的跑成了
+    setOnline(true)
+    await vi.advanceTimersByTimeAsync(MAX_WAIT)
+
+    // 再离线：新一轮跃迁，必须重新留一句（否则用户又回到"无痕"）
+    setOnline(false)
+    queue.requestSync('visible')
+    await vi.advanceTimersByTimeAsync(0)
+    expect(timesWarned()).toBe(2)
+
     queue.stop()
     vi.useRealTimers()
   })

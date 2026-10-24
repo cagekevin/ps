@@ -1,6 +1,6 @@
 // 契约测试，非实机：sync 是假实现，仓库用内存实现，全程零网络
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
-import type { SyncOutcome } from '@/cloud/change-sync'
+import type { SyncIntent, SyncOutcome } from '@/cloud/change-sync'
 
 /**
  * 每个用例换一个新队列：mock 成活的 getter，订阅层每次 `markDirty` 都取到当前实例。
@@ -32,7 +32,7 @@ const ok: SyncOutcome = { ok: true }
 
 type Queue = ReturnType<typeof createSyncQueue>
 /** 队列只认这个签名（`cloud/change-sync.ts` 的 `sync`）；mock 也要按它标注 */
-let sync: Mock<(units: string[]) => Promise<SyncOutcome>>
+let sync: Mock<(units: string[], intent: SyncIntent) => Promise<SyncOutcome>>
 let queue: Queue
 
 beforeEach(async () => {
@@ -43,7 +43,7 @@ beforeEach(async () => {
   vi.spyOn(log, 'warn').mockImplementation(() => undefined)
   vi.spyOn(log, 'error').mockImplementation(() => undefined)
 
-  sync = vi.fn<(units: string[]) => Promise<SyncOutcome>>(async () => ok)
+  sync = vi.fn<(units: string[], intent: SyncIntent) => Promise<SyncOutcome>>(async () => ok)
   queue = createSyncQueue({ sync })
   holder.queue = queue
 
@@ -78,7 +78,7 @@ describe('repo 改动 → 只标脏，60 秒后才由队列发一次推送（ADR
 
     await vi.advanceTimersByTimeAsync(1)
     expect(sync).toHaveBeenCalledTimes(1)
-    expect(sync).toHaveBeenCalledWith(['action.library'])
+    expect(sync).toHaveBeenCalledWith(['action.library'], 'dirty')
   })
 
   it('动作仓库文件改动（分组/动作）→ 同一条 action.library', async () => {
@@ -88,7 +88,7 @@ describe('repo 改动 → 只标脏，60 秒后才由队列发一次推送（ADR
     await vi.advanceTimersByTimeAsync(CLOUD_SYNC_DEBOUNCE_MS)
 
     expect(sync).toHaveBeenCalledTimes(1)
-    expect(sync).toHaveBeenCalledWith(['action.library'])
+    expect(sync).toHaveBeenCalledWith(['action.library'], 'dirty')
   })
 
   it('层级预设改动 → 推 font.hierarchy', async () => {
@@ -98,7 +98,7 @@ describe('repo 改动 → 只标脏，60 秒后才由队列发一次推送（ADR
     await vi.advanceTimersByTimeAsync(CLOUD_SYNC_DEBOUNCE_MS)
 
     expect(sync).toHaveBeenCalledTimes(1)
-    expect(sync).toHaveBeenCalledWith(['font.hierarchy'])
+    expect(sync).toHaveBeenCalledWith(['font.hierarchy'], 'dirty')
   })
 
   it('触发点本身一个请求都不发（59 秒内改三次仍是零请求）', async () => {
@@ -127,7 +127,7 @@ describe('repo 改动 → 只标脏，60 秒后才由队列发一次推送（ADR
     await vi.advanceTimersByTimeAsync(CLOUD_SYNC_DEBOUNCE_MS)
 
     expect(sync).toHaveBeenCalledTimes(1)
-    expect(sync).toHaveBeenCalledWith(['action.library', 'font.hierarchy'])
+    expect(sync).toHaveBeenCalledWith(['action.library', 'font.hierarchy'], 'dirty')
   })
 
   /**
@@ -141,7 +141,7 @@ describe('repo 改动 → 只标脏，60 秒后才由队列发一次推送（ADR
     await vi.advanceTimersByTimeAsync(CLOUD_SYNC_DEBOUNCE_MS)
 
     expect(sync).toHaveBeenCalledTimes(1)
-    expect(sync).toHaveBeenCalledWith(['font.stars'])
+    expect(sync).toHaveBeenCalledWith(['font.stars'], 'dirty')
   })
 
   it('字体标签改动 → 推 font.tags（TD-11-1）', async () => {
@@ -151,7 +151,7 @@ describe('repo 改动 → 只标脏，60 秒后才由队列发一次推送（ADR
     await vi.advanceTimersByTimeAsync(CLOUD_SYNC_DEBOUNCE_MS)
 
     expect(sync).toHaveBeenCalledTimes(1)
-    expect(sync).toHaveBeenCalledWith(['font.tags'])
+    expect(sync).toHaveBeenCalledWith(['font.tags'], 'dirty')
   })
 
   it('字体设置写盘 → 推 font.settings（TD-11-1）', async () => {
@@ -161,7 +161,7 @@ describe('repo 改动 → 只标脏，60 秒后才由队列发一次推送（ADR
     await vi.advanceTimersByTimeAsync(CLOUD_SYNC_DEBOUNCE_MS)
 
     expect(sync).toHaveBeenCalledTimes(1)
-    expect(sync).toHaveBeenCalledWith(['font.settings'])
+    expect(sync).toHaveBeenCalledWith(['font.settings'], 'dirty')
   })
 
   /**

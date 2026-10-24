@@ -36,9 +36,24 @@ export interface SyncOutcome {
   retryAfterMs?: number
 }
 
+/**
+ * 本轮同步的**意图**：`sweep` = 所有 unit 过一遍（启动补偿 / 变可见），`dirty` = 只推这一批。
+ *
+ * 为什么必须是显式参数（TD-11-14）：`units` 为空只是 sweep 的**结果**，不是判据。
+ * 消费侧一旦拿 `units.length === 0` 反推 sweep，空集的其他来历（还没有具体 unit、
+ * 闸门挡下时根本没跑）就会被当成同一种事——`setup.ts` 的 `markSkipped` 就是这么在
+ * 离线时静默掉的：既不记 pending 也不留日志。
+ */
+export type SyncIntent = 'sweep' | 'dirty'
+
 export interface SyncQueueDeps {
-  /** 真正干活的一次同步；`units` 为空数组表示"全量 sweep"（启动 / 变可见） */
-  sync: (units: string[]) => Promise<SyncOutcome>
+  /**
+   * 真正干活的一次同步。
+   *
+   * `intent` 是本轮的**判据**（TD-11-14）：`'sweep'` 时 `units` 是空数组（全量），
+   * `'dirty'` 时 `units` 就是这一批脏项。**不许**用 `units.length` 反推意图。
+   */
+  sync: (units: string[], intent: SyncIntent) => Promise<SyncOutcome>
   debounceMs?: number
   maxWaitMs?: number
   backoffMs?: readonly number[]
@@ -156,7 +171,7 @@ export function createSyncQueue(deps: SyncQueueDeps): SyncQueue {
     const dirtyAtStart = [...dirty].sort()
     const units = sweeping ? [] : dirtyAtStart
     try {
-      const outcome = await serial(() => deps.sync(units))
+      const outcome = await serial(() => deps.sync(units, sweeping ? 'sweep' : 'dirty'))
       if (outcome.ok) {
         attempts = 0
         retryAt = 0
