@@ -463,7 +463,22 @@ export function createCloudEngine(deps: CloudDeps): CloudEngine {
     }
 
     if (changed.length === 0) {
-      refreshBaseline()
+      // 写基线失败必须变成"这一轮没成功"，不能装作"内容一致、已是最新"（TD-11-6）：
+      // 基线没推进，下次本地真改了就会算出假冲突，而用户看不到任何原因。
+      try {
+        refreshBaseline()
+      } catch (error) {
+        // 写盘错是普通 Error（没有 CloudError 码），这里的失败类别由**这一行代码**决定
+        deps.pending.record(ready, 'network', 'CLOUD_WRITE_FAILED')
+        return {
+          ok: false,
+          count: 0,
+          pushed: [],
+          pending: ready,
+          error: error instanceof Error ? error.message : '同步台账写入失败',
+          errorCode: 'CLOUD_WRITE_FAILED',
+        }
+      }
       return {
         ok: true,
         count: 0,

@@ -15,6 +15,8 @@ export interface SyncOutcome {
   ok: boolean
   cancelled?: boolean
   errorCode?: string
+  /** 具体原因原文（引擎/闸门给的），日志里必须带得上——只有码等于只说"失败了" */
+  error?: string
   /**
    * 根本没发请求（自动同步关 / 没有台账 / 离线 / 未配置）。
    *

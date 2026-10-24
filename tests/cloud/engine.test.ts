@@ -287,6 +287,34 @@ describe('cloud engine', () => {
     expect(ledgerWrite).not.toHaveBeenCalled()
   })
 
+  /**
+   * TD-11-6：基线写盘失败不许伪装成"内容一致、已是最新"。
+   *
+   * 以前 `refreshBaseline()` 里的 `ledger.write` 没包 try（同一调用在推送路径上包了）：
+   * 抛出去冒到队列的 catch → 没人接 → 既不 log 也不留痕，用户只看到"上次同步时间不动"。
+   */
+  it('内容一致但基线写盘失败 → 报 CLOUD_WRITE_FAILED 并留痕，不装作已是最新', async () => {
+    pull.mockResolvedValue(cloudView({ 'font.tags': toUnit(payloadB) }))
+    ledgerRead.mockReturnValue({
+      rev: 3,
+      syncedAt: 100,
+      localHash: 'whatever',
+      units: { 'font.tags': toUnit(payloadB).hash },
+    })
+    ledgerWrite.mockImplementation(() => {
+      throw new Error('EPERM: 台账写不进去')
+    })
+
+    const result = await engine.pushUnits(['font.tags'])
+
+    expect(result).toMatchObject({
+      ok: false,
+      errorCode: 'CLOUD_WRITE_FAILED',
+      pending: ['font.tags'],
+    })
+    expect(pendingRecord).toHaveBeenCalledWith(['font.tags'], 'network', 'CLOUD_WRITE_FAILED')
+  })
+
   it('T-76①：没有 per-unit 基线（老台账）时首推视为新增，并写入基线', async () => {
     pull.mockResolvedValue(
       cloudView(

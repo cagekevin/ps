@@ -298,3 +298,43 @@ describe('同步队列：失败后的重试策略（TD-11-8）', () => {
     queue.stop()
   })
 })
+
+/**
+ * TD-11-6：两个出口必须真的被调用。
+ *
+ * 契约在 `SyncQueueDeps` 里，但装配点以前一个都没接（`deps.onOutcome?.()` 空转），
+ * 也没有任何用例证明"接上之后确实会响"——失败的信息就死在这一步。
+ */
+describe('同步队列：结局与异常的出口（TD-11-6）', () => {
+  it('失败时 onOutcome 拿到 outcome 与这一轮的 unit 列表', async () => {
+    const onOutcome = vi.fn()
+    const sync = vi.fn(async () => fail)
+    const queue = createSyncQueue({ sync, onOutcome })
+
+    queue.markDirty('font.tags')
+    await vi.advanceTimersByTimeAsync(CLOUD_SYNC_DEBOUNCE_MS)
+
+    expect(onOutcome).toHaveBeenCalledWith(fail, ['font.tags'])
+
+    queue.stop()
+  })
+
+  it('sync 自己抛错时 onError 拿到原异常，队列不崩', async () => {
+    const onError = vi.fn()
+    const boom = new Error('台账写不进去')
+    const queue = createSyncQueue({
+      sync: async () => {
+        throw boom
+      },
+      onError,
+    })
+
+    queue.markDirty('font.tags')
+    await vi.advanceTimersByTimeAsync(CLOUD_SYNC_DEBOUNCE_MS)
+
+    expect(onError).toHaveBeenCalledWith(boom)
+    expect(queue.attempts()).toBe(1)
+
+    queue.stop()
+  })
+})

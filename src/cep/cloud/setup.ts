@@ -12,6 +12,7 @@ import { cloudEntries } from './entries'
 import { isAutoSyncEnabled, isCloudConfigured } from './config'
 import { readCloudLedger, writeCloudLedger } from './ledger'
 import { clearPendingChanges, readPendingChanges, recordPendingChanges } from './pending'
+import { reportSyncError, reportSyncOutcome } from './sync-report'
 import { pullSnapshot, pushSnapshot } from './transport'
 
 /** 端口注入：具体 CEP 实现只在这里给；对外的 `cloudEngine` 是下面的串行门面 */
@@ -55,13 +56,22 @@ export function allSyncUnitIds(): string[] {
  */
 async function gate(): Promise<SyncOutcome | null> {
   // `skip: true`：这类原因一次请求都没发，不该吃掉退避额度（退避是留给真网络错误的）
-  if (!isCloudConfigured()) return { ok: false, skip: true, errorCode: 'CLOUD_NOT_CONFIGURED' }
-  if (!isAutoSyncEnabled()) return { ok: false, skip: true, errorCode: 'CLOUD_AUTO_SYNC_OFF' }
+  if (!isCloudConfigured())
+    return { ok: false, skip: true, errorCode: 'CLOUD_NOT_CONFIGURED', error: '未配置同步地址' }
+  if (!isAutoSyncEnabled())
+    return { ok: false, skip: true, errorCode: 'CLOUD_AUTO_SYNC_OFF', error: '自动同步已关闭' }
   const read = await readCloudLedger()
-  if (read.status === 'broken') return { ok: false, skip: true, errorCode: 'CLOUD_LEDGER_BROKEN' }
-  if (read.status === 'none') return { ok: false, skip: true, errorCode: 'CLOUD_NO_LEDGER' }
+  if (read.status === 'broken')
+    return { ok: false, skip: true, errorCode: 'CLOUD_LEDGER_BROKEN', error: '同步台账读不出来' }
+  if (read.status === 'none')
+    return {
+      ok: false,
+      skip: true,
+      errorCode: 'CLOUD_NO_LEDGER',
+      error: '本地还没有同步台账（新设备要先用「从云端拉取」）',
+    }
   if (typeof navigator !== 'undefined' && navigator.onLine === false) {
-    return { ok: false, skip: true, errorCode: 'CLOUD_OFFLINE' }
+    return { ok: false, skip: true, errorCode: 'CLOUD_OFFLINE', error: '当前离线' }
   }
   return null
 }
@@ -91,6 +101,9 @@ export const cloudSyncQueue = createSyncQueue({
     const result = await engine.pushUnits(units.length > 0 ? units : allSyncUnitIds())
     return { ...result, ...retryPolicy(result.errorCode) }
   },
+  // 结局与异常都必须有接收者（TD-11-6）：以前这两个钩子全空转，失败只剩 attempts++
+  onOutcome: reportSyncOutcome,
+  onError: reportSyncError,
 })
 
 /**
