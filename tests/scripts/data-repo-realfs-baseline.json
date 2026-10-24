@@ -1,0 +1,11 @@
+[
+  "src/cep/data/action-archive.ts",
+  "src/cep/data/actions.ts",
+  "src/cep/data/common-use.ts",
+  "src/cep/data/font-extra.ts",
+  "src/cep/data/free-panel.ts",
+  "src/cep/data/index.ts",
+  "src/cep/data/legacy-settings.ts",
+  "src/cep/data/rename.ts",
+  "src/cep/data/settings.ts"
+]
