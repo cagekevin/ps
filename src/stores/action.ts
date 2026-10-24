@@ -1,5 +1,5 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import {
   actionIndexRepo,
   actionLibraryRepo,
@@ -23,8 +23,17 @@ export const useActionStore = defineStore('action', () => {
   const warehouses = ref<ActionWarehouse[]>([])
   const activeIndex = ref(0)
   const groups = ref<ActionGroup[]>([])
-  /** 原版 dzShowListType 0/1/2；这里投影成 1/2/3 列 */
-  const listType = ref(getPref('dzShowListType', 2) + 1)
+  /** 原版 dzShowListType 0/1/2；这里投影成 1/2/3 列。**不导出**：对外只有下面的只读投影 */
+  const listTypeColumns = ref(getPref('dzShowListType', 2) + 1)
+
+  /**
+   * 列数投影的对外出口，**只读**（TD-03-3）。
+   *
+   * 导出 `computed` 而不是 `ref`：`storeToRefs` 对只读 getter 给的是 `ComputedRef`，
+   * 页面写 `listType.value = …` 时 `vue-tsc` 直接报只读属性——判据有执行者，
+   * 不再靠"页面记得别赋值"这句注释（TD-03-2 那版只是约定，改回去测试照样绿）。
+   */
+  const listType = computed(() => listTypeColumns.value)
 
   /**
    * 列数投影的**唯一写入口**（TD-03-2）。
@@ -36,7 +45,7 @@ export const useActionStore = defineStore('action', () => {
    * 方向不变）；本函数只管本 store 的投影，调用方是"命令成功之后"的页面。
    */
   function setListType(columns: 1 | 2 | 3) {
-    listType.value = columns
+    listTypeColumns.value = columns
   }
   /** 非空表示当前读到的不是真实数据（索引/库损坏），页面必须提示 */
   const degraded = ref('')

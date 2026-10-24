@@ -1,5 +1,5 @@
 import { flushPromises, mount } from '@vue/test-utils'
-import { createPinia, setActivePinia, type Pinia } from 'pinia'
+import { createPinia, setActivePinia, storeToRefs, type Pinia } from 'pinia'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { readValue } from '../support/repo-read'
 
@@ -143,6 +143,30 @@ describe('动作页', () => {
     expect(useActionStore().listType).toBe(1)
     expect(getPref('dzShowListType', 2)).toBe(0)
     wrapper.unmount()
+  })
+
+  /**
+   * TD-03-3：`listType` 的只读是**判据**，不是注释。
+   *
+   * TD-03-2 的"唯一写入口"只改了页面一处：store 仍导出可写 ref、页面仍 `storeToRefs` 取，
+   * 把 `listType.value = columns` 改回去测试照样绿 ⇒ 判据没有执行者。
+   *
+   * 这里的 `@ts-expect-error` 是**反向断言**（不是绕过类型）：两行一旦能编译，说明有人
+   * 把可写 ref 又导出了 ⇒ `npm run typecheck` 直接红。它盯的正是债里那两种形态：
+   * ① `store.listType = …`（store 自己的出口）；② `storeToRefs(store).listType.value = …`
+   * （页面拿到的那份）。运行时补一句：赋值不改值（只读 computed 只告警），投影只能经 `setListType`。
+   */
+  it('listType 只读：直写它编译期就红，且写不进值', async () => {
+    const { useActionStore } = await import('@/stores/action')
+    const store = useActionStore()
+    const before = store.listType
+
+    // @ts-expect-error TD-03-3：listType 是只读投影，store 外的唯一写入口是 setListType
+    store.listType = 2
+    // @ts-expect-error TD-03-3：storeToRefs 对只读 getter 给 ComputedRef，页面拿不到可写 ref
+    storeToRefs(store).listType.value = 2
+
+    expect(store.listType).toBe(before)
   })
 
   it('仓库触发器渲染当前仓库，点击展开下拉', async () => {
