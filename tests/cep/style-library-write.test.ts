@@ -69,6 +69,7 @@ const {
   readKuLibrary,
   addKuGroup,
   addKuItem,
+  appendKuGroup,
   deleteKuItem,
   sendKuItemToSwatch,
   appendKuItemToSwatch,
@@ -598,6 +599,76 @@ describe('拖拽落点（moveKuItemTo / moveKuGroupTo）', () => {
     ).rejects.toThrow('不存在')
 
     expect(fsMock.files.get(COLOR_LIB)).toBe(twoGroups)
+  })
+})
+
+/**
+ * 刀1：`appendKuGroup` —— 按钮 5「发送到设计助理」的落点。
+ *
+ * 官方 `addGroupItem(t)`（`app.v4.js:52470-52475`）：`this.info.push(t); this.updata(); return true;`
+ * 它与 `addGroup(name, afterIndex)`（`:52437-52449`）是两条路：**不校验、不补字段、不造 id**。
+ * 这三条用例钉的就是"没拿 `createKuGroup` 凑"。
+ */
+describe('appendKuGroup（原版 addGroupItem，:52470-52475）', () => {
+  const GROUP = {
+    name: '提取颜色组',
+    show: true,
+    list: [{ name: '未命名', color: { hex: 'FF0000' } }],
+  }
+
+  it('整份 push 到库**末尾**，字段原样保留（不补 id）', async () => {
+    seedLib(JSON.stringify([{ name: '灰白', show: true, list: [] }]))
+    await styleIndexRepo.write(INDEX_VALUE)
+
+    await appendKuGroup('color', GROUP)
+
+    const groups = JSON.parse(fsMock.files.get(COLOR_LIB) ?? '[]') as unknown[]
+    expect(groups).toEqual([{ name: '灰白', show: true, list: [] }, GROUP])
+  })
+
+  it('落盘后重读得到（新组在，颜色项能归一成色块）', async () => {
+    await styleIndexRepo.write(INDEX_VALUE)
+
+    await appendKuGroup('color', GROUP)
+
+    const read = await readKuLibrary('color', 'sj_kuColA.ini')
+    expect(read.note).toBe('')
+    expect(read.groups.map((g) => g.name)).toEqual(['提取颜色组'])
+    expect(read.groups[0].items).toEqual([{ name: '未命名', swatch: '#FF0000' }])
+  })
+
+  it('一次调用 = 一次原子写 + 一份 .bak（旧内容进 .bak）', async () => {
+    const before = JSON.stringify([{ name: '灰白', show: true, list: [] }])
+    seedLib(before)
+    await styleIndexRepo.write(INDEX_VALUE)
+    fsMock.atomicWrites.length = 0
+
+    await appendKuGroup('color', GROUP)
+
+    expect(fsMock.atomicWrites).toEqual([COLOR_LIB])
+    expect(fsMock.files.get(`${COLOR_LIB}.bak`)).toBe(before)
+  })
+
+  it('走同一条串行队列：并发两次都落盘，后写的不会覆盖先写的', async () => {
+    seedLib(JSON.stringify([{ name: '灰白', show: true, list: [] }]))
+    await styleIndexRepo.write(INDEX_VALUE)
+
+    await Promise.all([
+      appendKuGroup('color', { name: 'A', show: true, list: [] }),
+      appendKuGroup('color', { name: 'B', show: true, list: [] }),
+    ])
+
+    const groups = JSON.parse(fsMock.files.get(COLOR_LIB) ?? '[]') as Array<{ name: string }>
+    expect(groups.map((g) => g.name)).toEqual(['灰白', 'A', 'B'])
+  })
+
+  it('不是对象 → 抛错，库文件一个字节都不动', async () => {
+    const before = JSON.stringify([{ name: '灰白', show: true, list: [] }])
+    seedLib(before)
+    await styleIndexRepo.write(INDEX_VALUE)
+
+    await expect(appendKuGroup('color', 'not-a-group')).rejects.toThrow('组必须是非空对象')
+    expect(fsMock.files.get(COLOR_LIB)).toBe(before)
   })
 })
 

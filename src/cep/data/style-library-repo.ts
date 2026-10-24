@@ -1,10 +1,11 @@
 // 是什么：样式库的磁盘读写 —— 仓库索引 `sj_kuStoreInfo.ini` + 当前仓库的四个库文件（读 + 写）
 // 唯一入口：仓库索引 `sj_kuStoreInfo.ini` 与四类库文件的读和写只能经过这里；每次写都带 `<文件>.bak` 备份 + 单队列串行
+//   （队列与色板文件原语在 `swatch-repo.ts`；本条与它共用**同一条**写队列，别在这里再建一条）
 // 替代了什么：原版 `N_`（索引，`app.v4.js:53303-53740`）+ `X_/I_/K_/E_`（四库）的 `readToArray` / `updata`
 // 谁在用：`stores/style-library.ts`（读投影）、`commands/style.ts`（写）
 // 禁止：页面/组件不许 import 这里（走 store / 命令）
 
-import { DATA_FILES, USER_DIR } from '@/cep/env'
+import { DATA_FILES } from '@/cep/env'
 import {
   b64ToUtf8,
   hasNode,
@@ -31,6 +32,8 @@ import {
 import { CepError } from '@/utils/errors'
 import { log } from '@/utils/logger'
 import { pick } from './pick'
+// 写队列与色板文件原语都在 `swatch-repo`（依赖方向只能是 `style-library-repo → swatch-repo`）
+import { enqueue, readSwatchItems, swatchFilePath, writeSwatchItems } from './swatch-repo'
 import type { Repo } from './types'
 
 /**
@@ -196,21 +199,6 @@ export async function readKuGroupId(kind: KuKind, groupIndex: number): Promise<s
 
 /** 库文件里的组，保留全部未知键（样式项的 PS 效果载荷等，契约 §6.1 #1a） */
 type KuRawGroup = Record<string, unknown>
-
-/**
- * 所有库文件写入串行（与 `fileRepo` 每条队列同语义，D-12）：
- * 两次编辑若各自「读 → 改 → 写」并发跑，后写的会把先写的覆盖掉。
- */
-let queue: Promise<unknown> = Promise.resolve()
-
-function enqueue<T>(task: () => Promise<T>): Promise<T> {
-  const next = queue.then(task, task)
-  queue = next.then(
-    () => undefined,
-    () => undefined,
-  )
-  return next
-}
 
 /** 库文件名前缀，照抄原版 `P_()`（`app.v4.js:53284-53293`） */
 const KU_FILE_PREFIX: Record<KuKind, string> = {
@@ -636,6 +624,34 @@ export async function addKuGroup(kind: KuKind, name: string, afterIndex?: number
   )
 }
 
+/**
+ * 追加一个**现成的组对象**到库末尾（按钮 5「发送到设计助理」的落点）。
+ *
+ * 原版 `addGroupItem(t)`（`app.v4.js:52470-52475`）：`this.info.push(t); this.updata(); return true;`
+ * —— 它**不校验、不补字段、不造 id**，与 `addGroup(name, afterIndex)`（`:52437-52449`）是两条路。
+ * 所以这里**不许**拿 `createKuGroup` 凑：那个函数会补 `{name, show, list}` 并在样式库加
+ * `id: "YS"+GUID`，官方这条路径没有这一步（调用方给什么就存什么）。
+ *
+ * 上游形状：色板面板发 `{name, show: true, list: [...颜色项]}`（`sf.js:434-443`），
+ * 主面板收到 `sendColor` 后原样 push（`app.v4.js:17887-17892` → `:50034-50037`）。
+ *
+ * 唯一的结构校验是"必须是非空对象"：不是对象时 `JSON.stringify` 会写出 `null`，
+ * 库文件从此读不回组。字段一律不认、不改写（ADR-23/24：消费者只转发）。
+ */
+export async function appendKuGroup(kind: KuKind, group: unknown): Promise<void> {
+  // `async` 不是装饰：参数校验必须变成 **rejected promise**，不能同步 throw ——
+  // 调用方（`executeInherited` / `style.appendGroup`）只会 `.catch`，同步抛会漏出调用链。
+  if (!group || typeof group !== 'object' || Array.isArray(group)) {
+    throw new CepError('PARSE', '组必须是非空对象')
+  }
+
+  return enqueue(() =>
+    updateKuGroups(kind, (groups) => {
+      groups.push(group as KuRawGroup)
+    }),
+  )
+}
+
 /** 重命名分组。原版 `renameGroup(name, index)`（`:52456-52459`）：不查重，直接改名 */
 export async function renameKuGroup(kind: KuKind, groupIndex: number, name: string): Promise<void> {
   const groupName = name.trim()
@@ -826,60 +842,6 @@ export function moveKuGroupTo(
       groups[moved].show = false
     }),
   )
-}
-
-/**
- * 色板数据文件。原版 `path.seBan` = `getUserDataPath() + "/FengZiSeBan/userColor.ini"`
- * （`app.v4.js:5222`；`getUserDataPath()` 是 `%APPDATA%`，`:5180-5183`）。
- * `userDir()` = `getUserDataPath() + USER_DIR`（`cep/fs.ts:45-52`），去掉后缀还原成根。
- */
-function swatchFilePath(): string {
-  const dir = userDir()
-  if (!dir.endsWith(USER_DIR)) {
-    throw new CepError('IO', `用户数据目录不以 ${USER_DIR} 结尾，色板路径算不出来：${dir}`)
-  }
-  return `${dir.slice(0, -USER_DIR.length)}/FengZiSeBan/userColor.ini`
-}
-
-/**
- * 读色板数组。文件不存在 / 空文件 = 空数组（原版 `readToArray` 同语义，`app.v4.js:72714-72727`）。
- *
- * **有意偏离**：原版 `readToArray` 连 JSON 坏掉也吞成 `[]`，然后 `write` 覆盖回去 ——
- * 用户的色板会被一次追加抹平。这里坏文件直接抛，宁可这次追加失败。
- */
-async function readSwatchItems(path: string): Promise<unknown[]> {
-  const read = await readTextOutcome(path)
-  // T-112：读不到时**不许**返回 `[]`——调用方会把追加后的内容整份写回，等于把一份读不到的
-  // 色板抹平。`notSeen`（还没有色板文件）才是"空数组"。
-  if (read.status === 'error') {
-    throw new CepError('IO', `色板文件读不到，已中止写入：${path}（${read.reason}）`)
-  }
-  if (read.status === 'notSeen' || read.text === '') return []
-
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(read.text)
-  } catch (e) {
-    log.error('style', '色板文件不是合法 JSON', e)
-    throw new CepError('PARSE', `色板文件不是合法 JSON，已中止写入：${path}`)
-  }
-  if (!Array.isArray(parsed))
-    throw new CepError('PARSE', `色板文件顶层不是数组，已中止写入：${path}`)
-  return parsed
-}
-
-/** 写色板全文：旧内容先进 `.bak`，再原子写；写不进去抛（不让用户以为发送成功） */
-async function writeSwatchItems(path: string, items: unknown[]): Promise<void> {
-  const read = await readTextOutcome(path)
-  // T-112：读不到时**不许写**——`.bak` 写不出来（没有旧原文），整份覆盖就等于旧色板没有第二份。
-  // `notSeen`（还没有色板文件）照旧：没有旧内容，不需要 `.bak`。
-  if (read.status === 'error') {
-    throw new CepError('IO', `色板文件读不到，已中止写入：${path}（${read.reason}）`)
-  }
-  if (read.status === 'ok' && read.text) writeTextFile(`${path}.bak`, read.text)
-  if (!writeTextFileAtomic(path, JSON.stringify(items))) {
-    throw new CepError('IO', `色板文件写入失败：${path}`)
-  }
 }
 
 /**
