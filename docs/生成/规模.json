@@ -26,9 +26,9 @@
     }
   },
   "tests": {
-    "files": 131,
-    "cases": 1162,
-    "eachSites": 12
+    "files": 133,
+    "cases": 1177,
+    "eachSites": 16
   },
   "components": 31,
   "icons": 189,

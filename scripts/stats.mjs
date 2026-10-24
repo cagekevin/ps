@@ -4,7 +4,7 @@
  *   node scripts/stats.mjs gen     重新生成 docs/生成/规模.json、docs/生成/规模.md，
  *                                  并改写 docs/状态/进度.md 里的注入块
  *   node scripts/stats.mjs --check  校验上面三处与源码真值一致（不一致退出 1）
- *   node scripts/stats.mjs --json   只把真值打到 stdout
+ *   node scripts/stats.mjs --json   只把真值打到 stdout（测试用，可加 --root=<dir>）
  *
  * 为什么做这个：规模数字原来手抄在 docs/状态/进度.md 里（命令数、测试数、组件数、图标数），
  * 每次加代码就漂一次（实测：文档写 99 条命令 / 56 个测试文件 344 处用例，
@@ -39,7 +39,13 @@ import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from '
 import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-const root = fileURLToPath(new URL('..', import.meta.url))
+/**
+ * `--root=<dir>` 只给测试用：把口径跑在**已知答案的夹具**上（`tests/scripts/stats.test.ts`）。
+ * 生产不传 = 仓库根。除根路径外，本文件的任何计数口径都不因此改变。
+ */
+const root =
+  process.argv.find((a) => a.startsWith('--root='))?.slice(7) ??
+  fileURLToPath(new URL('..', import.meta.url))
 
 const COMMANDS_DIR = join(root, 'src/commands')
 const TESTS_DIR = join(root, 'tests')
@@ -612,7 +618,12 @@ function check() {
     process.exit(1)
   }
   console.log(
-    `[stats] 通过：命令 ${m.commands.total} / 用例 ${m.tests.cases}（静态计数）/ 组件 ${m.components} / 图标 ${m.icons} / 页面 ${m.pages} / 宿主事件 ${m.hostEvents}`,
+    `[stats] 通过：文档注入块与脚本算值一致（命令 ${m.commands.total} / 用例 ${m.tests.cases}（静态计数）/ 组件 ${m.components} / 图标 ${m.icons} / 页面 ${m.pages} / 宿主事件 ${m.hostEvents}）`,
+  )
+  // 「诚实失败可见」落点：这条闸只对账，不对口径。不写清边界 = 假安全感（TD-17-5）
+  console.log('[stats] 边界：本闸只保证「文档 == 脚本算的值」，**不保证计数口径本身对**。')
+  console.log(
+    '        口径改动（新增目录 / 新写法 / it.each 展开）必须人工核 compute()，不能靠这条绿。',
   )
 }
 
