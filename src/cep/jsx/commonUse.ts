@@ -1,4 +1,5 @@
 ﻿import { jsxCall } from '@/cep/transport'
+import { LONG, READ, WRITE } from './timeouts'
 import type { CommonUseJsx } from './types'
 
 // 是什么：常用页（/commonUse）域 jsx 的**唯一实现**
@@ -6,10 +7,6 @@ import type { CommonUseJsx } from './types'
 // 替代了什么：原版散在 CommonUse / 7 个子组件 / 自由面板派发表里的 `$cep.jsx*` 直调
 // 谁在用：commands/commonUse.ts
 // 禁止：页面/组件直接 import；新增函数必须同步改 types.ts 与 mock.ts
-
-const READ = 10000
-const WRITE = 60000
-const LONG = 300000
 
 /**
  * 常用页域真实实现。**名字与实参一律照官方派发表与调用点**（T-86a）。

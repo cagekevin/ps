@@ -1,4 +1,5 @@
 import { jsxCall } from '@/cep/transport'
+import { LONG, READ, WRITE } from './timeouts'
 import type { FontJsx } from './types'
 
 // 是什么：字体域 jsx 的**唯一实现**（字体管理页 + 字体面板页共用）
@@ -6,9 +7,6 @@ import type { FontJsx } from './types'
 // 替代了什么：原版 `$cep.jsx` / `$cep.jsxHistory` 的散点调用
 // 谁在用：commands/font.ts、commands/fontSet.ts
 // 禁止：页面/组件直接 import；新增函数必须同步改 types.ts 与 mock.ts
-
-const READ = 10000
-const WRITE = 20000
 
 function read(fn: string, args: unknown[], label: string) {
   return jsxCall(fn, args, { label, timeout: READ })
@@ -30,7 +28,7 @@ export function createFontJsx(): FontJsx {
     initSystemList: () =>
       jsxCall('ztgl_initSystemList', [], {
         label: '读取系统字体',
-        timeout: 120000,
+        timeout: LONG,
       }),
 
     setFont: (postScriptName, name, weight) =>

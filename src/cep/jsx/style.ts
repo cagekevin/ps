@@ -1,4 +1,5 @@
 import { jsxCall } from '@/cep/transport'
+import { READ, WRITE } from './timeouts'
 import type { StyleJsx } from './types'
 
 // 是什么：样式域 jsx 的**唯一实现**（/style 页的"应用"与"添加"）
@@ -6,9 +7,6 @@ import type { StyleJsx } from './types'
 // 替代了什么：原版 `$cep.jsx` / `jsxHistory` 的散点调用
 // 谁在用：commands/style.ts
 // 禁止：页面/组件直接 import；新增函数必须同步改 types.ts 与 mock.ts
-
-const READ = 10000
-const WRITE = 20000
 
 function read(fn: string, args: unknown[], label: string) {
   return jsxCall(fn, args, { label, timeout: READ })

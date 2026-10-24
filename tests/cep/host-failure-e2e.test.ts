@@ -157,7 +157,8 @@ describe('假 PS 全链路：三类宿主失败', () => {
     })
 
     const pending = execute('e2e.timeout')
-    await vi.advanceTimersByTimeAsync(20_001) // jsx/font.ts 的 WRITE 超时
+    // WRITE 档（jsx/timeouts.ts 的共享常量，写操作 60s；以前 font 域自己写 20s）
+    await vi.advanceTimersByTimeAsync(60_001)
     const result = await pending
 
     expect(result.ok).toBe(false)

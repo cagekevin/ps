@@ -1,4 +1,5 @@
 import { jsxCall } from '@/cep/transport'
+import { LONG } from './timeouts'
 import type { LegacyJsx } from './types'
 
 /**
@@ -11,7 +12,7 @@ export function createLegacyJsx(): LegacyJsx {
     call: (key, args, label) =>
       jsxCall(key, args, {
         label: label ?? key,
-        timeout: 300000,
+        timeout: LONG,
       }),
   }
 }
