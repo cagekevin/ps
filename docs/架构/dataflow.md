@@ -165,7 +165,7 @@ mousedown + Ctrl/Meta + 300ms
 | `TagMenu` / `TagContextMenu` | `useFloatingPosition` + `useDismiss` |
 | 动作页右键菜单 / 样式页 `StyleMenu` / 样式项 `.describe` | `useFloatingPosition` + `useDismiss` |
 | 动作页列布局菜单 | `absolute` 挂底栏（有意，不跟鼠标） |
-| `FontSetSelect` / `GTooltip` | 仍是 `relative` / `absolute` |
+| `FontSetSelect` | 仍是 `relative` / `absolute` |
 | `GPopover` | 只有 `_atoms` 演示，业务未用 |
 
 统一几何在 `composables/floating-position.ts`；不要新写一套坐标计算。

@@ -30,7 +30,6 @@
 - `CepModal`
 - `Icon`
 - `NewSpin`
-- `GTooltip`
 - `BackTop`
 - `ToastHost`
 - `TaskHud`
