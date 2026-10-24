@@ -134,6 +134,22 @@ describe('设置页 · 云同步状态（T-74）', () => {
     expect(text).toContain('2 项 —— 云端和本地都改过，需要你决定保留哪边')
   })
 
+  /**
+   * TD-11-9：后台失败之后，那句话必须**能出现在页面上**（不是只在日志里）。
+   * 刷新时机由 `bindCloudData` 负责，这里钉"痕迹一旦进状态，页面就说出来"。
+   */
+  it('后台失败留下的痕迹 → 页面上出现「没同步成功」并带上原因', () => {
+    cloudState.status = status({
+      pending: 1,
+      pendingItems: [{ unit: 'font.tags', at: 1, reason: 'network', code: 'CLOUD_PERMISSION' }],
+    })
+
+    const text = mountPage().text()
+
+    expect(text).toContain('没同步成功')
+    expect(text).toContain('网络失败，会在后台重试')
+  })
+
   it('「没配置地址」的提示与「冲突」提示互斥，不混成一句', () => {
     cloudState.status = status({ configured: false })
     const notConfigured = mountPage().text()

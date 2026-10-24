@@ -23,6 +23,7 @@ import { useTaskStore } from './stores/tasks'
 import { setProgressPort } from './commands/runtime'
 import { startSelectionWatch } from './selection'
 import { startCloudAutoSync } from './cloud/auto-sync'
+import { bindCloudData } from './stores/cloud'
 import './styles/tokens.css'
 import './styles/global.css'
 import './styles/layout.css'
@@ -48,6 +49,8 @@ bindFreePanelData()
 bindFontSetData()
 installCommonUseSource(commonUseRepo)
 bindRenameData()
+// 云同步：后台结局跃迁时让设置页的状态往上走（TD-11-9，页面不必自己轮询盘）
+bindCloudData()
 // 色板投影：本面板的命令写完文件（onChange）与别处写完发的 app event 都汇到这里重读。
 // 两个进程都会绑上——主面板那份是空转（多读三个小文件），换来"换入口时不会漏绑"。
 bindSwatchData()

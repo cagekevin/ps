@@ -7,6 +7,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { cloudEngine, cloudSyncQueue } from '@/cep/cloud/setup'
+import { onSyncOutcomeReported } from '@/cep/cloud/sync-report'
 import { emptyCloudStatus, type CloudStatus } from '@/cloud/types'
 
 export const useCloudStore = defineStore('cloud', () => {
@@ -31,3 +32,21 @@ export const useCloudStore = defineStore('cloud', () => {
 
   return { status, queuedUnits, syncing, refresh, refreshLive }
 })
+
+let bound = false
+
+/**
+ * 装配层调用一次（main.ts）：后台同步的结局**跃迁**时重读一次盘上的痕迹（TD-11-9）。
+ *
+ * 为什么必须有人接：页面只在挂载、手动拉取、切开关后 `refresh()`，5 秒定时器只刷内存脏数；
+ * 后台推送失败时那句"没同步成功"永远不出现——痕迹在盘上，但用户看不到。
+ *
+ * 为什么不放在 store setup 里：测试每次 `createPinia` 都会新建 store，订阅会越积越多（同 `bindFontData`）。
+ */
+export function bindCloudData(): void {
+  if (bound) return
+  bound = true
+  onSyncOutcomeReported(() => {
+    void useCloudStore().refresh()
+  })
+}

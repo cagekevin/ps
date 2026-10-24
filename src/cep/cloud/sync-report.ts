@@ -18,6 +18,37 @@ import type { SyncOutcome } from '@/cloud/change-sync'
  */
 let lastSignature = ''
 
+/**
+ * 结局变化的订阅者（TD-11-9）。
+ *
+ * 为什么需要它：痕迹写在盘上，而设置页只在挂载/手动拉取后读一次盘、5 秒定时器只刷内存脏数——
+ * 后台推送失败期间页面开着，"没同步成功"那句永远不出现，关掉重开才有。
+ *
+ * 只在**跃迁**时通知（与日志同一条判据：记跃迁不记心跳）：
+ * 每次成功都去读一遍台账文件没有意义，而"上一次不是成功"这一刻正是页面需要更新的时刻。
+ */
+export type SyncReportListener = (signature: string) => void
+const listeners = new Set<SyncReportListener>()
+
+/** 订阅结局变化；返回取消函数。装配层（main.ts 经 bindCloudData）接一次 */
+export function onSyncOutcomeReported(listener: SyncReportListener): () => void {
+  listeners.add(listener)
+  return () => {
+    listeners.delete(listener)
+  }
+}
+
+function notify(signature: string): void {
+  for (const listener of listeners) {
+    try {
+      listener(signature)
+    } catch (e) {
+      // 订阅者坏了不许影响同步本体：这条已经写进日志了，同步结果不受它影响
+      log.warn('cloud', '同步结局的订阅者抛错（同步本身不受影响）', e)
+    }
+  }
+}
+
 function signatureOf(outcome: SyncOutcome): string {
   if (outcome.ok) return 'ok'
   if (outcome.skip) return `skip:${outcome.errorCode ?? 'unknown'}`
@@ -33,18 +64,21 @@ function reasonOf(outcome: SyncOutcome): string {
 export function reportSyncOutcome(outcome: SyncOutcome, units: string[]): void {
   const signature = signatureOf(outcome)
   const scope = { units: units.length, errorCode: outcome.errorCode }
+  const changed = lastSignature !== signature
 
   if (outcome.ok) {
-    if (lastSignature && lastSignature !== 'ok') {
+    if (lastSignature && changed) {
       log.info('cloud', `云同步恢复正常（上一次：${lastSignature}）`, scope)
     }
     lastSignature = 'ok'
+    if (changed) notify(signature)
     return
   }
 
   if (outcome.skip) {
-    if (lastSignature !== signature) {
+    if (changed) {
       log.info('cloud', `后台同步本轮跳过：${reasonOf(outcome)}（没发请求，不消耗退避）`, scope)
+      notify(signature)
     }
     lastSignature = signature
     return
@@ -52,6 +86,7 @@ export function reportSyncOutcome(outcome: SyncOutcome, units: string[]): void {
 
   log.warn('cloud', `后台同步未完成：${reasonOf(outcome)}`, scope)
   lastSignature = signature
+  if (changed) notify(signature)
 }
 
 /**
@@ -62,7 +97,9 @@ export function reportSyncOutcome(outcome: SyncOutcome, units: string[]): void {
  */
 export function reportSyncError(error: unknown): void {
   log.error('cloud', '后台同步抛错（没有返回结局）', error)
+  const changed = lastSignature !== 'error'
   lastSignature = 'error'
+  if (changed) notify('error')
 }
 
 /** 仅测试用：清掉"上一轮结局"的记忆 */
