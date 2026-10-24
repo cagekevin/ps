@@ -133,12 +133,16 @@ export function contentHash(value: unknown): string {
   return md5(stableStringify(value))
 }
 
+/**
+ * 文本的**UTF-8 字节数**（TD-12-28）。
+ *
+ * 以前是 `try { TextEncoder… } catch { data.length }`：兜底那句把**字符数当字节数**，
+ * 一个汉字 3 字节却只记 1，同步快照里的 `size` 从此偏小且无人知道（潜伏型）。
+ * 现在没有兜底：`TextEncoder` 在两个运行环境（Node / CEP 的 Chromium）都有，
+ * 真没有就抛——宁可炸一次，也不要静默算错。
+ */
 export function fileByteSize(data: string): number {
-  try {
-    return new TextEncoder().encode(data).length
-  } catch {
-    return data.length
-  }
+  return new TextEncoder().encode(data).length
 }
 
 export function unitHash(payload: Pick<UnitPayload, 'schema' | 'files'>): string {

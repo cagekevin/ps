@@ -28,12 +28,12 @@ const TABLE: Array<{ family: string; lang: 'en' | 'cn'; note: string }> = [
 
 const DATA: Classification = {
   categories: [
-    { key: 'language', name: '语言', items: [] },
-    { key: 'commercial', name: '商用', items: [] },
+    { key: 'language', name: '语言', tags: [] },
+    { key: 'commercial', name: '商用', tags: [] },
   ],
   commercials: [],
   presets: {},
-} as Classification
+}
 
 describe('字体语言：唯一判据（TD-12-26）', () => {
   it.each(TABLE)('$family → $lang（$note）', ({ family, lang }) => {
