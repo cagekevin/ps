@@ -477,16 +477,17 @@ describe('style.pickColorToGroup（T-66：切吸色工具 + 等 PS 事件）', (
     await expect(pending).resolves.toMatchObject({ ok: true })
     expect(jsx.style.getForegroundColor).toHaveBeenCalledTimes(1)
   })
-  it('取消（selection）→ 提示「快速吸色到组已取消」，不写库', async () => {
+  /**
+   * TD-12-22：用户在 PS 里切走选区 = 主动放弃。它**不是失败**，所以结果是 `ok:'cancelled'`，
+   * 页面（`useCommand`）据此不弹失败提示——以前它被写成 `PARSE`，用户点掉一次吸色会收到一条"故障"。
+   */
+  it('取消（selection）→ ok:cancelled（不是失败），不写库', async () => {
     const pending = execute('style.pickColorToGroup', { kind: 'color', groupIndex: 0 })
 
     await vi.waitFor(() => expect(hostEvents.listeners.has('selection')).toBe(true))
     hostEvents.listeners.get('selection')?.()
 
-    await expect(pending).resolves.toMatchObject({
-      ok: false,
-      reason: '快速吸色到组已取消',
-    })
+    await expect(pending).resolves.toEqual({ ok: 'cancelled' })
     const groups = (await read(COLOR_LIB)) as Array<{ list: unknown[] }>
     expect(groups[0].list).toHaveLength(1)
     expect(hostEvents.listeners.size).toBe(0)

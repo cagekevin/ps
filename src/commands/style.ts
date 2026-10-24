@@ -103,7 +103,8 @@ async function pickColorToGroup(ctx: CommandContext, groupIndex: number): Promis
     await ctx.jsx.style.setTool('eyedropperTool')
 
     const result = await finished
-    if (result === 'cancelled') throw new CepError('PARSE', '快速吸色到组已取消')
+    // 用户在 PS 里切走选区 = 主动放弃，不是故障（TD-12-22）
+    if (result === 'cancelled') throw new CepError('CANCELLED', '快速吸色到组已取消')
     if (result === 'timeout')
       throw new CepError('TIMEOUT', '快速吸色到组已超时：没有收到 Photoshop 事件')
   } finally {

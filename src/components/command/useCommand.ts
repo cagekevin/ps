@@ -38,7 +38,9 @@ export function useCommand(id: string): UseCommandResult<unknown> {
         feedback.ok(successText ?? command?.title ?? '完成')
         return true
       }
-      // cancelled 不提示；FONT_MISSING 交给页面弹窗；其余失败必须提示
+      // 用户自己取消：什么都不弹（弹"失败"就是把他自己的选择报成故障）
+      if (result.ok === 'cancelled') return false
+      // FONT_MISSING 交给页面弹窗；其余失败必须提示
       if (result.ok === false && result.code !== 'FONT_MISSING') {
         feedback.error(result.reason)
       }

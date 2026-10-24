@@ -134,8 +134,13 @@ async function runWith(
     log.info('cmd', `${id} ${Date.now() - started}ms`)
     return { ok: true }
   } catch (e) {
-    const reason = describeCepError(e)
     const code = e instanceof CepError ? e.code : undefined
+    // 用户自己取消不是失败：单独一支，页面据此不提示（TD-12-22）
+    if (code === 'CANCELLED') {
+      log.info('cmd', `${id} 已被用户取消`)
+      return { ok: 'cancelled' }
+    }
+    const reason = describeCepError(e)
     // 带上原 error：文案层只给用户看「能看懂的那句」，日志必须留 PS 侧原话
     log.warn('cmd', `${id} 失败：${reason}`, e)
     return { ok: false, reason, code }
