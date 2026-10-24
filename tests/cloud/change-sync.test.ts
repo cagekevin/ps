@@ -338,3 +338,101 @@ describe('同步队列：结局与异常的出口（TD-11-6）', () => {
     queue.stop()
   })
 })
+
+/**
+ * TD-11-4：启动补偿 / 变可见的 "全量 sweep" 原先靠**脏集恰好为空**反推
+ * （`units = [...dirty]` 交给 `setup.ts` 的 `units.length > 0 ? units : allSyncUnitIds()`）。
+ * 后果：启动 30 秒内改过任一已订阅 unit ⇒ 这次"补偿"退化成"只推那一个"，
+ * 其余 unit 一条不推。判据：sweep 触发后 `sync` 必须收到空数组（= 全部 unit），
+ * 且失败/被挡后的重试仍是全量，不许退化成脏集。
+ */
+describe('同步队列：sweep 的意图不许靠脏集反推（TD-11-4）', () => {
+  it('脏集非空时 requestSync 仍按全量 sweep 跑，不是只推脏集', async () => {
+    const sync = vi.fn(async () => ok)
+    const queue = createSyncQueue({ sync })
+
+    queue.markDirty('font.stars')
+    queue.requestSync('boot')
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(sync).toHaveBeenCalledTimes(1)
+    expect(sync).toHaveBeenCalledWith([])
+
+    queue.stop()
+  })
+
+  it('sweep 成功 ⇒ 本轮开始时的脏集一并清掉（全部 unit 都同步过了）', async () => {
+    const sync = vi.fn(async () => ok)
+    const queue = createSyncQueue({ sync })
+
+    queue.markDirty('font.stars')
+    queue.markDirty('font.tags')
+    queue.requestSync('boot')
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(sync).toHaveBeenCalledWith([])
+    expect(queue.pendingUnits()).toEqual([])
+
+    queue.stop()
+  })
+
+  it('sweep 期间新标脏的改动不会被顺带清掉（只清本轮开始时那批）', async () => {
+    let release: (outcome: SyncOutcome) => void = () => {}
+    const sync = vi.fn<(units: string[]) => Promise<SyncOutcome>>(
+      () =>
+        new Promise<SyncOutcome>((resolve) => {
+          release = resolve
+        }),
+    )
+    const queue = createSyncQueue({ sync })
+
+    queue.markDirty('font.stars')
+    queue.requestSync('boot')
+    await vi.advanceTimersByTimeAsync(0)
+    expect(sync).toHaveBeenCalledWith([])
+
+    // sweep 还在飞的时候用户又改了一项：那是一次还没推上去的新改动
+    queue.markDirty('font.tags')
+    release(ok)
+    await vi.advanceTimersByTimeAsync(0)
+
+    expect(queue.pendingUnits()).toEqual(['font.tags'])
+
+    queue.stop()
+  })
+
+  it('sweep 失败后按退避重试的仍是全量，不退化成脏集', async () => {
+    const sync = vi.fn<(units: string[]) => Promise<SyncOutcome>>().mockResolvedValue(fail)
+    const queue = createSyncQueue({ sync })
+
+    queue.markDirty('font.stars')
+    queue.requestSync('boot')
+    await vi.advanceTimersByTimeAsync(0)
+    expect(sync).toHaveBeenLastCalledWith([])
+
+    await vi.advanceTimersByTimeAsync(CLOUD_SYNC_BACKOFF_MS[0])
+
+    expect(sync).toHaveBeenCalledTimes(2)
+    expect(sync).toHaveBeenLastCalledWith([])
+    expect(queue.pendingUnits()).toEqual(['font.stars'])
+
+    queue.stop()
+  })
+
+  it('被闸门挡下后的慢轮询仍是全量（打开自动同步即可补齐）', async () => {
+    const skip: SyncOutcome = { ok: false, skip: true, errorCode: 'CLOUD_AUTO_SYNC_OFF' }
+    const sync = vi.fn<(units: string[]) => Promise<SyncOutcome>>().mockResolvedValue(skip)
+    const queue = createSyncQueue({ sync })
+
+    queue.requestSync('boot')
+    await vi.advanceTimersByTimeAsync(0)
+    expect(sync).toHaveBeenLastCalledWith([])
+
+    await vi.advanceTimersByTimeAsync(CLOUD_SYNC_MAX_WAIT_MS)
+
+    expect(sync).toHaveBeenCalledTimes(2)
+    expect(sync.mock.calls[1][0]).toEqual([])
+
+    queue.stop()
+  })
+})

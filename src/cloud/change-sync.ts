@@ -49,7 +49,11 @@ export interface SyncQueueDeps {
 export interface SyncQueue {
   /** 记一笔"这个 unit 改过了"；**不发请求**，只重置静默期 */
   markDirty(unit: string): void
-  /** 立即排一次同步，无论有没有脏（sweep：启动补偿 / 变可见） */
+  /**
+   * 立即排一次**全量 sweep**：不看脏集，所有 unit 都过一遍（启动补偿 / 变可见）。
+   *
+   * 与"有脏就推"分开是必须的：sweep 的意图不能被"脏集恰好非空"改写成"只推脏集"（TD-11-4）。
+   */
   requestSync(reason: string): void
   /** 有脏就立刻推，没脏什么都不做（变隐藏：页面随时可能被销毁） */
   flushDirty(reason: string): void
@@ -89,6 +93,13 @@ export function createSyncQueue(deps: SyncQueueDeps): SyncQueue {
   let skipped = false
   /** 失败原因是"自己不会好"的（`retry:false`）：不再自己排重试，等下一次触发点 */
   let parked = false
+  /**
+   * 有人要过一次**全量 sweep**（启动补偿 / 变可见）：下一轮按"全部 unit"跑，不看脏集。
+   *
+   * 以前没有这个字段，sweep 靠"脏集恰好为空"反推（`deps.sync([])`），于是启动 30 秒内
+   * 只要改过任一 unit，补偿就退化成"只推那一个"（TD-11-4）。触发意图必须显式存下来。
+   */
+  let sweepRequested = false
   /** 一次同步在飞（pull→push 全程） */
   let running = false
   let stopped = false
@@ -138,30 +149,43 @@ export function createSyncQueue(deps: SyncQueueDeps): SyncQueue {
   async function execute(): Promise<void> {
     if (stopped || running) return
     running = true
-    const units = [...dirty].sort()
+    // 本轮意图先取走：sweep 要的是"全部 unit 过一遍"，与脏集有没有东西无关（TD-11-4）
+    const sweeping = sweepRequested
+    sweepRequested = false
+    /** 本轮开始时已经脏的：sweep 成功后只清这一批，期间新脏的必须留着 */
+    const dirtyAtStart = [...dirty].sort()
+    const units = sweeping ? [] : dirtyAtStart
     try {
       const outcome = await serial(() => deps.sync(units))
       if (outcome.ok) {
         attempts = 0
         retryAt = 0
-        for (const unit of units) dirty.delete(unit)
+        // 全量 sweep 成功 ⇒ 所有 unit 都同步过了，本轮开始时的脏集随之作废
+        for (const unit of sweeping ? dirtyAtStart : units) dirty.delete(unit)
         firstDirtyAt = dirty.size > 0 ? Date.now() : 0
       } else if (outcome.skip) {
         // 没发请求：脏留着，但不计失败、不进退避
         skipped = true
+        // 闸门挡下说明 sweep 根本没跑过，意图不能丢（否则打开自动同步后也补不上）
+        if (sweeping) sweepRequested = true
       } else if (outcome.retry === false) {
-        // 重试改变不了结果（权限）：停手，但不丢脏集合——下一次触发点会再试一次
+        // 重试改变不了结果（权限）：停手，但不丢脏集合——下一次触发点会再试一次。
+        // sweep 意图在这里**不保留**：停手意味着"等下一次触发点重新决定做什么"，
+        // 而那时的意图来自用户的新改动（推脏集），不是这次已经失败的补偿。
         attempts += 1
         parked = true
         retryAt = 0
       } else {
         attempts += 1
         retryAt = Date.now() + Math.max(backoffDelay(), outcome.retryAfterMs ?? 0)
+        // 退避重试的是**同一个意图**：这次没成功，下一轮仍是全量，不许退化成脏集
+        if (sweeping) sweepRequested = true
       }
       deps.onOutcome?.(outcome, units)
     } catch (error) {
       attempts += 1
       retryAt = Date.now() + backoffDelay()
+      if (sweeping) sweepRequested = true
       deps.onError?.(error)
     } finally {
       running = false
@@ -172,7 +196,9 @@ export function createSyncQueue(deps: SyncQueueDeps): SyncQueue {
         const delay = skipped ? maxWaitMs : Math.max(nextDelay(), retryAt - Date.now())
         // `skipped` 必须进条件：启动/变可见的 sweep 脏集为空、又不进退避，
         // 旧写法这一轮跳过之后就再也不排了——离线一小时等于彻底静默（TD-11-7）
-        if (!parked && (dirty.size > 0 || retryAt > Date.now() || skipped)) schedule(delay)
+        // `sweepRequested` 同理：还没兑现的 sweep 不能因为"本轮脏集为空"就丢掉
+        if (!parked && (dirty.size > 0 || retryAt > Date.now() || skipped || sweepRequested))
+          schedule(delay)
       }
       skipped = false
     }
@@ -198,6 +224,8 @@ export function createSyncQueue(deps: SyncQueueDeps): SyncQueue {
       schedule(Math.max(nextDelay(), retryAt - Date.now()))
     },
     requestSync() {
+      // 意图先记、再唤醒：`trigger` 在"上一轮没回来"时直接返回，意图不能跟着丢
+      sweepRequested = true
       trigger(false)
     },
     flushDirty() {
@@ -214,6 +242,7 @@ export function createSyncQueue(deps: SyncQueueDeps): SyncQueue {
       clearTimer()
       dirty.clear()
       firstDirtyAt = 0
+      sweepRequested = false
     },
   }
 }
