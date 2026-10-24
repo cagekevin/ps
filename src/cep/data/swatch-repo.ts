@@ -9,6 +9,7 @@
 import { USER_DIR } from '@/cep/env'
 import { readTextOutcome, userDir, writeTextFile, writeTextFileAtomic } from '@/cep/fs'
 import { CepError } from '@/utils/errors'
+import { isUsableJsonText } from '@/utils/json'
 import { log } from '@/utils/logger'
 
 /**
@@ -116,7 +117,18 @@ export async function writeSwatchItems(path: string, items: unknown[]): Promise<
   if (read.status === 'error') {
     throw new CepError('IO', `色板文件读不到，已中止写入：${path}（${read.reason}）`)
   }
-  if (read.status === 'ok' && read.text) writeTextFile(`${path}.bak`, read.text)
+  if (read.status === 'ok' && read.text) {
+    // TD-09-21：`.bak` 必须是**可读的上一版**。原文自己坏了（半截 JSON / 乱码）时，
+    // 把坏内容存成 `.bak` 只会让人以为有退路 —— 改存 `.corrupt-*`，坏字节一个不丢，
+    // 但绝不让"坏内容"顶着 `.bak` 这个名字。
+    if (isUsableJsonText(read.text)) {
+      writeTextFile(`${path}.bak`, read.text)
+    } else {
+      const quarantine = `${path}.corrupt-${Date.now()}`
+      writeTextFile(quarantine, read.text)
+      log.warn('swatch', `色板原文不是可用的 JSON，已另存为 ${quarantine}（不写 .bak）`)
+    }
+  }
   const written = writeTextFileAtomic(path, JSON.stringify(items))
   if (written.status === 'error') {
     throw new CepError('IO', `色板文件写入失败：${path}（${written.reason}）`)

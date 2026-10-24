@@ -16,6 +16,8 @@ import {
   writeBase64File,
   writeTextFile,
 } from '@/cep/fs'
+import { isKuLibraryFileName } from '@/domain/ku-format'
+import { isUsableJsonText } from '@/utils/json'
 import {
   encodeKuContainer,
   isSafeKuEntryName,
@@ -74,6 +76,53 @@ function fileNameOf(warehouse: StyleWarehouse | undefined, kind: KuKind): string
 }
 
 /**
+ * 把被覆盖的原文件**存成可用的 `.bak`**；原文已经不可用时另存为 `.corrupt-<时间戳>`。
+ *
+ * 契约（TD-09-21）：**`.bak` = 可读的上一版**。旧实现只是"被覆盖前的磁盘原文" ——
+ * 原文自己坏了时 `.bak` 存的就是坏的，回滚看着成功、打开还是坏，等于没有退路。
+ * 所以这里的判据不是"备份写成功"，而是"这份内容配叫备份"：
+ * - 库文件（`sj_ku*`）先过 `isUsableJsonText`（`utils/json.ts`，全仓唯一一份判据）；
+ * - 判"不可用"时**不写 `.bak`**，改成 `<文件>.corrupt-<ts>` 原字节留存 ——
+ *   既满足"`.bak` 一定是好的"，又不丢掉任何字节（坏文件也得能拿去查原因）。
+ *
+ * 为什么放这一层（ADR-0026 ②）：`fs.ts` 只报"写进去没有"，它不知道 `.kux` 长什么样；
+ * "这份原文还算不算库文件"是领域知识，只有数据层有解析器。
+ * 旁路图（`kuStyle/*.png` 等）不是库文件，不适用本判据，照旧写 `.bak`。
+ */
+function backupOriginal(relative: string, path: string, base64: string): void {
+  if (isKuLibraryFileName(relative)) {
+    let text = ''
+    try {
+      text = b64ToUtf8(base64)
+    } catch {
+      text = ''
+    }
+    if (!isUsableJsonText(text)) {
+      const quarantine = `${path}.corrupt-${Date.now()}`
+      const kept = writeBase64File(quarantine, base64)
+      if (kept.status === 'error') {
+        throw new CepError(
+          'IO',
+          `原文不可用且无法留存副本，已中止导入：${relative}（${kept.reason}）`,
+        )
+      }
+      log.warn(
+        'style',
+        `原文不是可用的库文件，已另存为 ${relative}.corrupt-*（不写 .bak，免得把坏内容当备份）`,
+      )
+      return
+    }
+  }
+
+  // TD-09-22：`.bak` 写失败**必须中止**。旧实现把这个失败丢掉继续写本体 ——
+  // 结果是"导入报成功、原件被覆盖、`.bak` 不存在、日志一行都没有"（EISDIR 可复现）
+  const backedUp = writeBase64File(`${path}.bak`, base64)
+  if (backedUp.status === 'error') {
+    throw new CepError('IO', `备份原文件失败，已中止导入：${relative}（${backedUp.reason}）`)
+  }
+}
+
+/**
  * 写一个文件到用户数据目录。目标已存在时先把原文备份成 `<文件>.bak`
  * （与 `fileRepo` / `updateKuGroups` 同约定，ADR-12）：导入替换不允许没有退路。
  *
@@ -87,14 +136,7 @@ function writeKuFile(relative: string, base64: string): boolean {
   if (read.status === 'error') {
     throw new CepError('IO', `读取原文件失败，已中止导入：${relative}（${read.reason}）`)
   }
-  if (read.status === 'ok') {
-    // TD-09-22：`.bak` 写失败**必须中止**。旧实现把这个失败丢掉继续写本体 ——
-    // 结果是"导入报成功、原件被覆盖、`.bak` 不存在、日志一行都没有"（EISDIR 可复现）
-    const backedUp = writeBase64File(`${path}.bak`, read.base64)
-    if (backedUp.status === 'error') {
-      throw new CepError('IO', `备份原文件失败，已中止导入：${relative}（${backedUp.reason}）`)
-    }
-  }
+  if (read.status === 'ok') backupOriginal(relative, path, read.base64)
   const written = writeBase64File(path, base64)
   if (written.status === 'error') {
     throw new CepError('IO', `写入文件失败：${relative}（${written.reason}）`)
