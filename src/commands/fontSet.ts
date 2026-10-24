@@ -14,7 +14,6 @@ import {
   quickFontRepo,
   translateCounterRepo,
 } from '@/cep/data/font-extra'
-import { readOr } from '@/cep/data/read-or'
 import type { QuickFont } from '@/cep/data/font-extra'
 import { patchFontSetSettings, readFontSetSettings } from '@/cep/data/legacy-settings'
 import { jsonp } from '@/cep/http'
@@ -238,9 +237,14 @@ export const fontSetCommands: Command<unknown>[] = [
     requires: 'layer',
     kind: 'long',
     async run(ctx, payload) {
-      // 计数器坏了等价于"今天还没翻译过"（清单 §二）：按 0 次继续，坏因由 `readOr` 落日志
+      // 计数器坏了按 0 次继续（清单 §二：对用户有利、不写盘）。这个值决定**是否放行翻译**，
+      // 是判断不是渲染，所以不走 `readOr`（`read-or.ts` 的禁令：命令层一律不用它），坏因自己落日志
+      const counterRead = await translateCounterRepo.read()
+      if (!counterRead.ok) {
+        log.warn('fontSet.translate', `翻译计数读取失败，本次按 0 次处理：${counterRead.reason}`)
+      }
       const counter = normalizeCounter(
-        readOr(await translateCounterRepo.read(), fontExtraDefaults.counter(), 'fontSet.translate'),
+        counterRead.ok ? counterRead.value : fontExtraDefaults.counter(),
         dayKey(),
       )
       if (counter.num >= counter.max) {
