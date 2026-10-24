@@ -372,8 +372,8 @@ export function buildOptionPatch(path: string, value: unknown): Record<string, u
   if (!segments.length || segments.some((s) => !s)) {
     throw new Error(`设置项路径非法：${path}`)
   }
-  return segments.reduceRight<Record<string, unknown>>(
-    (inner, segment) => ({ [segment]: inner }),
-    value as never,
-  )
+  // 逐层包成 `{ segment: inner }`，最内层是调用方给的值：中间态是 unknown，
+  // 只在最后断言一次（`as never` 会让这一处彻底逃过类型检查，什么都能塞进去）
+  const patch = segments.reduceRight<unknown>((inner, segment) => ({ [segment]: inner }), value)
+  return patch as Record<string, unknown>
 }

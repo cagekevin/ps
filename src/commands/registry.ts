@@ -127,7 +127,10 @@ async function runWith(
 
   const started = Date.now()
   try {
-    await command.run(context(selection, progress), payload as never)
+    // payload 来自命令网格 / 自由面板 / 快捷键，编译期只有 `unknown`；形状由各自的入口保证
+    // （`CommandPayloads` 是类型契约，自由面板那条还有运行时校验，见 TD-12-24）。
+    // 这里不再写 `as never`：那会把"形状不确定"说成"确定"，让类型检查在这个口子上彻底失效。
+    await command.run(context(selection, progress), payload)
     log.info('cmd', `${id} ${Date.now() - started}ms`)
     return { ok: true }
   } catch (e) {

@@ -115,6 +115,26 @@ describe('freePanel.execute 嵌套执行（D-33）', () => {
     expect(selection.refresh).toHaveBeenCalledTimes(1)
   })
 
+  /**
+   * TD-12-24：坏了要在**入口**拒绝。
+   *
+   * 旧行为：`Number('abc')` → `NaN` 一路进 jsx（"mode: NaN"），命令照跑、结果不可解释。
+   * 现在适配层当场抛 PARSE，理由点名是哪一项的哪个字段——jsx 一次都不该被调到。
+   */
+  it('option 不是数字 → 入口拒绝，理由带 key，jsx 一次都不调', async () => {
+    await putItem('zt_changeTextBranchMerge', 'abc')
+
+    const result = await execute('freePanel.execute', { blockId: 1, btnId: 1 })
+
+    expect(result).toMatchObject({ ok: false, code: 'PARSE' })
+    if (result.ok === false) {
+      expect(result.reason).toContain('zt_changeTextBranchMerge')
+      expect(result.reason).toContain('不是有效数字')
+    }
+    expect(jsx.font.setNumberSize).not.toHaveBeenCalled()
+    expect(jsx.action.callAction).not.toHaveBeenCalled()
+  })
+
   it('子命令失败时 code 原样透传（不能被冲成 JSX）', async () => {
     await putItem('dz_useAction', { group: '修图', name: '磨皮' })
 

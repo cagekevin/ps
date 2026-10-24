@@ -144,11 +144,36 @@ describe('旧自造 key 的别名表', () => {
   })
 })
 
+/**
+ * 每个 key 喂一份**形状合法**的 option。
+ *
+ * 以前这里一律喂 `null`：`Number(null)` 算出 0 也能通过，于是"形状不合法"被掩盖了。
+ * TD-12-24 之后数字位必须是真数字，闸门要审的是"映射指向的命令是否存在"，
+ * 所以喂合法样本，别让校验挡住闸门本身（校验自己有专门用例：`free-panel-legacy-reject`）。
+ */
+const SAMPLE_OPTION: Record<string, unknown> = {
+  zt_setFontSize: 24,
+  zt_setFontLeading: 24,
+  zt_setFontTracking: 0,
+  zt_setLeftRightAlign: 0,
+  zt_setUpDownAlign: 0,
+  zt_changeTextBranchMerge: 1,
+  zdy_customBuildTransform: {
+    number: 1,
+    angle: 0,
+    leftRigth: '',
+    topBottom: '',
+    pointIndex: 0,
+    scale: 1,
+    opacity: 1,
+  },
+}
+
 describe('悬空引用闸门：表里每个 id 都必须已注册', () => {
   it('11 个官方 key 解析出的 id 全部被 defineCommand 注册', () => {
     const missing: string[] = []
     for (const key of OFFICIAL_KEYS) {
-      const mapped = adaptFreePanelItem(item(key, null))
+      const mapped = adaptFreePanelItem(item(key, SAMPLE_OPTION[key] ?? null))
       expect(mapped, `${key} 应能解析`).toBeTruthy()
       if (!mapped || !get(mapped.id)) missing.push(`${key} → ${mapped?.id}`)
     }
