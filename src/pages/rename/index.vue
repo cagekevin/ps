@@ -705,9 +705,10 @@ onMounted(() => {
   width: 100%;
 }
 
-/* 组拖拽浮层皮肤 —— 照 `/style` 范本的 `.style-group--drag`（`pages/style/index.css`）。
-   UNVERIFIED: 重命名页这份 floatStyle 的具体值没有判据可依（原版源码在 docs/原版/01-原版源码/panel/js/app.v4.js，未复核）；
-   先沿用范本的 200×24、强调色、4px 圆角。
+/* 组拖拽浮层皮肤。依据：`app.v4.js:56984`（`Rename` 组件 `dragColorWrap` 的
+   `floatStyle: "background-color:#006FFF;width:200px;border-radius: 4px;"`）。
+   原版只给底色/宽度/圆角，没有固定高度——本类的 `height` / `line-height` 借自 `/style`
+   范本（`:50093` 的 200×24），与原版不一致；改它属页面视觉，冻结页不在文档轮里动（TD-04-1）。
    `position/left/top/z-index` 由 `useLongPressDrag` 的 `follow()` 内联给，这里只写皮肤。 */
 .rename-group--drag {
   width: 200px;
