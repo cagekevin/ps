@@ -305,3 +305,118 @@ git revert --abort 2>/dev/null; git checkout -- .
 
 清单里每个行号都能用 `git grep -n` 或直接打开文件核对；三类判据在本文开头，
 有争议先改判据再改清单，别逐条讨价还价。
+
+---
+
+# 六、T-101-0：70 处生产消费方逐条判类（阶段 0，只读）
+
+> 判据沿用本文开头那张表，**不改判据**。判的是 §1.1 那 70 处（79 处生产代码里被原始分档为"必须处理"的部分）。
+> 本轮一行代码未写；`src/` `tests/` 只读。
+
+## 6.1 三类各多少（+ 必须新增的第四类）
+
+| 类 | 处数 | 改的时候要写什么（一行伪代码） |
+| --- | --- | --- |
+| **A 必须处理** | **57** | `if (!r.ok) { 抛/feedback.error/log.error/degraded.value = r.reason } else { 用 r.value }` |
+| **B 纯展示** | **0** | —（70 处里一处都没有） |
+| **C 不该有读操作** | **0** | —（与 §三 结论一致） |
+| **P 生产 / 装配点** | **13** | `return { ok: true, value }` / `return { ok: false, reason }`，**不写 `if`** |
+| 合计 | **70** | |
+
+### P 类 13 处（原清单把它们混进了"必须处理"，但它们不是消费方）
+
+| 文件:行号 | 处数 | 它是什么 | 处置 |
+| --- | --- | --- | --- |
+| `src/cep/data/classification-repo.ts:86` | 1 | dev 分支产出 MOCK | `return { ok: true, value: MOCK }` |
+| `src/cep/data/classification-repo.ts:94` | 1 | 读失败产出空分类 | `return { ok: false, reason: '分类数据读取失败' }` |
+| `src/cep/data/classification-repo.ts:97` | 1 | 文件不存在 | `return { ok: false, reason: '分类数据文件不存在' }` |
+| `src/cep/data/classification-repo.ts:119` | 1 | **有值 + 有原因**（分组数为 0 也算坏） | 判别联合表达不了，见 6.4 方案 C/D |
+| `src/cep/data/classification-repo.ts:123` | 1 | JSON 非法 | `return { ok: false, reason: '分类数据格式不正确' }` |
+| `src/cep/data/memory-repo.ts:26` | 1 | 内存态，无失败路径 | `read: () => Promise.resolve({ ok: true, value })` |
+| `src/cep/data/legacy-settings.ts:100` | 2 | 解构 `{ value, degraded }` | `const r = await legacySettingsRepo.read()`；按 `r.ok` 重包 |
+| `src/cep/data/legacy-settings.ts:101` | 1 | 重包 `{ value: mergeFontSetSettings(value), degraded }` | `return r.ok ? { ok: true, value: merge(r.value) } : r` |
+| `src/cep/data/legacy-settings.ts:191` | 2 | 同上（commonUse 8 键） | 同上 |
+| `src/cep/data/free-panel.ts:117` | 1 | 仓库外包一层（会话态 showText） | `if (!result.ok) return result;` 再 seed/strip/apply |
+| `src/main.ts:41` | 1 | 装配层，问题只在类型 | 删 `CommonUseSource.read` 的自声明，改 `RepoRead<CommonUseFile \| null>` |
+
+**为什么 B=0**：70 处里没有一处满足"坏掉等价于这份数据不存在、用户不必知道"。
+连看起来最像纯展示的 5 处也不成立——它们都在**相邻一行**把 `degraded` 交给了 UI：
+
+| 位置 | 像纯展示 | 为什么不成立 |
+| --- | --- | --- |
+| `src/stores/action.ts:32` `:33` | 仓库列表 / 当前项 | 列表空 = "你没有仓库"这个**错结论**；且 `:34` 已把 `degraded` 交给页面提示条（`pages/action/index.vue:487`） |
+| `src/stores/action.ts:39` | 分组列表 | 同上，`:40` 已透出 |
+| `src/stores/classification-view.ts:24` | 分类树 | `:25` 已透出；`pages/fontManage/index.vue:153` 显示 |
+| `src/stores/font-set.ts:56` | 字体设置 | `:57` 已透出；设置还喂给 `commands/fontSet.ts` 的 jsx 参数 |
+| `src/stores/rename.ts:26` | 重命名预设 | `:27` 已透出；`pages/rename/index.vue:497` 显示 |
+
+§二 那 9 处（+ 2 处 tests）才是真正的 B；它们不在 70 里，所以本节 B=0，**B 的总数仍是 11**。
+
+## 6.2 A 类 57 处：51 处已带可见信号，6 处没有
+
+| 子类 | 处数 | 处置 |
+| --- | --- | --- |
+| 已有可见信号（抛错 / `degraded` 已进 UI / `log.error`） | **51** | 只换形状，行为不变 |
+| 缺信号：**静默用坏数据** | **2** | 见 6.3，必须补可见信号 |
+| 缺信号：**文案把"文件坏了"说成"没有/不存在"** | **4** | 改文案，见 6.3 |
+
+逐文件处置（同一文件内处置相同的合并成一行）：
+
+| 文件 | 处数 | 行号 | 处置（一行伪代码） | 子类 |
+| --- | --- | --- | --- | --- |
+| `cep/cloud/entries/action-library.ts` | 4 | 57×2, 59, 62 | `if (!read.ok) throw new Error(read.reason)`；59/62 不动（被 57 挡住） | 有信号 |
+| `cep/cloud/entries/font-hierarchy.ts` | 3 | 55×2, 56 | 同上 | 有信号 |
+| `cep/cloud/entries/font-stars.ts` | 3 | 13×2, 14 | 同上 | 有信号 |
+| `cep/cloud/entries/font-tags.ts` | 3 | 13×2, 14 | 同上 | 有信号 |
+| `cep/data/action-archive.ts` | 8 | 77×3, 85, 89, 118, 144×2 | `requireIndex(r)` 形参改 `RepoRead<…>`，体内 `if (!r.ok) throw new CepError('IO', '动作库索引文件损坏（'+r.reason+'），'+action+'已中止：磁盘上的仓库文件没动')` | 有信号 |
+| `cep/data/actions.ts` | 2 | 105, 106 | `if (!read.ok) throw new CepError('IO', '动作库索引文件损坏（'+read.reason+'），删除已中止')` | **文案** |
+| `cep/data/style-library-io.ts` | 2 | 173, 176 | `const stored = await styleIndexRepo.read(); if (!stored.ok) return { value: defaultStyleIndex(), degraded: stored.reason }` | 有信号 |
+| `cep/data/style-library-repo.ts` | 2 | 88, 103 | `if (!stored.ok) parsed = { value: defaultStyleIndex(), degraded: stored.reason }`，坏因照旧拼进 103 | 有信号 |
+| 同上 | 1 | 110 | `if (!stored.ok) throw new CepError('IO', '仓库索引文件损坏（'+stored.reason+'），已中止')` | **文案** |
+| 同上 | 2 | 269, 270 | `broken = [stored.ok ? '' : stored.reason, parsed.degraded]…`；271 照旧抛 | 有信号 |
+| `commands/font.ts` | 6 | 310×2, 312×2, 314×2 | `if (!tagRead.ok) throw new CepError('IO', '标签读取失败：'+tagRead.reason)`；314 不动 | 有信号 |
+| `commands/fontSet.ts` | 1 | 138 | `if (!settingsRead.ok) throw new CepError('IO', '字体设置文件损坏（'+settingsRead.reason+'），按间距分布已中止')` | **静默** |
+| `commands/freePanel.ts` | 1 | 298 | `if (!read.ok) throw new CepError('IO', '自由面板文件损坏（'+read.reason+'）')`，并删掉这行多余的第二次 `normalizeFreePanel` | **文案** |
+| `commands/rename.ts` | 3 | 193×2, 199 | `if (!read.ok) throw new CepError('IO', read.reason)`；199 不动 | 有信号 |
+| `stores/action.ts` | 5 | 32, 33, 34, 40×2 | `degraded.value = index.ok ? '' : index.reason`；`warehouses.value = index.ok ? index.value.list : []` | 有信号 |
+| 同上 | 2 | 36, 39 | 36：`if (!index.ok) return`（坏索引不许选文件）；39：`groups.value = library.ok ? library.value : []` | **36 静默** / 39 有信号 |
+| `stores/classification-view.ts` | 2 | 24, 25 | `degraded.value = result.ok ? '' : result.reason`；`data.value = result.ok ? result.value : emptyClassification()` | 有信号 |
+| `stores/font-set.ts` | 2 | 56, 57 | `settingsDegraded.value = settingsRead.ok ? '' : settingsRead.reason`；`settings.value = settingsRead.ok ? settingsRead.value : deepClone(FONT_SET_DEFAULTS)` | 有信号 |
+| `stores/free-panel.ts` | 3 | 23, 26×2 | `degraded.value = read.ok ? '' : read.reason`；`blocks.value = read.ok ? read.value.obj.list : []` | 有信号 |
+| `stores/rename.ts` | 2 | 26, 27 | `preset.value = read.ok ? read.value : []`；`degraded.value = read.ok ? '' : read.reason` | 有信号 |
+
+## 6.3 "坏了会静默用坏数据"：清单内 2 处，清单外另有 2 处（共 4 处，全是真 bug）
+
+| 位置 | 现在坏了会怎样 | 用户看到什么 |
+| --- | --- | --- |
+| `src/commands/fontSet.ts:138` | `const { value: settings } = await readFontSetSettings()` **把 `degraded` 整个丢掉**。文件坏 → `mergeFontSetSettings(fallback)` → 拿默认 `ztDistributionFilter` 照常跑 `distributeByPitch` | 分布结果按默认值算，用户以为是自己的设置；无任何提示 |
+| `src/stores/action.ts:36` | 坏索引 → `index.value` 是 fallback `DEFAULT_INDEX` → `selectActionFile` 把当前仓库切成 `sj_dz_default.json`；随后 `:38` 读的是默认仓库文件 | 页面提示条只说"索引坏了"（`:34`），**没说"当前显示的是默认仓库"**；用户看到的"默认仓库"分组被当成自己的仓库 |
+| `src/stores/common-use.ts:58`（**清单漏项**） | `loadOptions()` 取 `read.value`，`readCommonUseOptions()` 的 `degraded` 未使用。`sj_set.json` 坏 → 17 个 `cy*` 键全取默认 | 子面板参数静默变默认值 |
+| `src/commands/commonUse.ts:619`（**清单漏项**） | `readOptions: async () => (await readCommonUseOptions()).value`，同样丢 `degraded`。坏文件 → `placeImageAction` 按默认选项决定置入行为 | 置入图片走错分支，无提示（与 T-97-8 同一类，只是这次不是转型） |
+
+**为什么漏了这 2 处**：清单是**类型检查驱动**的（快照来自 `a661a1f` 的 `npm run typecheck`）。
+`readCommonUseOptions` 返回的是 `legacy-settings.ts:186-190` 的**自声明第三份形状**，不是 `RepoRead`，
+所以 `RepoRead` 改联合时它不报错——**"编译不过"不等于"消费方全找齐"**。
+`RepoRead` 改联合那天，这两处仍然静默。
+
+**4 处文案误导（不是静默，但结论错，也要改）**：`cep/data/actions.ts:105`（"至少保留一个仓库"）、
+`:106`（"仓库不存在"）、`cep/data/style-library-repo.ts:110`（"索引里没有当前仓库的库文件名"）、
+`commands/freePanel.ts:298`（"自由面板项不存在"）——四处都是把"文件坏了"说成"东西不存在"。
+
+## 6.4 B 类该用什么形状（**待用户拍板，本节不选**）
+
+| 方案 | 形状 | 代价 |
+| --- | --- | --- |
+| **A** `readOr(read, fallback)` | 数据层折叠，纯展示处直接取 `value`，`reason` 汇总到一处页面级 `degraded` | 新增"页面级 degraded 汇总"这一层（谁持有、谁清空、多源怎么拼）；`readOr` 若不把 `reason` 交出去，就是硬规则 20(b) 的静默回退——所以它必须带 reason 出口，不是纯 fallback |
+| **B** 保持判别联合，各处 `if (!ok) return []` | 零新概念 | 9 处 = 9 个兜底，正是本文 §二 自己禁止的写法（"不许让纯展示读取器各自 `?? []`"）；且每处一个分支，等于把 B 类退化成 A 类 |
+| **C** `RepoReadLoose<T>`（永远有 `value`，带 `reason?`） | 一个类型 | `RepoRead` 的第二份形状（违反"同一事实只有一处"）；但它是**唯一**能表达 `classification-repo.ts:119`（有值 + 有原因）的形状 |
+| **D** 生产侧双投影：`read()` 保联合（A 类与写路径用），`readSoft()` 返 `{ value, reason? }`（B 类用） | 两个函数，同源于 `readRaw` | 每个仓库多一个方法；但"事实"仍只有 `readRaw` 一处，且能同时喂 119 那类"半坏" |
+
+## 6.5 乙区三条的裁定
+
+| 条 | 裁定 | 依据 |
+| --- | --- | --- |
+| ① B 类不该套判别联合 | **采纳** | 与本文 §二 判据一致；套了每处都得写 `if (!ok) return []`，等于 9 个兜底 |
+| ② B≈11 / A≈59 | **驳回（口径错）** | 11 是**全文** B 总数（§2.1 生产 9 + §2.2 tests 2），不是 70 里的。70 = A 57 + P 13 + B 0。59 这个数对不上：差的不是 B，是 P（13 处生产/装配点） |
+| ③ 静默用坏数据 2–3 处 | **驳回（数量少算）** | 清单内 2 处（`commands/fontSet.ts:138`、`stores/action.ts:36`），清单外另 2 处（`stores/common-use.ts:58`、`commands/commonUse.ts:619`）。`action-archive` 已修，确实不再是其中之一 |
+
