@@ -312,7 +312,7 @@ if (wantCross) {
   const renderName = render?.type === 'Identifier' ? render.name : null
   // 两套行号（模板是 56d7.js、我们读 app.v4.js），只能按函数名匹配
   const renderLine = fnByName.get(render?.name ?? '')?.loc.start.line ?? render?.loc?.start?.line
-  const tplDir = join(root, '..', 'reference', '02-组件文档', '08-模板')
+  const tplDir = join(root, 'docs', '原版', '02-组件文档', '08-模板')
   const candidates = []
 
   for (const name of readdirSync(tplDir)) {
