@@ -48,7 +48,10 @@ beforeEach(() => {
       write: ledgerWrite,
     },
     pending: { record: vi.fn(), list: vi.fn(() => []), clear: vi.fn() },
-    entries: [{ id: 'font.tags', schema: 1, read: readAdapter, write: vi.fn() }],
+    entries: [
+      // `watch` 在 engine 这条链上用不到（订阅归 cep/cloud/change-sync.ts），但它是必填契约
+      { id: 'font.tags', schema: 1, read: readAdapter, write: vi.fn(), watch: () => () => {} },
+    ],
   })
 })
 

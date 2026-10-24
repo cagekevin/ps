@@ -8,6 +8,9 @@ export const fontStarsEntry: SyncUnitAdapter = {
   id: 'font.stars',
   schema: 1,
 
+  // 收藏写成功 → 标脏（`file-repo` 的 emit 在落盘之后，写失败不会走到这里）
+  watch: (markDirty) => starsRepo.onChange(markDirty),
+
   async read() {
     const read = await starsRepo.read()
     if (!read.ok) throw new Error(read.reason)

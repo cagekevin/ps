@@ -1,40 +1,32 @@
 // 是什么：把「本地数据文件改过了」接到同步队列的订阅层——只标脏，不发请求（ADR-21）
-// 唯一入口：repo 的 onChange 只能在这里订阅；别处不许自己起定时器或直接 push
-// 替代了什么：原版 `56d7.js:48341-48351` emit → `:8998` 监听 → `:9562` 3 秒防抖 → `:9596` `$sync.pushFile`
+// 唯一入口：每个 unit 的触发源声明在它自己的 adapter 上（`entries/*` 的 `watch`）；这里只负责装配
+// 替代了什么：原版 `56d7.js:48341-48351` emit → `:8998` 监听 → `:9562` 3 秒防抖 → `:9596` `$sync.pushFile`；
+//            本文件原先手列两根线（action.library / font.hierarchy），漏了 stars/tags/settings（TD-11-1）
 // 谁在用：cloud/auto-sync.ts 的 startCloudAutoSync（main.ts:74 启动时一次）
 // 禁止：页面/组件不许 import；这里不发请求（请求归 cep/cloud/setup.ts 的队列）
 
-import { actionIndexRepo, actionLibraryRepo } from '@/cep/data/actions'
-import { hierarchyRepo } from '@/cep/data/font-extra'
+import { cloudEntries } from './entries'
 import { cloudSyncQueue } from './setup'
-
-/** 原版三类事件在我们这里只剩两根线（unit 内文件由 adapter 一起处理）： */
-const ACTION_UNIT = 'action.library'
-const HIERARCHY_UNIT = 'font.hierarchy'
 
 let offs: (() => void)[] = []
 
 /**
- * 订阅"改过了"的两类来源：
- * - `actionIndexRepo`：动作仓库的增删改 / 切换（原版 `syncActionWarehouse`）
- * - `actionLibraryRepo`：当前仓库文件里的分组与动作（原版 `syncActionItem` / `syncActionWarehouse`）
- * - `hierarchyRepo`：层级预设（T-55，原版 `fontSetHierarych` 的 `$sync.pushFile`）
+ * 遍历 `cloudEntries`，逐个订阅它自己声明的触发源。
  *
- * 依据（二手）：`docs/生成/jsx返回结构复原.md` §3.3；`data/actions.ts:60,66` 两个 repo 均已实现 onChange。
+ * **为什么遍历注册表，而不是手列几个 repo**（TD-11-1 的母体）：同步项的注册地在
+ * `entries/index.ts`，触发源原先写在本文里 —— 两处分离，于是"新增一个同步项"只加了注册、
+ * 忘了订阅，效果是**改了不同步、不报错、关掉面板就等于没同步**，5 个 unit 只有 2 个订上。
+ * 现在触发源与 unit 同址（`SyncUnitAdapter.watch` 必填），漏声明编译不过。
  *
- * UNVERIFIED(T-56)：`Repo.onChange` 只在本进程写成功后触发。原版面板或第二个面板
- * 实例改同一文件时这里收不到，所以"别的面板改了动作仓库要不要上报"这件事
- * 只能在真机观察；不要据本文件宣称"任何改动都会同步"。
+ * 订阅只做一次：`offs` 非空即已装配，重复调用（HMR / 二次 startAutoSync）不会重复订。
+ *
+ * UNVERIFIED(T-56)：`Repo.onChange` 只在本进程写成功后触发。原版面板或第二个面板实例
+ * 改同一文件时这里收不到，所以"别的面板改了要不要上报"只能在真机观察；
+ * 不要据本文件宣称"任何改动都会同步"。
  */
 export function startCloudChangeSync(): void {
   if (offs.length > 0) return
-
-  const mark = (unit: string) => () => cloudSyncQueue.markDirty(unit)
-  offs = [
-    actionIndexRepo.onChange(mark(ACTION_UNIT)),
-    actionLibraryRepo.onChange(mark(ACTION_UNIT)),
-    hierarchyRepo.onChange(mark(HIERARCHY_UNIT)),
-  ]
+  offs = cloudEntries.map((entry) => entry.watch(() => cloudSyncQueue.markDirty(entry.id)))
 }
 
 export function stopCloudChangeSync(): void {

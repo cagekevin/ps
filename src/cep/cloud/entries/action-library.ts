@@ -1,5 +1,5 @@
 import { readTextOutcome, userDir, writeTextFileAtomic } from '@/cep/fs'
-import { actionIndexRepo } from '@/cep/data/actions'
+import { actionIndexRepo, actionLibraryRepo } from '@/cep/data/actions'
 import type { ActionWarehouseIndex } from '@/domain/action'
 import type { SyncFile, SyncUnitAdapter, WriteOutcome } from '@/domain/cloud'
 import { CepError } from '@/utils/errors'
@@ -52,6 +52,17 @@ function readIndex(value: unknown): ActionWarehouseIndex {
 export const actionLibraryEntry: SyncUnitAdapter = {
   id: 'action.library',
   schema: 1,
+
+  /**
+   * 一个 unit 两个写入口：仓库索引（列表 / 当前仓库）与仓库文件（分组 / 动作）分开存，
+   * 所以两边都要订。原来这两行手写在 `cep/cloud/change-sync.ts`，现在跟着 unit 走。
+   */
+  watch: (markDirty) => {
+    const offs = [actionIndexRepo.onChange(markDirty), actionLibraryRepo.onChange(markDirty)]
+    return () => {
+      for (const off of offs) off()
+    }
+  },
 
   async read() {
     const read = await actionIndexRepo.read()

@@ -50,6 +50,9 @@ export const fontHierarchyEntry: SyncUnitAdapter = {
   id: 'font.hierarchy',
   schema: 1,
 
+  // 层级预设写成功 → 标脏（原版 `fontSetHierarych` 直接 `$sync.pushFile`，见文件首注释）
+  watch: (markDirty) => hierarchyRepo.onChange(markDirty),
+
   async read() {
     const read = await hierarchyRepo.read()
     if (!read.ok) throw new Error(read.reason)

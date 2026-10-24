@@ -19,6 +19,9 @@ const { CLOUD_SYNC_DEBOUNCE_MS } = await import('@/config/cloud')
 const { startCloudChangeSync, stopCloudChangeSync } = await import('@/cep/cloud/change-sync')
 const { actionIndexRepo, actionLibraryRepo } = await import('@/cep/data/actions')
 const { hierarchyRepo } = await import('@/cep/data/font-extra')
+const { starsRepo, tagsRepo } = await import('@/cep/data')
+const { patchFontSetSettings } = await import('@/cep/data/legacy-settings')
+const { cloudEntries } = await import('@/cep/cloud/entries')
 const { log } = await import('@/utils/logger')
 
 const fetchGuard = vi.fn(() => {
@@ -125,6 +128,63 @@ describe('repo 改动 → 只标脏，60 秒后才由队列发一次推送（ADR
 
     expect(sync).toHaveBeenCalledTimes(1)
     expect(sync).toHaveBeenCalledWith(['action.library', 'font.hierarchy'])
+  })
+
+  /**
+   * TD-11-1：5 个 unit 只有 2 个订阅过，这三个改了**不标脏、不同步、不报错**。
+   * 判据：写这三个仓库之后必须出现对应 unit 的推送。
+   */
+  it('字体收藏改动 → 推 font.stars（TD-11-1）', async () => {
+    startCloudChangeSync()
+
+    await starsRepo.write([{ name: 'MiSans', star: 5 }])
+    await vi.advanceTimersByTimeAsync(CLOUD_SYNC_DEBOUNCE_MS)
+
+    expect(sync).toHaveBeenCalledTimes(1)
+    expect(sync).toHaveBeenCalledWith(['font.stars'])
+  })
+
+  it('字体标签改动 → 推 font.tags（TD-11-1）', async () => {
+    startCloudChangeSync()
+
+    await tagsRepo.write([{ text: '标题', arr: [], xz: false }])
+    await vi.advanceTimersByTimeAsync(CLOUD_SYNC_DEBOUNCE_MS)
+
+    expect(sync).toHaveBeenCalledTimes(1)
+    expect(sync).toHaveBeenCalledWith(['font.tags'])
+  })
+
+  it('字体设置写盘 → 推 font.settings（TD-11-1）', async () => {
+    startCloudChangeSync()
+
+    await patchFontSetSettings({ ztShowQuick: false })
+    await vi.advanceTimersByTimeAsync(CLOUD_SYNC_DEBOUNCE_MS)
+
+    expect(sync).toHaveBeenCalledTimes(1)
+    expect(sync).toHaveBeenCalledWith(['font.settings'])
+  })
+
+  /**
+   * 结构断言（防"再来一次 TD-11-1"）：期望值取自注册表 `cloudEntries` 本身，
+   * 而不是再抄一份 id 清单。新增 unit 却忘了给它触发源 ⇒ `watch` 缺失编译不过；
+   * 声明了却订不上（比如又退回手列）⇒ 这条红。
+   */
+  it('注册表里每个 unit 都有自己的触发源，五个都能标脏', async () => {
+    startCloudChangeSync()
+
+    await starsRepo.write([{ name: 'MiSans', star: 5 }])
+    await tagsRepo.write([{ text: '标题', arr: [], xz: false }])
+    await patchFontSetSettings({ ztShowQuick: true })
+    await hierarchyRepo.write({ index: 1, list: [{ name: '手机端', data: [72, 50, 28] }] })
+    await actionIndexRepo.update((value) => {
+      value.list.push({ name: '新仓库', fileName: 'sj_dz_new.json' })
+    })
+    await vi.advanceTimersByTimeAsync(CLOUD_SYNC_DEBOUNCE_MS)
+
+    expect(sync).toHaveBeenCalledTimes(1)
+    expect((sync.mock.calls[0][0] as string[]).slice().sort()).toEqual(
+      cloudEntries.map((entry) => entry.id).sort(),
+    )
   })
 
   it('stop 之后不再推送', async () => {

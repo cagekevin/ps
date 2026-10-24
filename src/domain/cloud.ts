@@ -59,6 +59,17 @@ export interface SyncUnitAdapter {
   schema: number
   read(): Promise<UnitPayload>
   write(payload: UnitPayload): Promise<WriteOutcome>
+  /**
+   * 这个同步项的**本地触发源**：仓库写成功后回调 `markDirty()`，返回取消订阅。
+   *
+   * 必填是判据，不是形式（TD-11-1）：触发源原先手列在 `cep/cloud/change-sync.ts`，
+   * 与同步项注册地（`cep/cloud/entries/index.ts`）分成两处，5 个 unit 只订了 2 个 ——
+   * 少的三个改了不标脏、不自动同步、也不报错。并到 adapter 上之后，
+   * **漏声明 = `npm run typecheck` 不过**，新增同步项不可能再静默漏订阅。
+   *
+   * 订阅是"全局只做一次"的装配动作，只许 `cep/cloud/change-sync.ts` 遍历调用。
+   */
+  watch(markDirty: () => void): () => void
 }
 
 export type WriteOutcome = { ok: true } | { ok: false; message: string }

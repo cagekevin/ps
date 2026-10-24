@@ -126,8 +126,10 @@ describe('cloud engine', () => {
       },
       pending: { record: pendingRecord, list: pendingList, clear: pendingClear },
       entries: [
-        { id: 'font.stars', schema: 1, read: readA, write: writeA },
-        { id: 'font.tags', schema: 1, read: readB, write: writeB },
+        // `watch` 是 engine 用不到的触发源声明（订阅归 `cep/cloud/change-sync.ts`），
+        // 但 `SyncUnitAdapter` 里它是必填：漏声明 = 新增同步项静默不同步（TD-11-1）
+        { id: 'font.stars', schema: 1, read: readA, write: writeA, watch: () => () => {} },
+        { id: 'font.tags', schema: 1, read: readB, write: writeB, watch: () => () => {} },
       ],
     }
     engine = createCloudEngine(deps)

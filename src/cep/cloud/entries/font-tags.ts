@@ -8,6 +8,9 @@ export const fontTagsEntry: SyncUnitAdapter = {
   id: 'font.tags',
   schema: 1,
 
+  // 标签写成功 → 标脏
+  watch: (markDirty) => tagsRepo.onChange(markDirty),
+
   async read() {
     const read = await tagsRepo.read()
     if (!read.ok) throw new Error(read.reason)
