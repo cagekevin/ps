@@ -213,7 +213,10 @@ export const renameCommands: Command<unknown>[] = [
 
       const read = await readTextOutcome(path)
       // T-107：两种不 ok 这里同果（都抛同一句），文案不变。
-      // 已知：这个命令自己读文件还撞 ADR-16（导入应收到 `data/`），另开条目
+      // 不违反 ADR-16：ADR-16 管的是"操作定义在哪 / 谁能触发"——本处就是 Command、页面经 useCommand 触发、
+      // 读的是用户刚选的文件（`openFile` 返回的路径），三条都满足。
+      // 与 `data/action-archive.ts` 的差别只是**做法不一致**（那处把导入收进 `data/`，这里没有），不是违规。
+      // 不必统一：用户选的一次性导入文件不是面板数据、没有唯一真相，收进 `data/` 是为对称而对称（T-119）。
       if (read.status !== 'ok') throw new CepError('IO', '导入失败，文件读取失败')
       const text = read.text
 
