@@ -16,6 +16,12 @@ vi.mock('@/cep/fs', () => ({
     if (state.failRead) throw new Error('EBUSY')
     return state.files.get(path) ?? null
   },
+  // T-105：`failRead` 走 error 分支——真实读取原语从不抛，D-42 以前靠"假 fs 抛错"才生效
+  readTextOutcome: async (path: string) => {
+    if (state.failRead) return { status: 'error' as const, reason: 'EBUSY' }
+    const text = state.files.get(path)
+    return text === undefined ? { status: 'missing' as const } : { status: 'ok' as const, text }
+  },
   // CAS 比对用的同步读（D-26）：必须读到同一份磁盘内容
   readTextFile: (path: string) => (state.failRead ? null : (state.files.get(path) ?? null)),
   writeTextFile: (path: string, text: string) => {

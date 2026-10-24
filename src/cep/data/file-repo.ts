@@ -1,4 +1,10 @@
-import { hasNode, readTextFile, readTextSmart, writeTextFile, writeTextFileAtomic } from '@/cep/fs'
+import {
+  hasNode,
+  readTextFile,
+  readTextOutcome,
+  writeTextFile,
+  writeTextFileAtomic,
+} from '@/cep/fs'
 import { CepError } from '@/utils/errors'
 import { log } from '@/utils/logger'
 import type { Repo, RepoRead } from './types'
@@ -58,19 +64,24 @@ export function fileRepo<T>(
 
   async function readRaw(): Promise<{ read: RepoRead<T>; text: string | null }> {
     const target = resolvePath()
-    let text: string | null
+    const outcome = await readTextOutcome(target)
 
-    try {
-      text = await readTextSmart(target)
-    } catch (e) {
-      // 读不抛：文件可能在原面板那边被占用，回退默认值但要标记
-      log.warn('repo', `${target} 读取失败，使用默认值`, e)
-      return { read: { ok: false, reason: '读取失败', fallback: fallback() }, text: null }
+    // 「读不到」≠「文件不存在」。读失败必须是 `ok: false`：压成 `ok: true` 时 `update` 会拿
+    // `fallback()` 派生的值覆盖用户文件，而且因为"原文为空"连 `.bak` 都不留（D-42 / T-105）
+    if (outcome.status === 'error') {
+      log.error('repo', `${target} 读取失败，使用默认值`, outcome.reason)
+      return {
+        read: { ok: false, reason: `读取失败：${outcome.reason}`, fallback: fallback() },
+        text: null,
+      }
     }
 
     // 文件不存在是首次使用的正常状态，不算读失败
-    if (!text) return { read: { ok: true, value: fallback() }, text: null }
+    if (outcome.status === 'missing') {
+      return { read: { ok: true, value: fallback() }, text: null }
+    }
 
+    const text = outcome.text
     let parsed: unknown
     try {
       parsed = JSON.parse(text)
@@ -95,7 +106,7 @@ export function fileRepo<T>(
   /**
    * 落盘前的 CAS 比对（D-26）。返回 `'same' | 'diff' | 'unknown'`。
    *
-   * 必须用**同步**读：`readTextSmart` 是 async，即使 Node 读本身是同步的，`await` 也会让出
+   * 必须用**同步**读：`readTextOutcome` 是 async，即使 Node 读本身是同步的，`await` 也会让出
    * 一个 microtask 边界——另一个实例（跨进程的等价前提）正好能在这个边界里完成一次完整写入，
    * 于是"比对通过 → rename"之间被插一脚，照样丢更新。实测过：换成同步读之前，
    * 两个实例各写 20 次只活下来 20 条（`tests/data/repo-cross-process.test.ts`）。
@@ -108,8 +119,9 @@ export function fileRepo<T>(
    */
   function compareSync(target: string, expected: string | null): 'same' | 'diff' | 'unknown' {
     if (!hasNode()) return 'unknown'
-    // 原来的 `catch { return 'diff' }` 不可达：`readTextFile`（fs.ts:55-64）自带 try/catch、
+    // 原来的 `catch { return 'diff' }` 不可达：`readTextFile` 自带 try/catch、
     // 失败只 return null，从不抛；`===` 比两个原始值也不会抛。
+    // 注意它只判"原文是不是这段"，不判为什么不是——要区分「不存在/读不到」用 `readTextOutcome`。
     return readTextFile(target) === expected ? 'same' : 'diff'
   }
 

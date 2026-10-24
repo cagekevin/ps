@@ -52,16 +52,39 @@ export function userDir(): string {
   return toPosix(roaming) + USER_DIR
 }
 
-/** 用 Node 读文件，失败返回 null（不抛） */
-export function readTextFile(absPath: string): string | null {
-  if (!hasNode()) return null
+/**
+ * 三态读取结果。
+ *
+ * **「文件不存在」与「读不到」必须分得开**：前者是首次使用的正常状态（可以给默认值），
+ * 后者是错误——压成两态（`null`）就会让写路径拿 fallback 派生值覆盖用户文件（D-42 / T-105）。
+ */
+export type TextRead =
+  { status: 'ok'; text: string } | { status: 'missing' } | { status: 'error'; reason: string }
+
+/**
+ * Node 侧三态读：`existsSync` 判「不存在」，`readFileSync` 抛错判「读不到」。
+ * 两者**不许**合成一个 `null`——那是 T-105 的根因。
+ */
+function readTextNode(absPath: string): TextRead {
   try {
     const fs = nodeRequire('fs')
-    if (!fs.existsSync(absPath)) return null
-    return fs.readFileSync(absPath, 'utf8') as string
-  } catch {
-    return null
+    if (!fs.existsSync(absPath)) return { status: 'missing' }
+    return { status: 'ok', text: fs.readFileSync(absPath, 'utf8') as string }
+  } catch (e) {
+    return { status: 'error', reason: e instanceof Error ? e.message : String(e) }
   }
+}
+
+/**
+ * 两态同步读：`null` = **不存在或读不到**。
+ *
+ * **写路径不要用**：它分不清两者，正是 D-42 守不住的原因（T-105）。要分就用 `readTextOutcome`。
+ * 保留它是因为 CAS 比对（`file-repo.ts` 的 `compareSync`）只关心"原文是不是这段"，不关心为什么不是。
+ */
+export function readTextFile(absPath: string): string | null {
+  if (!hasNode()) return null
+  const outcome = readTextNode(absPath)
+  return outcome.status === 'ok' ? outcome.text : null
 }
 
 /** 用 Node 写文件，目录不存在会建 */
@@ -268,19 +291,33 @@ export function writeTextFileAtomic(absPath: string, text: string): boolean {
   }
 }
 
-export async function readTextViaJsx(absPath: string): Promise<string | null> {
+/**
+ * jsx 侧「文件不存在」的固定前缀。**脚本拼的那句和这里解析的那句必须是同一个常量**——
+ * 以前脚本标了它、解析处 `startsWith(ERR_PREFIX) → null` 又把它扔掉，三态就此压成两态（T-105）。
+ */
+const JSX_MISSING_PREFIX = '文件不存在: '
+
+async function readTextViaJsxOutcome(absPath: string): Promise<TextRead> {
   const script =
     `(function(){try{var __f = new File(${JSON.stringify(toPosix(absPath))});` +
-    `if(!__f.exists){return '${ERR_PREFIX}文件不存在: ' + __f.fsName;}` +
+    `if(!__f.exists){return '${ERR_PREFIX}${JSX_MISSING_PREFIX}' + __f.fsName;}` +
     `__f.encoding = 'UTF-8'; __f.open('r'); var __s = __f.read(); __f.close(); return __s;}` +
     `catch(e){return '${ERR_PREFIX}' + ((e && e.message) ? e.message : String(e));}})()`
   try {
     const raw = await evalScriptRaw(script, 15000)
-    if (raw.startsWith(ERR_PREFIX)) return null
-    return raw
-  } catch {
-    return null
+    if (!raw.startsWith(ERR_PREFIX)) return { status: 'ok', text: raw }
+    const message = raw.slice(ERR_PREFIX.length)
+    if (message.startsWith(JSX_MISSING_PREFIX)) return { status: 'missing' }
+    return { status: 'error', reason: message }
+  } catch (e) {
+    return { status: 'error', reason: e instanceof Error ? e.message : String(e) }
   }
+}
+
+/** 两态：`null` = **不存在或读不到**。写路径不要用，见 `readTextOutcome` */
+export async function readTextViaJsx(absPath: string): Promise<string | null> {
+  const outcome = await readTextViaJsxOutcome(absPath)
+  return outcome.status === 'ok' ? outcome.text : null
 }
 
 /**
@@ -308,10 +345,31 @@ export async function psScriptsDir(): Promise<string | null> {
   }
 }
 
-/** Node 优先，失败再走 jsx File；浏览器里两者都没有，直接当读不到（不发注定失败的 evalScript） */
+/**
+ * 两态：`null` = **不存在或读不到**。写路径不要用，见 `readTextOutcome`。
+ * Node 优先，失败再走 jsx File；浏览器里两者都没有，直接当读不到（不发注定失败的 evalScript）。
+ */
 export async function readTextSmart(absPath: string): Promise<string | null> {
   const text = readTextFile(absPath)
   if (text !== null) return text
   if (!hasCep()) return null
   return readTextViaJsx(absPath)
+}
+
+/**
+ * **三态**读取：Node 优先，失败退 jsx `File`。
+ *
+ * 只有两条路都确认"没有这个文件"才返回 `missing`；只要有一条路说"读不到"，就是 `error`。
+ * 写路径（`file-repo` 的 `update`）必须用它：读失败被当成"文件不存在"时，
+ * `update` 会拿 `fallback()` 派生的值覆盖用户文件，而且因为"原文为空"连 `.bak` 都不留（D-42 / T-105）。
+ */
+export async function readTextOutcome(absPath: string): Promise<TextRead> {
+  const node = hasNode() ? readTextNode(absPath) : null
+  if (node?.status === 'ok') return node
+  if (!hasCep()) return node ?? { status: 'error', reason: '当前环境没有 Node，也没有 CEP' }
+  const viaJsx = await readTextViaJsxOutcome(absPath)
+  if (viaJsx.status === 'ok') return viaJsx
+  // 「读不到」优先于「不存在」：宁可报错，也不许把读失败降级成首次使用
+  if (node?.status === 'error') return node
+  return viaJsx
 }

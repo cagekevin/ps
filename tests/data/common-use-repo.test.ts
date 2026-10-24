@@ -1,4 +1,4 @@
-﻿import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 /**
  * T-85：`sj_commonFunction.json` 仓库与纯函数。
@@ -22,6 +22,12 @@ vi.mock('@/cep/fs', () => ({
   readTextSmart: async (path: string) => {
     if (state.failRead) throw new Error('EBUSY')
     return state.files.get(path) ?? null
+  },
+  // T-105：`failRead` 现在走 error 分支（旧实现只有"抛错"能让 D-42 生效，真实读取原语从不抛）
+  readTextOutcome: async (path: string) => {
+    if (state.failRead) return { status: 'error' as const, reason: 'EBUSY' }
+    const text = state.files.get(path)
+    return text === undefined ? { status: 'missing' as const } : { status: 'ok' as const, text }
   },
   readTextFile: (path: string) => (state.failRead ? null : (state.files.get(path) ?? null)),
   writeTextFile: (path: string, text: string) => {

@@ -1,11 +1,19 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { readValue } from '../support/repo-read'
 
-/** 磁盘上的原文；`readTextSmart`（异步读）与 `readTextFile`（CAS 比对用的同步读）读的是同一份 */
-const disk = vi.hoisted(() => ({ text: null as string | null }))
+/**
+ * 磁盘上的原文；`readTextOutcome`（三态读，写路径用它）与 `readTextFile`（CAS 比对用的同步读）
+ * 读的是同一份。`readError` 非空 = 文件在、但读不出来（T-105 的用例靠它）。
+ */
+const disk = vi.hoisted(() => ({ text: null as string | null, readError: '' }))
 
 const fs = vi.hoisted(() => ({
   hasNode: () => true,
+  readTextOutcome: vi.fn(async () => {
+    if (disk.readError) return { status: 'error' as const, reason: disk.readError }
+    if (disk.text === null) return { status: 'missing' as const }
+    return { status: 'ok' as const, text: disk.text }
+  }),
   readTextSmart: vi.fn(async () => disk.text),
   readTextFile: vi.fn(() => disk.text),
   writeTextFile: vi.fn((path: string, text: string) => {
@@ -36,6 +44,7 @@ const { fileRepo } = await import('@/cep/data/file-repo')
 beforeEach(() => {
   vi.clearAllMocks()
   disk.text = null
+  disk.readError = ''
   fs.writeTextFileAtomic.mockReturnValue(true)
 })
 
@@ -173,5 +182,83 @@ describe('fileRepo normalize（读边界归一）', () => {
     // 旧行为把形状错误的文件原样交出去，正是这刀要拆掉的那份断言（剩余仓库见台账 T-99-2）
     expect(read.reason).toBeUndefined()
     expect(readValue(read).items).toBe('不是数组')
+  })
+})
+
+/**
+ * T-105：**「读不到」与「文件不存在」必须走不同的 `ok`**。
+ *
+ * 以前两者都折成 `ok: true` + fallback：读失败零信号，`update` 于是拿 fallback 派生的值覆盖
+ * 用户文件，而且因为"原文为空"连 `.bak` 都不留（D-42 对「读不到」整个失效）。
+ */
+describe('fileRepo 三态读（T-105）', () => {
+  const make = () =>
+    fileRepo(
+      () => '/tmp/tags.json',
+      () => ({ items: [] as string[] }),
+    )
+
+  it('判据 A：文件不存在 → ok:true + fallback', async () => {
+    disk.text = null
+
+    const read = await make().read()
+
+    expect(read.ok).toBe(true)
+    expect(readValue(read).items).toEqual([])
+  })
+
+  it('判据 A：文件存在但读不出 → ok:false，reason 写明是读取失败', async () => {
+    disk.text = '{"items":["a"]}'
+    disk.readError = 'EACCES: permission denied'
+
+    const read = await make().read()
+
+    expect(read.ok).toBe(false)
+    expect(read.reason).toContain('读取失败')
+    expect(read.reason).toContain('EACCES')
+  })
+
+  it('判据 A：两条路的 ok 必须不同（压成两态时这条恒等，用例会红）', async () => {
+    disk.text = null
+    const missing = await make().read()
+
+    disk.readError = 'EACCES: permission denied'
+    const broken = await make().read()
+
+    expect(missing.ok).not.toBe(broken.ok)
+  })
+
+  it('判据 D：ok:false 仍带 fallback，页面照常渲染（不抛、不白屏）', async () => {
+    disk.readError = 'EACCES: permission denied'
+
+    const read = await make().read()
+
+    expect(read.ok).toBe(false)
+    expect(read.ok === false ? read.fallback : null).toEqual({ items: [] })
+  })
+
+  it('判据 B：读失败时 update 抛错、不写盘、原文件一个字节不变', async () => {
+    disk.text = '{"items":["用户的数据"]}'
+    disk.readError = 'EBUSY: resource busy or locked'
+
+    await expect(make().update((value) => ({ items: [...value.items, 'x'] }))).rejects.toThrow(
+      '拒绝覆盖写',
+    )
+
+    expect(disk.text).toBe('{"items":["用户的数据"]}')
+    expect(fs.writeTextFileAtomic).not.toHaveBeenCalled()
+    expect(fs.writeTextFile).not.toHaveBeenCalled()
+  })
+
+  it('判据 B：读失败也要留痕（log.error 带路径与系统错误原文）', async () => {
+    disk.readError = 'EBUSY: resource busy or locked'
+
+    await make().read()
+
+    expect(logger.error).toHaveBeenCalledWith(
+      'repo',
+      expect.stringContaining('/tmp/tags.json 读取失败'),
+      'EBUSY: resource busy or locked',
+    )
   })
 })

@@ -45,6 +45,15 @@ vi.mock('@/cep/fs', () => ({
     if (disk.yieldEveryRead) await Promise.resolve()
     return text
   },
+  // T-105：写路径走三态读。`onRead` 钩子与微任务让步照旧接在这里，跨进程竞态用例才拦得住
+  readTextOutcome: async (p: string) => {
+    if (disk.failRead) return { status: 'error' as const, reason: 'EBUSY' }
+    if (!fs.existsSync(p)) return { status: 'missing' as const }
+    const text = fs.readFileSync(p, 'utf8')
+    disk.onRead?.()
+    if (disk.yieldEveryRead) await Promise.resolve()
+    return { status: 'ok' as const, text }
+  },
   writeTextFile: (p: string, text: string) => {
     fs.mkdirSync(path.dirname(p), { recursive: true })
     fs.writeFileSync(p, text, 'utf8')
