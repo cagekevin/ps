@@ -60,6 +60,8 @@
  *                              # **凭证强制**（见文件头【结账闸】）；没有 `--evidence` 直接拒写
  *   node scripts/debt.mjs edit <TD-ID> --field summary｜solution｜classify｜rate --value "…"
  *                              # 整格/文本替换：现象 · 解法（寄居状态格）· 归类 · 利息率
+ *                              # `solution` 只替换解法那一段：`原记「…」` 与 `evidence:v1{…}`
+ *                              # **逐字保留**；要销毁原文必须显式 `--drop-original`
  *   node scripts/debt.mjs reanchor <TD-ID> --anchor 22-视频-剪辑器-M2计划审计-2026-09-14.md
  *   node scripts/debt.mjs move <TD-ID> --to <NN>          # 整体迁区（改 ID 区段 + 区名列，其余逐字保留）
  *   node scripts/debt.mjs archive [--dry]
@@ -1187,13 +1189,30 @@ function cmdEdit(argv) {
     } else if (field === 'rate') {
       parts[1 + C.rate] = ` ${value} `
     } else {
-      // 解法寄居在状态格：保留状态词与日期，只换 `· ` 之后的文本
+      // 解法寄居在状态格：**只替换解法那一段**，状态词 + 日期 + 凭证 + `原记` 全部原样
       const cell = String(parts[1 + C.status] || '')
       const m = cell.match(/^\s*\[\s*([^\]·]*)/)
       const head = m ? m[1].trim() : ''
-      // 已登记的凭证**不跟着解法一起被冲掉**（改描述 ≠ 重新结账；凭证丢了这条就退回"无凭证"）
-      const keep = (cell.match(EVIDENCE_BLOB_RE) ?? [])[0]
-      parts[1 + C.status] = ` [${head} · ${value}${keep ? ' · ' + keep : ''}] `
+      // 已登记的凭证与 `原记「…」`**不跟着解法一起被冲掉**（改描述 ≠ 重结账，更 ≠ 销毁历史）
+      const tail = settlementTail(cell)
+      const dropOriginal = argv.includes('--drop-original')
+      const conflict = tail && !dropOriginal ? editConflict(value, tail) : ''
+      if (conflict) {
+        console.error('❌ edit 被拒：新解法与已登记的 `原记「…」` 冲突（不猜，也不顺手销毁历史）')
+        console.error('   · ' + conflict)
+        console.error(`   · 现有尾巴：${tail.length > 120 ? tail.slice(0, 120) + '…' : tail}`)
+        console.error('')
+        console.error('   ↳ 确认要销毁原文就显式加 `--drop-original`（会打印被丢掉的原文）；')
+        console.error('     否则改说法，让新旧能共存。')
+        process.exit(1)
+      }
+      if (dropOriginal && /原记「/.test(tail))
+        console.log(
+          `⚠️ 按 --drop-original 丢掉原文：${
+            (tail.match(/原记「([\s\S]*)」\s*$/) ?? [])[1]?.slice(0, 200) ?? ''
+          }`,
+        )
+      parts[1 + C.status] = ` [${head} · ${value}${tail && !dropOriginal ? ' · ' + tail : ''}] `
     }
     f.lines[li] = parts.join('|')
     writeFileSync(f.file, f.lines.join('\n'))
@@ -1564,6 +1583,36 @@ function originalSettlement(statusCell) {
     .replace(/^\d{4}-\d{2}-\d{2}\s*/, '')
     .replace(/^[·：:]\s*/, '')
     .trim()
+}
+
+/**
+ * 状态格里"不该被 `edit` 碰"的尾巴 —— `evidence:v1{…}` 与 `原记「…」`，**逐字原样**。
+ *
+ * 【为什么】改一个字段不许把历史抹了：`edit --field solution` 只该替换"解法"那一段。
+ * 从**最早出现的**那一个标记切到尾，顺序与原文一致（不重排、不改写）。
+ */
+function settlementTail(cell) {
+  const s = String(cell ?? '')
+  const marks = [s.search(/evidence:v1\s*\{/), s.search(/原记「/)].filter((i) => i >= 0)
+  if (!marks.length) return ''
+  return s
+    .slice(Math.min(...marks))
+    .replace(/\]\s*$/, '')
+    .trim()
+}
+
+/** `edit --field solution` 的新值与已登记的 `原记` 是否冲突（不猜：冲突就要求显式销毁） */
+function editConflict(value, tail) {
+  const v = String(value ?? '')
+  if (/原记「|」/.test(v)) return '新解法里带了 `原记「…」` / `」`（像是要自己重写整格）'
+  if (/evidence:v1\s*\{/.test(v))
+    return '新解法里带了 `evidence:v1{…}`（凭证只能由 `resolve` 写，不许手写）'
+  const body = (String(tail ?? '').match(/原记「([\s\S]*)」\s*$/) ?? [])[1] ?? ''
+  if (!body) return ''
+  // 反向包含也要拦：新值抄了原文一大段（≥20 字）= 重写整句，留着会两句话打架
+  if (v.includes(body) || (v.length >= 20 && body.includes(v)))
+    return '新解法已包含 / 抄了旧的 `原记` 原文（像是重写整句，留着会重复）'
+  return ''
 }
 
 /** 被排除的裁定类：**列出 ID**，不猜、不改（要翻裁定走 `edit`） */
