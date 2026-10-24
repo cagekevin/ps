@@ -26,9 +26,9 @@
     }
   },
   "tests": {
-    "files": 129,
-    "cases": 1151,
-    "eachSites": 11
+    "files": 131,
+    "cases": 1162,
+    "eachSites": 12
   },
   "components": 31,
   "icons": 189,
@@ -64,7 +64,7 @@
     "set": 111
   },
   "fontSetFreePanelIcons": 5,
-  "stylePageCases": 73,
+  "stylePageCases": 69,
   "layers": {
     "cep": {
       "files": 53,
