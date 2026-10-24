@@ -90,27 +90,41 @@ export const fontSetCommands: Command<unknown>[] = [
     async run(ctx, { axis, index }) {
       const font = ctx.jsx.font
 
-      if (axis === 'h') {
-        if (index === 3) {
-          assertJsxOk(await font.setHorizontalCenters(), '水平居中分布失败')
-        } else {
-          // 原版底部对齐只传一个参数（app.v4.js:38080）
-          assertJsxOk(await font.setTextAlignment(index), '设置水平对齐失败')
-        }
-        return
-      }
+      switch (axis) {
+        case 'h':
+          if (index === 3) {
+            assertJsxOk(await font.setHorizontalCenters(), '水平居中分布失败')
+          } else {
+            // 原版底部对齐只传一个参数（app.v4.js:38080）
+            assertJsxOk(await font.setTextAlignment(index), '设置水平对齐失败')
+          }
+          return
 
-      if (axis === 'v') {
-        if (index === 3) {
-          assertJsxOk(await font.setVerticalCenter(), '垂直平均分布失败')
-        } else {
-          assertJsxOk(await font.setTextUpDownAlign(index), '设置垂直对齐失败')
-        }
-        return
-      }
+        case 'v':
+          if (index === 3) {
+            assertJsxOk(await font.setVerticalCenter(), '垂直平均分布失败')
+          } else {
+            assertJsxOk(await font.setTextUpDownAlign(index), '设置垂直对齐失败')
+          }
+          return
 
-      // 原版：无自由面板时固定 3（与背景水平）/ 4（与背景垂直），app.v4.js:38203、38210
-      assertJsxOk(await font.setBackgroundAlign(axis === 'bg-h' ? 3 : 4), '与背景对齐失败')
+        // 原版：无自由面板时固定 3（与背景水平）/ 4（与背景垂直），app.v4.js:38203、38210
+        case 'bg-h':
+          assertJsxOk(await font.setBackgroundAlign(3), '与背景对齐失败')
+          return
+        case 'bg-v':
+          assertJsxOk(await font.setBackgroundAlign(4), '与背景对齐失败')
+          return
+
+        default:
+          // 以前这里是 `axis === 'bg-h' ? 3 : 4` 的兜底：**枚举外任何值都当 bg-v 执行并报成功**
+          // ——拿"与背景垂直"去动用户文档，用户以为点的是别的对齐（TD-12-25）。
+          // 不猜默认行为，直接拒绝并列出合法值。
+          throw new CepError(
+            'PARSE',
+            `未知的对齐方向：${String(axis)}（合法值：h / v / bg-h / bg-v）`,
+          )
+      }
     },
   }),
 
@@ -168,7 +182,15 @@ export const fontSetCommands: Command<unknown>[] = [
     requires: 'layer',
     kind: 'instant',
     async run(ctx, { config }) {
+      // 缺配置以前是一句英文 TypeError（`Cannot read properties of undefined (reading 'padding')`），
+      // 用户看不出是哪一步坏了（TD-12-25 后半）
+      if (!config || typeof config.padding !== 'string') {
+        throw new CepError('PARSE', '生成按钮缺少配置：没有拿到 padding（按钮边距设置）')
+      }
       if (!config.padding.trim()) throw new CepError('PARSE', '边距不能为空')
+      if (typeof config.type !== 'number' || typeof config.isLine !== 'boolean') {
+        throw new CepError('PARSE', '生成按钮的配置不完整：type 必须是数字、isLine 必须是布尔')
+      }
       assertJsxOk(await ctx.jsx.font.createButton(config), '生成按钮失败')
     },
   }),

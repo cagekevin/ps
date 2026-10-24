@@ -95,12 +95,70 @@ describe('fontSet.align', () => {
     expect(font.setVerticalCenter).toHaveBeenCalled()
   })
 
+  /**
+   * TD-12-25：枚举外的 axis **不许猜默认行为**。
+   * 以前 `axis === 'bg-h' ? 3 : 4` 让任何怪值都走"与背景垂直"并报成功——用户点了别的对齐，
+   * 文档被按 bg-v 改了，界面还说成功。
+   */
+  it('枚举外 axis → PARSE，理由列出合法值，且一次 jsx 都不调', async () => {
+    vi.clearAllMocks()
+
+    const result = await execute('fontSet.align', { axis: 'diagonal', index: 0 })
+
+    expect(result).toMatchObject({ ok: false, code: 'PARSE' })
+    if (result.ok === false) {
+      expect(result.reason).toContain('diagonal')
+      expect(result.reason).toContain('h / v / bg-h / bg-v')
+    }
+    expect(font.setBackgroundAlign).not.toHaveBeenCalled()
+    expect(font.setTextAlignment).not.toHaveBeenCalled()
+  })
+
+  it('缺 axis 也拒绝（不是当成某个默认方向）', async () => {
+    const result = await execute('fontSet.align', { index: 0 })
+
+    expect(result).toMatchObject({ ok: false, code: 'PARSE' })
+    expect(font.setBackgroundAlign).not.toHaveBeenCalled()
+  })
+
   it('与背景对齐固定传 3 / 4（无自由面板）', async () => {
     await execute('fontSet.align', { axis: 'bg-h', index: 0 })
     expect(font.setBackgroundAlign).toHaveBeenCalledWith(3)
 
     await execute('fontSet.align', { axis: 'bg-v', index: 0 })
     expect(font.setBackgroundAlign).toHaveBeenCalledWith(4)
+  })
+})
+
+describe('fontSet.createButton 配置缺失（TD-12-25 后半）', () => {
+  it('没有 config → PARSE 说清缺什么，不是英文 TypeError', async () => {
+    const result = await execute('fontSet.createButton', {})
+
+    expect(result).toMatchObject({ ok: false, code: 'PARSE' })
+    if (result.ok === false) {
+      expect(result.reason).toContain('生成按钮缺少配置')
+      expect(result.reason).not.toContain('Cannot read')
+    }
+    expect(font.createButton).not.toHaveBeenCalled()
+  })
+
+  it('config 缺字段 → 点名缺哪个字段，不调 jsx', async () => {
+    const result = await execute('fontSet.createButton', {
+      config: { type: 'wrong', isLine: true, padding: '10' },
+    })
+
+    expect(result).toMatchObject({ ok: false, code: 'PARSE' })
+    if (result.ok === false) expect(result.reason).toContain('type')
+    expect(font.createButton).not.toHaveBeenCalled()
+  })
+
+  it('配置齐全照常执行', async () => {
+    const result = await execute('fontSet.createButton', {
+      config: { type: 1, isLine: false, padding: '10,20' },
+    })
+
+    expect(result).toMatchObject({ ok: true })
+    expect(font.createButton).toHaveBeenCalledTimes(1)
   })
 })
 
