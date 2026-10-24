@@ -613,5 +613,95 @@ git checkout HEAD -- src        # 还原（git diff --stat HEAD -- src 为空）
 | ② 146 错里相当一部分是 `mockResolvedValue` 实参类型 | **驳回** | 只有 2 条（`TS2322` 1 + `TS2353` 1）；144 条是**读返回值**的取值口 |
 | ③ 改完 `断言基线.json` 处数会变 | **驳回** | 它统计 `src/` 的 `as any` / `as unknown as`，本阶段 src 一行未改，`git status` 里没有这个文件 |
 
+---
+
+# 九、T-101-4：让伪造 `RepoRead` 的 mock 编译不过
+
+> 起点 `9636341`。`src/` 一行未改；只动 `tests/` 与 `eslint.config.js`。
+
+## 9.1 全仓一共几处（丙区 2 的答案）
+
+| 形态 | 处数 | 位置（行号=本刀落地后；括号内是改动前的裸声明位置） |
+| --- | --- | --- |
+| `read: vi.fn()` 裸声明 → 带类型参数 | **4** | `tests/cep/action-archive.test.ts:17`（原 `:13`）、`tests/pages/freePanel-degraded.test.ts:19`（原 `:14`）、`tests/pages/style.test.ts:44`（`indexRepo.read`）、`tests/stores/free-panel.test.ts:19`（原 `:14`） |
+| `vi.mock` 工厂里的手写假读（不是 `vi.fn`，`vi.fn<Repo<T>['read']>()` 改不动，改加显式返回类型） | **2** | `tests/pages/rename.test.ts:46`、`tests/commands/common-use-place-image-watch.test.ts:36` |
+| 受它们约束的 `mockResolvedValue` 实参 | **9** | action-archive 4、freePanel-degraded 2、style 的 `indexRepo` 1、free-panel 2 |
+| `vi.spyOn(repo, 'read')` | **1** | `tests/cep/cloud-hierarchy.test.ts:104`——**本来就带类型，不用改**；同文件没有 `vi.fn` 造 read，不存在"混用" |
+| `read: () => realRepo.read()` 转发 | 2 | `tests/stores/common-use.test.ts:66`、`tests/degraded-signals.test.ts:80`——被 `CommonUseSource.read`（`src/stores/common-use.ts:19`）约束，**本来就红得了** |
+
+**所以"全改成 `vi.fn<Repo<T>['read']>()`"是 4 处，不是 100 多处。** 184 处 `mockResolvedValue` 里绝大多数是 jsx / fs / fetch 的返回值，与 `RepoRead` 无关。
+
+## 9.2 闸分两层（为什么不能只有类型）
+
+| 层 | 管什么 | 判据 |
+| --- | --- | --- |
+| **类型**（`tsconfig.tests.json`） | 已带类型参数的 mock 的**值形状**：`{ value, degraded }` / 漏 `ok` → `TS2353` / `TS2345` | `npm run typecheck` |
+| **规则**（`eslint.config.js` 的 `no-restricted-syntax` 两条） | `vi.fn()` 自己：`vi.fn()` 的默认类型参数是 `any`，类型系统管不到"你没写参数"。①`read` 的 mock 必须带类型参数；②`mockResolvedValue` 字面量有 `value` 无 `ok` 即红 | `npm run check`（lint） |
+
+**为什么不扫 `degraded` 字段**：`StyleLibrarySnapshot`（`style.test.ts` 的 `repo.read`）是另一份合法形状，它真的有 `degraded`；混着扫只会逼人加 disable。
+
+## 9.3 顺手修掉 2 处现存旧形状（typecheck 与运行时都绿）
+
+| 位置 | 旧形状 | 为什么一直没被发现 |
+| --- | --- | --- |
+| `tests/pages/freePanel-degraded.test.ts:72` | `{ value }` | `read.ok` 是 `undefined` → store 走"读坏"分支但 `reason` 也是 `undefined`，渲染结果与成功臂相同，用例照样绿 |
+| `tests/pages/style.test.ts:190` | `{ value }` | `stored.ok` 是 `undefined` → 索引回落成 `defaultStyleIndex()`（空列表），断言没钉仓库名，绿 |
+
+两处改成 `{ ok: true, value }` 后用例仍全绿（1073），说明**渲染结果没变、只是路径从"静默失败"回到"真读到"**。
+
+## 9.4 判据 A 的实证（两个方向都红）
+
+```text
+# 探针 1：类型化 vi.fn 的 mock 塞回旧形状（freePanel-degraded.test.ts:72）
+tests/pages/freePanel-degraded.test.ts(72,33): error TS2345: Argument of type
+  '{ value: {...}; }' is not assignable to parameter of type 'RepoRead<FreePanelFile>'.
+# 再补 degraded 字段：
+tests/pages/freePanel-degraded.test.ts(74,7): error TS2353: Object literal may only specify
+  known properties, and 'degraded' does not exist in type 'RepoRead<FreePanelFile>'.
+
+# 探针 2：手写假读（rename.test.ts:50）塞回旧形状
+tests/pages/rename.test.ts(50,79): error TS2353: ... 'degraded' does not exist in type 'RepoRead<RenamePreset>'.
+
+# 正对照：还原后 npm run typecheck 退出码 0
+```
+
+**同一处 mock 把类型参数去掉**（`vi.fn()`），typecheck 只剩 `TS6133` 未使用导入、**对旧形状一个字不报**；而 `npm run check` 的 lint 报两条：
+
+```text
+19:3  error  读 mock 必须带类型参数：vi.fn<Repo<T>['read']>() ...  no-restricted-syntax
+72:33 error  RepoRead 的成功臂必须带 `ok: true`：`{ value }` 是旧形状 ...  no-restricted-syntax
+```
+
+这就是 15/26 的根因所在：**类型只能守住"已经写了类型参数的 mock"**。
+
+## 9.5 丙区 1 的单位
+
+`§8.4` 的「15 条 / 5 文件」：**15 = 失败用例（`it()`）条数**（action-archive 5 + common-use-place-image-watch 5 + freePanel-degraded 1 + rename 2 + free-panel 2），**5 = 测试文件数**。不是断言数、不是错误行数。自洽校验：11（两边都红）+ 15 = 26（运行时红总数）。
+
+## 9.6 丙区 3：这道闸会不会变成"写类型应付"——证伪办法
+
+**会。** 类型对、值错（`ok: true` 但 `value` 是空的）照样绿。**证伪手段是变异**：把每个已类型化 mock 的值改成"类型合法但语义错"，用例**必须红**；仍绿 = 那条 mock 没被断言消费，闸对它无意义。
+
+已实测一次：`tests/stores/free-panel.test.ts` 把 `{ ok: true, value: {...list:[block]} }` 改成 `{ ok: false, reason: 'x' }`（类型合法）→ `Tests 1 failed | 1 passed`；还原回绿。**判据：每处 mock 的 `ok` 取反后至少一条用例红。**
+
+## 9.7 乙区三条
+
+| 条 | 裁定 | 依据 |
+| --- | --- | --- |
+| ① 逐个加 `vi.fn<Repo<T>['read']>()` 是"改 100 多处" | **驳回（数量错）** | RepoRead 的裸 `vi.fn` 只有 4 处（9.1），184 处 `mockResolvedValue` 大多与 RepoRead 无关 |
+| ② `tests/support/` 出一个 `mockRepo<T>()` 工厂让裸 `vi.fn()` 消失 | **驳回（结构上不成立）** | 4 处声明**全在 `vi.hoisted()` 里**；hoisted 回调先于 import 执行，工厂是运行时值，调不到。只能用 `import type` 的**类型**（就是现在这样），所以工厂只对"非 hoisted 的 RepoRead mock"有用，而本仓一处都没有 |
+| ③ 扩 `assertion-guard.mjs` 扫"`mockResolvedValue(` 接收者没类型参数" | **驳回（换实现）** | 那个脚本是**逐行正则**：判不了 `typeArguments` 这种语法结构，也追不到 `mockResolvedValue(broken)` 里 `broken` 的定义。同一规则写成 ESLint AST 选择器 12 行即可，且 `check` 里已有 lint |
+
+**另一条被评估后落选的方案（判据 B 的第四个候选）**：用 `vi.mocked(await import('@/cep/data/free-panel')).freePanelRepo` 从**真实模块**取回类型，`.mockResolvedValue` 自然带形状，零新增规则。
+
+- 优点：类型来源是模块（SSOT），仓库的 `T` 变了不用手改测试。
+- 落选理由：①`vi.mocked` 是一次**转型**，而这里的问题是"值写错"，用转型修转型，方向与硬规则 20 相反；②`style.test.ts` 的 `indexRepo` **不是模块导出**（`style-library-repo.ts` 内部字段），取不到；③4 处里 3 处的裸对象还要喂给 `vi.mock` 工厂，工厂自己的对象类型仍需声明。**但它在 `freePanelRepo` 这种"模块导出即仓库"的地方确实可行——用户若要改选，这里就是入口。**
+
+
+## 9.8 已知缺口（本刀没堵）
+
+新写一个 `vi.mock` 工厂、把假读写成 `read: async () => ({ ... })` 且**不写返回类型**，两道闸都看不见（`vi.mock` 工厂的返回值不受类型约束）。补法只剩"扫 vi.mock 工厂里 read 属性必须有返回类型注解"，但会误伤 `installCommonUseSource({ read: () => realRepo.read() })` 那种**已被签名约束**的写法，收益不抵噪音，暂不做。
+
+
 
 

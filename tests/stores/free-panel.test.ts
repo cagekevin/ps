@@ -1,5 +1,7 @@
 import { createPinia, setActivePinia } from 'pinia'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { FreePanelFile } from '@/domain/free-panel'
+import type { Repo } from '@/cep/data/types'
 
 /**
  * T-99-2 / D-40：自由面板投影里的 `degraded`。
@@ -11,7 +13,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
  * 这里只钉投影这一层，所以把 repo 换成假对象。
  */
 
-const repo = vi.hoisted(() => ({ read: vi.fn(), onChange: vi.fn() }))
+// 类型参数不是装饰：`vi.fn()` 不写参数时 `mockResolvedValue` 收 `any`，
+// 旧形状 `{ value, degraded }` / 漏 `ok` 都能编译过，运行时静默走失败分支。
+const repo = vi.hoisted(() => ({
+  read: vi.fn<Repo<FreePanelFile>['read']>(),
+  onChange: vi.fn(),
+}))
 
 vi.mock('@/cep/data/free-panel', () => ({ freePanelRepo: repo }))
 

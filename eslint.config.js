@@ -1,4 +1,4 @@
-﻿import js from '@eslint/js'
+import js from '@eslint/js'
 import pluginVue from 'eslint-plugin-vue'
 import globals from 'globals'
 import tseslint from 'typescript-eslint'
@@ -65,6 +65,33 @@ export default tseslint.config(
   {
     files: ['tests/**/*.ts'],
     languageOptions: { globals: { ...globals.node, ...globals.browser } },
+    rules: {
+      /**
+       * T-101-4：`vi.fn()` 不写类型参数时参数是 `any`，`mockResolvedValue({ value, degraded })`
+       * 编译器一个字不报；运行时 `read.ok` 是 `undefined` → 静默走失败分支。
+       * T-101-2c 的 26 条运行时红里 **15 条 typecheck 零信号**，全是这个口子。
+       *
+       * 分工：**值形状由类型守**（`vi.fn<Repo<T>['read']>()` 之后写错就 TS2345），
+       * 这两条只守"别把类型参数漏掉 / 别把旧字段写回来"——类型管不到 `vi.fn()` 自己。
+       */
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector:
+            "Property[key.name='read'][value.type='CallExpression'][value.callee.object.name='vi'][value.callee.property.name='fn']:not([value.typeArguments])",
+          message:
+            "读 mock 必须带类型参数：vi.fn<Repo<T>['read']>() / vi.fn<typeof 读函数>()。裸 vi.fn() 的 mockResolvedValue 收 any，旧形状编译不过不了（T-101-4）",
+        },
+        {
+          selector:
+            "CallExpression[callee.property.name=/^mockResolvedValue(Once)?$/] > ObjectExpression:has(> Property[key.name='value']):not(:has(> Property[key.name='ok']))",
+          message:
+            'RepoRead 的成功臂必须带 `ok: true`：`{ value }` 是旧形状，运行时 read.ok 是 undefined（T-101-2 起是判别联合）',
+        },
+        // 不扫 `degraded` 字段：`StyleLibrarySnapshot`（`style.test.ts` 的 `repo.read`）是另一份
+        // 合法形状，它真的有 `degraded`。混着扫只会逼人加 disable。
+      ],
+    },
   },
 
   {

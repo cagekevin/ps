@@ -3,6 +3,7 @@ import { createPinia, setActivePinia, type Pinia } from 'pinia'
 import { nextTick } from 'vue'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { RenamePreset } from '@/domain/rename'
+import type { RepoRead } from '@/cep/data/types'
 
 /**
  * 重命名页的四个分支：加载中 / 空态 / 读失败（重试）/ 正常。
@@ -43,10 +44,10 @@ vi.mock('@/selection', () => ({
 vi.mock('@/cep/jsx', () => ({ jsx }))
 vi.mock('@/cep/data/rename', () => ({
   renameRepo: {
-    read: async () => {
+    read: async (): Promise<RepoRead<RenamePreset>> => {
       if (repo.hold) await new Promise<void>((resolve) => (repo.release = resolve))
       if (repo.fail) throw new Error('预设文件损坏')
-      return { ok: true as const, value: JSON.parse(JSON.stringify(repo.value)) as unknown }
+      return { ok: true, value: JSON.parse(JSON.stringify(repo.value)) as RenamePreset }
     },
     write: async (value: unknown) => {
       repo.value = value

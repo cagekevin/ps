@@ -1,6 +1,8 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
+import type { CommonUseOptions } from '@/cep/data/legacy-settings'
+import type { RepoRead } from '@/cep/data/types'
 
 /**
  * T-97-8：真机 bug「勾了拖入图片转链接智能对象，拖图进去什么都不发生」。
@@ -32,10 +34,11 @@ const diskOptions = vi.hoisted(() => ({
   degraded: '' as string,
 }))
 vi.mock('@/cep/data/legacy-settings', () => ({
-  readCommonUseOptions: async () =>
+  // 返回类型写死：旧形状 `{ value, degraded }` 在这里编译不过，不用等运行时才发现
+  readCommonUseOptions: async (): Promise<RepoRead<Partial<CommonUseOptions>>> =>
     diskOptions.degraded
-      ? { ok: false as const, reason: diskOptions.degraded }
-      : { ok: true as const, value: diskOptions.current },
+      ? { ok: false, reason: diskOptions.degraded }
+      : { ok: true, value: diskOptions.current },
   updateCommonUseOptions: async () => ({}),
   COMMON_USE_SETTING_KEYS: [],
 }))

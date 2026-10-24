@@ -1,6 +1,8 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia, type Pinia } from 'pinia'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { FreePanelFile } from '@/domain/free-panel'
+import type { Repo } from '@/cep/data/types'
 
 /**
  * T-99-2：自由面板读坏时的**页面可见提示**。
@@ -11,7 +13,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
  * repo 换成假对象，只钉页面这一层；真实接线在 `tests/data/free-panel-repo.test.ts`。
  */
 
-const repo = vi.hoisted(() => ({ read: vi.fn(), onChange: vi.fn() }))
+// 类型参数不是装饰：`vi.fn()` 不写参数时 `mockResolvedValue` 收 `any`，
+// 旧形状 `{ value, degraded }` / 漏 `ok` 都能编译过，运行时静默走失败分支。
+const repo = vi.hoisted(() => ({
+  read: vi.fn<Repo<FreePanelFile>['read']>(),
+  onChange: vi.fn(),
+}))
 
 const selection = vi.hoisted(() => ({ hasSelection: false, typeNumber: 0 }))
 const jsx = vi.hoisted(() => ({
@@ -63,6 +70,7 @@ describe('自由面板 · 读坏提示', () => {
 
   it('正常空文件仍显示普通空态文案', async () => {
     repo.read.mockResolvedValue({
+      ok: true,
       value: { uid: 1, btnId: 0, obj: { version: '1.0', type: 'row', list: [] } },
     })
 

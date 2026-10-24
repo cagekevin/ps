@@ -1,4 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { ActionWarehouseIndex } from '@/domain/action'
+import type { Repo, RepoRead } from '@/cep/data/types'
 
 const fs = vi.hoisted(() => ({
   userDir: () => '/user',
@@ -9,8 +11,10 @@ const fs = vi.hoisted(() => ({
   removeFile: vi.fn(),
 }))
 
+// `vi.hoisted` 里不能用运行时值（先于 import 执行），所以类型写在 `vi.fn<>()` 上，靠 `import type` 擦除。
+// 不写类型参数的 `vi.fn()` 参数是 `any`：旧形状 `{ value, degraded }` 编译不报、运行时静默走失败分支。
 const data = vi.hoisted(() => ({
-  read: vi.fn(),
+  read: vi.fn<Repo<ActionWarehouseIndex>['read']>(),
   write: vi.fn(),
   selectActionFile: vi.fn(),
 }))
@@ -102,7 +106,7 @@ describe('action-archive', () => {
  * 这三条钉的是"中止在任何写之前"，以及文案说的是"文件坏了"而不是"你没有仓库"。
  */
 describe('action-archive · 坏索引（T-99-4）', () => {
-  const broken = {
+  const broken: RepoRead<ActionWarehouseIndex> = {
     ok: false,
     reason: '内容不是合法 JSON',
   }

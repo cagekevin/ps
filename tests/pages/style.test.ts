@@ -1,4 +1,4 @@
-﻿import { flushPromises, mount } from '@vue/test-utils'
+import { flushPromises, mount } from '@vue/test-utils'
 import { nextTick } from 'vue'
 import { createPinia, setActivePinia, type Pinia } from 'pinia'
 import { readFileSync } from 'node:fs'
@@ -6,7 +6,9 @@ import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { setPref } from '@/cep/data/settings'
 import { decodeText } from '@/domain/translate'
-import type { KuGroup, KuKind } from '@/domain/style-library'
+import type { KuGroup, KuKind, StyleWarehouseIndex } from '@/domain/style-library'
+import type { StyleLibrarySnapshot } from '@/cep/data/style-library-repo'
+import type { Repo } from '@/cep/data/types'
 import { useFeedbackStore } from '@/stores/feedback'
 
 /**
@@ -17,7 +19,8 @@ import { useFeedbackStore } from '@/stores/feedback'
  * 这样测到的是"页面点了之后命令怎么跑"，不是替身自己的行为。
  */
 const repo = vi.hoisted(() => ({
-  read: vi.fn(),
+  // 这两个是 `Repo` 的读：不写类型参数时 `mockResolvedValue` 收 `any`，旧形状也能编译过
+  read: vi.fn<() => Promise<StyleLibrarySnapshot>>(),
   readItem: vi.fn(),
   readGroupId: vi.fn(),
   appendItem: vi.fn(),
@@ -38,7 +41,7 @@ const repo = vi.hoisted(() => ({
   deleteWarehouse: vi.fn(),
   moveItemTo: vi.fn(),
   moveGroupTo: vi.fn(),
-  indexRepo: { read: vi.fn() },
+  indexRepo: { read: vi.fn<Repo<StyleWarehouseIndex>['read']>() },
 }))
 
 vi.mock('@/cep/data/style-library-repo', () => ({
@@ -185,13 +188,14 @@ beforeEach(() => {
   repo.moveGroupTo.mockResolvedValue(undefined)
   // 命令层与 store 都会读索引；不返回真索引会走"读失败"分支，渲染不出库
   repo.indexRepo.read.mockResolvedValue({
+    ok: true,
     value: { index: 0, list: [{ name: '我的样式仓库' }] },
   })
 })
 
 describe('样式页三态', () => {
   it('加载态：读完之前显示正在读取', async () => {
-    let release: (value: unknown) => void = () => {}
+    let release: (value: StyleLibrarySnapshot) => void = () => {}
     repo.read.mockReturnValue(new Promise((resolve) => (release = resolve)))
 
     const wrapper = mountPage()
