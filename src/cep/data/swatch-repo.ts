@@ -11,6 +11,7 @@ import { readTextOutcome, userDir, writeTextFile, writeTextFileAtomic } from '@/
 import { CepError } from '@/utils/errors'
 import { isUsableJsonText } from '@/utils/json'
 import { log } from '@/utils/logger'
+import { writeProtectedTextNow } from './protected-text'
 import { runQueued } from './write-queue'
 
 /** 写队列搬到了 `data/write-queue.ts`（TD-09-18：数据层只留一条链） */
@@ -217,7 +218,9 @@ export function appendCustomItem(item: unknown): Promise<{ added: boolean }> {
  */
 export function setRecentLimit(limit: number): Promise<void> {
   return runQueued(async () => {
-    writeTextFile(recentLimitPath(), String(limit))
+    // 受保护的纯文本写：备份 + 原子写 + 回读校验（TD-09-19 / TD-16-1）。
+    // 这句以前是裸 `writeTextFile`：无 tmp、非原子、无备份——面板关在写中途就留下半截数字文件。
+    await writeProtectedTextNow(recentLimitPath(), String(limit))
 
     const items = await readSwatchItems(recentFilePath())
     if (items.length <= limit) {
