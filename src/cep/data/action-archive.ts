@@ -94,7 +94,8 @@ export async function archiveDefaultName(current: boolean): Promise<string> {
 
 export function exportActionArchive(current: boolean, targetPath: string): Promise<void> {
   return runQueued(async () => {
-    const index = requireIndex(await actionIndexRepo.read(), '导出')
+    // 锁内读：走不排队的 readInLock，避免 runQueued 套 runQueued 自锁（write-queue.ts:6 / TD-09-30）
+    const index = requireIndex(await actionIndexRepo.readInLock(), '导出')
     const list = current ? [index.list[index.index]].filter(Boolean) : index.list
     if (!list.length) throw new CepError('PARSE', '没有可导出的仓库')
 
@@ -130,7 +131,8 @@ export function importActionArchive(append: boolean, sourcePath: string): Promis
     }
 
     // 任何写之前先确认索引是真实数据：坏索引时下面的 next.list 会基于 fallback 算出来
-    const current = requireIndex(await actionIndexRepo.read(), '导入')
+    // 锁内读：readInLock（不自排自，TD-09-30）
+    const current = requireIndex(await actionIndexRepo.readInLock(), '导入')
     const nextList = append ? [...current.list, ...imported.store.list] : imported.store.list
     const next: ActionWarehouseIndex = {
       index: append ? nextList.length - 1 : 0,

@@ -59,12 +59,24 @@ export interface Repo<T> {
   write(value: T): Promise<void>
   /**
    * 与 `write` 相同，但**不排队**：调用方必须已持有 `data/write-queue` 的锁。
-   * 唯一使用者是 `action-archive` 的导入事务（"写 N 个库文件 + 写索引"要独占一段，
-   * 已在锁内再排一次队会自锁）。
+   * 用在"写 N 个库文件 + 写索引"这类要独占一段的事务里——已在锁内再排一次队会自锁。
    */
   writeInLock(value: T): Promise<void>
+  /**
+   * 与 `read` 相同，但**不排队**：调用方必须已持有 `data/write-queue` 的锁。
+   *
+   * 这是 `writeInLock` 的另一半：锁内的读也必须走"不排队"版本，否则读一次就把队列
+   * 自己排在了自己后面 → 自锁（`write-queue.ts:6` 的禁令）。不排队读本身安全：
+   * 写是原子 rename，读到的要么是旧值要么是新值，不会看到半截。
+   */
+  readInLock(): Promise<RepoRead<T>>
   /** 读 → 改 → 写，同一文件的调用严格串行；失败抛 */
   update(mutator: (value: T) => T | void): Promise<T>
+  /**
+   * 与 `update` 相同（读→改→写 + 落盘前 CAS 比对），但**不排队**：调用方必须已持有写队列锁。
+   * 锁内的索引读改写用它——保留 CAS（跨进程仍可能被另一面板改过），又不会自己排自己。
+   */
+  updateInLock(mutator: (value: T) => T | void): Promise<T>
   /** 写成功后通知；用于 store 保持只读投影 */
   onChange(listener: (value: T) => void): () => void
 }

@@ -53,6 +53,20 @@ export function memoryRepo<T>(initial: () => T): Repo<T> {
         return Promise.resolve(value)
       }),
 
+    /**
+     * 锁内的读：调用方已持有全局 `runQueued` 锁，内存态读永远成功、无需再排本地队列。
+     * 与 `writeInLock` 同一约定（不并进本地 `enqueue`）。
+     */
+    readInLock: async () => ({ ok: true as const, value }),
+
+    /** 锁内的读→改→写：全局链已串行化，直接同步改内存值，不再排本地队列 */
+    updateInLock: async (mutator) => {
+      const result = mutator(value)
+      if (result !== undefined) value = result
+      for (const listener of listeners) listener(value)
+      return value
+    },
+
     onChange(listener) {
       listeners.add(listener)
       return () => {

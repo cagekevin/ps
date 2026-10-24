@@ -144,12 +144,51 @@ export function fileRepo<T>(
     return true
   }
 
+  /** 不排队的读：给锁内调用方用（`readInLock`）。写是原子 rename，读不会看到半截 */
+  async function rawRead(): Promise<RepoRead<T>> {
+    const { read } = await readRaw()
+    return read
+  }
+
+  /** 不排队的读→改→写（含 CAS 比对 + 重试）：`update` 与 `updateInLock` 共用这一份 */
+  async function rawUpdate(mutator: (value: T) => T | void): Promise<T> {
+    const target = resolvePath()
+    let attempts = 0
+
+    for (;;) {
+      const { read, text } = await readRaw()
+
+      // D-42：读到的不是真实数据（损坏 / 读不到）时**禁止写**。以前这里会拿 fallback
+      // 继续 update，一次点击就把用户文件覆盖成默认值——原文只剩 .bak 里那一份。
+      if (!read.ok) throw new CepError('IO', `${target} ${read.reason}，拒绝覆盖写`)
+      if (opts.requireExisting && text === null) {
+        throw new CepError('IO', `${target} 不存在，拒绝写入`)
+      }
+
+      const result = mutator(read.value)
+      const next = (result === undefined ? read.value : result) as T
+
+      // D-26：读 → 改 的窗口里，另一个面板（独立面板）可能已经写过。
+      // 落盘前同步比对；不一致就丢掉本轮结果、在新值上重跑 mutator。
+      const written = await persist(next, text, text)
+      if (!written) {
+        attempts += 1
+        if (attempts > retries) {
+          throw new CepError('IO', `${target} 正被其他面板修改，写入已放弃（重试 ${retries} 次）`)
+        }
+        log.warn('repo', `${target} 被其他面板改过，重试 ${attempts}/${retries}`)
+        // 退避 + 抖动：两个面板同时连点时，不加抖动会一直撞在同一个时间片里
+        await new Promise((resolve) => setTimeout(resolve, 3 * attempts + Math.random() * 7))
+        continue
+      }
+
+      emit(next)
+      return next
+    }
+  }
+
   return {
-    read: () =>
-      runQueued(async () => {
-        const { read } = await readRaw()
-        return read
-      }),
+    read: () => runQueued(() => rawRead()),
 
     write: (value) =>
       runQueued(async () => {
@@ -158,54 +197,19 @@ export function fileRepo<T>(
       }),
 
     /**
-     * 落盘但**不排队**：调用方必须已经持有 `runQueued` 的锁。
-     * 只有 `action-archive` 的导入事务用它（它要在"写 N 个库文件 + 写索引"这段里独占，
-     * 再排一次队会自锁）。其余任何地方都用 `write`。
+     * 落盘但**不排队**：调用方必须已经持有 `runQueued` 的锁（锁内再排一次队会自锁）。
+     * 用在"写 N 个库文件 + 写索引"这类独占事务里（`action-archive` / `style-library-io`）。
      */
     writeInLock: async (value) => {
       await persist(value, null)
       emit(value)
     },
 
-    update: (mutator) =>
-      runQueued(async () => {
-        const target = resolvePath()
-        let attempts = 0
+    readInLock: () => rawRead(),
 
-        for (;;) {
-          const { read, text } = await readRaw()
+    update: (mutator) => runQueued(() => rawUpdate(mutator)),
 
-          // D-42：读到的不是真实数据（损坏 / 读不到）时**禁止写**。以前这里会拿 fallback
-          // 继续 update，一次点击就把用户文件覆盖成默认值——原文只剩 .bak 里那一份。
-          if (!read.ok) throw new CepError('IO', `${target} ${read.reason}，拒绝覆盖写`)
-          if (opts.requireExisting && text === null) {
-            throw new CepError('IO', `${target} 不存在，拒绝写入`)
-          }
-
-          const result = mutator(read.value)
-          const next = (result === undefined ? read.value : result) as T
-
-          // D-26：读 → 改 的窗口里，另一个面板（独立面板）可能已经写过。
-          // 落盘前同步比对；不一致就丢掉本轮结果、在新值上重跑 mutator。
-          const written = await persist(next, text, text)
-          if (!written) {
-            attempts += 1
-            if (attempts > retries) {
-              throw new CepError(
-                'IO',
-                `${target} 正被其他面板修改，写入已放弃（重试 ${retries} 次）`,
-              )
-            }
-            log.warn('repo', `${target} 被其他面板改过，重试 ${attempts}/${retries}`)
-            // 退避 + 抖动：两个面板同时连点时，不加抖动会一直撞在同一个时间片里
-            await new Promise((resolve) => setTimeout(resolve, 3 * attempts + Math.random() * 7))
-            continue
-          }
-
-          emit(next)
-          return next
-        }
-      }),
+    updateInLock: (mutator) => rawUpdate(mutator),
 
     onChange(listener) {
       listeners.add(listener)

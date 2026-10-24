@@ -33,7 +33,9 @@ export function pick<T>(
     read: () => repo().read(),
     write: (value) => repo().write(value),
     writeInLock: (value) => repo().writeInLock(value),
+    readInLock: () => repo().readInLock(),
     update: (mutator) => repo().update(mutator),
+    updateInLock: (mutator) => repo().updateInLock(mutator),
     onChange: (listener) => repo().onChange(listener),
   }
 }

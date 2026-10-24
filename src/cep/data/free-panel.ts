@@ -111,16 +111,43 @@ function emit(value: FreePanelFile): void {
  * 写：入参的 showText 是权威值，收进会话态；剥掉键的副本落盘。
  * 改：mutator 看到的是带 showText 的值（命令层照常读写），落盘时剥键。
  */
-export const freePanelRepo: Repo<FreePanelFile> = {
-  async read(): Promise<RepoRead<FreePanelFile>> {
-    const result = await base.read()
-    // 坏文件不给 fallback（判别联合里取不到 value）：没有块可挂会话态，原样返回，坏因在 reason 里
-    if (!result.ok) return result
-    const blocks = result.value.obj.list
+
+/** 读后把会话态贴回返回值（`read` 与 `readInLock` 共用一份，别抄两遍） */
+function prepareRead(result: RepoRead<FreePanelFile>): RepoRead<FreePanelFile> {
+  // 坏文件不给 fallback（判别联合里取不到 value）：没有块可挂会话态，原样返回，坏因在 reason 里
+  if (!result.ok) return result
+  const blocks = result.value.obj.list
+  seedShowText(blocks)
+  stripShowText(blocks)
+  applySessionShowText(blocks)
+  return result
+}
+
+/** 把命令层的 mutator 包成"看得到会话态、落盘剥键"的底层 mutator（`update` / `updateInLock` 共用） */
+function wrapMutator(
+  mutator: (value: FreePanelFile) => FreePanelFile | void,
+): (file: FreePanelFile) => FreePanelFile {
+  return (file) => {
+    const blocks = file.obj.list
+    // mutator 要看到 showText（命令层按 block.showText 写）：磁盘值只作种子，会话态优先
     seedShowText(blocks)
     stripShowText(blocks)
     applySessionShowText(blocks)
-    return result
+
+    const next = mutator(file) ?? file
+    // mutator 改过的 showText 是权威值，更新会话态
+    captureShowText(next.obj.list)
+
+    // 落盘的是剥掉 showText 的副本
+    const onDisk = deepClone(next)
+    stripShowText(onDisk.obj.list)
+    return onDisk
+  }
+}
+
+export const freePanelRepo: Repo<FreePanelFile> = {
+  async read(): Promise<RepoRead<FreePanelFile>> {
+    return prepareRead(await base.read())
   },
 
   /** 与 `write` 同语义的"锁内"版本：转给底层仓库的同名方法（TD-09-18） */
@@ -141,23 +168,20 @@ export const freePanelRepo: Repo<FreePanelFile> = {
   },
 
   async update(mutator: (value: FreePanelFile) => FreePanelFile | void): Promise<FreePanelFile> {
-    const persisted = await base.update((file) => {
-      const blocks = file.obj.list
-      // mutator 要看到 showText（命令层按 block.showText 写）：磁盘值只作种子，会话态优先
-      seedShowText(blocks)
-      stripShowText(blocks)
-      applySessionShowText(blocks)
+    const persisted = await base.update(wrapMutator(mutator))
+    applySessionShowText(persisted.obj.list)
+    emit(persisted)
+    return persisted
+  },
 
-      const next = mutator(file) ?? file
-      // mutator 改过的 showText 是权威值，更新会话态
-      captureShowText(next.obj.list)
+  async readInLock(): Promise<RepoRead<FreePanelFile>> {
+    return prepareRead(await base.readInLock())
+  },
 
-      // 落盘的是剥掉 showText 的副本
-      const onDisk = deepClone(next)
-      stripShowText(onDisk.obj.list)
-      return onDisk
-    })
-
+  async updateInLock(
+    mutator: (value: FreePanelFile) => FreePanelFile | void,
+  ): Promise<FreePanelFile> {
+    const persisted = await base.updateInLock(wrapMutator(mutator))
     applySessionShowText(persisted.obj.list)
     emit(persisted)
     return persisted

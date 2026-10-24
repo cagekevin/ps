@@ -95,7 +95,9 @@ export async function readIndexState(): Promise<{
   value: StyleWarehouseIndex
   degraded: string
 }> {
-  const stored = await styleIndexRepo.read()
+  // 锁内的读：本函数会在 `runQueued` 任务体里被调用（`updateKuGroups`/仓库事务），
+  // 再走排队的 `read()` 会把队列排在自己后面 → 自锁（write-queue.ts:6）。读不排队是安全的（原子写）。
+  const stored = await styleIndexRepo.readInLock()
   // 坏索引没有 value：用仓库自己的 fallback 继续归一，坏因拼进 degraded
   const parsed = readStyleWarehouseIndex(stored.ok ? stored.value : defaultStyleIndex())
   return {
@@ -132,7 +134,8 @@ export async function readStyleLibrary(): Promise<StyleLibrarySnapshot> {
 
 /** 当前仓库某个库的绝对路径；**读**用它（索引里没登记文件名就等于没这个库，不许猜路径） */
 async function currentLibPath(kind: KuKind): Promise<string> {
-  const stored = await styleIndexRepo.read()
+  // 锁内读（在 send* 的 runQueued 任务体里被调用）：走 readInLock 避免自锁
+  const stored = await styleIndexRepo.readInLock()
   // 「索引文件坏了」≠「这个仓库没登记库文件名」：不分开说，用户会以为是自己没建过库（T-101-1）
   if (!stored.ok) {
     throw new CepError('IO', `仓库索引文件损坏（${stored.reason}），已中止：不猜库文件路径`)
@@ -380,7 +383,8 @@ async function updateKuGroups(kind: KuKind, mutate: (groups: KuRawGroup[]) => vo
 
   if (target.isNew) {
     // 库文件已经落盘才登记索引：反过来会让索引指向一个不存在的文件
-    await styleIndexRepo.update((value) => {
+    // 锁内写（updateKuGroups 的调用方都已 runQueued）：用 updateInLock 保留 CAS，又不自排自
+    await styleIndexRepo.updateInLock((value) => {
       const current = readStyleWarehouseIndex(value).value
       const warehouse = current.list[current.index]
       if (!warehouse) throw new CepError('PARSE', '仓库索引里没有当前仓库')
@@ -419,25 +423,23 @@ function createWarehouse(name: string): StyleWarehouse {
  */
 export async function selectWarehouse(index: number): Promise<void> {
   await usableIndex()
-  await runQueued(() =>
-    styleIndexRepo.update((value) => {
-      const current = readStyleWarehouseIndex(value).value
-      const valid = Number.isInteger(index) && index >= 0 && index < current.list.length
-      return { ...value, index: valid ? index : 0, list: current.list }
-    }),
-  )
+  // `styleIndexRepo.update` 自己已排队 + 原子 + CAS；外面再套 runQueued = 自己排自己 → 自锁（TD-09-30）
+  await styleIndexRepo.update((value) => {
+    const current = readStyleWarehouseIndex(value).value
+    const valid = Number.isInteger(index) && index >= 0 && index < current.list.length
+    return { ...value, index: valid ? index : 0, list: current.list }
+  })
 }
 
 /** 新建仓库。原版 `add()`（`:53357-53363`）：`list.push(P_("未命名分组"))`，名字就是「未命名分组」 */
 export async function addWarehouse(): Promise<void> {
   await usableIndex()
-  await runQueued(() =>
-    styleIndexRepo.update((value) => {
-      const current = readStyleWarehouseIndex(value).value
-      const list = [...current.list, createWarehouse('未命名分组')]
-      return { ...value, index: current.index, list }
-    }),
-  )
+  // 同 selectWarehouse：`update` 自己已排队，别再套
+  await styleIndexRepo.update((value) => {
+    const current = readStyleWarehouseIndex(value).value
+    const list = [...current.list, createWarehouse('未命名分组')]
+    return { ...value, index: current.index, list }
+  })
 }
 
 /**
@@ -451,15 +453,14 @@ export async function renameWarehouse(index: number, name: string): Promise<void
   if (!warehouseName) throw new CepError('PARSE', '仓库名不能为空')
 
   await usableIndex()
-  await runQueued(() =>
-    styleIndexRepo.update((value) => {
-      const current = readStyleWarehouseIndex(value).value
-      const warehouse = current.list[index]
-      if (!warehouse) throw new CepError('PARSE', `仓库 ${index} 不存在`)
-      warehouse.name = warehouseName
-      return { ...value, index: current.index, list: current.list }
-    }),
-  )
+  // 同 selectWarehouse：`update` 自己已排队，别再套
+  await styleIndexRepo.update((value) => {
+    const current = readStyleWarehouseIndex(value).value
+    const warehouse = current.list[index]
+    if (!warehouse) throw new CepError('PARSE', `仓库 ${index} 不存在`)
+    warehouse.name = warehouseName
+    return { ...value, index: current.index, list: current.list }
+  })
 }
 
 export interface WarehouseDeleteResult {
@@ -573,42 +574,44 @@ export async function deleteWarehouse(index: number): Promise<WarehouseDeleteRes
   // 没有 Node 就移不了文件（索引写本身也会抛 NO_NODE），先拦在门口，别只删索引不搬文件
   if (!hasNode()) throw new CepError('NO_NODE', 'Node 不可用，无法把仓库文件移到回收目录')
 
-  const current = await usableIndex()
-  const warehouse = current.list[index]
-  if (!warehouse) throw new CepError('PARSE', `仓库 ${index} 不存在`)
-  // 原版只在页面层拦「最少保留一个分组哦」（`f_delete`，`:53978-53987`），这里再拦一道：
-  // 索引里一个仓库都不剩，整个页面读到的就是空列表
-  if (current.list.length === 1) throw new CepError('PARSE', '最少保留一个分组哦')
+  // 整段（复制旧文件 → 改索引 → 删原件）独占一条写链：导入/编辑不能插进中间，
+  // 否则会出现"索引已删、旧文件还在"或反向的半态。锁内索引读写走 *InLock（不自排自，TD-09-30）
+  return runQueued(async () => {
+    const current = await usableIndex()
+    const warehouse = current.list[index]
+    if (!warehouse) throw new CepError('PARSE', `仓库 ${index} 不存在`)
+    // 原版只在页面层拦「最少保留一个分组哦」（`f_delete`，`:53978-53987`），这里再拦一道：
+    // 索引里一个仓库都不剩，整个页面读到的就是空列表
+    if (current.list.length === 1) throw new CepError('PARSE', '最少保留一个分组哦')
 
-  const recycleDir = `${userDir()}/.deleted-${Date.now()}`
-  const moved: string[] = []
-  for (const relative of await warehouseFiles(warehouse)) {
-    if (await copyToRecycle(relative, recycleDir)) moved.push(relative)
-  }
+    const recycleDir = `${userDir()}/.deleted-${Date.now()}`
+    const moved: string[] = []
+    for (const relative of await warehouseFiles(warehouse)) {
+      if (await copyToRecycle(relative, recycleDir)) moved.push(relative)
+    }
 
-  await runQueued(() =>
-    styleIndexRepo.update((value) => {
+    await styleIndexRepo.updateInLock((value) => {
       const next = readStyleWarehouseIndex(value).value
       next.list.splice(index, 1)
       if (index < next.index) next.index -= 1
       else if (index === next.index) next.index = 0
       return { ...value, index: next.index, list: next.list }
-    }),
-  )
+    })
 
-  // 索引已经不再引用这些文件，删不掉只会留下孤儿文件 —— 记下来报给调用方，不抛
-  const failed: string[] = []
-  for (const relative of moved) {
-    const removed = removeFile(`${userDir()}/${relative}`)
-    // 删不掉要说出来：T-109 之前这里靠 existsSync，EPERM 会被谎报成删成功
-    if (!removed.ok) {
-      log.warn('style', `删除仓库：旧文件删不掉：${relative}`, removed.reason)
-      failed.push(relative)
+    // 索引已经不再引用这些文件，删不掉只会留下孤儿文件 —— 记下来报给调用方，不抛
+    const failed: string[] = []
+    for (const relative of moved) {
+      const removed = removeFile(`${userDir()}/${relative}`)
+      // 删不掉要说出来：T-109 之前这里靠 existsSync，EPERM 会被谎报成删成功
+      if (!removed.ok) {
+        log.warn('style', `删除仓库：旧文件删不掉：${relative}`, removed.reason)
+        failed.push(relative)
+      }
     }
-  }
-  log.info('style', `仓库 ${warehouse.name} 已移入回收目录`, { recycleDir, moved, failed })
+    log.info('style', `仓库 ${warehouse.name} 已移入回收目录`, { recycleDir, moved, failed })
 
-  return { recycleDir, moved, failed }
+    return { recycleDir, moved, failed }
+  })
 }
 
 /**
