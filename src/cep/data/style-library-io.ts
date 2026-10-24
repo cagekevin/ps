@@ -30,7 +30,6 @@ import {
   type KuRawGroup,
 } from '@/domain/ku-io'
 import {
-  defaultStyleIndex,
   fileNameOf,
   readStyleWarehouseIndex,
   type StyleWarehouse,
@@ -38,7 +37,7 @@ import {
 } from '@/domain/style-library'
 import { CepError } from '@/utils/errors'
 import { log } from '@/utils/logger'
-import { kuGuid, readKuFileText, styleIndexRepo } from './style-library-repo'
+import { kuGuid, readIndexState, readKuFileText, styleIndexRepo } from './style-library-repo'
 import { isRecord } from '@/utils/guards'
 
 /** 进度回调：只报"正在做什么"，不猜百分比（仓库数量差异太大） */
@@ -218,24 +217,12 @@ function validateContainer(file: KuContainerFile): void {
   }
 }
 
-/** 当前索引 + 归一化（越界 `index` 夹回合法范围），读坏了也返回，调用方决定是否中止 */
-async function indexState(): Promise<{ value: StyleWarehouseIndex; degraded: string }> {
-  const stored = await styleIndexRepo.read()
-  // 坏索引没有 value：用仓库自己的 fallback 继续归一，坏因照旧拼进 degraded——
-  // 本函数的契约就是"读坏了也返回，调用方决定是否中止"
-  const parsed = readStyleWarehouseIndex(stored.ok ? stored.value : defaultStyleIndex())
-  return {
-    value: parsed.value,
-    degraded: [stored.ok ? '' : stored.reason, parsed.degraded].filter(Boolean).join('；'),
-  }
-}
-
 /**
  * 可写前提下的索引：索引读不懂就抛。
  * 覆盖导入例外（它本来就要整份替换，且替换前会留 `.bak`），见 `importKuArchive`。
  */
 async function currentIndex(): Promise<StyleWarehouseIndex> {
-  const { value, degraded } = await indexState()
+  const { value, degraded } = await readIndexState()
   if (degraded) throw new CepError('PARSE', `仓库索引不可用：${degraded}`)
   return value
 }
@@ -378,7 +365,7 @@ export async function importKuArchive(
   validateContainer(remapped)
 
   // 覆盖导入允许索引已损坏：它本来就要整份替换，且替换前会留 `.bak`；追加导入必须能读懂原索引
-  const before = append ? await currentIndex() : (await indexState()).value
+  const before = append ? await currentIndex() : (await readIndexState()).value
   const oldFiles = append ? [] : await filesOfIndex(before)
   const nextIndex = readStyleWarehouseIndex(remapped.store).value
 

@@ -85,16 +85,34 @@ export interface StyleLibrarySnapshot {
 }
 
 /**
+ * 索引读取 + 归一 + `degraded` 拼装（TD-09-16：原来这段在 `readStyleLibrary`、`usableIndex`、
+ * `style-library-io.indexState` 三处各写一遍）。
+ *
+ * 契约：**读坏了也返回**（`value` 是归一后的结果，`degraded` 非空说明为什么不可信），
+ * 由调用方决定"照常用 + 提示"还是"中止写入"——两种策略的判据都在调用方，不在这里。
+ */
+export async function readIndexState(): Promise<{
+  value: StyleWarehouseIndex
+  degraded: string
+}> {
+  const stored = await styleIndexRepo.read()
+  // 坏索引没有 value：用仓库自己的 fallback 继续归一，坏因拼进 degraded
+  const parsed = readStyleWarehouseIndex(stored.ok ? stored.value : defaultStyleIndex())
+  return {
+    value: parsed.value,
+    degraded: [stored.ok ? '' : stored.reason, parsed.degraded].filter(Boolean).join('；'),
+  }
+}
+
+/**
  * 一次读出「索引 + 当前仓库的四个库」。
  *
  * 只读当前仓库：原版 `initData` 也是 `getCurrentColorPath()` 那四个（`app.v4.js:53392-53407`），
  * 切仓库要写索引，属于第 2 段。
  */
 export async function readStyleLibrary(): Promise<StyleLibrarySnapshot> {
-  const stored = await styleIndexRepo.read()
-  // 坏索引没有 value：用仓库自己的 fallback 继续归一，坏因在下面拼进 degraded 交给页面
-  const parsed = readStyleWarehouseIndex(stored.ok ? stored.value : defaultStyleIndex())
-  const current = parsed.value.list[parsed.value.index]
+  const state = await readIndexState()
+  const current = state.value.list[state.value.index]
 
   const libraries = {} as Record<KuKind, KuGroup[]>
   const notes: string[] = []
@@ -106,11 +124,9 @@ export async function readStyleLibrary(): Promise<StyleLibrarySnapshot> {
   }
 
   return {
-    index: parsed.value,
+    index: state.value,
     libraries,
-    degraded: [stored.ok ? '' : stored.reason, parsed.degraded, ...notes]
-      .filter(Boolean)
-      .join('；'),
+    degraded: [state.degraded, ...notes].filter(Boolean).join('；'),
   }
 }
 
@@ -273,11 +289,9 @@ function itemAt(groups: KuRawGroup[], groupIndex: number, itemIndex: number): Ku
  * （原件虽在 `.bak`，但用户不该承担这个）。所以这类一律抛。
  */
 async function usableIndex(): Promise<StyleWarehouseIndex> {
-  const stored = await styleIndexRepo.read()
-  const parsed = readStyleWarehouseIndex(stored.ok ? stored.value : defaultStyleIndex())
-  const broken = [stored.ok ? '' : stored.reason, parsed.degraded].filter(Boolean).join('；')
-  if (broken) throw new CepError('PARSE', `仓库索引不可用，已中止写入：${broken}`)
-  return parsed.value
+  const state = await readIndexState()
+  if (state.degraded) throw new CepError('PARSE', `仓库索引不可用，已中止写入：${state.degraded}`)
+  return state.value
 }
 
 interface KuFileTarget {

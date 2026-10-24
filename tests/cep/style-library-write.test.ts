@@ -112,6 +112,40 @@ beforeEach(() => {
   fsMock.readErrorPath = ''
 })
 
+describe('索引状态只有一份实现（TD-09-16）', () => {
+  /**
+   * 原来「读索引 → 归一 → 拼 degraded」在 `readStyleLibrary`、`usableIndex`、
+   * `style-library-io.indexState` 三处各写一遍：改一处必漏另两处。
+   * 现在只有一个 `readIndexState`，下面钉住它的两条契约。
+   */
+  beforeEach(() => {
+    fsMock.files.clear()
+    fsMock.atomicWrites.length = 0
+    fsMock.failAtomic = false
+    fsMock.readErrorPath = ''
+  })
+
+  it('索引不存在 = 首次使用：degraded 为空串（不许当成"坏了"）', async () => {
+    const { readIndexState } = await import('@/cep/data/style-library-repo')
+
+    const state = await readIndexState()
+
+    expect(state.degraded).toBe('')
+    expect(state.value.list).toHaveLength(1)
+  })
+
+  it('页面读路径与写前检查共用这一份：两边 degraded 一字不差', async () => {
+    const { readIndexState, readStyleLibrary } = await import('@/cep/data/style-library-repo')
+
+    const state = await readIndexState()
+    const snapshot = await readStyleLibrary()
+
+    // 索引这一层的原因必须**同源**（页面读在自己的 notes 之外不再自己拼一份）
+    expect(snapshot.degraded.startsWith(state.degraded)).toBe(true)
+    expect(snapshot.index).toEqual(state.value)
+  })
+})
+
 describe('备份（ADR-12）', () => {
   it('改库前把原文复制成 <库文件>.bak，原文件被新内容覆盖', async () => {
     const before = JSON.stringify([{ name: '灰白', show: true, list: [] }])
