@@ -11,7 +11,12 @@ import type { SelectionSnapshot } from '@/selection'
  * 命令是插件的最小可执行单位：页面、常用页、自定义面板、快捷键都只消费它。
  * `requires` / `kind` **没有默认值**——新命令不写就编译不过。
  */
-export type CommandGroup = 'font' | 'layer' | 'style' | 'action' | 'file' | 'system'
+/**
+ * 命令分组。**`seban` 是色板独立面板专用的**：
+ * 那 7 条命令只该由 `#/seBan` 调用，主面板任何页面都不请求这一组，
+ * 所以进注册表后主面板可见面零变化（`CommandGrid` 只按显式 `group` 渲染）。
+ */
+export type CommandGroup = 'font' | 'layer' | 'style' | 'action' | 'file' | 'system' | 'seban'
 
 /** 执行前置。`textLayer` 依赖 `Layer_getTypeNumber === 2`，该值未在真机确认 */
 export type Requirement = 'none' | 'layer' | 'textLayer' | 'document'

@@ -866,6 +866,36 @@ describe('style.appendGroupToSwatch（原版 :50269-50290）', () => {
   })
 })
 
+describe('style.appendGroup（原版 addGroupItem，:52470-52475）', () => {
+  it('整份 push 到当前库末尾，字段原样保留（不补 id）', async () => {
+    const group = {
+      name: '客户色',
+      show: true,
+      list: [{ name: '未命名', color: { hex: 'FF0000' } }],
+    }
+
+    await expect(execute('style.appendGroup', { kind: 'color', group })).resolves.toEqual({
+      ok: true,
+    })
+
+    const groups = (await read(COLOR_LIB)) as unknown[]
+    expect(groups[1]).toEqual(group)
+  })
+
+  it('样式库的组也不补 id（官方 addGroupItem 不走 createGroupObject）', async () => {
+    const group = { name: '客户样式', show: true, list: [] }
+
+    await expect(execute('style.appendGroup', { kind: 'style', group })).resolves.toEqual({
+      ok: true,
+    })
+
+    const groups = (await read(STYLE_LIB)) as Array<{ name: string; id?: string }>
+    expect(groups.map((g) => g.name)).toEqual(['样式默认分组', '客户样式'])
+    // 关键：没有 id —— 说明没拿 `createKuGroup`（会补 `YS<guid>`）凑
+    expect(groups[1].id).toBeUndefined()
+  })
+})
+
 // ---------- 第 5 段：仓库（只动索引 sj_kuStoreInfo.ini）----------
 
 /** 两条仓库的索引（beforeEach 只写了一条） */

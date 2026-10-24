@@ -8,6 +8,7 @@ import { legacyCommands } from './legacy'
 import { renameCommands } from './rename'
 import { register } from './registry'
 import { styleCommands } from './style'
+import { swatchCommands } from './swatch'
 import { systemCommands } from './system'
 
 /**
@@ -25,6 +26,7 @@ for (const command of [
   ...cloudCommands,
   ...renameCommands,
   ...styleCommands,
+  ...swatchCommands,
   ...systemCommands,
   ...commonUseCommands,
 ])

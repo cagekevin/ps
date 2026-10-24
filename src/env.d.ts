@@ -44,6 +44,14 @@ interface CepFs {
   ): { err: number; data: string }
 }
 
+/**
+ * CEP 的通用接口（`window.cep.util`）。声明在这里而不是 `cep/open-url.ts`：
+ * 这是**运行时注入**的第三方形状（硬规则 20(a)）。
+ */
+interface CepUtil {
+  openURLInDefaultBrowser(url: string): void
+}
+
 interface Window {
   __adobe_cep__?: CepBridge
   /** 构建信息，启动自检写入；用于控制台/支持排查 */
@@ -51,8 +59,8 @@ interface Window {
   /** CEP 开了 --enable-nodejs 后可用 */
   require?: (id: string) => unknown
   cep_node?: { require: (id: string) => unknown }
-  /** CEP 的 Node 侧 API（文件对话框在 `cep.fs`，见 `CepFs`） */
-  cep?: { fs?: CepFs }
+  /** CEP 的 Node 侧 API（文件对话框在 `cep.fs`，外链在 `cep.util`） */
+  cep?: { fs?: CepFs; util?: CepUtil }
   /** 日志导出的调试入口，由 `utils/logger.ts` 挂上去 */
   __pszDump?: () => string
 }

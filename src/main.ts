@@ -1,4 +1,4 @@
-﻿import { createApp } from 'vue'
+import { createApp } from 'vue'
 import { createPinia } from 'pinia'
 import App from './App.vue'
 import router from './router'
@@ -15,6 +15,7 @@ import { bindFontSetData } from './stores/font-set'
 import { installCommonUseSource } from './stores/common-use'
 import { commonUseRepo } from './cep/data/common-use'
 import { bindRenameData } from './stores/rename'
+import { bindSwatchData } from './stores/swatch'
 import { useTaskStore } from './stores/tasks'
 import { setProgressPort } from './commands/runtime'
 import { startSelectionWatch } from './selection'
@@ -40,6 +41,9 @@ bindFreePanelData()
 bindFontSetData()
 installCommonUseSource(commonUseRepo)
 bindRenameData()
+// 色板投影：本面板的命令写完文件（onChange）与别处写完发的 app event 都汇到这里重读。
+// 两个进程都会绑上——主面板那份是空转（多读三个小文件），换来"换入口时不会漏绑"。
+bindSwatchData()
 
 // 长任务状态由 store 实现，命令层只依赖端口（commands 不许依赖 stores）
 setProgressPort({

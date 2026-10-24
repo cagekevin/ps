@@ -1,4 +1,4 @@
-﻿import type {
+import type {
   CreateButtonConfig,
   FontSetSettings,
   PasteFontConfig,
@@ -570,6 +570,17 @@ export interface StyleAddItemPayload extends StyleKuKindPayload {
   item: Record<string, unknown>
 }
 
+/**
+ * 追加一个**现成的组对象**（按钮 5「发送到设计助理」的落点）。
+ *
+ * 对应官方 `addGroupItem(t)`（`app.v4.js:52470-52475`）：`this.info.push(t); this.updata()`。
+ * `group` 由调用方给（色板面板发的是 `{name, show: true, list: [...]}`，`sf.js:434-443`），
+ * 命令层不造组、不补 `id`、不校验字段——与 `style.addGroup`（只给名字、由 repo 造组）是两条路。
+ */
+export interface StyleAppendGroupPayload extends StyleKuKindPayload {
+  group: Record<string, unknown>
+}
+
 export interface StyleRenameItemPayload extends StyleGroupIndexPayload {
   itemIndex: number
   name: string
@@ -617,6 +628,35 @@ export interface StyleWarehouseIndexPayload {
 
 export interface StyleRenameWarehousePayload extends StyleWarehouseIndexPayload {
   name: string
+}
+
+// ---------- 色板面板（独立 CEP 面板 /seBan）----------
+
+/**
+ * 最近色保留条数。原版 `SheZhi` 用 `prompt` 收字符串再 `parseInt`（`sf.js:400-407`）；
+ * 这里由页面收数（CepModal），命令只做**同一条**校验并把官方三条文案原样抛出去。
+ */
+export interface SwatchSetLimitPayload {
+  /** 0–15；`0` 合法，含义是"不保留最近色"（`sf.js:408`） */
+  limit: number
+}
+
+/**
+ * 发送到设计助理。原版 `faSongDaoZhuLi`（`sf.js:426-460`）：`prompt` 收组名 →
+ * `{ name: zuMing, show: true, list: GetColorArray() }` → 发 `sendColor`。
+ * `kind` 官方没带（它进的是主面板当前 tab），我方必须显式给，命令不猜。
+ */
+export interface SwatchSendToAssistantPayload {
+  name: string
+  kind: KuKind
+}
+
+/**
+ * 形状填充 / 线框开关。原版 `SheZhiXingZhuang`（`sf.js:466-472`）：
+ * 无修饰键 → `sb_SheZhiXingZhuang('1')`（去填充）；shift → `'0'`（去线框）。
+ */
+export interface SwatchShapePayload {
+  target: 'fill' | 'stroke'
 }
 
 export interface CommandPayloads {
@@ -717,6 +757,8 @@ export interface CommandPayloads {
   'style.deleteGroup': StyleGroupIndexPayload
   'style.toggleGroupShow': StyleToggleGroupShowPayload
   'style.addItem': StyleAddItemPayload
+  /** 追加现成的组对象（原版 `addGroupItem`，`:52470-52475`）：按钮 5 的落点 */
+  'style.appendGroup': StyleAppendGroupPayload
   'style.renameItem': StyleRenameItemPayload
   'style.deleteItem': StyleItemRefPayload
   'style.reorderItem': StyleReorderItemPayload
@@ -785,6 +827,23 @@ export interface CommandPayloads {
   'commonUse.exportImages': CommonUseExportPayload
   'commonUse.openExportFolder': void
   'commonUse.swapWireframeFill': void
+
+  // ---------- 色板面板（独立 CEP 面板 /seBan）：7 个按钮各一条 ----------
+  // 官方实现全在 `sf.js`（面板真身 `%APPDATA%/fz.FengZi3Hao/`，不在仓库）。
+  /** 按钮 1 添加前景色：读前景色 → 命中 hex 不添加 → 追加 `userColor.ini` */
+  'seban.addForegroundColor': void
+  /** 按钮 2 打开作者站酷：`openURLInDefaultBrowser('http://pszhuli.com')`（`sf.js:394-396`） */
+  'seban.openAuthorSite': void
+  /** 按钮 3 设置：最近色保留条数（0–15） */
+  'seban.setRecentLimit': SwatchSetLimitPayload
+  /** 按钮 4 添加当前图层颜色（文本 / 形状图层） */
+  'seban.addLayerColor': void
+  /** 按钮 5 发送到设计助理：发 `sendColor`，**不碰盘**（落点见 `style.appendGroup`） */
+  'seban.sendToAssistant': SwatchSendToAssistantPayload
+  /** 按钮 6 去形状填充 / 去线框（shift） */
+  'seban.setShapeFill': SwatchShapePayload
+  /** 按钮 7 交换线框与填充状态（仅形状图层） */
+  'seban.swapWireframeFill': void
 
   'legacy.call': LegacyCallPayload
   'cloud.setUrl': CloudSetUrlPayload

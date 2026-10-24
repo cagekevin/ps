@@ -1,9 +1,10 @@
-﻿import { openFile, saveFile } from '@/cep/dialog'
+import { openFile, saveFile } from '@/cep/dialog'
 import { exportKuArchive, importKuArchive, kuArchiveDefaultName } from '@/cep/data/style-library-io'
 import {
   addKuGroup,
   addKuItem,
   addWarehouse,
+  appendKuGroup,
   appendKuGroupToSwatch,
   appendKuItemToSwatch,
   deleteKuGroup,
@@ -314,6 +315,19 @@ export const styleCommands: Command<unknown>[] = [
     kind: 'instant',
     async run(_ctx, { kind, name, afterIndex }) {
       await addKuGroup(kind, name, afterIndex)
+    },
+  }),
+
+  defineCommand({
+    id: 'style.appendGroup',
+    title: '追加分组',
+    group: 'style',
+    requires: 'none',
+    kind: 'instant',
+    async run(_ctx, { kind, group }) {
+      // 原版 `addGroupItem(t)`（`:52470-52475`）：整份 push + `updata()`，不校验、不补字段。
+      // 色板面板「发送到设计助理」发的就是 `{name, show: true, list: [...]}`（`sf.js:434-443`）。
+      await appendKuGroup(kind, group)
     },
   }),
 
