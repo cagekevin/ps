@@ -17,6 +17,8 @@ const fsMock = vi.hoisted(() => ({
   failAtomic: false,
   /** 每次原子写落的路径 —— 用来证明"一次拖拽只写一次盘" */
   atomicWrites: [] as string[],
+  /** 非空 = 这个路径的读返回 `error`（模拟 EPERM / EBUSY：文件在、但读不到） */
+  readErrorPath: '',
 }))
 
 vi.mock('@/cep/fs', () => ({
@@ -25,6 +27,10 @@ vi.mock('@/cep/fs', () => ({
   readTextSmart: async (path: string) => fsMock.files.get(path) ?? null,
   // T-107：唯一读入口（三态）+ 同步例外（CAS / 结构上同步的调用方）
   readTextOutcome: async (path: string) => {
+    // T-112：文件在、但读不到（EPERM / EBUSY）——这是"读不到"，不是"没有"
+    if (fsMock.readErrorPath && path === fsMock.readErrorPath) {
+      return { status: 'error' as const, reason: 'EPERM: operation not permitted' }
+    }
     const text = fsMock.files.get(path)
     return text === undefined ? { status: 'notSeen' as const } : { status: 'ok' as const, text }
   },
@@ -64,6 +70,7 @@ const {
   addKuItem,
   deleteKuItem,
   sendKuItemToSwatch,
+  appendKuItemToSwatch,
   selectWarehouse,
   addWarehouse,
   renameWarehouse,
@@ -96,6 +103,7 @@ beforeEach(() => {
   fsMock.files.clear()
   fsMock.failAtomic = false
   fsMock.atomicWrites.length = 0
+  fsMock.readErrorPath = ''
 })
 
 describe('备份（ADR-12）', () => {
@@ -257,6 +265,62 @@ describe('发送到色板', () => {
     fsMock.failAtomic = true
 
     await expect(sendKuItemToSwatch('color', 0, 0)).rejects.toThrow('色板文件写入失败')
+  })
+})
+
+/**
+ * T-112：**读不到 ≠ 没有**。四处 P1 都在这条边界上：
+ * 文件在、但读不到（`EPERM` / `EBUSY`）时，原来的写法会拿 `[]` / `null` 当"首次使用"，
+ * 然后整份写回 —— 用户的库文件 / 色板被一次操作抹平，而且 `.bak` 也写不出来。
+ *
+ * 钉的是"抛错 + 原件一个字节都不变"。`notSeen`（文件本来不存在）仍按空处理，
+ * 由 `readTextOutcome` 的 `notSeen` 分支保证，不在这组用例里重复。
+ */
+describe('读不到时不许写盘（T-112）', () => {
+  const swatch = 'ROAM/FengZiSeBan/userColor.ini'
+  const OLD_SWATCH = JSON.stringify([{ name: '旧色', color: { hex: '000000' } }])
+
+  it('updateKuGroups：库文件读不到 → 抛错，原件一个字节都不动、不写 .bak', async () => {
+    const original = JSON.stringify([{ name: '旧组', show: true, list: [] }])
+    seedLib(original)
+    await styleIndexRepo.write(INDEX_VALUE)
+    fsMock.readErrorPath = COLOR_LIB
+
+    await expect(addKuGroup('color', '新组')).rejects.toThrow('读不到')
+
+    expect(fsMock.files.get(COLOR_LIB)).toBe(original)
+    expect(fsMock.files.get(`${COLOR_LIB}.bak`)).toBeUndefined()
+  })
+
+  it('readSwatchItems：色板读不到 → 追加中止，色板一个字节都不动', async () => {
+    seedLib(
+      JSON.stringify([
+        { name: '灰白', show: true, list: [{ name: '主色', color: { hex: '302F34' } }] },
+      ]),
+    )
+    await styleIndexRepo.write(INDEX_VALUE)
+    fsMock.files.set(swatch, OLD_SWATCH)
+    fsMock.readErrorPath = swatch
+
+    await expect(appendKuItemToSwatch('color', 0, 0)).rejects.toThrow('读不到')
+
+    expect(fsMock.files.get(swatch)).toBe(OLD_SWATCH)
+    expect(fsMock.files.get(`${swatch}.bak`)).toBeUndefined()
+  })
+
+  it('writeSwatchItems：色板读不到 → 整份替换中止，原件一个字节都不动', async () => {
+    seedLib(
+      JSON.stringify([
+        { name: '灰白', show: true, list: [{ name: '主色', color: { hex: '302F34' } }] },
+      ]),
+    )
+    await styleIndexRepo.write(INDEX_VALUE)
+    fsMock.files.set(swatch, OLD_SWATCH)
+    fsMock.readErrorPath = swatch
+
+    await expect(sendKuItemToSwatch('color', 0, 0)).rejects.toThrow('读不到')
+
+    expect(fsMock.files.get(swatch)).toBe(OLD_SWATCH)
   })
 })
 

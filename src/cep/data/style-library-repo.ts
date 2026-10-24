@@ -337,11 +337,13 @@ async function resolveKuFile(kind: KuKind): Promise<KuFileTarget> {
 async function updateKuGroups(kind: KuKind, mutate: (groups: KuRawGroup[]) => void): Promise<void> {
   const target = await resolveKuFile(kind)
   const read = await readTextOutcome(target.path)
-  // T-107 **已知欠账（P1）**：`error` 这里仍按"首次使用"处理（`groups = []`）然后写回，
-  // 等于把一份读不到的库文件换成空数组、且没有 `.bak`。修法是让 error 中止写入——
-  // 那会改变现有行为（一次追加从成功变失败），按判据 C 先报不改，另开条目
+  // T-112：**读不到 ≠ 首次使用**。读不到时既不知道旧内容、也写不出 `.bak`，继续写回等于
+  // 把一份读不到的库文件换成空数组。`notSeen`（文件本来不存在）才是"首次使用按空处理"。
   if (read.status === 'error') {
-    log.error('style', `${kind} 库文件读不到，本次写入可能覆盖它：${read.reason}`)
+    throw new CepError(
+      'IO',
+      `${kind} 库文件读不到，已中止写入：${target.fileName}（${read.reason}）`,
+    )
   }
   const previous = read.status === 'ok' ? read.text : null
 
@@ -846,12 +848,10 @@ function swatchFilePath(): string {
  */
 async function readSwatchItems(path: string): Promise<unknown[]> {
   const read = await readTextOutcome(path)
-  // T-107 **已知欠账（P1）**：`error` 这里仍按"没有色板"处理（返回 `[]`），随后调用方会把
-  // 追加后的内容整份写回 —— 一份读不到的色板会被一次追加抹平。修法是让 error 中止写入，
-  // 会改变现有行为，按判据 C 先报不改，另开条目
+  // T-112：读不到时**不许**返回 `[]`——调用方会把追加后的内容整份写回，等于把一份读不到的
+  // 色板抹平。`notSeen`（还没有色板文件）才是"空数组"。
   if (read.status === 'error') {
-    log.error('style', `色板文件读不到，本次写入可能覆盖它：${read.reason}`)
-    return []
+    throw new CepError('IO', `色板文件读不到，已中止写入：${path}（${read.reason}）`)
   }
   if (read.status === 'notSeen' || read.text === '') return []
 
@@ -870,10 +870,10 @@ async function readSwatchItems(path: string): Promise<unknown[]> {
 /** 写色板全文：旧内容先进 `.bak`，再原子写；写不进去抛（不让用户以为发送成功） */
 async function writeSwatchItems(path: string, items: unknown[]): Promise<void> {
   const read = await readTextOutcome(path)
-  // T-107 **已知欠账（P1）**：`error` 时 `.bak` 不写，紧接着整份覆盖 —— 旧色板没有第二份。
-  // 修法是让 error 中止写入（改变现有行为），按判据 C 先报不改，另开条目
+  // T-112：读不到时**不许写**——`.bak` 写不出来（没有旧原文），整份覆盖就等于旧色板没有第二份。
+  // `notSeen`（还没有色板文件）照旧：没有旧内容，不需要 `.bak`。
   if (read.status === 'error') {
-    log.error('style', `色板文件读不到，本次写入没有 .bak：${read.reason}`)
+    throw new CepError('IO', `色板文件读不到，已中止写入：${path}（${read.reason}）`)
   }
   if (read.status === 'ok' && read.text) writeTextFile(`${path}.bak`, read.text)
   if (!writeTextFileAtomic(path, JSON.stringify(items))) {

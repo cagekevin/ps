@@ -13,6 +13,8 @@ import { readValue } from '../support/repo-read'
 const fsMock = vi.hoisted(() => ({
   files: new Map<string, string>(),
   failWrite: false,
+  /** 非空 = 这个路径的读返回 `error`（模拟 EPERM / EBUSY：文件在、但读不到） */
+  readErrorPath: '',
 }))
 
 const dialog = vi.hoisted(() => ({ open: null as string | null, save: null as string | null }))
@@ -25,6 +27,10 @@ vi.mock('@/cep/fs', () => ({
   readTextSmart: async (path: string) => fsMock.files.get(path) ?? null,
   // T-107：唯一读入口（三态）
   readTextOutcome: async (path: string) => {
+    // T-112：文件在、但读不到（EPERM / EBUSY）——这是"读不到"，不是"没有"
+    if (fsMock.readErrorPath && path === fsMock.readErrorPath) {
+      return { status: 'error' as const, reason: 'EPERM: operation not permitted' }
+    }
     const text = fsMock.files.get(path)
     return text === undefined ? { status: 'notSeen' as const } : { status: 'ok' as const, text }
   },
@@ -168,6 +174,7 @@ beforeEach(async () => {
   vi.clearAllMocks()
   fsMock.files.clear()
   fsMock.failWrite = false
+  fsMock.readErrorPath = ''
   dialog.open = null
   dialog.save = null
 
@@ -263,6 +270,26 @@ describe('导入 .kux（契约 §2.4 / §5.2）', () => {
     expect(JSON.parse(fsMock.files.get(`${INDEX}.bak`) ?? 'null')).toMatchObject({
       list: [{ name: '默认仓库' }],
     })
+  })
+
+  it('T-112：旧索引读不到 → 中止替换，索引一个字节都不动、也没有 .bak', async () => {
+    const indexText = JSON.stringify({ index: 0, list: [warehouse('默认仓库')] })
+    fsMock.files.set(INDEX, indexText)
+    fsMock.files.set('IN/one.kux', containerText('导入仓库'))
+    dialog.open = 'IN/one.kux'
+    // 文件在、但读不到（EPERM）。这不是"索引不存在"，不许当首次导入
+    fsMock.readErrorPath = INDEX
+
+    const before = [...fsMock.files.keys()].sort()
+
+    const result = await execute('style.importKuReplace')
+
+    expect(result.ok).toBe(false)
+    // 读不到就写不出 .bak，所以整份替换必须中止：旧索引原样留着
+    expect(fsMock.files.get(INDEX)).toBe(indexText)
+    expect(fsMock.files.has(`${INDEX}.bak`)).toBe(false)
+    // 磁盘文件集合前后完全一致：已写的新库文件回滚掉，旧的一个都没少
+    expect([...fsMock.files.keys()].sort()).toEqual(before)
   })
 
   it('追加导入：本地仓库保留，导入的接在后面并选中它', async () => {

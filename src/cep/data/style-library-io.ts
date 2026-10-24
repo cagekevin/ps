@@ -344,11 +344,15 @@ export async function importKuArchive(
       })
     } else {
       // `fileRepo.write` 不备份，替换索引前自己留一份原文。
-      // T-107 **已知欠账（P1）**：`notSeen` 与 `error` 这里仍同果——读不到旧索引时 `.bak` 不写，
-      // 紧接着整份替换索引，旧内容就没有第二份了。要修得让 error 分支中止替换（会改变现有行为，另开条目）
+      // T-112：**读不到旧索引就中止替换**——拿不到旧原文就写不出 `.bak`，整份替换等于把索引
+      // 变成没有退路的版本。`notSeen`（索引本来不存在，首次导入）照旧：没有旧内容可备份。
+      // 抛在这里是安全的：外层 catch 只删本次新建的库文件，旧索引与旧文件都没动。
       const previous = await readTextOutcome(indexPath())
       if (previous.status === 'error') {
-        log.error('style', `索引读不到，本次替换没有 .bak：${previous.reason}`)
+        throw new CepError(
+          'IO',
+          `索引读不到，已中止替换（没有 .bak 的替换等于没有退路）：${previous.reason}`,
+        )
       }
       if (previous.status === 'ok' && previous.text) {
         writeTextFile(`${indexPath()}.bak`, previous.text)
