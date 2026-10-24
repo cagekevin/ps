@@ -30,7 +30,7 @@
     "cases": 1359,
     "eachSites": 17
   },
-  "components": 31,
+  "components": 30,
   "icons": 189,
   "pages": 9,
   "hostEvents": 7,
@@ -79,8 +79,8 @@
       "lines": 4859
     },
     "components": {
-      "files": 36,
-      "lines": 3288
+      "files": 35,
+      "lines": 3211
     },
     "composables": {
       "files": 10,
@@ -92,7 +92,7 @@
     },
     "pages": {
       "files": 63,
-      "lines": 12805
+      "lines": 12800
     },
     "selection": {
       "files": 2,

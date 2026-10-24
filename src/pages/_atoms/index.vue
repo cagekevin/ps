@@ -23,7 +23,6 @@ import GInput from '@/components/GInput.vue'
 import GMenu from '@/components/GMenu.vue'
 import GMenuItem from '@/components/GMenuItem.vue'
 import GPopover from '@/components/GPopover.vue'
-import GTooltip from '@/components/GTooltip.vue'
 import Icon from '@/components/Icon.vue'
 import NewSpin from '@/components/NewSpin.vue'
 import PageShell from '@/components/PageShell.vue'
@@ -146,10 +145,6 @@ function toast(message: string) {
             <GButton size="small" @click="popoverOpen = false">关闭</GButton>
           </div>
         </GPopover>
-
-        <GTooltip content="这是 tooltip">
-          <GButton size="small">悬停提示</GButton>
-        </GTooltip>
       </div>
     </section>
 
