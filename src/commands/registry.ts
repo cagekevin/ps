@@ -1,7 +1,6 @@
 import { starsRepo, tagsRepo } from '@/cep/data'
 import { actionIndexRepo, actionLibraryRepo } from '@/cep/data/actions'
 import { freePanelRepo } from '@/cep/data/free-panel'
-import { settingsSnapshot } from '@/cep/data/settings'
 import { jsx } from '@/cep/jsx'
 import { current, refresh, type SelectionSnapshot } from '@/selection'
 import { CepError } from '@/utils/errors'
@@ -78,7 +77,6 @@ function canRun(requires: Requirement, selection: SelectionSnapshot): boolean {
 function context(selection: SelectionSnapshot, progress: ProgressHandle): CommandContext {
   return {
     selection,
-    settings: settingsSnapshot(),
     data: {
       stars: starsRepo,
       tags: tagsRepo,

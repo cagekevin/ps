@@ -65,7 +65,7 @@ function loadAll(): Record<string, unknown> {
   }
 
   try {
-    // 同步读是 ADR-26 ④ 的具名例外之三：`getPref` / `settingsSnapshot` 全链路同步。
+    // 同步读是 ADR-26 ④ 的具名例外之三：`getPref` 全链路同步。
     // 三态在此分流：`notSeen`（新装机）→ 默认值且允许写回；`error`（读不到）→ 默认值但**禁止写回**。
     const read = readTextSync(filePath())
     if (read.status === 'error') {
@@ -145,10 +145,36 @@ function persist(all: Record<string, unknown>) {
   })
 }
 
-/** 只读快照，给命令层用；调用方不要改它 */
-export function settingsSnapshot(): Record<string, unknown> {
-  return { ...loadAll() }
-}
+/**
+ * 界面偏好键的**唯一清单**（TD-10-12）。
+ *
+ * 以前 `getPref(key: string)`：拼错一个字母不报错、不崩，只是"这个设置项永远不生效"——
+ * 最贵的一类 bug（页面明明设了，重启就回默认）。现在 key 是联合类型，
+ * 拼错在 `npm run typecheck` 就红；加新偏好必须先登记到这里（一行）。
+ *
+ * 命名是**历史原样**（`cmmSwitchindex` / `dzShowListType` / `styleShowTab` 这些是原版键名），
+ * 不改名——它们就是用户 `sj_v5_ui.json` 里的键，改名等于丢用户设置。
+ */
+export type PrefKey =
+  // 左侧栏
+  | 'nav.hidden'
+  | 'nav.tips'
+  | 'nav.hoverSwitch'
+  | 'nav.autoJump'
+  // 字体
+  | 'font.previewMode'
+  | 'font.previewText'
+  // 各页界面状态（原版键名）
+  | 'styleShowTab'
+  | 'action.guideDone'
+  | 'cmmSwitchindex'
+  | 'cmmShowColorSign'
+  | 'dzShowListType'
+  | 'commonUse.collapsed'
+  // 云同步
+  | 'cloud.pending'
+  | 'cloud.gasUrl'
+  | 'cloud.autoSync'
 
 /** 仅测试用：清掉内存缓存 */
 export function __resetSettingsForTest() {
@@ -157,12 +183,12 @@ export function __resetSettingsForTest() {
   readFailureReported = false
 }
 
-export function getPref<T>(key: string, fallback: T): T {
+export function getPref<T>(key: PrefKey, fallback: T): T {
   const value = loadAll()[key]
   return value === undefined ? fallback : (value as T)
 }
 
-export function setPref(key: string, value: unknown) {
+export function setPref(key: PrefKey, value: unknown) {
   const all = loadAll()
   all[key] = value
 

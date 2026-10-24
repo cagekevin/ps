@@ -59,8 +59,8 @@ describe('偏好读不到 → 拒绝写回（TD-09-23）', () => {
   it('读返回 error 时：getPref 仍给默认值，但一个字节都不写盘', () => {
     fsMock.readError = 'EACCES: permission denied'
 
-    expect(settings.getPref('flag', 'default')).toBe('default')
-    settings.setPref('flag', 'changed')
+    expect(settings.getPref('nav.hidden', 'default')).toBe('default')
+    settings.setPref('nav.hidden', 'changed')
     settings.flushPrefs()
 
     // 关键断言：默认值没有变成"用户偏好"写回文件
@@ -70,16 +70,16 @@ describe('偏好读不到 → 拒绝写回（TD-09-23）', () => {
 
   it('拒绝写回要喊出来（写失败监听器收到一条带原因的提示）', () => {
     fsMock.readError = 'EACCES: permission denied'
-    settings.getPref('flag', 'default')
-    settings.setPref('flag', 'changed')
+    settings.getPref('nav.hidden', 'default')
+    settings.setPref('nav.hidden', 'changed')
     settings.flushPrefs()
 
     expect(errors.join('\n')).toContain('偏好文件读不到')
   })
 
   it('首次使用（notSeen）照旧可以写：这不是"读不到"', () => {
-    settings.getPref('flag', 'default')
-    settings.setPref('flag', 'changed')
+    settings.getPref('nav.hidden', 'default')
+    settings.setPref('nav.hidden', 'changed')
     settings.flushPrefs()
 
     expect(atomic).toHaveBeenCalledTimes(1)
@@ -88,8 +88,8 @@ describe('偏好读不到 → 拒绝写回（TD-09-23）', () => {
   it('原子写失败 → 报错，且**不再退回普通写**（TD-09-27）', () => {
     atomic.mockReturnValue({ status: 'error' as const, reason: 'ENOSPC: disk full' })
 
-    settings.getPref('flag', 'default')
-    settings.setPref('flag', 'changed')
+    settings.getPref('nav.hidden', 'default')
+    settings.setPref('nav.hidden', 'changed')
     settings.flushPrefs()
 
     expect(errors.join('\n')).toContain('偏好写入失败')

@@ -80,9 +80,9 @@ describe('真实失败的全链条 · 关掉重开还能查到', () => {
     // 2) 语义层：真 settings（走 CEP 分支 → readTextSync 报 error → log.error）
     const settings = await import('@/cep/data/settings')
     settings.__resetSettingsForTest()
-    expect(settings.getPref('anything', 'default')).toBe('default')
+    expect(settings.getPref('font.previewText', 'default')).toBe('default')
     // 读失败之后写回必须被拒（1a 的 `refuseIfReadFailed`）——这条路会记一条 error
-    settings.setPref('anything', 'changed')
+    settings.setPref('font.previewText', 'changed')
     settings.flushPrefs()
 
     // 3) 落点：flush 到"盘"上

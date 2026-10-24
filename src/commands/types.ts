@@ -38,7 +38,14 @@ export interface ProgressPort {
 
 export interface CommandContext {
   selection: SelectionSnapshot
-  settings: Record<string, unknown>
+  /**
+   * **没有 `settings` 字段**（TD-10-12 删掉的）。
+   *
+   * 原来这里是一个 `Record<string, unknown>`：40+ 个偏好键没有任何键名约束，
+   * 拼错一个字母既不报错也不崩，只是"这个设置永远不生效"。而且它当时**零个消费者**——
+   * 命令要读设置时走的是有型的 `readFontSetSettings()`（返回 `FontSetSettings`）
+   * 或 `getPref(key: PrefKey)`。与其给一个没人用的口袋补键名，不如删掉这个口袋。
+   */
   data: DataPort
   jsx: JsxPort
   /** 只有 `kind: 'long'` 时才真正上报；其余是 no-op */

@@ -130,7 +130,7 @@ export function classifyFsError(
 /**
  * **唯一的同步读 = ADR-26 ④ 的具名例外**，只给**结构上必须同步**的调用方，现登记**两处**：
  * 1. 落盘前的 CAS 比对（`file-repo.ts` 的 `compareSync`）——`await` 会多一个 microtask 边界，正是 D-26 丢更新的位置；
- * 2. 面板界面偏好（`data/settings.ts` 的 `loadAll`）——`getPref` / `settingsSnapshot` 全链路同步。
+ * 2. 面板界面偏好（`data/settings.ts` 的 `loadAll`）——`getPref` 全链路同步。
  *
  * 云同步的"有没有台账"护栏（`cloud/ledger.ts`）**已在 T-114 退出这条例外**：靠这里只能拿到
  * `null`，分不出 `ENOENT`（没有台账）与 `EPERM`（读不到），坏台账被读成"没有台账"，
