@@ -23,7 +23,8 @@ const feedback = vi.hoisted(() => ({ error: vi.fn(), warn: vi.fn(), info: vi.fn(
 
 vi.mock('@/cep/cloud/entries', () => ({ cloudEntries: [] }))
 vi.mock('@/cep/cloud/config', () => ({
-  isCloudConfigured: () => true,
+  // 名字跟生产者对齐（TD-11-10 正名）：mock 少一个导出会让被测代码拿到 undefined
+  isCloudUrlUsable: () => true,
   isAutoSyncEnabled: () => true,
 }))
 vi.mock('@/cep/cloud/ledger', () => ({

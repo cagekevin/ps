@@ -9,7 +9,7 @@ import type { SyncOutcome } from '@/cloud/change-sync'
 import { CLOUD_SYNC_BACKOFF_MS } from '@/config/cloud'
 import { createCloudEngine, type CloudEngine } from '@/cloud/engine'
 import { cloudEntries } from './entries'
-import { isAutoSyncEnabled, isCloudConfigured } from './config'
+import { isAutoSyncEnabled, isCloudUrlUsable } from './config'
 import { readCloudLedger, writeCloudLedger } from './ledger'
 import { clearPendingChanges, readPendingChanges, recordPendingChanges } from './pending'
 import { reportSyncError, reportSyncOutcome } from './sync-report'
@@ -18,7 +18,8 @@ import { pullSnapshot, pushSnapshot } from './transport'
 /** 端口注入：具体 CEP 实现只在这里给；对外的 `cloudEngine` 是下面的串行门面 */
 const engine = createCloudEngine({
   config: {
-    isConfigured: isCloudConfigured,
+    // 端口名由 engine 定（`isConfigured`）；实现叫 `isCloudUrlUsable` 才是它真正判的事
+    isConfigured: isCloudUrlUsable,
     isAutoSyncEnabled,
   },
   transport: {
@@ -56,7 +57,7 @@ export function allSyncUnitIds(): string[] {
  */
 async function gate(): Promise<SyncOutcome | null> {
   // `skip: true`：这类原因一次请求都没发，不该吃掉退避额度（退避是留给真网络错误的）
-  if (!isCloudConfigured())
+  if (!isCloudUrlUsable())
     return { ok: false, skip: true, errorCode: 'CLOUD_NOT_CONFIGURED', error: '未配置同步地址' }
   if (!isAutoSyncEnabled())
     return { ok: false, skip: true, errorCode: 'CLOUD_AUTO_SYNC_OFF', error: '自动同步已关闭' }
