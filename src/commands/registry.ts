@@ -151,13 +151,33 @@ export async function execute<K extends CommandId>(
 export async function execute(id: string, payload?: unknown): Promise<CommandResult>
 export async function execute(id: string, payload?: unknown): Promise<CommandResult> {
   // 命令不存在就不必去问 PS 要选区（保持"未知 id 不 refresh"的旧行为）
-  if (!registry.get(id)) return { ok: false, reason: `命令不存在：${id}` }
+  const command = registry.get(id)
+  if (!command) return { ok: false, reason: `命令不存在：${id}` }
 
   // 一次执行只查一次选区，不再让每个命令自己调 getLayerState
-  const selection = await refresh().catch(() => null)
-  if (!selection) return { ok: false, reason: '读取选区失败' }
+  let selection: SelectionSnapshot
+  try {
+    selection = await refresh()
+  } catch (e) {
+    // 读不到选区 ≠ 没有选区：原因（INIT / TIMEOUT_UNKNOWN / PARSE…）必须原样带走，
+    // 以前 `.catch(() => null)` 把 code 和原文都丢了，用户只看到一句「读取选区失败」（TD-13-4）
+    const reason = describeCepError(e)
+    const code = e instanceof CepError ? e.code : undefined
+    log.warn('cmd', `${id} 前置查询选区失败：${reason}`, e)
+    if (needsSelection(command.requires)) {
+      return { ok: false, reason: `读取选区失败：${reason}`, code }
+    }
+    // requires 为 none / document 的命令本来就不看选区，不能被无关失败连坐；
+    // 继续用上一次快照（`canRun` 对这两档不看内容，命令拿到的 selection 只是转发）
+    selection = current()
+  }
 
   return runWith(id, payload, selection)
+}
+
+/** 这条命令的成败是否真的取决于选区快照 */
+function needsSelection(requires: Requirement): boolean {
+  return requires === 'layer' || requires === 'textLayer'
 }
 
 /**

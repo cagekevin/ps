@@ -26,8 +26,8 @@
     }
   },
   "tests": {
-    "files": 145,
-    "cases": 1244,
+    "files": 146,
+    "cases": 1248,
     "eachSites": 16
   },
   "components": 31,
@@ -76,7 +76,7 @@
     },
     "commands": {
       "files": 16,
-      "lines": 4750
+      "lines": 4770
     },
     "components": {
       "files": 36,
