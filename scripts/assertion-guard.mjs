@@ -31,6 +31,33 @@ const RULES = [
 /** 转型理由注释的固定标记；换写法守卫不认，避免"随便写个注释就过" */
 const REASON = '断言理由：'
 
+/**
+ * 结构闸：`pick()` 不许在**模块加载时**定死实现（T-113）。
+ *
+ * 13 个仓库都在 import 期调 `pick()`（`actions.ts` / `common-use.ts` / `font-extra.ts` / …）。
+ * 一旦 `pick.ts` 里写回 `return hasCep() ? fileRepo(...) : memoryRepo(...)`，
+ * 测试只要把 CEP 桥装晚一步（或者忘了装），就静默走 `memoryRepo`——**永不失败**，
+ * 于是"喂 EPERM 也不会红"：用例全绿但测的是内存仓库。T-111 第一版、更早的 mock 类型闸
+ * 都是这个形态。
+ *
+ * 这条不是"规矩"，是**根因的形状**：只要 pick 是懒求值，顺序问题就不存在。
+ * 所以它拦的不是测试怎么写，而是 pick 又变回急求值。
+ */
+const PICK_FILE = join(root, 'src/cep/data/pick.ts')
+const EAGER_PICK = /return\s+hasCep\s*\(\s*\)\s*\?/
+
+function checkPickIsLazy() {
+  const lines = readFileSync(PICK_FILE, 'utf8').split('\n')
+  const hits = []
+  lines.forEach((line, index) => {
+    if (isCommentLine(line)) return
+    if (EAGER_PICK.test(line)) {
+      hits.push({ file: 'src/cep/data/pick.ts', line: index + 1, text: line.trim() })
+    }
+  })
+  return hits
+}
+
 function walk(dir) {
   const out = []
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -78,6 +105,9 @@ const found = scan()
 const counts = {}
 for (const [file, hits] of found) counts[file] = hits.length
 
+/** 结构闸的命中（不受基线影响：这条例外为零，不存在"存量"） */
+const eagerPick = checkPickIsLazy()
+
 if (process.argv.includes('--update')) {
   const sorted = Object.fromEntries(Object.entries(counts).sort(([a], [b]) => a.localeCompare(b)))
   writeFileSync(BASELINE, `${JSON.stringify(sorted, null, 2)}\n`, 'utf8')
@@ -100,16 +130,35 @@ for (const [file, hits] of found) {
 
 const stale = Object.entries(baseline).filter(([file, n]) => (counts[file] ?? 0) < n)
 
-if (violations.length === 0) {
+if (violations.length === 0 && eagerPick.length === 0) {
   console.log(
     '[assert] 通过：没有新增 `as any` / `as unknown as`（第三方边界需写 `// 断言理由：…`）',
   )
+  console.log('[assert] 通过：`pick()` 仍是首次使用时定实现（模块加载期定死会制造测试假绿）')
   if (stale.length) {
     console.log(
       `[assert] 提示：${stale.length} 个文件的违规数已下降，跑 \`npm run assert:baseline\` 收紧基线`,
     )
   }
   process.exit(0)
+}
+
+if (eagerPick.length) {
+  console.error('[assert] 失败：`pick()` 又变回模块加载时定实现（T-113）\n')
+  for (const v of eagerPick) {
+    console.error(`  ${v.file}:${v.line}`)
+    console.error(`    ${v.text.slice(0, 120)}`)
+  }
+  console.error(
+    '\n为什么拦：13 个仓库在 import 期调 `pick()`。写回 `return hasCep() ? … : memoryRepo(…)`',
+  )
+  console.error('之后，测试只要把 CEP 桥装晚一步（或忘了装）就静默走内存仓库——永不失败，')
+  console.error('喂 EPERM 也不会红，用例全绿但测的不是真实接线（T-111 第一版踩过）。')
+  console.error(
+    '\n怎么改：保留 `let impl: Repo<T> | null` + `impl ??= hasCep() ? … : …` 的懒求值写法，',
+  )
+  console.error('让实现在**第一次调用**时才定；顺序问题就不存在了。')
+  process.exit(1)
 }
 
 console.error(`[assert] 失败：${violations.length} 处新增双转型（AGENTS.md 硬规则 20）\n`)
