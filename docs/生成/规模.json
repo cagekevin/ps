@@ -26,8 +26,8 @@
     }
   },
   "tests": {
-    "files": 171,
-    "cases": 1395,
+    "files": 175,
+    "cases": 1426,
     "eachSites": 17
   },
   "components": 30,
@@ -68,11 +68,11 @@
   "layers": {
     "cep": {
       "files": 58,
-      "lines": 7452
+      "lines": 7477
     },
     "cloud": {
       "files": 4,
-      "lines": 1074
+      "lines": 1089
     },
     "commands": {
       "files": 16,
@@ -92,7 +92,7 @@
     },
     "pages": {
       "files": 63,
-      "lines": 12856
+      "lines": 12857
     },
     "selection": {
       "files": 2,
@@ -100,7 +100,7 @@
     },
     "stores": {
       "files": 16,
-      "lines": 1272
+      "lines": 1281
     },
     "utils": {
       "files": 12,
