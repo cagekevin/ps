@@ -95,7 +95,7 @@ function toast(message: string) {
 
     <!--
       CheckBox / GInput / SelectBox：表单三件套。
-      CheckBox 固定 14×14，页面不能调大小；
+      CheckBox 没有 size prop：尺寸是组件内部 CSS（`--checkbox-size`），页面不通过属性调大小；
       GInput 只有 small / medium；
       SelectBox 只接受 options + 索引，页面不自己画下拉。
     -->
