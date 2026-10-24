@@ -107,8 +107,15 @@ export async function readStyleLibrary(): Promise<StyleLibrarySnapshot> {
 /** 当前仓库某个库的绝对路径；**读**用它（索引里没登记文件名就等于没这个库，不许猜路径） */
 async function currentLibPath(kind: KuKind): Promise<string> {
   const stored = await styleIndexRepo.read()
-  const index = readStyleWarehouseIndex(stored.value).value
-  const warehouse = index.list[index.index]
+  // 「索引文件坏了」≠「这个仓库没登记库文件名」：不分开说，用户会以为是自己没建过库（T-101-1）
+  if (stored.degraded) {
+    throw new CepError('IO', `仓库索引文件损坏（${stored.degraded}），已中止：不猜库文件路径`)
+  }
+  const parsed = readStyleWarehouseIndex(stored.value)
+  if (parsed.degraded) {
+    throw new CepError('IO', `仓库索引不可用（${parsed.degraded}），已中止：不猜库文件路径`)
+  }
+  const warehouse = parsed.value.list[parsed.value.index]
   const fileName = fileNameOf(warehouse, kind)
   if (!fileName) {
     throw new CepError('IO', `索引里没有当前仓库的${kind}库文件名`)

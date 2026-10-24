@@ -31,13 +31,21 @@ export const useActionStore = defineStore('action', () => {
     const index = await actionIndexRepo.read()
     warehouses.value = index.value.list
     activeIndex.value = index.value.index
-    degraded.value = index.degraded ?? ''
 
-    selectActionFile(currentWarehouseFile(index.value))
+    const reasons: string[] = []
+    // 坏索引的 `value` 是 fallback `DEFAULT_INDEX`，下面 `selectActionFile` 会把当前仓库切成
+    // `sj_dz_default.json`。只说"索引坏了"不够——用户会把默认仓库当成自己的仓库（T-101-1）
+    const indexFile = currentWarehouseFile(index.value)
+    if (index.degraded) {
+      reasons.push(`动作库索引文件损坏（${index.degraded}），当前显示的是默认仓库 ${indexFile}`)
+      log.error('action', `索引损坏，已回退默认仓库 ${indexFile}`, index.degraded)
+    }
+    selectActionFile(indexFile)
 
     const library = await actionLibraryRepo.read()
     groups.value = library.value
-    if (library.degraded) degraded.value = library.degraded
+    if (library.degraded) reasons.push(`动作库文件损坏（${library.degraded}）`)
+    degraded.value = reasons.join('；')
   }
 
   // ── "从 Photoshop 添加"弹层的数据源（读，不是命令） ──────────────────

@@ -20,7 +20,11 @@ import { resolve } from 'node:path'
 function deps(options: Record<string, unknown>) {
   const embedImage = vi.fn(async () => null)
   const relinkToFile = vi.fn(async () => null)
-  const d: PlaceImageDeps = { readOptions: async () => options, embedImage, relinkToFile }
+  const d: PlaceImageDeps = {
+    readOptions: async () => ({ value: options }),
+    embedImage,
+    relinkToFile,
+  }
   return { d, embedImage, relinkToFile }
 }
 

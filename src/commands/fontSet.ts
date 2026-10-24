@@ -135,9 +135,14 @@ export const fontSetCommands: Command<unknown>[] = [
       const text = value.trim()
       if (!text) throw new CepError('PARSE', '不能输入空字符')
 
-      const { value: settings } = await readFontSetSettings()
+      const settingsRead = await readFontSetSettings()
+      // 坏设置文件 → `mergeFontSetSettings` 会补默认值：照常跑等于拿默认 `ztDistributionFilter`
+      // 去动用户的文档，用户以为用的是自己的设置（T-101-1）
+      if (settingsRead.degraded) {
+        throw new CepError('IO', `字体设置文件损坏（${settingsRead.degraded}），按间距分布已中止`)
+      }
       assertJsxOk(
-        await ctx.jsx.font.distributeByPitch(axis, text, settings.ztDistributionFilter),
+        await ctx.jsx.font.distributeByPitch(axis, text, settingsRead.value.ztDistributionFilter),
         '分布元素失败',
       )
     },

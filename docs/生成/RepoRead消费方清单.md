@@ -420,3 +420,55 @@ git revert --abort 2>/dev/null; git checkout -- .
 | ② B≈11 / A≈59 | **驳回（口径错）** | 11 是**全文** B 总数（§2.1 生产 9 + §2.2 tests 2），不是 70 里的。70 = A 57 + P 13 + B 0。59 这个数对不上：差的不是 B，是 P（13 处生产/装配点） |
 | ③ 静默用坏数据 2–3 处 | **驳回（数量少算）** | 清单内 2 处（`commands/fontSet.ts:138`、`stores/action.ts:36`），清单外另 2 处（`stores/common-use.ts:58`、`commands/commonUse.ts:619`）。`action-archive` 已修，确实不再是其中之一 |
 
+---
+
+# 七、T-101-1：8 处补可见信号（已修，不动 `RepoRead` 形状）
+
+> 只补信号，不改类型。每处一条用例，喂**真的坏文件**（走 `fileRepo` 的 `hasCep` 分支），
+> 断言用户能看到的那句话：命令 reason（→ toast）/ store `degraded`（→ 页面提示条）/ `log.error`（→ 设置页「打开日志」）。
+> 用例：`tests/degraded-signals.test.ts`（11 条）、`tests/commands/common-use-place-image-watch.test.ts`（+1 条）。
+
+## 7.1 静默 4 处（修前：按默认值继续跑，无任何信号）
+
+| 位置 | 改法 | 用户看到什么 |
+| --- | --- | --- |
+| `commands/fontSet.ts:138` | `degraded` 非空即 `throw CepError('IO', '字体设置文件损坏（…），按间距分布已中止')`，jsx 一次不调 | toast |
+| `stores/action.ts:36` | 提示改成 `动作库索引文件损坏（…），当前显示的是默认仓库 sj_dz_default.json` + `log.error`；`library.degraded` 与它拼成一个 `degraded`（不再互相覆盖） | 页面提示条 + 日志 |
+| `stores/common-use.ts:58` | `loadOptions` 的坏因进 `degraded`（`reasons.tiles` / `reasons.options` 合成 computed）+ `log.error` | 页面提示条 + 日志 |
+| `commands/commonUse.ts:619` | `PlaceImageDeps.readOptions` 返回值**带上 `degraded`**（原来只取 `.value`，消费侧替生产者捏造"一切正常"）；非空 → `log.error` + 返回 `'none'`，不按默认开关置入 | 日志（事件回调没有 `useCommand` 接住；命令层不许 import 视图层，ADR-16） |
+
+## 7.2 文案 4 处（修前：把"文件坏了"说成"没有"）
+
+| 位置 | 坏文件时的新文案 | 对照（本来就没有） |
+| --- | --- | --- |
+| `cep/data/actions.ts:105/106` | `动作库索引文件损坏（…），删除已中止` | 索引正常只剩 1 条 → 仍 `至少保留一个仓库` |
+| `cep/data/style-library-repo.ts:110` | `仓库索引文件损坏（…），已中止：不猜库文件路径` | 索引正常但没登记 → 仍 `索引里没有当前仓库的color库文件名` |
+| `commands/freePanel.ts:298` | `自由面板文件损坏（…），执行已中止`（同时删掉第二次 `normalizeFreePanel`，读边界已归一） | — |
+
+## 7.3 丙区 2：同族到底几处（`{ value, degraded }` 读取入口的全部调用点，`src/` 生产代码）
+
+| 入口 | 调用点 | 有信号 | 可空着 | 静默 | 文案 | 不适用 | 转发/生产 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| `Repo<T>.read()` | 32 | 18 | 7 | 0 | 3 | 0 | 4 |
+| `readFontSetSettings()` | 2 | 1 | 0 | 1 | 0 | 0 | 0 |
+| `readCommonUseOptions()` | 2 | 0 | 0 | 2 | 0 | 0 | 0 |
+| `readStyleWarehouseIndex()` | 11 | 9 | 0 | 0 | 1 | 1 | 0 |
+| **合计** | **47** | **28** | **7** | **3** | **4** | **1** | **4** |
+
+- 修前：静默 3 + 文案 4 = **7 个调用点**；点名的第 8 处（`stores/action.ts:36`）**不是调用点**，是
+  `stores/action.ts:31` 那个消费方内部的回退决策。→ **只数调用点会漏它**，这也是它没被 T-101-0 的清单直接点到的原因之一。
+- 「可空着」7 处是 §2.1 的 B 类（`font-meta.ts:6/18`、`commands/fontSet.ts:234`、`stores/font-set.ts:50-53`），
+  本轮不动，等 §6.4 的形状拍板后在数据层显式折叠。
+- 「不适用」1 处：`style-library-io.ts:306` 解析的是导入包里的 `store`，不是磁盘读。
+
+## 7.4 丙区 1 的判据（"有信号"够不够）
+
+**不够。** 判据：信号必须回答"**我现在看的是哪份数据**"，只回答"有东西坏了"仍是误导。
+
+- `degraded` 只写"索引坏了" → 用户把 fallback 的「默认仓库」当成自己的 → **误导**；
+- 写成"索引坏了，当前显示的是默认仓库 `sj_dz_default.json`" → 用户知道自己在看什么 → **合规**。
+
+同理，`degraded` 只出现在页面提示条、却让命令层按默认参数**动文档**（`fontSet.ts:138`）仍算静默：
+降级可以，但**不许在用户看不见的地方按降级值产生副作用**。
+
+

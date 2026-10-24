@@ -4,6 +4,7 @@ import type { ActionLibrary, ActionWarehouseIndex } from '@/domain/action'
 import { pick } from './pick'
 import type { Repo } from './types'
 import { deepClone } from '@/utils/clone'
+import { CepError } from '@/utils/errors'
 
 /**
  * 动作库仓库。结构与原版源码一致（`app.v4.js:6552-6659`），不是猜的：
@@ -102,6 +103,11 @@ export async function renameWarehouse(index: number, name: string): Promise<void
 /** 删除仓库：删文件 → 改索引；删当前项时 index=0（原版 wh.delete 6580-6596） */
 export async function deleteWarehouse(index: number): Promise<void> {
   const read = await actionIndexRepo.read()
+  // 坏索引的 `value` 是 fallback `DEFAULT_INDEX`（1 条「默认仓库」）：不先判这一行，下面两句
+  // 会分别说成「至少保留一个仓库」和「仓库不存在」——把"文件坏了"说成"你没有仓库"（T-101-1）
+  if (read.degraded) {
+    throw new CepError('IO', `动作库索引文件损坏（${read.degraded}），删除已中止`)
+  }
   if (read.value.list.length <= 1) throw new Error('至少保留一个仓库')
   const target = read.value.list[index]
   if (!target) throw new Error('仓库不存在')

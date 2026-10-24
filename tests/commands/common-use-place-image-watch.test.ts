@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { flushPromises } from '@vue/test-utils'
+import { createPinia, setActivePinia } from 'pinia'
 
 /**
  * T-97-8：真机 bug「勾了拖入图片转链接智能对象，拖图进去什么都不发生」。
@@ -26,9 +27,15 @@ vi.mock('@/cep/events', () => ({
 }))
 
 /** 数据层真形状：async + `{ value, degraded }` */
-const diskOptions = vi.hoisted(() => ({ current: {} as Record<string, unknown> }))
+const diskOptions = vi.hoisted(() => ({
+  current: {} as Record<string, unknown>,
+  degraded: '' as string,
+}))
 vi.mock('@/cep/data/legacy-settings', () => ({
-  readCommonUseOptions: async () => ({ value: diskOptions.current }),
+  readCommonUseOptions: async () => ({
+    value: diskOptions.current,
+    degraded: diskOptions.degraded,
+  }),
   updateCommonUseOptions: async () => ({}),
   COMMON_USE_SETTING_KEYS: [],
 }))
@@ -47,6 +54,7 @@ beforeEach(() => {
   listeners.clear()
   stopPlaceImageWatch()
   diskOptions.current = {}
+  diskOptions.degraded = ''
 })
 
 describe('T-97-8：事件订阅 → 真实读盘 → 分支真的执行', () => {
@@ -122,5 +130,34 @@ describe('T-97-8：事件订阅 → 真实读盘 → 分支真的执行', () => 
     expect(warn).toHaveBeenCalled()
     expect(String(warn.mock.calls.at(-1)?.[1])).toContain('placeImage')
     warn.mockRestore()
+  })
+})
+
+/**
+ * T-101-1：设置文件坏了，`readCommonUseOptions()` 的 `degraded` 以前被整个丢掉，
+ * 于是 17 个开关全缺 → `placeImageAction` 静默走 `'none'`：拖图进去什么都不发生，
+ * 与 T-97-8 症状相同、成因不同（那次是转型，这次是丢字段）。
+ */
+describe('T-101-1：设置文件坏了不许静默按默认值处理', () => {
+  it('degraded 非空 → 一个 jsx 都不调，reason 进 error 日志（设置页「打开日志」能看到）', async () => {
+    setActivePinia(createPinia())
+    // 即使磁盘上碰巧还有能触发 relink 的键，坏文件也不许照它跑
+    diskOptions.current = { cyOpenDranInToLinkObject: true, cyDragInAutoEmbed: true }
+    diskOptions.degraded = '内容不是合法 JSON'
+
+    const { log } = await import('@/utils/logger')
+    const error = vi.spyOn(log, 'error').mockImplementation(() => {})
+
+    const { port, relinkToFile, embedImage } = jsxPort()
+    await startPlaceImageWatch({ jsx: port })
+    listeners.get('placeImage')!(PAYLOAD)
+    await flushPromises()
+
+    expect(relinkToFile).not.toHaveBeenCalled()
+    expect(embedImage).not.toHaveBeenCalled()
+    expect(error).toHaveBeenCalled()
+    expect(String(error.mock.calls.at(-1)?.[1])).toContain('内容不是合法 JSON')
+    expect(String(error.mock.calls.at(-1)?.[1])).toContain('placeImage')
+    error.mockRestore()
   })
 })

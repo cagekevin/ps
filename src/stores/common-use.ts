@@ -1,9 +1,10 @@
 import { defineStore } from 'pinia'
-import { ref } from 'vue'
+import { computed, ref } from 'vue'
 import { readCommonUseOptions } from '@/cep/data/legacy-settings'
 import { getCommonUseCollapsed } from '@/cep/data/settings'
 import { toTiles, type CommonUseFile, type CommonUseTile } from '@/domain/common-use'
 import { describeCepError } from '@/utils/error-text'
+import { log } from '@/utils/logger'
 
 /**
  * 常用页的**只读投影**：落盘文件 + 折叠态 → 页面渲染用的形状。
@@ -46,8 +47,16 @@ export const useCommonUseStore = defineStore('common-use', () => {
   const loading = ref(false)
   /** 非空表示读失败；页面内联显示 + 重试按钮 */
   const error = ref('')
+  /**
+   * 两个来源各自的原因，合成一个 `degraded`：
+   * `tiles` 读 `sj_commonFunction.json`，`options` 读 `sj_set.json`——**两个文件**，
+   * 后跑的那个不许把前一个的原因抹掉（T-101-1 之前 `loadOptions` 的坏因整个丢掉）。
+   */
+  const reasons = ref({ tiles: '', options: '' })
   /** 非空表示读到的是降级数据（文件损坏），仍可渲染但要提示 */
-  const degraded = ref('')
+  const degraded = computed(() =>
+    [reasons.value.tiles, reasons.value.options].filter(Boolean).join('；'),
+  )
 
   function applyFile(file: CommonUseFile | null) {
     tiles.value = toTiles(file)
@@ -56,7 +65,13 @@ export const useCommonUseStore = defineStore('common-use', () => {
   /** 读子面板参数（`sj_set.json` 的 17 个 cy* 键）；命令写成功后由页面重读一次 */
   async function loadOptions() {
     const read = await readCommonUseOptions()
-    options.value = read.value as Record<string, unknown>
+    options.value = read.value
+    // 坏 sj_set.json → 17 个键全缺、控件全按缺省显示：必须进 `degraded` 让页面提示，
+    // 否则用户以为设置被清了（T-101-1）
+    reasons.value.options = read.degraded ?? ''
+    if (read.degraded) {
+      log.error('common-use', `常用页设置读取失败，子面板参数按缺省显示：${read.degraded}`)
+    }
   }
 
   /** 折叠态是同步偏好（`sj_v5_ui.json`），不参与 loading/error */
@@ -70,11 +85,11 @@ export const useCommonUseStore = defineStore('common-use', () => {
     try {
       const read = await requireSource().read()
       applyFile(read.value)
-      degraded.value = read.degraded ?? ''
+      reasons.value.tiles = read.degraded ?? ''
     } catch (e) {
       error.value = describeCepError(e)
       applyFile(null)
-      degraded.value = ''
+      reasons.value.tiles = ''
     } finally {
       loading.value = false
     }

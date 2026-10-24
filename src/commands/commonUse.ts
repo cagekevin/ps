@@ -545,12 +545,14 @@ export const commonUseCommands: Command<unknown>[] = [
  */
 export interface PlaceImageDeps {
   /**
-   * 读当前设置。**必须是异步**：数据层 `readCommonUseOptions()` 是 `Promise`，
-   * 且返回 `{ value, degraded }` 而不是裸对象。
+   * 读当前设置。**必须是异步**：数据层 `readCommonUseOptions()` 是 `Promise`。
    * 这里写同步签名会让实现方被迫 `as unknown as` 把 Promise 当对象用（T-97-8 真机 bug 就是这么来的），
    * 而 `as` 能过编译、过测试、运行时静默返回 `'none'`。
+   *
+   * 返回值必须**连 `degraded` 一起交出来**：设置文件坏了时 17 个开关全缺，只拿 `.value`
+   * 就等于消费侧替生产者捏造"一切正常"（T-101-1）。
    */
-  readOptions: () => Promise<Record<string, unknown>>
+  readOptions: () => Promise<{ value: Record<string, unknown>; degraded?: string }>
   embedImage: (options: { path: string; bLink2: unknown; bDelete: unknown }) => Promise<unknown>
   relinkToFile: (path: string) => Promise<unknown>
 }
@@ -588,14 +590,24 @@ export async function dispatchPlaceImage(
   payload: unknown,
   deps: PlaceImageDeps,
 ): Promise<'relink' | 'embed' | 'none'> {
-  const options = await deps.readOptions()
-  const action = placeImageAction(name, options)
+  const read = await deps.readOptions()
+  // 设置文件坏了 → 开关全缺，`placeImageAction` 会一路静默走 'none'（与 T-97-8 同一个症状）。
+  // 事件回调没有 `useCommand` 接住，弹不了 toast（命令层不许 import 视图层，ADR-16），
+  // 所以按本文件既有口径落 error 日志（`设置页 → 打开日志` 能看到），并且**不按默认值猜**。
+  if (read.degraded) {
+    log.error(
+      'commonUse.placeImage',
+      `常用页设置文件损坏（${read.degraded}），${name} 未处理：请到设置页修复 sj_set.json 后重试`,
+    )
+    return 'none'
+  }
+  const action = placeImageAction(name, read.value)
   if (action === 'relink') {
     await deps.relinkToFile(placeImagePath(payload))
     return 'relink'
   }
   if (action === 'embed') {
-    await deps.embedImage(buildDragInPayload(options))
+    await deps.embedImage(buildDragInPayload(read.value))
     return 'embed'
   }
   return 'none'
@@ -614,9 +626,10 @@ export async function startPlaceImageWatch(ctx: {
 }): Promise<void> {
   if (stopPlaceImage) return
   const deps: PlaceImageDeps = {
-    // `readCommonUseOptions()` 是 async 且返回 `{ value, degraded }`：**必须 await 再取 `.value`**。
-    // 少任何一个都会让 `placeImageAction` 读到 `undefined` → 静默走 `'none'`（T-97-8 的真因）。
-    readOptions: async () => (await readCommonUseOptions()).value,
+    // `readCommonUseOptions()` 是 async 且返回 `{ value, degraded }`：**必须 await 再取 `.value`**，
+    // 且 `degraded` 必须原样交给 `dispatchPlaceImage`——少任何一个都会让置入静默走 `'none'`
+    // （T-97-8 是前半个真因，T-101-1 是后半个）。
+    readOptions: () => readCommonUseOptions(),
     embedImage: (options) => ctx.jsx.commonUse.embedImage(options),
     relinkToFile: (path) => ctx.jsx.commonUse.relinkToFile(path),
   }

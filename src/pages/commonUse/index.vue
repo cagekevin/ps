@@ -327,7 +327,7 @@ function flip(direction: FlipDirection) {
 
 <template>
   <section class="page-common-use u-scroll">
-    <p v-if="degraded" class="page-common-use__warn">{{ degraded }}，常用项可能不完整</p>
+    <p v-if="degraded" class="page-common-use__warn">{{ degraded }}，常用项或设置可能不完整</p>
 
     <p v-if="error" class="page-common-use__error">
       {{ error }}
