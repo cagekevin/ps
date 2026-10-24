@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
+import { readValue } from '../support/repo-read'
 
 /**
  * 样式页导入导出（第 6 段）：`.kux` 容器四条命令。
@@ -237,7 +238,7 @@ describe('导入 .kux（契约 §2.4 / §5.2）', () => {
     const result = await execute('style.importKuReplace')
     expect(result.ok).toBe(true)
 
-    const index = (await styleIndexRepo.read()).value
+    const index = readValue(await styleIndexRepo.read())
     expect(index.list.map((item) => item.name)).toEqual(['导入仓库'])
     // 内层文件名换新：不再指向导入文件里的名字
     expect(index.list[0].color).not.toBe('sj_kuColB2014808B3687D156.ini')
@@ -262,7 +263,7 @@ describe('导入 .kux（契约 §2.4 / §5.2）', () => {
     const result = await execute('style.importKuAppend')
     expect(result.ok).toBe(true)
 
-    const index = (await styleIndexRepo.read()).value
+    const index = readValue(await styleIndexRepo.read())
     expect(index.list.map((item) => item.name)).toEqual(['默认仓库', '导入仓库'])
     expect(index.index).toBe(1)
     expect(fsMock.files.has(LIB.color)).toBe(true)
@@ -276,7 +277,7 @@ describe('导入 .kux（契约 §2.4 / §5.2）', () => {
     const result = await execute('style.importKuReplace')
     expect(result.ok).toBe(true)
 
-    const index = (await styleIndexRepo.read()).value
+    const index = readValue(await styleIndexRepo.read())
     const color = String(index.list[0].color)
     expect(fsMock.files.has(`${USER}/${color}`)).toBe(false)
   })
@@ -290,7 +291,7 @@ describe('导入 .kux（契约 §2.4 / §5.2）', () => {
     expect(result.ok).toBe(false)
     expect(result.ok === false && result.reason).toContain('写入文件失败')
 
-    const index = (await styleIndexRepo.read()).value
+    const index = readValue(await styleIndexRepo.read())
     expect(index.list.map((item) => item.name)).toEqual(['默认仓库'])
     expect(fsMock.files.has(LIB.color)).toBe(true)
   })

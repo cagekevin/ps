@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { readValue } from '../support/repo-read'
 
 /** 磁盘上的原文；`readTextSmart`（异步读）与 `readTextFile`（CAS 比对用的同步读）读的是同一份 */
 const disk = vi.hoisted(() => ({ text: null as string | null }))
@@ -106,17 +107,19 @@ describe('fileRepo normalize（读边界归一）', () => {
 
     const read = await make().read()
 
-    expect(read.value.items).toEqual(['a', 'b'])
-    expect(read.degraded).toBeUndefined()
+    expect(readValue(read).items).toEqual(['a', 'b'])
+    expect(read.reason).toBeUndefined()
   })
 
-  it('形状不认识时 degraded 有值，业务只拿到 fallback 的空列表', async () => {
+  it('形状不认识时报坏因，业务拿不到任何 value（旧形状给的是 fallback 空列表）', async () => {
     disk.text = '{"items":"不是数组"}'
 
     const read = await make().read()
 
-    expect(read.degraded).toBe('内容结构不认识')
-    expect(read.value.items).toEqual([])
+    expect(read.reason).toBe('内容结构不认识')
+    // 旧断言是「业务只拿到 fallback 的空列表」；4a96f63 把 `value` 从失败臂上删掉后，
+    // 同一个意图更强：坏读连 value 都没有
+    expect(read).not.toHaveProperty('value')
   })
 
   it('"坏"必须留痕：degraded 带原因 + log.error 带路径（不是静默降级）', async () => {
@@ -136,8 +139,8 @@ describe('fileRepo normalize（读边界归一）', () => {
 
     const read = await make().read()
 
-    expect(read.degraded).toBe('内容不是合法 JSON')
-    expect(read.value.items).toEqual([])
+    expect(read.reason).toBe('内容不是合法 JSON')
+    expect(read).not.toHaveProperty('value')
   })
 
   it('文件不存在不算 degraded（"读到空"与"文件坏了"可分）', async () => {
@@ -145,8 +148,8 @@ describe('fileRepo normalize（读边界归一）', () => {
 
     const read = await make().read()
 
-    expect(read.degraded).toBeUndefined()
-    expect(read.value.items).toEqual([])
+    expect(read.reason).toBeUndefined()
+    expect(readValue(read).items).toEqual([])
   })
 
   it('结构不认识时 update 拒绝写，磁盘一个字节都不变', async () => {
@@ -168,7 +171,7 @@ describe('fileRepo normalize（读边界归一）', () => {
     ).read()
 
     // 旧行为把形状错误的文件原样交出去，正是这刀要拆掉的那份断言（剩余仓库见台账 T-99-2）
-    expect(read.degraded).toBeUndefined()
-    expect(read.value.items).toBe('不是数组')
+    expect(read.reason).toBeUndefined()
+    expect(readValue(read).items).toBe('不是数组')
   })
 })

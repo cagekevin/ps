@@ -1,6 +1,7 @@
-﻿import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { encodeText } from '@/domain/translate'
+import { readValue } from '../support/repo-read'
 
 /**
  * 样式域命令（第 2 段）。
@@ -873,10 +874,10 @@ describe('style.selectWarehouse（原版 select，:53365-53372）', () => {
     await seedTwoWarehouses()
 
     await expect(execute('style.selectWarehouse', { index: 1 })).resolves.toEqual({ ok: true })
-    expect((await styleIndexRepo.read()).value.index).toBe(1)
+    expect(readValue(await styleIndexRepo.read()).index).toBe(1)
 
     await expect(execute('style.selectWarehouse', { index: 2 })).resolves.toEqual({ ok: true })
-    expect((await styleIndexRepo.read()).value.index).toBe(0)
+    expect(readValue(await styleIndexRepo.read()).index).toBe(0)
   })
 })
 
@@ -884,7 +885,7 @@ describe('style.addWarehouse（原版 add / P_，:53357-53363）', () => {
   it('追加一条「未命名分组」，四个库文件名各自生成', async () => {
     await expect(execute('style.addWarehouse')).resolves.toEqual({ ok: true })
 
-    const { list } = (await styleIndexRepo.read()).value
+    const { list } = readValue(await styleIndexRepo.read())
     expect(list).toHaveLength(2)
     expect(list[1].name).toBe('未命名分组')
     expect(list[1].color).toMatch(/^sj_kuCol[0-9A-F]{16}\.json$/)
@@ -898,14 +899,14 @@ describe('style.renameWarehouse（原版 rename，:53324-53327）', () => {
 
     expect(result.ok).toBe(false)
     expect(result.ok === false && result.reason).toContain('仓库名不能为空')
-    expect((await styleIndexRepo.read()).value.list[0].name).toBe('默认仓库')
+    expect(readValue(await styleIndexRepo.read()).list[0].name).toBe('默认仓库')
   })
 
   it('正常改名写进索引', async () => {
     await expect(execute('style.renameWarehouse', { index: 0, name: '客户B' })).resolves.toEqual({
       ok: true,
     })
-    expect((await styleIndexRepo.read()).value.list[0].name).toBe('客户B')
+    expect(readValue(await styleIndexRepo.read()).list[0].name).toBe('客户B')
   })
 })
 
@@ -915,7 +916,7 @@ describe('style.deleteWarehouse（原版 delete，:53329-53356）', () => {
 
     expect(result.ok).toBe(false)
     expect(result.ok === false && result.reason).toBe('最少保留一个分组哦')
-    expect((await styleIndexRepo.read()).value.list).toHaveLength(1)
+    expect(readValue(await styleIndexRepo.read()).list).toHaveLength(1)
   })
 
   it('两个仓库时删掉一个：索引少一条，库文件移进 .deleted- 目录（不硬删）', async () => {
@@ -924,7 +925,7 @@ describe('style.deleteWarehouse（原版 delete，:53329-53356）', () => {
 
     await expect(execute('style.deleteWarehouse', { index: 0 })).resolves.toEqual({ ok: true })
 
-    expect((await styleIndexRepo.read()).value.list.map((w) => w.name)).toEqual(['客户A'])
+    expect(readValue(await styleIndexRepo.read()).list.map((w) => w.name)).toEqual(['客户A'])
     expect(store.files.has(`${USER}/sj_kuColA.ini`)).toBe(false)
     const recycled = [...store.files.keys()].filter((path) => path.includes('/.deleted-'))
     expect(recycled).toContainEqual(expect.stringMatching(/\/\.deleted-\d+\/sj_kuColA\.ini$/))

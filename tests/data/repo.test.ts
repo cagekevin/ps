@@ -31,6 +31,7 @@ vi.mock('@/cep/fs', () => ({
 
 import { fileRepo } from '@/cep/data/file-repo'
 import { memoryRepo } from '@/cep/data/memory-repo'
+import { readValue } from '../support/repo-read'
 
 interface Row {
   name: string
@@ -54,21 +55,28 @@ function createRepo() {
 
 describe('fileRepo 读', () => {
   it('文件不存在时返回 fallback，且不算 degraded（首次使用是正常状态）', async () => {
-    const { value, degraded } = await createRepo().read()
+    const read = await createRepo().read()
+    const value = readValue(read)
+    const degraded = read.reason
     expect(value).toEqual([])
     expect(degraded).toBeUndefined()
   })
 
-  it('内容损坏时返回 fallback 并带 degraded', async () => {
+  it('内容损坏时报坏因、不交出 fallback（坏读没有 value）', async () => {
     state.files.set(PATH, '{oops')
-    const { value, degraded } = await createRepo().read()
-    expect(value).toEqual([])
+    const read = await createRepo().read()
+    const degraded = read.reason
+    // 旧断言是 `value` 等于 fallback `[]`；4a96f63 的 src/cep/data/types.ts 把 `value`
+    // 从失败臂上删了，同一个意图变成「业务根本拿不到值」
+    expect(read).not.toHaveProperty('value')
     expect(degraded).toBeTruthy()
   })
 
   it('合法 JSON 原样返回', async () => {
     state.files.set(PATH, JSON.stringify([{ name: 'MiSans', star: 3 }]))
-    const { value, degraded } = await createRepo().read()
+    const read = await createRepo().read()
+    const value = readValue(read)
+    const degraded = read.reason
     expect(value).toEqual([{ name: 'MiSans', star: 3 }])
     expect(degraded).toBeUndefined()
   })
@@ -125,7 +133,7 @@ describe('fileRepo 并发', () => {
         }),
       ),
     )
-    const { value } = await repo.read()
+    const value = readValue(await repo.read())
     expect(value).toHaveLength(10)
     expect(new Set(value.map((row) => row.name)).size).toBe(10)
   })
@@ -137,7 +145,7 @@ describe('fileRepo 并发', () => {
 
     state.failWrite = false
     await repo.write([{ name: 'ok' }])
-    const { value } = await repo.read()
+    const value = readValue(await repo.read())
     expect(value).toEqual([{ name: 'ok' }])
   })
 })
@@ -175,7 +183,7 @@ describe('memoryRepo', () => {
         }),
       ),
     )
-    const { value } = await repo.read()
+    const value = readValue(await repo.read())
     expect(value).toHaveLength(5)
   })
 

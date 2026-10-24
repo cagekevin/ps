@@ -21,7 +21,7 @@ function deps(options: Record<string, unknown>) {
   const embedImage = vi.fn(async () => null)
   const relinkToFile = vi.fn(async () => null)
   const d: PlaceImageDeps = {
-    readOptions: async () => ({ value: options }),
+    readOptions: async () => ({ ok: true as const, value: options }),
     embedImage,
     relinkToFile,
   }

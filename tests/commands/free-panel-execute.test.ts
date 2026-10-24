@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia, type Pinia } from 'pinia'
+import { readValue } from '../support/repo-read'
 
 /**
  * `freePanel.execute` 的嵌套执行（D-33）与区域 id 分配（D-38 / D-39）。
@@ -153,12 +154,12 @@ describe('区域 id 分配（D-38 / D-39）', () => {
     await execute('freePanel.addBlock', { type: 'norow' })
 
     // 数字立刻取出来：测试环境走 memoryRepo，读出来的是同一份对象引用，clear 会把它的 uid 改掉
-    const beforeUid = (await freePanelRepo.read()).value.uid
+    const beforeUid = readValue(await freePanelRepo.read()).uid
     expect(beforeUid).toBe(3)
 
     await execute('freePanel.clear', {})
 
-    const after = (await freePanelRepo.read()).value
+    const after = readValue(await freePanelRepo.read())
     expect(after.obj.list).toHaveLength(1)
     expect(after.uid).toBeGreaterThan(beforeUid)
     expect(after.obj.list[0].id).toBeGreaterThan(beforeUid)
@@ -172,7 +173,7 @@ describe('区域 id 分配（D-38 / D-39）', () => {
 
     await execute('freePanel.addBlock', { type: 'norow' })
 
-    const next = (await freePanelRepo.read()).value
+    const next = readValue(await freePanelRepo.read())
     expect(next.obj.list.map((block) => block.id)).toEqual([1, 7, 8])
     expect(next.uid).toBe(8)
   })
@@ -185,7 +186,7 @@ describe('区域 id 分配（D-38 / D-39）', () => {
 
     await execute('freePanel.removeBlock', { blockId: 5 })
 
-    const next = (await freePanelRepo.read()).value
+    const next = readValue(await freePanelRepo.read())
     expect(next.obj.list).toHaveLength(1)
     expect(next.obj.list[0].id).toBe(6)
     expect(next.uid).toBe(6)
@@ -196,7 +197,7 @@ describe('区域 id 分配（D-38 / D-39）', () => {
     await execute('freePanel.removeBlock', { blockId: 2 })
     await execute('freePanel.addBlock', { type: 'norow' }) // 3
 
-    const next = (await freePanelRepo.read()).value
+    const next = readValue(await freePanelRepo.read())
     expect(next.obj.list.map((block) => block.id)).toEqual([1, 3])
   })
 })

@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
+import { readValue } from '../support/repo-read'
 
 vi.mock('@/selection', () => ({
   refresh: async () => ({ hasSelection: false, typeNumber: 0 }),
@@ -31,7 +32,7 @@ describe('自由面板命令', () => {
   it('add 写入选中 block.data，并生成唯一 btnId', async () => {
     await addTwo()
 
-    const file = (await freePanelRepo.read()).value
+    const file = readValue(await freePanelRepo.read())
     const block = findBlock(file.obj.list, 1)
     expect(block?.data).toHaveLength(2)
     expect(block?.data[0]).toMatchObject({
@@ -61,20 +62,20 @@ describe('自由面板命令', () => {
 
   it('remove 按 blockId + btnId 删除', async () => {
     await addTwo()
-    const file = (await freePanelRepo.read()).value
+    const file = readValue(await freePanelRepo.read())
     const first = findBlock(file.obj.list, 1)?.data[0]
     if (!first) throw new Error('fixture missing')
 
     await execute('freePanel.remove', { blockId: 1, btnId: first.btnId })
 
-    const next = (await freePanelRepo.read()).value
+    const next = readValue(await freePanelRepo.read())
     expect(findBlock(next.obj.list, 1)?.data.map((item) => item.text)).toEqual(['锐化'])
   })
 
   it('setDisplay 更新列数 / 图标 / 文字', async () => {
     await execute('freePanel.setDisplay', { showNumber: 4, showIcon: true, showText: false })
 
-    const file = (await freePanelRepo.read()).value
+    const file = readValue(await freePanelRepo.read())
     const block = findBlock(file.obj.list, 1)
     expect(block?.showNumber).toBe(4)
     expect(block?.showIcon).toBe(true)
@@ -99,13 +100,13 @@ describe('自由面板命令', () => {
       return next
     })
 
-    const mixed = (await freePanelRepo.read()).value
+    const mixed = readValue(await freePanelRepo.read())
     expect(mixed.obj.list.map((block) => block.showNumber)).toEqual([3, 2])
 
     // 显式点"四列" = 全局设置生效
     await execute('freePanel.setDisplay', { showNumber: 4 })
 
-    const after = (await freePanelRepo.read()).value
+    const after = readValue(await freePanelRepo.read())
     expect(after.obj.list.map((block) => block.showNumber)).toEqual([4, 4])
   })
 
@@ -113,25 +114,25 @@ describe('自由面板命令', () => {
     await execute('freePanel.addBlock', { parentId: 1, type: 'row' })
     await execute('freePanel.setDisplay', { showIcon: true })
 
-    const file = (await freePanelRepo.read()).value
+    const file = readValue(await freePanelRepo.read())
     expect(file.obj.list[0].showIcon).toBe(true)
     expect(file.obj.list[0].children[0]?.showIcon).toBe(true)
   })
 
   it('addBlock 新增根区域 / 子区域，removeBlock 删除', async () => {
     await execute('freePanel.addBlock', { type: 'norow' })
-    let file = (await freePanelRepo.read()).value
+    let file = readValue(await freePanelRepo.read())
     expect(file.obj.list).toHaveLength(2)
     expect(file.obj.list[1].id).toBe(file.uid)
 
     await execute('freePanel.addBlock', { parentId: 1, type: 'row' })
-    file = (await freePanelRepo.read()).value
+    file = readValue(await freePanelRepo.read())
     expect(findBlock(file.obj.list, 1)?.children).toHaveLength(1)
 
     const childId = findBlock(file.obj.list, 1)?.children[0].id
     if (!childId) throw new Error('child missing')
     await execute('freePanel.removeBlock', { blockId: childId })
-    file = (await freePanelRepo.read()).value
+    file = readValue(await freePanelRepo.read())
     expect(findBlock(file.obj.list, 1)?.children).toHaveLength(0)
   })
 
@@ -143,7 +144,7 @@ describe('自由面板命令', () => {
       height: '200px',
     })
 
-    const block = findBlock((await freePanelRepo.read()).value.obj.list, 1)
+    const block = findBlock(readValue(await freePanelRepo.read()).obj.list, 1)
     expect(block?.type).toBe('row')
     expect(block?.width).toBe('50%')
     expect(block?.height).toBe('200px')
@@ -153,7 +154,7 @@ describe('自由面板命令', () => {
     await addTwo()
     await execute('freePanel.clear', {})
 
-    const file = (await freePanelRepo.read()).value
+    const file = readValue(await freePanelRepo.read())
     expect(file.obj.list).toHaveLength(1)
     expect(file.obj.list[0].data).toEqual([])
   })
@@ -172,7 +173,7 @@ describe('自由面板命令', () => {
     })
     await execute('freePanel.add', { blockId: 2, items: [{ text: 'X', key: 'z' }] })
 
-    const before = (await freePanelRepo.read()).value
+    const before = readValue(await freePanelRepo.read())
     const a = findBlock(before.obj.list, 1)?.data[0]
     const x = findBlock(before.obj.list, 2)?.data[0]
     if (!a || !x) throw new Error('fixture missing')
@@ -185,7 +186,7 @@ describe('自由面板命令', () => {
       position: 'before',
     })
 
-    const after = (await freePanelRepo.read()).value
+    const after = readValue(await freePanelRepo.read())
     expect(findBlock(after.obj.list, 1)?.data.map((item) => item.text)).toEqual(['B'])
     expect(findBlock(after.obj.list, 2)?.data.map((item) => item.text)).toEqual(['A', 'X'])
   })
@@ -199,7 +200,7 @@ describe('自由面板命令', () => {
         { text: 'C', key: 'z' },
       ],
     })
-    const file = (await freePanelRepo.read()).value
+    const file = readValue(await freePanelRepo.read())
     const [a, b, c] = findBlock(file.obj.list, 1)?.data ?? []
     if (!a || !b || !c) throw new Error('fixture missing')
 
@@ -210,7 +211,7 @@ describe('自由面板命令', () => {
       toBtnId: a.btnId,
       position: 'before',
     })
-    let next = (await freePanelRepo.read()).value
+    let next = readValue(await freePanelRepo.read())
     expect(findBlock(next.obj.list, 1)?.data.map((item) => item.text)).toEqual(['C', 'A', 'B'])
 
     await execute('freePanel.reorder', {
@@ -220,7 +221,7 @@ describe('自由面板命令', () => {
       toBtnId: c.btnId,
       position: 'after',
     })
-    next = (await freePanelRepo.read()).value
+    next = readValue(await freePanelRepo.read())
     expect(findBlock(next.obj.list, 1)?.data.map((item) => item.text)).toEqual(['C', 'B', 'A'])
   })
 })

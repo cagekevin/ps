@@ -478,6 +478,8 @@ git revert --abort 2>/dev/null; git checkout -- .
 **现状欠账**：`/fontSet` 没有页面级 `degraded` 槽，S2 档的 4 份（设置 / 快捷字体 / 层级预设 /
 翻译计数）现在只有日志。旧的那个 `settingsDegraded` **全仓零消费方**（`git grep -n settingsDegraded`
 只剩它自己 3 行），不是"页面提示"——T-101-2b 已删掉，缺口登记为 `T-101-3`。
+**S2 的第一个落点就是 `T-101-3`**（§8.5）：判据说"必须进页面级 `degraded`"，欠账就只能是"槽还没建"，
+不能是"这处不配让用户看见"。
 `stores/action.ts` 是反例对照：那里的 `degraded` 真的被 `pages/action/index.vue:487` 渲染，
 所以它算达标——**区别不在层，在有没有人读那个 ref**。
 
@@ -533,5 +535,83 @@ git revert --abort 2>/dev/null; git checkout -- .
 
 同理，`degraded` 只出现在页面提示条、却让命令层按默认参数**动文档**（`fontSet.ts:138`）仍算静默：
 降级可以，但**不许在用户看不见的地方按降级值产生副作用**。
+
+---
+
+# 八、T-101-2c：测试侧收口（26 红 → 0，只改构造）
+
+> 起点 `01d82e5`：`npm test` 26 红 / 1047 绿，`tsconfig.tests.json` 146 错。`src/` 一行未改。
+> 终点：1073 全绿，两套 program 0 错，`npm run check` 绿。
+
+## 8.1 26 条的根因（同一个）
+
+全部是**构造**问题：`vi.fn()` 不带泛型时参数是 `any`，`mockResolvedValue({ value, degraded })` 编译器一个字不报；
+运行到 `if (!read.ok)` 时 `read.ok` 是 `undefined` → 静默走**失败分支**。
+所以 26 条里 11 条是"该走成功分支却走了失败分支"，15 条是断言直接读 `.value` / `.degraded` 拿到 `undefined`。
+
+**流程上我错了**：判据 B 要求"动手前把 26 条断言逐字抄成清单"，我是动手**后**用
+`git show 01d82e5:tests/` 复盘的。证据强度没降（8.2 的 diff 就是逐字对账），但顺序没照判据走。
+
+## 8.2 断言对账（判据 B）
+
+`git diff -U0 -- tests | grep -c '^[-+].*expect('` = **115 行**。分两类：
+
+| 类 | 行数 | 内容 |
+| --- | --- | --- |
+| **A 只换取值口** | 109 | `expect(x.value…)` → `expect(readValue(x)…)`；`expect(x.degraded…)` → `expect(x.reason…)`。**括号里的期望值逐字未变**（`'内容结构不认识'` / `toEqual(['a','b'])` / `toHaveLength(1)` / `toBeUndefined()` 全部原样） |
+| **B 断言被替换** | 8 条断言 / 6 条用例 | 钉的是"坏读仍给 fallback 值"。`4a96f63` 把 `value` 从失败臂上删了，所以这个值**不存在**了 |
+
+B 类逐条（每条都能指到 `4a96f63` 的行）：
+
+| 用例 | 旧断言 | 新断言 | 锚点 |
+| --- | --- | --- | --- |
+| `file-repo.test.ts` 形状不认识 | `read.value.items` = `[]` | `expect(read).not.toHaveProperty('value')` | `4a96f63:src/cep/data/types.ts:27-29`（`RepoReadBad` 只有 `ok`+`reason`）、`:src/cep/data/file-repo.ts:90` |
+| `file-repo.test.ts` 非法 JSON | 同上 | 同上 | `…file-repo.ts:80` |
+| `free-panel-repo.test.ts` 缺 obj | `read.value.obj.list` 长度 1、`.data` = `[]` | `not.toHaveProperty('value')` | `…types.ts:27-29`、`…file-repo.ts:90` |
+| `free-panel-repo.test.ts` list 不是数组 | `read.value.obj.list[0].data` = `[]` | 同上 | 同上 |
+| `repo.test.ts` 内容损坏 | `value` = `[]` | 同上 | `…file-repo.ts:80` |
+| `repo-cross-process.test.ts` read 报坏因 | `readValue(result)` = `{ list: [] }` | 同上 | `…types.ts:27-29` |
+
+三条用例标题同步改了（"返回 fallback"→"不交出 fallback"），因为标题已经与新行为矛盾。
+
+## 8.3 判据 C：反向探针（旧 src + 新测试）
+
+```powershell
+git checkout 4a96f63 -- src     # 只换 src，tests 不动
+npm test                        # 119 文件 / 1073 用例，全绿
+git checkout HEAD -- src        # 还原（git diff --stat HEAD -- src 为空）
+```
+
+**结论：绿。** 没有一条用例依赖 `01d82e5` 相对 `4a96f63` 的 src 变化（`read-or.ts` 头部文案、
+`commands/fontSet.ts` 计数器分支、`stores/font-set.ts` 删死槽），所以本刀确实只做了形状适配。
+
+## 8.4 丙区 2：146 错与 26 红的真实重叠
+
+| | 数 | 说明 |
+| --- | --- | --- |
+| typecheck 错 | 146（20 文件） | `TS2339` 120（`.value`/`.degraded` 不存在）、`TS7006` 24（前者导致的隐式 any）、`TS2322` 1 + `TS2353` 1（**只有这 2 条是构造/实参类型**） |
+| 运行时红 | 26（11 文件） | — |
+| **两边都红** | **11 条 / 6 文件 / 40 错** | cloud-hierarchy 1、file-repo 2、common-use-place-image 2、free-panel-repo 4、repo-cross-process 1、repo 1 |
+| **typecheck 报了但运行时不红** | **106 错 / 14 文件** | 断言直接读返回对象，形状错了但值还在 |
+| **typecheck 没报但运行时红** | **15 条 / 5 文件** | `action-archive` 5、`common-use-place-image-watch` 5、`pages/freePanel-degraded` 1、`pages/rename` 2、`stores/free-panel` 2 —— 全靠 `vi.fn()` 擦类型 |
+
+**这个数决定的事：`typecheck` 不能当测试侧的闸。** 58%（15/26）的运行时红在 typecheck 里零信号。
+要让它能当闸，mock 必须带泛型：`vi.fn<Repo<T>['read']>()` / `vi.spyOn(repo, 'read')`（后者本来就有类型，
+所以 6 个 overlap 文件里 4 个是 spyOn——它们至少红了一处）。
+
+## 8.5 丙区 1：S2 的第一个落点
+
+**是 `T-101-3`。** S2 档不是纸上的：`/fontSet` 的设置 / 快捷字体 / 层级预设 / 翻译计数四份现在只有日志，
+补页面级 `degraded` 槽就是 S2 的第一次落地。判据（§6.7）现在写明这条链：
+**S2 → 页面级 `degraded` → 目前唯一欠账是 `T-101-3`；S2 若长期没有落点，说明判据写错了，不是数据不配。**
+
+## 8.6 乙区三条
+
+| 条 | 裁定 | 依据 |
+| --- | --- | --- |
+| ① 26 条全在 mock 构造上，没有真行为变化 | **半采纳** | 构造确实是全部 26 条的根因；但"没有真行为变化"不成立——6 条用例里有 8 条断言钉的是"坏读仍给 fallback 值"，那个值被 `4a96f63` 删了，见 8.2 B 类 |
+| ② 146 错里相当一部分是 `mockResolvedValue` 实参类型 | **驳回** | 只有 2 条（`TS2322` 1 + `TS2353` 1）；144 条是**读返回值**的取值口 |
+| ③ 改完 `断言基线.json` 处数会变 | **驳回** | 它统计 `src/` 的 `as any` / `as unknown as`，本阶段 src 一行未改，`git status` 里没有这个文件 |
+
 
 

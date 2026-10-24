@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { readValue } from '../support/repo-read'
 
 /**
  * T-86b：常用页在 `sj_set.json` 里的 8 个 `cy*` 键（唯一入口 = `cep/data/legacy-settings.ts`）。
@@ -53,7 +54,9 @@ describe('读那 8 个键', () => {
       别人的键: 'keep',
     })
 
-    const { value, degraded } = await readCommonUseOptions()
+    const read = await readCommonUseOptions()
+    const value = readValue(read)
+    const degraded = read.reason
 
     expect(degraded).toBeUndefined()
     expect(Object.keys(value).sort()).toEqual(['cyExport', 'cyLinkObject'])
@@ -62,7 +65,7 @@ describe('读那 8 个键', () => {
   it('文件里缺的键不补默认值（缺 = 官方默认，由面板决定）', async () => {
     writeDisk({ ztPreview: 3 })
 
-    const { value } = await readCommonUseOptions()
+    const value = readValue(await readCommonUseOptions())
 
     expect(value).toEqual({})
   })

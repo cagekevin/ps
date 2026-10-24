@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { readFileSync } from 'node:fs'
 import { resolve } from 'node:path'
+import { readValue } from '../support/repo-read'
 
 /**
  * T-94：用**官方真实文件**当 fixture 验根形状。
@@ -57,7 +58,7 @@ describe('官方真实文件（fixture）', () => {
 
   it('读官方文件 → 14 项（页面不会再是空态）', async () => {
     const read = await commonUseRepo.read()
-    const tiles = toTiles(read.value)
+    const tiles = toTiles(readValue(read))
 
     expect(tiles).toHaveLength(14)
     expect(tiles[0].name).toBe('嵌入图片')
@@ -94,7 +95,7 @@ describe('官方真实文件（fixture）', () => {
     state.files.set(PATH, JSON.stringify({ info: JSON.parse(OFFICIAL) }))
 
     const read = await commonUseRepo.read()
-    expect(toTiles(read.value)).toHaveLength(14)
+    expect(toTiles(readValue(read))).toHaveLength(14)
 
     await commonUseRepo.setShow('div_img_cya1', false)
     const after = disk()

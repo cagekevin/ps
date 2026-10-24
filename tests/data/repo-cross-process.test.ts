@@ -207,10 +207,12 @@ describe('degraded 时拒绝覆盖写（D-42）', () => {
     expect(read()).toEqual({ list: ['真实数据'] })
   })
 
-  it('read 仍然返回 degraded，由 UI 提示（读这条路径不许被改动牵连）', async () => {
+  it('read 仍然报坏因，由 UI 提示（读这条路径不许被改动牵连）', async () => {
     fs.writeFileSync(FILE(), '{oops', 'utf8')
     const result = await createRepo().read()
-    expect(result.degraded).toBeTruthy()
-    expect(result.value).toEqual({ list: [] })
+    expect(result.reason).toBeTruthy()
+    // 旧断言是「读到 fallback `{ list: [] }`」；4a96f63 之后坏读没有 value，
+    // 同一个意图变成「业务拿不到值」
+    expect(result).not.toHaveProperty('value')
   })
 })

@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { readValue } from '../support/repo-read'
 
 /**
  * T-99-2：`sj_appFreePanel.json` 的读边界归一。
@@ -83,11 +84,11 @@ describe('自由面板仓库 · 读边界归一（T-99-2）', () => {
 
     const read = await freePanelRepo.read()
 
-    expect(read.degraded).toBeUndefined()
-    expect(read.value.uid).toBe(2)
-    expect(read.value.btnId).toBe(12)
-    expect(read.value.obj.list).toHaveLength(1)
-    expect(read.value.obj.list[0].data[0]).toMatchObject({
+    expect(read.reason).toBeUndefined()
+    expect(readValue(read).uid).toBe(2)
+    expect(readValue(read).btnId).toBe(12)
+    expect(readValue(read).obj.list).toHaveLength(1)
+    expect(readValue(read).obj.list[0].data[0]).toMatchObject({
       key: 'dz_useAction',
       text: 'ps批量导出',
       option: { group: '常用', name: 'ps批量导出' },
@@ -99,10 +100,11 @@ describe('自由面板仓库 · 读边界归一（T-99-2）', () => {
 
     const read = await freePanelRepo.read()
 
-    expect(read.degraded).toBe('内容结构不认识')
-    // 值退到 fallback：一个空区域、没有项——不是把 {} 当面板用
-    expect(read.value.obj.list).toHaveLength(1)
-    expect(read.value.obj.list[0].data).toEqual([])
+    expect(read.reason).toBe('内容结构不认识')
+    // 旧断言是「值退到 fallback：一个空区域、没有项」；坏读没有 value（4a96f63 的
+    // src/cep/data/types.ts 把 `value` 从失败臂上删了），同一个意图更强：
+    // 业务根本取不到值，也就不可能把 `{}` 当面板用
+    expect(read).not.toHaveProperty('value')
   })
 
   it('obj.list 不是数组时同样判为结构不认识', async () => {
@@ -110,8 +112,8 @@ describe('自由面板仓库 · 读边界归一（T-99-2）', () => {
 
     const read = await freePanelRepo.read()
 
-    expect(read.degraded).toBe('内容结构不认识')
-    expect(read.value.obj.list[0].data).toEqual([])
+    expect(read.reason).toBe('内容结构不认识')
+    expect(read).not.toHaveProperty('value')
   })
 
   it('顶层是数组（把别的库文件拷进来）也不当面板用', async () => {
@@ -119,7 +121,7 @@ describe('自由面板仓库 · 读边界归一（T-99-2）', () => {
 
     const read = await freePanelRepo.read()
 
-    expect(read.degraded).toBe('内容结构不认识')
+    expect(read.reason).toBe('内容结构不认识')
   })
 
   it('非法 JSON 与结构不认识是两个原因', async () => {
@@ -127,14 +129,14 @@ describe('自由面板仓库 · 读边界归一（T-99-2）', () => {
 
     const read = await freePanelRepo.read()
 
-    expect(read.degraded).toBe('内容不是合法 JSON')
+    expect(read.reason).toBe('内容不是合法 JSON')
   })
 
   it('文件不存在不算 degraded（首次使用是正常状态）', async () => {
     const read = await freePanelRepo.read()
 
-    expect(read.degraded).toBeUndefined()
-    expect(read.value.obj.list).toHaveLength(1)
+    expect(read.reason).toBeUndefined()
+    expect(readValue(read).obj.list).toHaveLength(1)
   })
 
   it('结构不认识时 update 拒绝写，磁盘一个字节不变', async () => {

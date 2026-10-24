@@ -49,8 +49,8 @@ async function mountPage() {
 describe('自由面板 · 读坏提示', () => {
   it('degraded 有值时空态显示原因，不再显示"还没有自由面板区域"', async () => {
     repo.read.mockResolvedValue({
-      value: { uid: 1, btnId: 0, obj: { version: '1.0', type: 'row', list: [] } },
-      degraded: '内容结构不认识',
+      ok: false,
+      reason: '内容结构不认识',
     })
 
     const wrapper = await mountPage()

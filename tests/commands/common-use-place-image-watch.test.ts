@@ -26,16 +26,16 @@ vi.mock('@/cep/events', () => ({
   },
 }))
 
-/** 数据层真形状：async + `{ value, degraded }` */
+/** 数据层真形状：async + `RepoRead`（`{ ok: true, value }` / `{ ok: false, reason }`） */
 const diskOptions = vi.hoisted(() => ({
   current: {} as Record<string, unknown>,
   degraded: '' as string,
 }))
 vi.mock('@/cep/data/legacy-settings', () => ({
-  readCommonUseOptions: async () => ({
-    value: diskOptions.current,
-    degraded: diskOptions.degraded,
-  }),
+  readCommonUseOptions: async () =>
+    diskOptions.degraded
+      ? { ok: false as const, reason: diskOptions.degraded }
+      : { ok: true as const, value: diskOptions.current },
   updateCommonUseOptions: async () => ({}),
   COMMON_USE_SETTING_KEYS: [],
 }))

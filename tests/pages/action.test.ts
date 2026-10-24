@@ -1,6 +1,7 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia, type Pinia } from 'pinia'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { readValue } from '../support/repo-read'
 
 const selection = vi.hoisted(() => ({ hasSelection: true, typeNumber: 2 }))
 
@@ -109,7 +110,7 @@ describe('动作页', () => {
     }
     await flushPromises()
 
-    const { value } = await actionLibraryRepo.read()
+    const value = readValue(await actionLibraryRepo.read())
     expect(value[0].list.map((item) => item.name)).toEqual(['锐化', '磨皮'])
     wrapper.unmount()
   })

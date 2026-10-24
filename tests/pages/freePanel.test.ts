@@ -1,6 +1,7 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia, type Pinia } from 'pinia'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { readValue } from '../support/repo-read'
 
 /**
  * 自由面板的拖拽 —— T-67 起走 `useLongPressDrag`（`am()` 机制，见 `/style` 范本）。
@@ -84,7 +85,7 @@ describe('自由面板 · 拖拽', () => {
     }
     await flushPromises()
 
-    const file = (await freePanelRepo.read()).value
+    const file = readValue(await freePanelRepo.read())
     expect(findBlock(file.obj.list, 1)?.data.map((item) => item.text)).toEqual(['B'])
     expect(findBlock(file.obj.list, 2)?.data.map((item) => item.text)).toEqual(['X', 'A'])
     wrapper.unmount()
@@ -139,7 +140,7 @@ describe('自由面板 · 显示设置勾选态（D-32 全局口径）', () => {
     await four.trigger('click')
     await flushPromises()
 
-    const after = (await freePanelRepo.read()).value
+    const after = readValue(await freePanelRepo.read())
     expect(after.obj.list.map((block) => block.showNumber)).toEqual([4, 4])
 
     // 重新打开菜单：现在只有「四列」打勾

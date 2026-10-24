@@ -3,6 +3,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { hierarchyRepo } from '@/cep/data/font-extra'
 import { fontHierarchyEntry } from '@/cep/cloud/entries/font-hierarchy'
 import { cloudEntries } from '@/cep/cloud/entries'
+import { readValue } from '../support/repo-read'
 
 const fetchGuard = vi.fn(() => {
   throw new Error('契约测试，非实机：禁止真实网络请求')
@@ -65,7 +66,7 @@ describe('font.hierarchy 云同步项（T-55）', () => {
 
     expect(result.ok).toBe(true)
     const saved = await hierarchyRepo.read()
-    expect(saved.value).toEqual({ index: 0, list: [{ name: '手机端', data: [72, 50, 28] }] })
+    expect(readValue(saved)).toEqual({ index: 0, list: [{ name: '手机端', data: [72, 50, 28] }] })
   })
 
   it('write 拒绝非法载荷，仓库不变', async () => {
@@ -94,15 +95,15 @@ describe('font.hierarchy 云同步项（T-55）', () => {
       expect(result.ok).toBe(false)
     }
 
-    expect((await hierarchyRepo.read()).value.list).toEqual([
+    expect(readValue(await hierarchyRepo.read()).list).toEqual([
       { name: '常规', data: [92, 48, 36, 24, 15, 12] },
     ])
   })
 
   it('read 遇到降级（读不到真实数据）时明确失败，不上传假数据', async () => {
     vi.spyOn(hierarchyRepo, 'read').mockResolvedValue({
-      value: { index: 0, list: [] },
-      degraded: '读取失败',
+      ok: false,
+      reason: '读取失败',
     })
 
     await expect(fontHierarchyEntry.read()).rejects.toThrow('读取失败')

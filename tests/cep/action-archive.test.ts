@@ -40,6 +40,7 @@ beforeEach(() => {
   fs.writeBase64File.mockReturnValue(true)
   data.write.mockResolvedValue(undefined)
   data.read.mockResolvedValue({
+    ok: true,
     value: { index: 0, list: [{ name: '当前仓库', fileName: 'sj_dz_current.json' }] },
   })
 })
@@ -102,8 +103,8 @@ describe('action-archive', () => {
  */
 describe('action-archive · 坏索引（T-99-4）', () => {
   const broken = {
-    value: { index: 0, list: [{ name: '默认仓库', fileName: 'sj_dz_default.json' }] },
-    degraded: '内容不是合法 JSON',
+    ok: false,
+    reason: '内容不是合法 JSON',
   }
 
   it('导入（替换）：抛错且一个字节都不写，也不删任何文件', async () => {

@@ -4,6 +4,7 @@ import { starsRepo, tagsRepo } from '@/cep/data'
 import { fontSettingsEntry } from '@/cep/cloud/entries/font-settings'
 import { fontStarsEntry } from '@/cep/cloud/entries/font-stars'
 import { fontTagsEntry } from '@/cep/cloud/entries/font-tags'
+import { readValue } from '../support/repo-read'
 
 const fsMock = vi.hoisted(() => ({
   readTextSmart: vi.fn(),
@@ -56,7 +57,7 @@ describe('cloud entries', () => {
     })
 
     expect(result.ok).toBe(true)
-    const saved = (await legacySettingsRepo.read()).value
+    const saved = readValue(await legacySettingsRepo.read())
     expect(saved.keepMe).toBe(7)
     expect((saved as Record<string, unknown>).ztExpandMultiple).toBe(false)
   })
@@ -83,6 +84,6 @@ describe('cloud entries', () => {
       ],
     })
     expect(starWrite.ok).toBe(true)
-    expect((await starsRepo.read()).value).toEqual([{ name: 'MiSans', star: 3 }])
+    expect(readValue(await starsRepo.read())).toEqual([{ name: 'MiSans', star: 3 }])
   })
 })

@@ -1,5 +1,6 @@
-﻿import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { buildOptionPatch } from '@/domain/common-use'
+import { readValue } from '../support/repo-read'
 
 /**
  * T-88b2：面板参数写回 `sj_set.json` 的三条靶点。
@@ -119,7 +120,7 @@ describe('重读还在（等价于"卸载重挂"）', () => {
     await updateCommonUseOptions(buildOptionPatch('cyOpenDranInToLinkObject', true))
     const read = await readCommonUseOptions()
 
-    expect(read.value.cyOpenDranInToLinkObject).toBe(true)
-    expect((read.value.cyExport as { compress: { level: number } }).compress.level).toBe(60)
+    expect(readValue(read).cyOpenDranInToLinkObject).toBe(true)
+    expect((readValue(read).cyExport as { compress: { level: number } }).compress.level).toBe(60)
   })
 })

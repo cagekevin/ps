@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { readValue } from '../support/repo-read'
 
 const font = vi.hoisted(() => ({
   initSystemList: vi.fn(),
@@ -116,7 +117,7 @@ describe('fontSet.fontName 最近使用', () => {
       family: 'MiSans',
     })
 
-    expect((await fontHistoryRepo.read()).value.slice(0, 2)).toEqual(['MiSans', '旧字体'])
+    expect(readValue(await fontHistoryRepo.read()).slice(0, 2)).toEqual(['MiSans', '旧字体'])
   })
 })
 
@@ -194,7 +195,7 @@ describe('fontSet.translate', () => {
     expect(font.setTranslateText).toHaveBeenCalledWith(expect.any(Array), true)
 
     const counter = await translateCounterRepo.read()
-    expect(counter.value.num).toBe(1)
+    expect(readValue(counter).num).toBe(1)
   })
 
   it('超过 1000 字不发起请求', async () => {

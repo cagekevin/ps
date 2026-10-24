@@ -36,8 +36,8 @@ beforeEach(() => {
 describe('free-panel store · degraded', () => {
   it('读坏时 blocks 为空列表，degraded 带原因', async () => {
     repo.read.mockResolvedValue({
-      value: { uid: 1, btnId: 0, obj: { version: '1.0', type: 'row', list: [block] } },
-      degraded: '内容结构不认识',
+      ok: false,
+      reason: '内容结构不认识',
     })
 
     const store = useFreePanelStore()
@@ -49,6 +49,7 @@ describe('free-panel store · degraded', () => {
 
   it('正常读取时 blocks 是文件里的区域，degraded 为空', async () => {
     repo.read.mockResolvedValue({
+      ok: true,
       value: { uid: 1, btnId: 0, obj: { version: '1.0', type: 'row', list: [block] } },
     })
 

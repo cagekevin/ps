@@ -46,7 +46,7 @@ vi.mock('@/cep/data/rename', () => ({
     read: async () => {
       if (repo.hold) await new Promise<void>((resolve) => (repo.release = resolve))
       if (repo.fail) throw new Error('预设文件损坏')
-      return { value: JSON.parse(JSON.stringify(repo.value)) as unknown }
+      return { ok: true as const, value: JSON.parse(JSON.stringify(repo.value)) as unknown }
     },
     write: async (value: unknown) => {
       repo.value = value

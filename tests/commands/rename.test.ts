@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import type { RenamePreset } from '@/domain/rename'
+import { readValue } from '../support/repo-read'
 
 /**
  * 重命名排序命令 —— 落点计算已收口到 `domain/reorder.ts`（T-67）。
@@ -40,7 +41,7 @@ function seed(): RenamePreset {
 }
 
 async function read(): Promise<RenamePreset> {
-  return (await renameRepo.read()).value
+  return readValue(await renameRepo.read())
 }
 
 beforeEach(async () => {

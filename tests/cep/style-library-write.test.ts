@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { readValue } from '../support/repo-read'
 
 /**
  * 写库能力（第 3 段的落地层）：`cep/data/style-library-repo.ts`。
@@ -127,7 +128,7 @@ describe('索引里没有库文件名：先写库文件，再补索引（照 act
     ])
     // 索引补登记的是同一个文件名
     const index = await styleIndexRepo.read()
-    expect(index.value.list[0].color).toBe(fileName?.replace(`${USER}/`, ''))
+    expect(readValue(index).list[0].color).toBe(fileName?.replace(`${USER}/`, ''))
   })
 
   it('写库失败（原子写返回 false）→ 抛错，索引不登记，不留半截文件', async () => {
@@ -137,7 +138,7 @@ describe('索引里没有库文件名：先写库文件，再补索引（照 act
     await expect(addKuGroup('color', '第一组')).rejects.toThrow('写入失败')
 
     const index = await styleIndexRepo.read()
-    expect(index.value.list[0].color).toBeUndefined()
+    expect(readValue(index).list[0].color).toBeUndefined()
     expect([...fsMock.files.keys()].some((path) => path.includes('sj_kuCol'))).toBe(false)
   })
 })
@@ -281,19 +282,19 @@ describe('切换仓库（原版 select，app.v4.js:53365-53372）', () => {
     await selectWarehouse(0)
 
     const index = await styleIndexRepo.read()
-    expect(index.value.index).toBe(0)
-    expect(index.value.list.map((w) => w.name)).toEqual(['默认仓库', '客户A'])
+    expect(readValue(index).index).toBe(0)
+    expect(readValue(index).list.map((w) => w.name)).toEqual(['默认仓库', '客户A'])
   })
 
   it('越界（负数 / 超过末位 / 正好等于 list.length）一律归 0', async () => {
     await styleIndexRepo.write(two())
 
     await selectWarehouse(2) // 原版判 `t > list.length` 会漏过这一条，这里也归 0
-    expect((await styleIndexRepo.read()).value.index).toBe(0)
+    expect(readValue(await styleIndexRepo.read()).index).toBe(0)
 
     await styleIndexRepo.write(two())
     await selectWarehouse(-1)
-    expect((await styleIndexRepo.read()).value.index).toBe(0)
+    expect(readValue(await styleIndexRepo.read()).index).toBe(0)
   })
 })
 
@@ -303,7 +304,7 @@ describe('新建仓库（原版 add / P_，app.v4.js:53357-53363 / 53284-53293�
 
     await addWarehouse()
 
-    const { list } = (await styleIndexRepo.read()).value
+    const { list } = readValue(await styleIndexRepo.read())
     expect(list.map((w) => w.name)).toEqual(['默认仓库', '未命名分组'])
 
     const added = list[1]
@@ -325,7 +326,7 @@ describe('重命名仓库（原版 rename，:53324-53327）', () => {
 
     await renameWarehouse(0, '  我的仓库  ')
 
-    const { list } = (await styleIndexRepo.read()).value
+    const { list } = readValue(await styleIndexRepo.read())
     expect(list[0].name).toBe('我的仓库')
     expect(list[0].color).toBe('sj_kuColA.json')
     expect(list[1].name).toBe('客户A')
@@ -336,7 +337,7 @@ describe('重命名仓库（原版 rename，:53324-53327）', () => {
 
     await expect(renameWarehouse(0, '   ')).rejects.toThrow('仓库名不能为空')
 
-    expect((await styleIndexRepo.read()).value.list[0].name).toBe('默认仓库')
+    expect(readValue(await styleIndexRepo.read()).list[0].name).toBe('默认仓库')
   })
 })
 
@@ -375,8 +376,8 @@ describe('删除仓库（原版 delete，:53329-53356）', () => {
     const result = await deleteWarehouse(0)
 
     const index = await styleIndexRepo.read()
-    expect(index.value.list.map((w) => w.name)).toEqual(['客户A'])
-    expect(index.value.index).toBe(0) // 原来 1，删掉前面的 0 → -1
+    expect(readValue(index).list.map((w) => w.name)).toEqual(['客户A'])
+    expect(readValue(index).index).toBe(0) // 原来 1，删掉前面的 0 → -1
 
     // 四个库文件 + 样式组文件与缩略图 + 渐变预览图都搬到了回收目录（保留原相对路径）
     expect(result.recycleDir).toMatch(/\/\.deleted-\d+$/)
@@ -403,8 +404,8 @@ describe('删除仓库（原版 delete，:53329-53356）', () => {
     await deleteWarehouse(1)
 
     const index = await styleIndexRepo.read()
-    expect(index.value.list.map((w) => w.name)).toEqual(['默认仓库'])
-    expect(index.value.index).toBe(0)
+    expect(readValue(index).list.map((w) => w.name)).toEqual(['默认仓库'])
+    expect(readValue(index).index).toBe(0)
   })
 
   it('只剩一个仓库 → 抛错，索引与文件都不动', async () => {
@@ -413,7 +414,7 @@ describe('删除仓库（原版 delete，:53329-53356）', () => {
 
     await expect(deleteWarehouse(0)).rejects.toThrow('最少保留一个分组哦')
 
-    expect((await styleIndexRepo.read()).value.list).toHaveLength(1)
+    expect(readValue(await styleIndexRepo.read()).list).toHaveLength(1)
     expect(fsMock.files.has(`${USER}/sj_kuColA.json`)).toBe(true)
     expect([...fsMock.files.keys()].some((path) => path.includes('.deleted-'))).toBe(false)
   })
@@ -423,7 +424,7 @@ describe('删除仓库（原版 delete，:53329-53356）', () => {
 
     await expect(deleteWarehouse(9)).rejects.toThrow('仓库 9 不存在')
 
-    expect((await styleIndexRepo.read()).value.list).toHaveLength(2)
+    expect(readValue(await styleIndexRepo.read()).list).toHaveLength(2)
   })
 })
 
