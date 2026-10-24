@@ -11,6 +11,7 @@ import { decodeDzx, encodeDzx, remapDzxFileNames, type DzxFile } from '@/domain/
 import { CepError } from '@/utils/errors'
 import { log } from '@/utils/logger'
 import { actionIndexRepo, currentWarehouseFile, selectActionFile } from './actions'
+import { runQueued } from './write-queue'
 import type { RepoRead } from './types'
 
 /**
@@ -19,17 +20,6 @@ import type { RepoRead } from './types'
  * 这里负责路径、临时文件、索引和回滚；命令层只负责文件对话框。
  * 导入顺序固定：先写新文件 → 写索引 → 成功后清理旧文件。
  */
-let queue: Promise<unknown> = Promise.resolve()
-
-function enqueue<T>(task: () => Promise<T>): Promise<T> {
-  const next = queue.then(task, task)
-  queue = next.then(
-    () => undefined,
-    () => undefined,
-  )
-  return next
-}
-
 function pathOf(fileName: string): string {
   if (!fileName || /[\\/]/.test(fileName)) {
     throw new CepError('PARSE', `仓库文件名不合法：${fileName}`)
@@ -103,7 +93,7 @@ export async function archiveDefaultName(current: boolean): Promise<string> {
 }
 
 export function exportActionArchive(current: boolean, targetPath: string): Promise<void> {
-  return enqueue(async () => {
+  return runQueued(async () => {
     const index = requireIndex(await actionIndexRepo.read(), '导出')
     const list = current ? [index.list[index.index]].filter(Boolean) : index.list
     if (!list.length) throw new CepError('PARSE', '没有可导出的仓库')
@@ -124,7 +114,7 @@ export function exportActionArchive(current: boolean, targetPath: string): Promi
 }
 
 export function importActionArchive(append: boolean, sourcePath: string): Promise<void> {
-  return enqueue(async () => {
+  return runQueued(async () => {
     const read = await readTextOutcome(sourcePath)
     // T-107：导入前读不到就不许继续。两种不 ok 这里同果（都抛同一句），文案不变
     if (read.status !== 'ok') throw new CepError('IO', '读取导入文件失败')
@@ -157,7 +147,8 @@ export function importActionArchive(append: boolean, sourcePath: string): Promis
         written.push(entry.name)
       }
 
-      await actionIndexRepo.write(next)
+      // 已在全局写锁内：再排队会自锁（writeInLock 的注释写了这一条）
+      await actionIndexRepo.writeInLock(next)
     } catch (e) {
       removeAll(written)
       throw e

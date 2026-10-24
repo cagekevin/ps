@@ -33,7 +33,8 @@ import { CepError } from '@/utils/errors'
 import { log } from '@/utils/logger'
 import { pick } from './pick'
 // 写队列与色板文件原语都在 `swatch-repo`（依赖方向只能是 `style-library-repo → swatch-repo`）
-import { enqueue, readSwatchItems, swatchFilePath, writeSwatchItems } from './swatch-repo'
+import { readSwatchItems, swatchFilePath, writeSwatchItems } from './swatch-repo'
+import { runQueued } from './write-queue'
 import type { Repo } from './types'
 
 /**
@@ -407,7 +408,7 @@ function createWarehouse(name: string): StyleWarehouse {
  */
 export async function selectWarehouse(index: number): Promise<void> {
   await usableIndex()
-  await enqueue(() =>
+  await runQueued(() =>
     styleIndexRepo.update((value) => {
       const current = readStyleWarehouseIndex(value).value
       const valid = Number.isInteger(index) && index >= 0 && index < current.list.length
@@ -419,7 +420,7 @@ export async function selectWarehouse(index: number): Promise<void> {
 /** 新建仓库。原版 `add()`（`:53357-53363`）：`list.push(P_("未命名分组"))`，名字就是「未命名分组」 */
 export async function addWarehouse(): Promise<void> {
   await usableIndex()
-  await enqueue(() =>
+  await runQueued(() =>
     styleIndexRepo.update((value) => {
       const current = readStyleWarehouseIndex(value).value
       const list = [...current.list, createWarehouse('未命名分组')]
@@ -439,7 +440,7 @@ export async function renameWarehouse(index: number, name: string): Promise<void
   if (!warehouseName) throw new CepError('PARSE', '仓库名不能为空')
 
   await usableIndex()
-  await enqueue(() =>
+  await runQueued(() =>
     styleIndexRepo.update((value) => {
       const current = readStyleWarehouseIndex(value).value
       const warehouse = current.list[index]
@@ -578,7 +579,7 @@ export async function deleteWarehouse(index: number): Promise<WarehouseDeleteRes
     if (await copyToRecycle(relative, recycleDir)) moved.push(relative)
   }
 
-  await enqueue(() =>
+  await runQueued(() =>
     styleIndexRepo.update((value) => {
       const next = readStyleWarehouseIndex(value).value
       next.list.splice(index, 1)
@@ -614,7 +615,7 @@ export async function addKuGroup(kind: KuKind, name: string, afterIndex?: number
   const groupName = name.trim()
   if (!groupName) throw new CepError('PARSE', '分组名不能为空')
 
-  return enqueue(() =>
+  return runQueued(() =>
     updateKuGroups(kind, (groups) => {
       const next = createKuGroup(kind, groupName)
       if (typeof afterIndex === 'number' && afterIndex >= 0 && afterIndex + 1 < groups.length) {
@@ -647,7 +648,7 @@ export async function appendKuGroup(kind: KuKind, group: unknown): Promise<void>
     throw new CepError('PARSE', '组必须是非空对象')
   }
 
-  return enqueue(() =>
+  return runQueued(() =>
     updateKuGroups(kind, (groups) => {
       groups.push(group as KuRawGroup)
     }),
@@ -659,7 +660,7 @@ export async function renameKuGroup(kind: KuKind, groupIndex: number, name: stri
   const groupName = name.trim()
   if (!groupName) throw new CepError('PARSE', '分组名不能为空')
 
-  return enqueue(() =>
+  return runQueued(() =>
     updateKuGroups(kind, (groups) => {
       groupAt(groups, groupIndex).name = groupName
     }),
@@ -671,7 +672,7 @@ export async function renameKuGroup(kind: KuKind, groupIndex: number, name: stri
  * 所以库永远至少有一个组（样式库的组还带新生成的 `id`）。
  */
 export function deleteKuGroup(kind: KuKind, groupIndex: number): Promise<void> {
-  return enqueue(() =>
+  return runQueued(() =>
     updateKuGroups(kind, (groups) => {
       groupAt(groups, groupIndex)
       groups.splice(groupIndex, 1)
@@ -686,7 +687,7 @@ export function deleteKuGroup(kind: KuKind, groupIndex: number): Promise<void> {
  * `showOnlyGroup` 的边界照抄：本来只显示这一组时，再点一次是把它关掉（不是保持）。
  */
 export function setKuGroupShow(kind: KuKind, groupIndex: number, showOnly: boolean): Promise<void> {
-  return enqueue(() =>
+  return runQueued(() =>
     updateKuGroups(kind, (groups) => {
       groupAt(groups, groupIndex)
       if (!showOnly) {
@@ -719,7 +720,7 @@ export async function addKuItem(kind: KuKind, groupIndex: number, item: unknown)
     throw new CepError('PARSE', '项必须是非空对象')
   }
 
-  return enqueue(() =>
+  return runQueued(() =>
     updateKuGroups(kind, (groups) => {
       itemList(groupAt(groups, groupIndex), groupIndex).push(item)
     }),
@@ -736,7 +737,7 @@ export async function renameKuItem(
   const itemName = name.trim()
   if (!itemName) throw new CepError('PARSE', '名称不能为空')
 
-  return enqueue(() =>
+  return runQueued(() =>
     updateKuGroups(kind, (groups) => {
       itemAt(groups, groupIndex, itemIndex).name = itemName
     }),
@@ -745,7 +746,7 @@ export async function renameKuItem(
 
 /** 删除一项。原版 `deleteItem(groupIndex, itemIndex)`（`:52477-52480`） */
 export function deleteKuItem(kind: KuKind, groupIndex: number, itemIndex: number): Promise<void> {
-  return enqueue(() =>
+  return runQueued(() =>
     updateKuGroups(kind, (groups) => {
       const list = itemList(groupAt(groups, groupIndex), groupIndex)
       itemAt(groups, groupIndex, itemIndex)
@@ -771,7 +772,7 @@ export async function replaceKuItem(
     throw new CepError('PARSE', 'cy_changeStyleColor 返回值不是对象，未回写')
   }
 
-  return enqueue(() =>
+  return runQueued(() =>
     updateKuGroups(kind, (groups) => {
       const list = itemList(groupAt(groups, groupIndex), groupIndex)
       if (!list[itemIndex]) throw new CepError('PARSE', `第 ${itemIndex} 项不存在`)
@@ -793,7 +794,7 @@ export function moveKuItem(
   itemIndex: number,
   direction: 'up' | 'down',
 ): Promise<void> {
-  return enqueue(() =>
+  return runQueued(() =>
     updateKuGroups(kind, (groups) => {
       const list = itemList(groupAt(groups, groupIndex), groupIndex)
       itemAt(groups, groupIndex, itemIndex)
@@ -816,7 +817,7 @@ export function moveKuItem(
  * 拖拽过程中页面不许调它，只在 `mouseup` 后调一次（原版也是 `Callback` 里才 `updata()`）。
  */
 export function moveKuItemTo(kind: KuKind, move: DropMove): Promise<void> {
-  return enqueue(() =>
+  return runQueued(() =>
     updateKuGroups(kind, (groups) => {
       const lists = groups.map((group, index) => itemList(group, index))
       applyItemDrop(lists, move)
@@ -837,7 +838,7 @@ export function moveKuGroupTo(
   to: number,
   position: DropPosition,
 ): Promise<void> {
-  return enqueue(() =>
+  return runQueued(() =>
     updateKuGroups(kind, (groups) => {
       const moved = applyListDrop(groups, from, to, position)
       if (moved < 0) return
@@ -865,7 +866,7 @@ export function sendKuItemToSwatch(
   groupIndex: number,
   itemIndex: number,
 ): Promise<void> {
-  return enqueue(async () => {
+  return runQueued(async () => {
     const { groups } = await readRawGroups(kind)
     const item = itemAt(groups, groupIndex, itemIndex)
     await writeSwatchItems(swatchFilePath(), [item])
@@ -880,7 +881,7 @@ export function appendKuItemToSwatch(
   groupIndex: number,
   itemIndex: number,
 ): Promise<void> {
-  return enqueue(async () => {
+  return runQueued(async () => {
     const { groups } = await readRawGroups(kind)
     const item = itemAt(groups, groupIndex, itemIndex)
     const path = swatchFilePath()
@@ -896,7 +897,7 @@ export function appendKuItemToSwatch(
  * `write(path.seBan, JSON.stringify(data.info[index].list))` —— **整份替换**，不是逐项追加。
  */
 export function sendKuGroupToSwatch(kind: KuKind, groupIndex: number): Promise<void> {
-  return enqueue(async () => {
+  return runQueued(async () => {
     const { groups } = await readRawGroups(kind)
     const list = itemList(groupAt(groups, groupIndex), groupIndex)
     await writeSwatchItems(swatchFilePath(), list)
@@ -905,7 +906,7 @@ export function sendKuGroupToSwatch(kind: KuKind, groupIndex: number): Promise<v
 
 /** 追加到色板（整组）。原版 `:50269-50290`：读回 → 逐项 push 该组 `list` → 写回 */
 export function appendKuGroupToSwatch(kind: KuKind, groupIndex: number): Promise<void> {
-  return enqueue(async () => {
+  return runQueued(async () => {
     const { groups } = await readRawGroups(kind)
     const list = itemList(groupAt(groups, groupIndex), groupIndex)
     const path = swatchFilePath()

@@ -26,7 +26,8 @@ const data = vi.hoisted(() => ({
 
 vi.mock('@/cep/fs', () => fs)
 vi.mock('@/cep/data/actions', () => ({
-  actionIndexRepo: { read: data.read, write: data.write },
+  // 导入事务在全局写锁内写索引 → 走 writeInLock（TD-09-18）
+  actionIndexRepo: { read: data.read, write: data.write, writeInLock: data.write },
   currentWarehouseFile: (index: { list: Array<{ fileName: string }> }) => index.list[0].fileName,
   selectActionFile: data.selectActionFile,
 }))

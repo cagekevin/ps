@@ -57,6 +57,12 @@ export interface Repo<T> {
   read(): Promise<RepoRead<T>>
   /** 覆写；失败抛 */
   write(value: T): Promise<void>
+  /**
+   * 与 `write` 相同，但**不排队**：调用方必须已持有 `data/write-queue` 的锁。
+   * 唯一使用者是 `action-archive` 的导入事务（"写 N 个库文件 + 写索引"要独占一段，
+   * 已在锁内再排一次队会自锁）。
+   */
+  writeInLock(value: T): Promise<void>
   /** 读 → 改 → 写，同一文件的调用严格串行；失败抛 */
   update(mutator: (value: T) => T | void): Promise<T>
   /** 写成功后通知；用于 store 保持只读投影 */

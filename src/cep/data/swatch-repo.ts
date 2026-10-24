@@ -11,31 +11,10 @@ import { readTextOutcome, userDir, writeTextFile, writeTextFileAtomic } from '@/
 import { CepError } from '@/utils/errors'
 import { isUsableJsonText } from '@/utils/json'
 import { log } from '@/utils/logger'
+import { runQueued } from './write-queue'
 
-/**
- * 数据层**唯一**的串行写队列（D-12）。
- *
- * 原 `style-library-repo.ts:201-213` 的注释：两次编辑若各自「读 → 改 → 写」并发跑，
- * 后写的会把先写的覆盖掉。色板三个文件与样式库四个文件共用这一条，因为
- * `sendKuItemToSwatch` 这类操作是「读库文件 → 写色板文件」，两条队列并存时
- * 中间可以被插进另一次库写入，写出去的就是旧项。
- *
- * **为什么 export**（与任务书「不 export」的偏差，理由写在这里免得下一个人改回去）：
- * `style-library-repo.ts` 另有 15 个写函数（分组 / 项 / 仓库索引）要用同一条队列；
- * 不 export 就只能在那里再建一条 —— 正是上面那段注释要防的事。依赖方向仍是
- * `style-library-repo → swatch-repo`（`docs/页面/11-色板面板.md` §二 允许，反向成环禁止）。
- */
-let queue: Promise<unknown> = Promise.resolve()
-
-export function enqueue<T>(task: () => Promise<T>): Promise<T> {
-  const next = queue.then(task, task)
-  queue = next.then(
-    () => undefined,
-    () => undefined,
-  )
-  return next
-}
-
+/** 写队列搬到了 `data/write-queue.ts`（TD-09-18：数据层只留一条链） */
+export { runQueued } from './write-queue'
 /**
  * 色板目录名。原版 `sf.js:11` 的 `g_FN.muLu = "/FengZiSeBan"`，挂在 `getUserDataPath()`（`%APPDATA%`）下。
  * 注意它**不在** `USER_DIR`（`/SheJiZhuLi`）里面 —— 原版 `path.seBan` =
@@ -211,7 +190,7 @@ function itemHex(item: unknown): string {
  * 返回 `{ added }` 让调用方决定提示；去重在**同一条队列槽内**做完，两次连点不会加两条。
  */
 export function appendCustomItem(item: unknown): Promise<{ added: boolean }> {
-  return enqueue(async () => {
+  return runQueued(async () => {
     const hex = itemHex(item)
     // 官方在这里会对 `undefined.color` 直接抛 TypeError；我们抛带原因的错误
     if (!hex) throw new CepError('PARSE', '不是颜色项（缺少 color.hex），未添加')
@@ -237,7 +216,7 @@ export function appendCustomItem(item: unknown): Promise<{ added: boolean }> {
  * "最近使用"的语义该保新。用户可见差异只在"把数量调小"这一个动作上。
  */
 export function setRecentLimit(limit: number): Promise<void> {
-  return enqueue(async () => {
+  return runQueued(async () => {
     writeTextFile(recentLimitPath(), String(limit))
 
     const items = await readSwatchItems(recentFilePath())

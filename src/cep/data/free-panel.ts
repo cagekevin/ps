@@ -123,6 +123,15 @@ export const freePanelRepo: Repo<FreePanelFile> = {
     return result
   },
 
+  /** 与 `write` 同语义的"锁内"版本：转给底层仓库的同名方法（TD-09-18） */
+  async writeInLock(value: FreePanelFile): Promise<void> {
+    const onDisk = deepClone(value)
+    captureShowText(onDisk.obj.list)
+    await base.writeInLock(onDisk)
+    applySessionShowText(value.obj.list)
+    emit(value)
+  },
+
   async write(value: FreePanelFile): Promise<void> {
     const onDisk = deepClone(value)
     captureShowText(onDisk.obj.list)

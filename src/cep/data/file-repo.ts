@@ -1,5 +1,6 @@
 import { readTextOutcome, readTextSync, writeTextFile, writeTextFileAtomic } from '@/cep/fs'
 import { CepError } from '@/utils/errors'
+import { runQueued } from './write-queue'
 import { log } from '@/utils/logger'
 import type { Repo, RepoRead } from './types'
 
@@ -40,17 +41,6 @@ export function fileRepo<T>(
   const retries = opts.retries ?? 5
   const normalize = opts.normalize
   const listeners = new Set<(value: T) => void>()
-  let queue: Promise<unknown> = Promise.resolve()
-
-  function enqueue<R>(task: () => Promise<R>): Promise<R> {
-    // 前一条失败不阻塞后一条（和 transport 的队列同一语义）
-    const next = queue.then(task, task)
-    queue = next.then(
-      () => undefined,
-      () => undefined,
-    )
-    return next
-  }
 
   function emit(value: T) {
     for (const listener of listeners) listener(value)
@@ -156,19 +146,29 @@ export function fileRepo<T>(
 
   return {
     read: () =>
-      enqueue(async () => {
+      runQueued(async () => {
         const { read } = await readRaw()
         return read
       }),
 
     write: (value) =>
-      enqueue(async () => {
+      runQueued(async () => {
         await persist(value, null)
         emit(value)
       }),
 
+    /**
+     * 落盘但**不排队**：调用方必须已经持有 `runQueued` 的锁。
+     * 只有 `action-archive` 的导入事务用它（它要在"写 N 个库文件 + 写索引"这段里独占，
+     * 再排一次队会自锁）。其余任何地方都用 `write`。
+     */
+    writeInLock: async (value) => {
+      await persist(value, null)
+      emit(value)
+    },
+
     update: (mutator) =>
-      enqueue(async () => {
+      runQueued(async () => {
         const target = resolvePath()
         let attempts = 0
 

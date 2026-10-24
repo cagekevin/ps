@@ -33,6 +33,18 @@ export function memoryRepo<T>(initial: () => T): Repo<T> {
         return Promise.resolve()
       }),
 
+    /**
+     * 内存仓库没有磁盘事务，`writeInLock` 与 `write` 同语义（TD-09-18）。
+     * 它**不并进** `data/write-queue` 的链：内存实现没有磁盘、也没有跨仓库共享的文件，
+     * 并链只会让浏览器 dev 与用例里互不相干的仓库互相阻塞（实测：并链后 39 条用例失败）。
+     */
+    writeInLock: (next) =>
+      enqueue(() => {
+        value = next
+        for (const listener of listeners) listener(value)
+        return Promise.resolve()
+      }),
+
     update: (mutator) =>
       enqueue(() => {
         const result = mutator(value)
