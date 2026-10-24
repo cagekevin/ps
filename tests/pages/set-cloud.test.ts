@@ -147,7 +147,8 @@ describe('设置页 · 云同步状态（T-74）', () => {
     const text = mountPage().text()
 
     expect(text).toContain('没同步成功')
-    expect(text).toContain('网络失败，会在后台重试')
+    // 带了错误码就按码说：权限错**不会**自动重试，不能说成"会在后台重试"
+    expect(text).toContain('权限被拒绝，不会自动重试')
   })
 
   it('「没配置地址」的提示与「冲突」提示互斥，不混成一句', () => {

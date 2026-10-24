@@ -23,8 +23,8 @@ function status(over: Partial<CloudStatus> = {}): CloudStatus {
   }
 }
 
-function change(unit: string, reason: PendingChange['reason']): PendingChange {
-  return { unit, at: 1, reason }
+function change(unit: string, reason: PendingChange['reason'], code?: string): PendingChange {
+  return { unit, at: 1, reason, ...(code ? { code } : {}) }
 }
 
 describe('formatSyncedAt', () => {
@@ -137,5 +137,59 @@ describe('describeCloudStatus', () => {
 
   it('队列为空时写「无」，不是 0 项', () => {
     expect(describeCloudStatus({ status: status(), queuedUnits: 0 }).queuedText).toBe('无')
+  })
+})
+
+/**
+ * TD-11-12：文案必须和真实行为一致。
+ *
+ * 两件事：
+ * 1. 痕迹里带了错误码就**按码说**——`network` 这一桶里混着"会自动重试"（离线）
+ *    和"不会自动重试"（权限），同一句"会在后台重试"对权限错是假的；
+ * 2. 文案不许指向界面上**不存在的按钮**（「上传」没有入口），也要把"想保留本地"的
+ *    真实代价说清（今天没有一键上传，只能拉取后重做）。
+ */
+describe('云同步文案与真实行为一致（TD-11-12）', () => {
+  it('权限错：按码说"不会自动重试"，不再说"会在后台重试"', () => {
+    const view = describeCloudStatus({
+      status: status({
+        pending: 1,
+        pendingItems: [change('font.tags', 'network', 'CLOUD_PERMISSION')],
+      }),
+      queuedUnits: 0,
+    })
+
+    expect(view.failedText).toContain('权限被拒绝')
+    expect(view.failedText).toContain('不会自动重试')
+    expect(view.failedText).not.toContain('会在后台重试')
+  })
+
+  it('没有码时退回粗桶说法（老痕迹照样能读）', () => {
+    const view = describeCloudStatus({
+      status: status({ pending: 1, pendingItems: [change('font.tags', 'network')] }),
+      queuedUnits: 0,
+    })
+
+    expect(view.failedText).toContain('网络失败，会在后台重试')
+  })
+
+  it('坏台账的提示不指向不存在的「上传」按钮', () => {
+    const view = describeCloudStatus({
+      status: status({ ledgerState: { status: 'broken', reason: 'EPERM' } }),
+      queuedUnits: 0,
+    })
+
+    expect(view.notice).toContain('自动上传已暂停')
+    expect(view.notice).not.toContain('「上传」')
+  })
+
+  it('冲突提示说清两边各自的代价（保留本地没有一键上传）', () => {
+    const view = describeCloudStatus({
+      status: status({ pending: 1, pendingItems: [change('font.tags', 'conflict')] }),
+      queuedUnits: 0,
+    })
+
+    expect(view.conflictText).toContain('从云端拉取')
+    expect(view.conflictText).toContain('目前没有一键上传')
   })
 })
