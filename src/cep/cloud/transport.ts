@@ -15,6 +15,8 @@ import {
   type CloudSnapshot,
 } from '@/domain/cloud'
 import { getCloudUrl } from './config'
+import { postText } from '@/cep/http'
+import { CepError } from '@/utils/errors'
 
 const TIMEOUT_MS = 20_000
 
@@ -72,23 +74,22 @@ async function request(
   const url = getCloudUrl()
   if (!url) throw new CloudError('CLOUD_NOT_CONFIGURED', '未配置同步地址')
 
-  const controller = typeof AbortController === 'function' ? new AbortController() : null
-  const timer = controller ? setTimeout(() => controller.abort(), TIMEOUT_MS) : null
-
   try {
-    const response = await fetch(url, {
-      method: 'POST',
-      redirect: 'follow',
-      headers: { 'Content-Type': 'text/plain;charset=utf-8' },
-      body: JSON.stringify(data === undefined ? { action } : { action, data }),
-      signal: controller?.signal,
-    })
+    // 网络出口只有一个：`cep/http.ts`（TD-13-3）。这里不再自己 `fetch`——
+    // 超时、abort、发不出去这几种情况都在那一层归一成 CepError('TIMEOUT' | 'NETWORK')。
+    const response = await postText(
+      url,
+      JSON.stringify(data === undefined ? { action } : { action, data }),
+      {
+        timeoutMs: TIMEOUT_MS,
+      },
+    )
 
-    if (!response.ok) {
+    if (response.status < 200 || response.status >= 300) {
       throw httpError(response.status)
     }
 
-    const text = await response.text()
+    const text = response.text
     if (text.includes('<html')) {
       // 登录页/权限页与 401/403 是同一件事：用户要做的事与重试策略完全一样，共用一个码
       throw new CloudError('CLOUD_PERMISSION', 'GAS 返回了权限页，请确认部署权限为“所有人”')
@@ -111,12 +112,11 @@ async function request(
     return json
   } catch (error) {
     if (error instanceof CloudError) throw error
-    if (error instanceof Error && error.name === 'AbortError') {
+    // 11-8 的判据：超时与"发不出去"的重试方式、用户动作都一样 → 同一个码
+    if (error instanceof CepError && error.code === 'TIMEOUT') {
       throw new CloudError('CLOUD_NETWORK', '同步超时')
     }
     throw new CloudError('CLOUD_NETWORK', error instanceof Error ? error.message : '同步网络失败')
-  } finally {
-    if (timer) clearTimeout(timer)
   }
 }
 

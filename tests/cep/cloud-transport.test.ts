@@ -110,6 +110,30 @@ describe('cloud transport', () => {
     await expect(pullSnapshot()).rejects.toMatchObject({ code: 'CLOUD_NETWORK' })
   })
 
+  /**
+   * TD-13-3：网络出口从"transport 里裸 fetch"换成 `cep/http.postText` 之后，
+   * **码与重试语义必须和 11-8 一字不变**。下面两条钉住换出口时最容易漂的两种：
+   * 超时（以前自己 abort，现在由 http 层抛 TIMEOUT）与"发不出去"（fetch reject）。
+   */
+  it('超时（abort）→ CLOUD_NETWORK「同步超时」，与 11-8 一致', async () => {
+    const abort = Object.assign(new Error('aborted'), { name: 'AbortError' })
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(abort))
+
+    await expect(pushSnapshot(buildSnapshot({}, 1, 1))).rejects.toMatchObject({
+      code: 'CLOUD_NETWORK',
+      message: '同步超时',
+    })
+  })
+
+  it('发不出去（fetch reject）→ CLOUD_NETWORK，带原话', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockRejectedValue(new Error('Failed to fetch')))
+
+    await expect(pushSnapshot(buildSnapshot({}, 1, 1))).rejects.toMatchObject({
+      code: 'CLOUD_NETWORK',
+      message: 'Failed to fetch',
+    })
+  })
+
   it('非 JSON 报 CLOUD_BAD_RESPONSE', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response('not-json')))
 

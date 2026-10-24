@@ -7,6 +7,56 @@
 import { CepError } from '@/utils/errors'
 import { log } from '@/utils/logger'
 
+/**
+ * 一次 POST 的结果。**非 2xx 不抛**：状态码是"怎么重试/用户去做什么"的判据（TD-11-8 那套码
+ * 由调用方按 401/403/429/其余分档），网络出口只报观测（ADR-0026 ②）。
+ */
+export interface HttpTextResponse {
+  status: number
+  text: string
+}
+
+/**
+ * POST 一段文本、拿回文本。**这是 `fetch` 在本仓的唯一出口**（AGENTS §17「外部网络」）。
+ *
+ * 抛错只有两种情况，且分得开：
+ * - `TIMEOUT`：到点没回（`AbortController` 触发）；
+ * - `NETWORK`：请求发不出去 / 被拒（DNS、断网、CORS…）。
+ * 调用方据此按自己的错误码归类（云同步把两者都归 `CLOUD_NETWORK`，与 11-8 的判据一致：
+ * 重试方式和用户动作都一样，不再细分）。
+ */
+export async function postText(
+  url: string,
+  body: string,
+  opts: { timeoutMs?: number; contentType?: string } = {},
+): Promise<HttpTextResponse> {
+  if (typeof fetch !== 'function') {
+    throw new CepError('NETWORK', '当前环境不支持网络请求')
+  }
+
+  const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT
+  const controller = typeof AbortController === 'function' ? new AbortController() : null
+  const timer = controller ? setTimeout(() => controller.abort(), timeoutMs) : null
+
+  try {
+    const response = await fetch(url, {
+      method: 'POST',
+      redirect: 'follow',
+      headers: { 'Content-Type': opts.contentType ?? 'text/plain;charset=utf-8' },
+      body,
+      signal: controller?.signal,
+    })
+    return { status: response.status, text: await response.text() }
+  } catch (error) {
+    if (error instanceof Error && error.name === 'AbortError') {
+      throw new CepError('TIMEOUT', `请求超时（${Math.round(timeoutMs / 1000)}s）`)
+    }
+    throw new CepError('NETWORK', error instanceof Error ? error.message : '网络请求失败')
+  } finally {
+    if (timer) clearTimeout(timer)
+  }
+}
+
 const DEFAULT_TIMEOUT = 15000
 let sequence = 0
 
