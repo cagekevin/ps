@@ -1,7 +1,7 @@
-# jsx 返回结构复原（基于 `archive\源码还原\` 逆向产物）
+﻿# jsx 返回结构复原（基于 `archive\源码还原\` 逆向产物）
 
 > 日期：2026-10-22
-> 目的：验证 `archive\源码还原\` 的逆向产物能否解封台账里被标 `blocked` 的验证类任务，
+> 目的：验证 `archive\源码还原\` 的逆向产物能否解封 `daily/架构日志/00-任务-总索引.md` 里被标 `blocked` 的验证类任务，
 > 并把**能从源码复原的事实**落定。推断与实证分开标注，不猜字段。
 >
 > **一句话结论**：
@@ -635,7 +635,7 @@ this.$cep.jsx("zt_setFontAllCaps", [this.fontInfo.capitalization == "allCaps"]);
 
 ### 3.1 T-54（30 个 jsx 返回结构 fixture）—— **只能解封一半，明确分两半**
 
-T-54 的判据是**两件事**（`docs/状态/台账.md:72`）：① `jsx契约.md` 每个函数有返回结构；② `src/mocks/` 有 fixture。
+T-54 的判据是**两件事**（`daily/架构日志/债务.md:72`）：① `jsx契约.md` 每个函数有返回结构；② `src/mocks/` 有 fixture。
 
 | 判据 | 能否解封 | 依据 |
 |---|---|---|
@@ -892,7 +892,7 @@ for (const f of files) {
 ## 附录 B：本文未做的事（边界声明）
 
 - 没有改 `tools/README.md`（也没替你决定改不改，事实与行号见 §1.2）。
-- 没有改 `docs/生成/库文件格式契约.md`、`docs/页面/*`、`docs/状态/台账.md`、`docs/状态/进度.md`。
+- 没有改 `docs/生成/库文件格式契约.md`、`docs/页面/*`、`daily/架构日志/债务.md`、`docs/状态/进度.md`。
 - 没有改 `src/`、`tests/`、`scripts/`、`package.json`；`reference/` 与 `archive/` 全程只读。
 - 没有跑 build / deploy / install / `14-sprite.cjs`；没有做任何 git 操作。
 - 没有在 PS 里跑任何 jsx —— 因此本文**没有新增一条"实测返回"**；唯一实测记录仍来自

@@ -1,7 +1,7 @@
-# 数据流总览
+﻿# 数据流总览
 
 > 只写**跨页不变量**：分层、唯一入口、存储归属、跨页机制、写入边界。
-> 单页细节 → `docs/页面/0N-*.md`；待办 → `docs/状态/台账.md`；机制选型 → `docs/架构/决策记录.md`。
+> 单页细节 → `docs/页面/0N-*.md`；待办 → `daily/架构日志/债务.md`；机制选型 → `docs/adr/`（一条一文件）。
 > 复核：2026-10-22（命令见 §8）。**本文不记录“当前通过 / 正常”**——那是命令输出，抄进来就会过期。
 
 ## 0. 怎么读
@@ -15,7 +15,7 @@
 | 查自由面板 | §7 |
 | 复核本文是否还准 | §8 |
 
-不写：页面布局与视觉值（`docs/页面/0N`）、待办（台账）、单条 jsx 返回结构（`docs/架构/jsx契约.md`）。
+不写：页面布局与视觉值（`docs/页面/0N`）、待办（`daily/架构日志/债务.md` ／ `00-任务-总索引.md`）、单条 jsx 返回结构（`docs/架构/jsx契约.md`）。
 
 ## 1. 分层与数据流硬约束
 
@@ -169,7 +169,7 @@ mousedown + Ctrl/Meta + 300ms
 
 ## 5. 写入边界与失败模式
 
-这些是**现状**，不是待办清单。要修其中一条，先在 `docs/状态/台账.md` 登记 id，再动代码。
+这些是**现状**，不是待办清单。要修其中一条，先在 `daily/架构日志/债务.md` 登记 id，再动代码。
 
 | # | 事实 | 改代码时必须知道 |
 |---|---|---|
@@ -187,7 +187,7 @@ mousedown + Ctrl/Meta + 300ms
 
 ## 6. 页面数据流索引
 
-| 页面 | 一行数据流 | 细节落点 | 状态（台账） |
+| 页面 | 一行数据流 | 细节落点 | 状态（任务索引） |
 |---|---|---|---|
 | `/fontManage` | `stores/font.load*` → `tagsRepo` / `starsRepo` / `sys-font`；`classification-view` → `classification-repo`；列表走 `usePagedList` | `docs/页面/01-字体管理.md` §六 / 七 / 十；`docs/生成/横切能力.md` §二 | 部分实现（T-51 / 52 / 53 / 58） |
 | `/fontSet` | 页面 → `useCommand('fontSet.*')` → `commands/fontSet.ts` → `ctx.jsx.font.*`；当前文字走 `selection/current-text` → `stores/font-set`；字体列表走 `cep/jsx/font.initSystemList` → `stores/font` | `docs/页面/02-字体面板.md` §三；`docs/架构/字体面板事件数据流.md` §一 / 三 | 部分实现（T-54 / 55） |
@@ -320,7 +320,7 @@ manifest 第二扩展
 跑完只看输出，不把结果抄回本文；只更新顶部“复核”日期。
 
 ```bash
-# 1. 门禁：样式守卫 + 台账 + ESLint + Prettier
+# 1. 门禁：样式守卫 + 债务账本 + ESLint + Prettier
 npm run check
 
 # 2. 类型

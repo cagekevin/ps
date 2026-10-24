@@ -23,6 +23,11 @@ export default tseslint.config(
       '*.log',
       '.tmp-*/**',
       'probe-*',
+      // 原样拷自 maomao（2026-10-24，T-122/T-123）：逻辑一个字符都不改，所以不按本仓风格 lint。
+      // 改它们就等于与上游分叉，下次上游更新就合不回来。
+      'scripts/adr.mjs',
+      'scripts/debt.mjs',
+      'scripts/arch-index.mjs',
     ],
   },
 

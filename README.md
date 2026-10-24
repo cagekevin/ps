@@ -1,4 +1,4 @@
-﻿# 设计助理 · 新面板（v5）
+# 设计助理 · 新面板（v5）
 
 Vue 3 + TypeScript + Vite + Pinia，跑在 CEP 12（PS 2022+）里。
 PS 能力层继续调原厂 jsxbin，不重写。
@@ -7,8 +7,9 @@ PS 能力层继续调原厂 jsxbin，不重写。
 
 | 想知道 | 看 |
 |---|---|
-| 每页做到哪了 | `docs/进度.md` |
-| 接下来做什么（唯一待办源） | `docs/台账.md` |
+| 每页做到哪了 | `docs/状态/进度.md` |
+| 技术债（唯一待办源） | `daily/架构日志/债务.md` |
+| 任务（`T-xx`） | `daily/架构日志/00-任务-总索引.md` |
 | 规范与约束 | `AGENTS.md` |
 
 ## 范围
@@ -60,9 +61,9 @@ public/
 | `npm run typecheck` | 只跑 vue-tsc（`src/**` 与 `tests/**` 两个 program） |
 | `npm run lint` | ESLint（vue essential + TS，`--max-warnings 0`） |
 | `npm run format` / `format:check` | Prettier（不管 `docs/`、`public/`、产物） |
-| `npm run check` | 样式守卫 + 台账校验 + 规模校验 + lint + prettier |
+| `npm run check` | 样式守卫 + 债务账本校验 + 规模校验 + lint + prettier |
 | `npm test` / `test:watch` | 单元 / 组件测试（vitest + jsdom，不启浏览器） |
-| `npm run ledger` | 只校验 `docs/台账.md`（依赖、id、done 状态） |
+| `npm run ledger` | 只校验 `docs/债务.md`（依赖、id、done 状态） |
 | `npm run registry` | 新增横切能力后同步 `docs/横切能力.md` |
 | `npm run style:fix` / `style:baseline` | 自动修样式违规 / 修完后收紧基线 |
 | `npm run log:new` / `log:index` | 写日志（决策/踩坑/机制变更才写） |
