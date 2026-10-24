@@ -106,4 +106,54 @@ describe('任务书格式守卫', () => {
     expect(result.code).not.toBe(0)
     expect(result.out).toContain('R2')
   })
+
+  /**
+   * R3 后半：丙区是最后一区（TD-17-12）。
+   *
+   * 旧版只扫甲区**之前**，头注释却承诺"丙区之后不许有内容" —— 于是
+   * `## 丁区` + 散装正文返回 `[]`（等于没判）。这两条把"第四区"钉住：
+   * 判据是**丙区之后不许再出现任何标题**（H2/H1 都算），而不是"丙区里不许写正文"。
+   */
+  it('丙区之后出现 `## 丁区` → 非 0，报 R3 且指出是第 4 节', () => {
+    const result = run(writeSpec(`${GOOD}\n## 丁区【第四区】\n散装正文，不该存在。\n再一行。\n`))
+    expect(result.code).not.toBe(0)
+    expect(result.out).toContain('R3')
+    expect(result.out).toContain('第 4 节')
+    expect(result.out).toContain('丁区')
+  })
+
+  it('丙区之后出现 `# 附录`（H1 也算） → 非 0，报 R3', () => {
+    const result = run(writeSpec(`${GOOD}\n# 附录\n这里也是第四区。\n`))
+    expect(result.code).not.toBe(0)
+    expect(result.out).toContain('R3')
+    expect(result.out).toContain('附录')
+  })
+
+  it('合规任务书（丙区写多行正文与多条问题）→ 退出码 0，零违规', () => {
+    const result = run(
+      writeSpec(
+        [
+          '# 标题',
+          '',
+          '## 甲区【可执行】',
+          '1. **目标**：做一件事',
+          '2. **判据**：能核对',
+          '',
+          '## 乙区【参考】',
+          '1. 一条参考',
+          '',
+          '## 丙区【问题】',
+          '1. 第一个问题',
+          '2. 第二个问题',
+          '   缩进写的补充说明也属于丙区正文。',
+          '',
+          '丙区一直写到文末，这里再加一段散正文仍然是丙区。',
+          '',
+        ].join('\n'),
+      ),
+    )
+    expect(result.code).toBe(0)
+    expect(result.out).toContain('通过')
+    expect(result.out).not.toContain('违反')
+  })
 })
