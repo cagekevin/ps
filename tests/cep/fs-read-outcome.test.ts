@@ -2,26 +2,29 @@ import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { ERR_PREFIX } from '@/utils/errors'
 
 /**
- * T-105：读取原语必须是**三态**（`ok` / `notSeen` / `error`）。
+ * T-105 / T-108：读取原语必须是**三态**（`ok` / `notSeen` / `error`），而且 `notSeen` 要精确。
  *
- * 以前 `readTextViaJsx` 的脚本在 `fs.ts:274` 就把「文件不存在」单独标出来了，
- * 下一行 `startsWith(ERR_PREFIX) → null` 又把它和别的错误一起压成 `null`；
- * `readTextFile` 的 `catch → null` 同样。于是 `file-repo` 分不出
- * 「首次使用」和「读不到」，D-42（读坏禁止写）对「读不到」整个失效。
+ * T-105 把两态拆成三态，但判"查不到"用的是 `existsSync` —— 它对**存在但读不到**的文件
+ * 也返回 `false`（实测本机 `C:\Windows\System32\config\SAM`：`accessSync` 报 `EPERM`，
+ * `existsSync` 报 `false`），于是权限问题又被判成"首次使用"，`update` 照样能覆盖。
+ * T-108 改成只认 `ENOENT`，其余错误码一律 `error`。
  *
  * 这个文件**不 mock** `@/cep/fs`：给真实实现装上 `window.require` / `window.__adobe_cep__`，
- * 测的是真代码，只把 node:fs 和 ExtendScript 换成假的。
+ * 测的是真代码，只把 node:fs 和 ExtendScript 换成假的。**不用真实路径**（换台机器就红）。
  */
 const realFs = {
-  exists: true,
   text: '{}' as string,
-  error: '' as string,
+  /** 非空 = `readFileSync` 抛一个带这个 `code` 的系统错误（模拟 ENOENT / EPERM / EACCES / EBUSY） */
+  code: '' as string,
 }
 
 const fakeFs = {
-  existsSync: () => realFs.exists,
+  // T-108：实现**不许**再用 existsSync 判存在性。让它一被调用就炸，钉住这一点
+  existsSync: () => {
+    throw new Error('用例：实现不许再用 existsSync 判存在性（T-108）')
+  },
   readFileSync: () => {
-    if (realFs.error) throw new Error(realFs.error)
+    if (realFs.code) throw Object.assign(new Error(`模拟 ${realFs.code}`), { code: realFs.code })
     return realFs.text
   },
 }
@@ -52,9 +55,8 @@ function clearBridges() {
 const { combineReads, readTextOutcome } = await import('@/cep/fs')
 
 beforeEach(() => {
-  realFs.exists = true
   realFs.text = '{}'
-  realFs.error = ''
+  realFs.code = ''
   jsx.reply = ''
 })
 
@@ -69,33 +71,40 @@ describe('readTextOutcome · Node 路', () => {
     await expect(readTextOutcome('/tmp/a.json')).resolves.toEqual({ status: 'ok', text: '{}' })
   })
 
-  it('查不到文件 → notSeen（观测，不是"不存在"的结论）', async () => {
+  it('ENOENT → notSeen（只有这一个码算"查不到"）', async () => {
     installNode()
-    realFs.exists = false
+    realFs.code = 'ENOENT'
 
     await expect(readTextOutcome('/tmp/a.json')).resolves.toEqual({ status: 'notSeen' })
   })
 
-  it('文件存在但读不出 → error，reason 带系统错误原文', async () => {
+  it.each(['EPERM', 'EACCES', 'EBUSY'])('%s → error，绝不许出现 notSeen', async (code) => {
     installNode()
-    realFs.error = 'EACCES: permission denied, open /tmp/a.json'
+    realFs.code = code
 
     const outcome = await readTextOutcome('/tmp/a.json')
 
     expect(outcome.status).toBe('error')
-    expect(outcome.status === 'error' ? outcome.reason : '').toContain('EACCES')
+    expect(outcome.status === 'error' ? outcome.reason : '').toContain(code)
   })
 
-  it('「不存在」与「读不到」的 status 必须不同（压成两态就是 T-105 的根因）', async () => {
+  it('存在但读不到（EPERM）与查不到（ENOENT）的 status 必须不同', async () => {
     installNode()
-    realFs.exists = false
-    const notSeen = await readTextOutcome('/tmp/a.json')
+    realFs.code = 'ENOENT'
+    const absent = await readTextOutcome('/tmp/a.json')
 
-    realFs.exists = true
-    realFs.error = 'EPERM: operation not permitted'
-    const broken = await readTextOutcome('/tmp/a.json')
+    realFs.code = 'EPERM'
+    const unreadable = await readTextOutcome('/tmp/a.json')
 
-    expect(notSeen.status).not.toBe(broken.status)
+    expect(absent.status).not.toBe(unreadable.status)
+  })
+
+  it('实现不再依赖 existsSync（假 fs 的 existsSync 一被调用就抛）', async () => {
+    installNode()
+    realFs.code = 'EPERM'
+
+    // 这条会红如果实现回退成"先 existsSync 判存在"——那正是 T-108 的缝
+    await expect(readTextOutcome('/tmp/a.json')).resolves.toMatchObject({ status: 'error' })
   })
 })
 
@@ -120,7 +129,7 @@ describe('readTextOutcome · jsx 路（Node 不可用）', () => {
   it('两条路都说不存在才算 notSeen', async () => {
     installNode()
     installCep()
-    realFs.exists = false
+    realFs.code = 'ENOENT'
     jsx.reply = `${ERR_PREFIX}文件不存在: /tmp/a.json`
 
     await expect(readTextOutcome('/tmp/a.json')).resolves.toEqual({ status: 'notSeen' })
@@ -129,7 +138,7 @@ describe('readTextOutcome · jsx 路（Node 不可用）', () => {
   it('Node 说读不到、jsx 说不存在 → 仍报 error（宁可报错，不许降级成首次使用）', async () => {
     installNode()
     installCep()
-    realFs.error = 'EBUSY: resource busy or locked'
+    realFs.code = 'EBUSY'
     jsx.reply = `${ERR_PREFIX}文件不存在: /tmp/a.json`
 
     const outcome = await readTextOutcome('/tmp/a.json')

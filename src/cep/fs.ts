@@ -57,27 +57,40 @@ export function userDir(): string {
  *
  * 三个状态各自只描述"原语看到了什么"：
  * - `ok`：读到了内容；
- * - `notSeen`：文件系统在那个路径上**查不到东西**（`existsSync` 为 false）。
- *   **这不等于"文件不存在"**——权限、路径拼错、同步盘没挂都长这样。
+ * - `notSeen`：文件系统**明确说那个路径上没有东西**——只认 `ENOENT`。
+ *   **这不等于"文件不存在"**，也不代表"权限问题"：`EPERM` / `EACCES` / `EBUSY` / 网络盘错误
+ *   一律进 `error`（实测 `C:\Windows\System32\config\SAM`：`accessSync` 报 `EPERM`，而
+ *   `existsSync` 报 `false`——用 `existsSync` 判存在性会把"读不到"错判成"没有"）。
  *   要不要当"首次使用"由数据层按各自语义判（ADR-26 ②）；
- * - `error`：有东西但读不出来，`reason` 是原始错误文本。
+ * - `error`：看不到或读不出来，`reason` 带原始错误码与文本。
  *
  * 压成两态（`string | null`）就会让写路径拿 fallback 派生值覆盖用户文件（D-42 / T-105）。
  */
 export type TextRead =
   { status: 'ok'; text: string } | { status: 'notSeen' } | { status: 'error'; reason: string }
 
+/** Node 系统错误的 `code`（`ENOENT` / `EPERM` / `EACCES` / `EBUSY` …）；取不到返回空串 */
+function errCode(e: unknown): string {
+  if (typeof e !== 'object' || e === null || !('code' in e)) return ''
+  const code = e.code
+  return typeof code === 'string' ? code : ''
+}
+
 /**
- * Node 侧三态读：`existsSync` 为 false → `notSeen`（观测），`readFileSync` 抛错 → `error` + 原因。
- * 两者**不许**合成一个 `null`——那是 T-105 的根因。
+ * Node 侧三态读：**只认 `ENOENT` 是"查不到"**，其余错误码一律 `error`。
+ *
+ * 不用 `existsSync` 判存在性：它对"存在但读不到"也返回 `false`（实测 `EPERM` 的 SAM 文件），
+ * 那正是 T-108 的缝。也不用先 `accessSync` 再读——`readFileSync` 自己抛的 `code` 同样精确，
+ * 而且少一次系统调用、没有"判完到读之间文件变了"的窗口。
  */
 function readTextNode(absPath: string): TextRead {
   try {
-    const fs = nodeRequire('fs')
-    if (!fs.existsSync(absPath)) return { status: 'notSeen' }
-    return { status: 'ok', text: fs.readFileSync(absPath, 'utf8') as string }
+    return { status: 'ok', text: nodeRequire('fs').readFileSync(absPath, 'utf8') as string }
   } catch (e) {
-    return { status: 'error', reason: e instanceof Error ? e.message : String(e) }
+    const code = errCode(e)
+    const message = e instanceof Error ? e.message : String(e)
+    if (code === 'ENOENT') return { status: 'notSeen' }
+    return { status: 'error', reason: code ? `${code}: ${message}` : message }
   }
 }
 
@@ -303,6 +316,10 @@ export function writeTextFileAtomic(absPath: string, text: string): boolean {
 /**
  * jsx 侧「文件不存在」的固定前缀。**脚本拼的那句和这里解析的那句必须是同一个常量**——
  * 以前脚本标了它、解析处 `startsWith(ERR_PREFIX) → null` 又把它扔掉，三态就此压成两态（T-105）。
+ *
+ * **精度上限（T-108 已知残差）**：ExtendScript 的 `File.exists` 没有错误码，权限不足与文件
+ * 不存在都返回 false，所以这条路分不出 `EPERM`。**有 Node 时不影响结论**——`combineReads`
+ * 让 Node 的 `error` 压过 jsx 的 `notSeen`；只有 CEP 没开 `--enable-nodejs` 时才退化成不精确。
  */
 const JSX_MISSING_PREFIX = '文件不存在: '
 

@@ -27,7 +27,7 @@
   "tests": {
     "files": 120,
     "cases": 1051,
-    "eachSites": 8
+    "eachSites": 9
   },
   "components": 31,
   "icons": 189,
@@ -67,7 +67,7 @@
   "layers": {
     "cep": {
       "files": 52,
-      "lines": 6013
+      "lines": 6030
     },
     "cloud": {
       "files": 4,
