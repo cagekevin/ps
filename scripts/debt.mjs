@@ -34,6 +34,16 @@
  * 【列错位为什么能无损解析】`line.split('|')` 与 `join('|')` 互逆：只要重新定出正确列边界，描述里的裸 `|`
  *   会被逐字还原。靠**四级校验**（标准 / A 尾部多余段 / B 右锚定 / C 左锚定状态起点），任一级不过就报 `manual`，**绝不猜**。
  *
+ * 【结账闸：`resolve` 必须有凭证（2026-10-25 · TD-09-37）】
+ *   实证：全量复算 115 条「已解决」→ 39 条**零凭证**（"旧台账 D-xx 已 done 迁移归档"）、
+ *   76 条只有散文数字（19 条假或口径窄）。根因**不是有人算错**，是「结账」这个动作**没有门槛**：
+ *   写进去就永久有效，从没人复算。故 `resolve` 起强制 `--evidence`，三道闸缺一即**拒写**（不是警告）：
+ *     ① 格式 / 三问齐全；② 凭证命令**真跑一遍**；③ 声称与实跑**对得上**。
+ *   **不许开后门**：没有 `--force` / `--legacy` / 环境变量；主刀也得给凭证。
+ *   机器化不了的（如「删掉了冗余实现」）走**人工降级**：`kind=人工;by=<谁>;why=<为什么>`，
+ *   **显式标记 + 有名有姓**，`reverify` 单列「人工担保」，不与机验混算。
+ *   存量复算用 `reverify`（**只读**）：真跑每条凭证命令，出「可复用 / 数字漂移 / 无凭证待补」三张清单。
+ *
  * 用法（读）：
  *   node scripts/debt.mjs list [--area 22] [--status 待还] [--class 增债] [--all] [--json]
  *     · 默认 = 主表待办；给了 `--area`/`--status`/`--class`/`--all` 之一 = **跨主表 + 归档**筛
@@ -45,18 +55,30 @@
  * 用法（写 / 维护）：
  *   node scripts/debt.mjs add --area 22 --summary "…" [--class 增债] [--rate 中] [--owner 结构债]
  *                              [--anchor 22-视频-横切全量-2026-09-13.md] [--refs "@见 TD-xx"]
- *   node scripts/debt.mjs resolve <TD-ID> [--status 已解决] [--note "…"] [--date YYYY-MM-DD]
+ *   node scripts/debt.mjs resolve <TD-ID> --evidence "cmd=…;claim=…;fail=…;cplx=…;impl=…"
+ *                              [--status 已解决] [--note "…"] [--date YYYY-MM-DD]
+ *                              # **凭证强制**（见文件头【结账闸】）；没有 `--evidence` 直接拒写
  *   node scripts/debt.mjs edit <TD-ID> --field summary｜solution｜classify｜rate --value "…"
  *                              # 整格/文本替换：现象 · 解法（寄居状态格）· 归类 · 利息率
  *   node scripts/debt.mjs reanchor <TD-ID> --anchor 22-视频-剪辑器-M2计划审计-2026-09-14.md
  *   node scripts/debt.mjs move <TD-ID> --to <NN>          # 整体迁区（改 ID 区段 + 区名列，其余逐字保留）
  *   node scripts/debt.mjs archive [--dry]
+ * 用法（只读复算）：
+ *   node scripts/debt.mjs reverify <TD-ID> | --all   # 真跑每条「已解决」自带的凭证命令，与声称对账；
+ *                                                   # 汇总三张清单：可复用 / 数字漂移 / 无凭证待补
+ *                                                   # （+ 跑不动 / 人工担保 两张，见文件头）
+ *                                                   # **只读：不改任何状态**，改不改账本由人决定
+ * 测试夹具：`--root=<dir>`（任意位置）—— 把账本指到已知答案的夹具，见 `tests/scripts/debt-*.test.ts`。
  */
 import { readFileSync, writeFileSync, existsSync, readdirSync } from 'node:fs'
+import { execSync } from 'node:child_process'
 import { fileURLToPath } from 'node:url'
-import { join } from 'node:path'
+import { join, resolve } from 'node:path'
 
-const ROOT = fileURLToPath(new URL('..', import.meta.url))
+// `--root=<dir>` 只给测试夹具用（与 `stats.mjs` / `layer-boundary.mjs` 同款口径）：
+// 它把**账本位置**指到夹具，不改任何判据 —— 结账闸在哪个根上跑都得给凭证。
+const ROOT_ARG = process.argv.find((a) => a.startsWith('--root='))?.slice(7) ?? ''
+const ROOT = ROOT_ARG ? resolve(ROOT_ARG) : fileURLToPath(new URL('..', import.meta.url))
 const LOG_DIR = join(ROOT, 'daily', '架构日志')
 const LEDGER = join(LOG_DIR, '债务.md')
 const ARCHIVE = join(LOG_DIR, '债务-归档.md')
@@ -363,8 +385,245 @@ function statusNote(status, max = 76) {
     .replace(/^(已裁定非债|已解决|已裁定|待用户拍板|待翻新|已退役|待还|不做)\s*/, '')
     .replace(/^\d{4}-\d{2}-\d{2}\s*/, '')
     .replace(/^[·：:]\s*/, '')
+    // 凭证是机器串（长），列表里只留一个记号；解码看 `show` / `reverify`
+    .replace(EVIDENCE_BLOB_RE, '凭证✓')
   if (!note) return ''
   return note.length > max ? note.slice(0, max) + '…' : note
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// 结账凭证（evidence）—— 写入口闸与 `reverify` 共用的**同一份**解析 / 校验 / 复算
+// ─────────────────────────────────────────────────────────────────────────────
+/**
+ * 格式（v1，机器可读，写在状态格里）：
+ *   机验：evidence:v1{cmd=<只读命令>;claim=<命令输出里必须出现的数字或结论>;fail=<失败现在由谁看到>;
+ *                     cplx=<复杂度降在哪>;impl=真实现[：细节]|替身：<替的是什么>[;red=<先红凭证，可选>]}
+ *   人工：evidence:v1{kind=人工;by=<担保人>;why=<为什么机器化不了>;claim=…;fail=…;cplx=…;impl=…}
+ *
+ * 【为什么写进状态格，而不是另开一个 `债务-凭证/` 目录】① `archive` 把完成行**逐字搬进归档**、
+ *   `move` 只改 ID 与区名列 ⇒ 凭证自动跟着走，不会因为"搬了行 / 换了号"变成孤儿；
+ *   ② 账本外再放一份 = 第二份真相，还得再立一条"搬家时同步"的规矩。
+ *
+ * 【为什么 `claim` 只认"输出里必须出现"】它就是**别人复算的那一句话**：命令跑出来的输出里
+ *   有这串，说明结论成立；没有就是漂移。数字按**独立数字**比对（`3` 不会被 `143` 蒙混过去）。
+ */
+const EVIDENCE_TAG = 'evidence:v1'
+const EVIDENCE_BLOB_RE = /evidence:v1\{[^{}]*\}/
+const EVIDENCE_KEYS = ['cmd', 'claim', 'fail', 'cplx', 'impl', 'red']
+const EVIDENCE_KEYS_MANUAL = ['kind', 'by', 'why', 'claim', 'fail', 'cplx', 'impl', 'red']
+/** 值里禁这些字符：`|` 撑破表格列；`]` 状态格在第一个 `]` 处截断；`{}` 是 blob 边界；`;` 是字段分隔 */
+const EVIDENCE_FORBIDDEN = /[|｜\]{}]/
+/** 凭证命令必须**只读** —— 它要被反复复算，带写副作用就是"复算会改世界" */
+const EVIDENCE_READONLY_DENY = [
+  { re: /(?<!\d)>(?!&1)/, why: '重定向 `>`' },
+  { re: /\brm\s+-/, why: '`rm -`' },
+  { re: /\bmv\s+/, why: '`mv`' },
+  { re: /\bsed\s+-i/, why: '`sed -i`' },
+  { re: /\bgit\s+(?:checkout|reset|clean|stash|switch)\b/, why: 'git 写操作' },
+  { re: /\bnpm\s+publish\b/, why: '`npm publish`' },
+]
+const EVIDENCE_TIMEOUT_MS = 180_000
+
+/** 从状态格取凭证（`reverify` / `show` 用；`null` = 这条没凭证） */
+function parseEvidenceBlob(statusText) {
+  const m = String(statusText ?? '').match(EVIDENCE_BLOB_RE)
+  if (!m) return null
+  const fields = {}
+  const bad = []
+  for (const seg of m[0].slice(EVIDENCE_TAG.length + 1, -1).split(';')) {
+    if (!seg.trim()) continue
+    const i = seg.indexOf('=')
+    if (i < 0) bad.push(seg.trim())
+    else fields[seg.slice(0, i).trim()] = seg.slice(i + 1).trim()
+  }
+  return { fields, bad, raw: m[0] }
+}
+
+function formatEvidence(fields) {
+  const order = fields.kind === '人工' ? EVIDENCE_KEYS_MANUAL : EVIDENCE_KEYS
+  const parts = order
+    .filter((k) => fields[k] !== undefined && fields[k] !== '')
+    .map((k) => `${k}=${fields[k]}`)
+  return `${EVIDENCE_TAG}{${parts.join(';')}}`
+}
+
+/** 拒写时的**可复制填空模板**（没有它，下一个人只会想办法绕过闸） */
+function evidenceHelp() {
+  return [
+    '',
+    '   把下面五行填好，作为 `--evidence` 传进来（一行，字段用 `;` 分隔）：',
+    '',
+    "     cmd=<一条只读命令，别人拿去能跑出同一个结果，如 grep -c 'xxx' src/a.ts>",
+    '     claim=<上面这条命令的输出里必须出现的数字或结论，如 3>',
+    '     fail=<失败了现在由谁看到：页面内联 / 日志 / 门禁>',
+    '     cplx=<复杂度降在哪：重复份数 N→1 / 环节数 / 兜底计数>',
+    '     impl=<真实现 | 替身：替的是什么>',
+    '',
+    '   直接复制填空：',
+    '     node scripts/debt.mjs resolve TD-xx-1 --note "…" \\',
+    '       --evidence "cmd=…;claim=…;fail=…;cplx=…;impl=真实现"',
+    '',
+    '   机器化不了（如「删掉了冗余实现」）才走**人工降级**，必须显式标记 + 有名有姓：',
+    '     --evidence "kind=人工;by=<你的名字>;why=<为什么这条没法机器化>;claim=…;fail=…;cplx=…;impl=替身：…"',
+    '',
+    '   ↳ 口径见 `架构师改码7步法` §7.1「一凭证」；存量复算：`node scripts/debt.mjs reverify <ID>`',
+  ].join('\n')
+}
+
+/**
+ * 闸 ①：格式 / 三问齐全 / 命令只读。
+ * 返回 `{ blob, fields }`；不合格 → 打印问题 + 模板，**直接 exit 1（不写盘）**。
+ */
+function requireEvidence(raw) {
+  const problems = []
+  let text = String(raw ?? '').trim()
+  const missing = !text
+  if (missing) problems.push('没有 `--evidence`（结账必须有凭证）')
+  // 允许整段粘贴（带 `evidence:v1{…}` 外壳时剥掉）
+  const wrapped = text.match(EVIDENCE_BLOB_RE)
+  if (wrapped) text = wrapped[0].slice(EVIDENCE_TAG.length + 1, -1)
+
+  const fields = {}
+  const bad = []
+  for (const seg of text.split(';')) {
+    if (!seg.trim()) continue
+    const i = seg.indexOf('=')
+    if (i < 0) bad.push(seg.trim())
+    else fields[seg.slice(0, i).trim()] = seg.slice(i + 1).trim()
+  }
+
+  const kind = fields.kind || '机验'
+  if (kind !== '机验' && kind !== '人工')
+    problems.push(`kind=\`${kind}\` 只认「机验」或「人工」（不写 = 机验）`)
+  const allowed = kind === '人工' ? EVIDENCE_KEYS_MANUAL : EVIDENCE_KEYS
+  for (const k of Object.keys(fields))
+    if (!allowed.includes(k)) problems.push(`不认识的键 \`${k}\`（只认 ${allowed.join(' / ')}）`)
+  for (const seg of bad) problems.push(`这段不是 \`键=值\`：\`${seg}\``)
+
+  const need =
+    kind === '人工' ? ['by', 'why', 'claim', 'fail', 'cplx', 'impl'] : EVIDENCE_KEYS.slice(0, 5)
+  // 整个 `--evidence` 都没给时，只报"没有凭证" + 模板（不逐键刷屏）
+  if (!missing) for (const k of need) if (!fields[k]) problems.push(`缺 \`${k}=\``)
+
+  for (const [k, v] of Object.entries(fields)) {
+    if (EVIDENCE_FORBIDDEN.test(v))
+      problems.push(
+        `\`${k}\` 的值里有禁用字符（\`|\` 撑破表格列 / \`]\` 截断状态格 / \`{}\` 是凭证边界）`,
+      )
+  }
+  for (const k of ['fail', 'cplx'])
+    if (fields[k] && fields[k].length < 4)
+      problems.push(`三问的 \`${k}\` 太短（≥4 字）：要给一句人话，不是"无"`)
+  if (fields.impl && !/^(?:真实现|替身)/.test(fields.impl))
+    problems.push(
+      '`impl=` 只认「真实现」或「替身：<替的是什么>」（验证跑的是真实现还是替身，必须说清）',
+    )
+
+  if (kind === '人工') {
+    if (fields.by && fields.by.length < 2)
+      problems.push('`by=` 要有名有姓（≥2 字）—— 人工担保必须能追责')
+    if (fields.why && fields.why.length < 8)
+      problems.push('`why=` 要写清为什么这条没法机器化（≥8 字）')
+    if (fields.cmd)
+      problems.push('人工凭证不该带 `cmd=`（有可跑命令就该走机验，别借人工降级走后门）')
+  } else if (fields.cmd) {
+    for (const d of EVIDENCE_READONLY_DENY)
+      if (d.re.test(fields.cmd))
+        problems.push(`凭证命令必须是只读命令：命中 ${d.why}（它要被反复复算，不许带写副作用）`)
+  }
+
+  if (problems.length) {
+    console.error(
+      `❌ 结账被拒：**${missing ? '没有凭证' : '凭证不合格'}**（写入口闸，不是警告；没有 --force / 环境变量旁路）`,
+    )
+    for (const p of problems) console.error('   · ' + p)
+    console.error(evidenceHelp())
+    process.exit(1)
+  }
+  const withKind = { ...fields, kind }
+  return { blob: formatEvidence(withKind), fields: withKind }
+}
+
+function outputTail(s, n = 4) {
+  return String(s ?? '')
+    .split(/\r?\n/)
+    .filter(Boolean)
+    .slice(-n)
+}
+
+/** 真跑凭证命令（只读；`cwd` = 账本根，别人拿去跑也是同一个结果） */
+function runEvidenceCommand(cmd) {
+  try {
+    const out = execSync(cmd, {
+      cwd: ROOT,
+      encoding: 'utf8',
+      stdio: ['ignore', 'pipe', 'pipe'],
+      timeout: EVIDENCE_TIMEOUT_MS,
+    })
+    return { ok: true, exit: 0, output: String(out) }
+  } catch (e) {
+    const err = e
+    return {
+      ok: false,
+      exit: typeof err.status === 'number' ? err.status : -1,
+      output: `${err.stdout ?? ''}${err.stderr ?? ''}`,
+      reason: err.signal ? `被 ${err.signal} 结束` : err.code === 'ETIMEDOUT' ? '超时' : '',
+    }
+  }
+}
+
+/** 声称是否成立：数字按**独立数字**比对（`3` 不被 `143` 蒙混），其余按原文子串 */
+function claimMatches(output, claim) {
+  const text = String(output ?? '')
+  const c = String(claim ?? '').trim()
+  if (!c) return false
+  if (/^\d+(?:\.\d+)?$/.test(c))
+    return new RegExp(`(?<![\\d.])${c.replace('.', '\\.')}(?![\\d.])`).test(text)
+  return text.includes(c)
+}
+
+function numbersIn(output, max = 6) {
+  const out = []
+  for (const m of String(output ?? '').matchAll(/(?<![\w.])\d+(?:\.\d+)?(?![\w.])/g)) {
+    if (!out.includes(m[0])) out.push(m[0])
+    if (out.length >= max) break
+  }
+  return out
+}
+
+/**
+ * 闸 ②③：真跑一遍 + 声称对得上。
+ * 跑不动 / 对不上 → **拒写**（账本未写入）。人工担保跳过（没有命令可跑，改由 `by` 追责）。
+ */
+function verifyClaim(ev) {
+  const f = ev.fields
+  if (f.kind === '人工') {
+    console.log(`⚠️ 人工担保落账：本条**不可机验**，责任在 ${f.by}（${f.why}）`)
+    console.log('   ↳ `reverify` 会把它单列在「人工担保」里，不与机验混算')
+    return
+  }
+  const res = runEvidenceCommand(f.cmd)
+  if (!res.ok) {
+    console.error('❌ 结账被拒：**凭证命令跑不动**（写入口闸，不是警告；账本未写入）')
+    console.error(`   命令 : ${f.cmd}`)
+    console.error(`   实跑 : exit=${res.exit}${res.reason ? `（${res.reason}）` : ''}`)
+    for (const l of outputTail(res.output)) console.error(`   | ${l.slice(0, 160)}`)
+    console.error('   ↳ 跑不动的命令等于没凭证：要么修命令，要么换一条能跑出同一个结果的。')
+    process.exit(1)
+  }
+  if (!claimMatches(res.output, f.claim)) {
+    const nums = numbersIn(res.output)
+    console.error('❌ 结账被拒：**凭证声称对不上**（写入口闸，不是警告；账本未写入）')
+    console.error(`   命令 : ${f.cmd}`)
+    console.error(`   声称 : ${f.claim}`)
+    console.error(
+      `   实跑 : exit=0，输出里没有「${f.claim}」${nums.length ? `；输出里的数字：${nums.join(' / ')}` : ''}`,
+    )
+    for (const l of outputTail(res.output)) console.error(`   | ${l.slice(0, 160)}`)
+    console.error('   ↳ 凭证要能被**别人拿去复算**：改声称或改命令，不许写成"大概 / 约"。')
+    process.exit(1)
+  }
+  console.log(`✅ 凭证已复算：\`${f.cmd}\` → 命中「${f.claim}」`)
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -604,11 +863,22 @@ function cmdShow(argv) {
         ? ' · ⚠️ 列错位需人工'
         : ''
     console.log(`── ${f.id}${SRC_TAG(r)}${warn}`)
-    console.log(`  状态   : [${statusWord(f.status)}]${f.status.replace(/^\*{0,2}\[[^\]]*\]/, '')}`)
+    const statusTail = f.status.replace(/^\*{0,2}\[[^\]]*\]/, '').replace(EVIDENCE_BLOB_RE, '')
+    console.log(`  状态   : [${statusWord(f.status)}]${statusTail}`)
     console.log(
       `  归类   : ${normClass(f.class).value}   利息率 : ${normRate(f.rate).value}   区域 : ${f.area ?? ''}`,
     )
     console.log(`  现象   : ${f.summary}`)
+    // 凭证（TD-09-37）：状态格里的机器串在这里解码给人看；复算 = `reverify <ID>`
+    const ev = parseEvidenceBlob(f.status)
+    if (ev) {
+      console.log(
+        `  凭证   : ${ev.fields.kind === '人工' ? `人工担保（by ${ev.fields.by}）` : '机验（可复算）'}`,
+      )
+      for (const [k, v] of Object.entries(ev.fields))
+        if (k !== 'kind') console.log(`           ${k.padEnd(5)} = ${v}`)
+      console.log(`           ↳ 复算：node scripts/debt.mjs reverify ${f.id}`)
+    }
     // 完整解法：从"全文归档"取该 ID 的原始行（账本压缩时丢掉的长决策都在那儿）
     const full = readFullArchive(id)
     const note = full?.fields.status ?? f.status
@@ -726,7 +996,10 @@ function cmdAdd(argv) {
 
 function cmdResolve(argv) {
   const id = argv.find((a) => /^TD-\d+-\d+|^MD-\d+-\d+/.test(a))
-  if (!id) fail('用法：resolve <TD-ID> [--status 已解决] [--note "…"] [--date YYYY-MM-DD]')
+  if (!id)
+    fail(
+      '用法：resolve <TD-ID> --evidence "cmd=…;claim=…;fail=…;cplx=…;impl=…" [--status 已解决] [--note "…"] [--date YYYY-MM-DD]',
+    )
   const status = argVal(argv, '--status') || '已解决'
   if (!STATUS_WORDS.includes(status))
     fail(`状态 \`${status}\` 不在白名单 [${STATUS_WORDS.join(' / ')}]`)
@@ -738,6 +1011,16 @@ function cmdResolve(argv) {
   if (/[|｜]/.test(note)) {
     fail('note 含竖线 → 用「／」代替（裸管道符会撑破表格列，本仓已有数行因此错位）')
   }
+  // 状态格在第一个 `]` 处截断（`statusNote` / `normStatus` 都这么读）⇒ `]` `{` `}` 会把凭证与显示一起毁掉
+  if (/[\]{}]/.test(note)) {
+    fail(
+      'note 含 `]` / `{` / `}` → 状态格在第一个 `]` 处截断，这几个字符会毁掉凭证与显示；改用「」',
+    )
+  }
+  // ── 结账闸（TD-09-37）：① 凭证合格 → ② 真跑 → ③ 声称对得上，缺一即拒写 ──
+  const evidence = requireEvidence(argVal(argv, '--evidence'))
+  verifyClaim(evidence)
+
   // ── 目标 = 主表优先，**归档也允许改**（2026-09-14）──
   // 【为什么】`archive` 之后才发现状态文案要修（实证：note 被 PowerShell 的 ASCII 双引号截断）时，
   //   旧实现**直接硬失败且没有替代路径** ⇒ 人只能手改表格行 = 破「唯一写入者」这条红线。
@@ -761,7 +1044,7 @@ function cmdResolve(argv) {
     if (r.mode === 'manual') fail(`${id} 在${t.label}是「列错位需人工」行 → 先修列，再改状态`)
     const C = MAP[r.kind]
     const parts = t.lines[r.li].split('|')
-    const newStatus = `[${status} ${date}${note ? ' · ' + note : ''}]`
+    const newStatus = `[${status} ${date}${note ? ' · ' + note : ''} · ${evidence.blob}]`
     parts[1 + C.status] = ` ${newStatus} `
     t.lines[r.li] = parts.join('|')
     writeFileSync(t.file, t.lines.join('\n'))
@@ -902,7 +1185,9 @@ function cmdEdit(argv) {
       const cell = String(parts[1 + C.status] || '')
       const m = cell.match(/^\s*\[\s*([^\]·]*)/)
       const head = m ? m[1].trim() : ''
-      parts[1 + C.status] = ` [${head} · ${value}] `
+      // 已登记的凭证**不跟着解法一起被冲掉**（改描述 ≠ 重新结账；凭证丢了这条就退回"无凭证"）
+      const keep = (cell.match(EVIDENCE_BLOB_RE) ?? [])[0]
+      parts[1 + C.status] = ` [${head} · ${value}${keep ? ' · ' + keep : ''}] `
     }
     f.lines[li] = parts.join('|')
     writeFileSync(f.file, f.lines.join('\n'))
@@ -1048,6 +1333,160 @@ function cmdArchive(argv) {
         .join(' · ') || '（无）'
     }`,
   )
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// reverify（只读重判 · TD-09-37）
+// ─────────────────────────────────────────────────────────────────────────────
+/**
+ * 存量「已解决」的复算：**真跑**每条凭证命令，与它当初声称的数字 / 结论对账。
+ *
+ * 【为什么必须有】2026-10-25 全量复算：115 条「已解决」里 39 条零凭证、76 条只有散文数字
+ *   （19 条假或口径窄）。结账闸只防**新增** —— 存量必须能被重判，否则"假账"只是被封存。
+ *
+ * 【只读】本命令**不改任何状态**（不写盘、不降级、不改行）。要不要据此改账本由人决定；
+ *   无凭证的**只标「无凭证」，不猜**（不替它推断"大概修好了"）。
+ *
+ * 【清单】
+ *   ① 可复用：命令跑出来与声称一致 → 凭证今天仍然成立，谁都能重跑
+ *   ② 数字漂移：跑得动但与声称不符 → 附改前（声明）/ 改后（实跑输出里的数字）
+ *   ③ 无凭证待补：没有机验凭证的已结债 → 再分「旧台账迁移」/「有结论无命令」/「无结论无命令」
+ *   ④ 跑不动：命令现在跑不起来（exit≠0）→ 凭证已失效，等同无凭证
+ *   ⑤ 人工担保：`kind=人工`（不可机验，按 `by` 追责）—— 显式降级通道，单列不与机验混算
+ */
+function cmdReverify(argv) {
+  const id = argv.find((a) => /^TD-\d+-\d+|^MD-\d+-\d+/.test(a))
+  const all = argv.includes('--all')
+  if (!id && !all)
+    fail('用法：node scripts/debt.mjs reverify <TD-ID> | --all（**只读**：不改任何状态）')
+  const pool = loadAll().filter((r) => r.fields.kind === 'TD' && r.src !== 'full')
+  const done = pool.filter((r) => DONE_WORDS.includes(statusWord(r.fields.status)))
+  let targets
+  if (all) targets = done
+  else {
+    const row = pool.find((r) => r.fields.id === id)
+    if (!row) fail(`主表 ∪ 归档 中均无 ${id}`)
+    if (!DONE_WORDS.includes(statusWord(row.fields.status))) {
+      console.log(
+        `✅ ${id} 未结账（[${statusWord(row.fields.status)}]）→ 无需复算（本命令只管已结的账）`,
+      )
+      return
+    }
+    targets = [row]
+  }
+  targets.sort((a, b) => idKey(a.fields.id) - idKey(b.fields.id))
+
+  const ok = []
+  const drift = []
+  const broken = []
+  const manual = []
+  const none = { legacy: [], prose: [], bare: [] }
+  for (const r of targets) {
+    const ev = parseEvidenceBlob(r.fields.status)
+    // 无凭证 / 凭证残缺（键都拆不开、或连 claim 都没有）→ 一律算「无凭证」，不猜
+    if (!ev || ev.bad.length || !ev.fields.claim) {
+      const status = String(r.fields.status)
+      const body = status.match(/^\*{0,2}\[([^\]]+)\]/)?.[1] ?? status
+      const note = body.replace(/\d{4}-\d{2}-\d{2}/g, '')
+      if (/旧台账/.test(status)) none.legacy.push(r)
+      else if (/\d/.test(note)) none.prose.push(r)
+      else none.bare.push(r)
+      continue
+    }
+    if (ev.fields.kind === '人工') {
+      manual.push({ r, ev })
+      continue
+    }
+    if (!ev.fields.cmd) {
+      none.prose.push(r) // 机验却没了命令 = 凭证残缺，等同无凭证
+      continue
+    }
+    const res = runEvidenceCommand(ev.fields.cmd)
+    if (!res.ok) broken.push({ r, ev, res })
+    else if (claimMatches(res.output, ev.fields.claim)) ok.push({ r, ev })
+    else drift.push({ r, ev, res })
+  }
+
+  const line = (icon, r, text) => console.log(`   ${icon} ${r.fields.id}${SRC_TAG(r)} ｜ ${text}`)
+  const noneCount = none.legacy.length + none.prose.length + none.bare.length
+  const withEv = ok.length + drift.length + broken.length + manual.length
+  // 按状态词分档（「已解决」是主战场，但「已裁定 / 已退役 / 不做」同样是没人再看的结账标签）
+  const byStatus = {}
+  for (const r of targets) {
+    const w = statusWord(r.fields.status)
+    byStatus[w] = (byStatus[w] || 0) + 1
+  }
+  const statusBreak = Object.entries(byStatus)
+    .map(([k, v]) => `${k} ${v}`)
+    .join(' · ')
+  console.log(
+    `🔁 debt reverify（**只读**：不改任何状态）｜ 已结账 ${targets.length} 条（${statusBreak}）· 带凭证 ${withEv} 条 ｜ 实跑 ${ok.length + drift.length + broken.length} 次`,
+  )
+
+  console.log(`\n【① 可复用（命令跑出来对得上）】${ok.length} 条`)
+  if (!ok.length) console.log('   （无）')
+  for (const { r, ev } of ok) line('✅', r, `声明=${ev.fields.claim} ｜ cmd=${ev.fields.cmd}`)
+
+  console.log(`\n【② 数字漂移（声明 ≠ 实跑）】${drift.length} 条`)
+  if (!drift.length) console.log('   （无）')
+  for (const { r, ev, res } of drift) {
+    const nums = numbersIn(res.output)
+    line(
+      '⚠️',
+      r,
+      `改前（声明）=${ev.fields.claim} → 改后（实跑）=${nums.length ? nums.join(' / ') : '（输出里没有数字）'}`,
+    )
+    console.log(`        cmd=${ev.fields.cmd}`)
+    for (const l of outputTail(res.output, 2)) console.log(`        | ${l.slice(0, 140)}`)
+  }
+
+  console.log(`\n【③ 无凭证待补】${noneCount} 条`)
+  if (!noneCount) console.log('   （无）')
+  const idList = (rows) => {
+    for (let i = 0; i < rows.length; i += 8)
+      console.log(
+        '      ' +
+          rows
+            .slice(i, i + 8)
+            .map((x) => x.fields.id)
+            .join(' · '),
+      )
+  }
+  for (const [label, rows] of [
+    ['旧台账迁移（"旧台账 D-xx 已 done，迁移归档"）', none.legacy],
+    ['有结论无命令（状态格里有数字 / 结论，但没有可跑命令）', none.prose],
+    ['无结论无命令', none.bare],
+  ]) {
+    if (!rows.length) continue
+    console.log(`   · ${label} —— ${rows.length} 条`)
+    idList(rows)
+  }
+  if (noneCount)
+    console.log(
+      '   ↳ 补凭证的唯一正当路径：带 `--evidence` 重跑一次 `resolve`（不许手写表格行、不许改成"大概"）',
+    )
+
+  console.log(`\n【④ 跑不动（凭证命令现在失败）】${broken.length} 条`)
+  if (!broken.length) console.log('   （无）')
+  for (const { r, ev, res } of broken) {
+    line(
+      '⛔',
+      r,
+      `声明=${ev.fields.claim} ｜ exit=${res.exit}${res.reason ? `（${res.reason}）` : ''}`,
+    )
+    console.log(`        cmd=${ev.fields.cmd}`)
+    for (const l of outputTail(res.output, 2)) console.log(`        | ${l.slice(0, 140)}`)
+  }
+
+  console.log(`\n【⑤ 人工担保（不可机验 · 显式降级，按 by 追责）】${manual.length} 条`)
+  if (!manual.length) console.log('   （无）')
+  for (const { r, ev } of manual)
+    line('✍️', r, `by=${ev.fields.by} ｜ claim=${ev.fields.claim} ｜ why=${ev.fields.why}`)
+
+  console.log(
+    `\n小结：可复用 ${ok.length} · 漂移 ${drift.length} · 跑不动 ${broken.length} · 无凭证 ${noneCount} · 人工担保 ${manual.length}`,
+  )
+  console.log('↳ 本命令只报不改：要不要据此降级 / 改账本由人决定（本命令不写盘）')
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1364,6 +1803,9 @@ switch (cmd) {
   case 'archive':
     cmdArchive(rest)
     break
+  case 'reverify':
+    cmdReverify(rest)
+    break
   case 'audit':
     cmdAudit(rest)
     break
@@ -1379,9 +1821,12 @@ switch (cmd) {
       '  读：list [--area NN] [--status X] [--all] | area <NN> | search <关键词> | show <TD-ID>',
     )
     console.log(
-      '  写：add --area NN --summary "…" | resolve <TD-ID> --note "…" | edit <TD-ID> --field summary｜solution｜classify｜rate --value "…" | reanchor <TD-ID> --anchor <区域文件> | move <TD-ID> --to <NN>',
+      '  写：add --area NN --summary "…" | resolve <TD-ID> --evidence "cmd=…;claim=…;fail=…;cplx=…;impl=…"（**凭证强制**） | edit <TD-ID> --field summary｜solution｜classify｜rate --value "…" | reanchor <TD-ID> --anchor <区域文件> | move <TD-ID> --to <NN>',
     )
     console.log('  维护：archive [--dry] | audit [--liveness] | fix [--dry]（规范化历史列错位行）')
+    console.log(
+      '  复算：reverify <TD-ID> | --all（**只读**：真跑每条已结债的凭证命令，出「可复用 / 数字漂移 / 无凭证待补」）',
+    )
     console.log('  统计：stats（形态/解法分布 —— 供"找债捷径"与"手法排行"，见两份 SOP）')
     process.exit(cmd ? 1 : 0)
 }
