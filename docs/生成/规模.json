@@ -26,8 +26,8 @@
     }
   },
   "tests": {
-    "files": 158,
-    "cases": 1314,
+    "files": 159,
+    "cases": 1319,
     "eachSites": 17
   },
   "components": 31,
@@ -88,7 +88,7 @@
     },
     "domain": {
       "files": 25,
-      "lines": 3525
+      "lines": 3545
     },
     "pages": {
       "files": 63,

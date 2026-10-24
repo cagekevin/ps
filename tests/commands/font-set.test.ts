@@ -162,6 +162,39 @@ describe('fontSet.createButton 配置缺失（TD-12-25 后半）', () => {
   })
 })
 
+describe('fontSet.quickFont：平行数组不等长不许落盘（TD-12-27）', () => {
+  /**
+   * 以前：`hjm` 比 `zz` 短 → `sortQuickFont` 产出 `undefined` → JSON 写进用户的
+   * `sj_fontSet.json`（undefined 变 null）→ 报错要等到几天后点「应用」才出现。
+   * 现在：`update` 的 mutator 里抛 PARSE ⇒ 仓库存盘在 mutator 之后 ⇒ **压根没写**。
+   */
+  it('加不进去（PARSE 点名家族名），且快选文件一个字节都没动', async () => {
+    const { quickFontRepo } = await import('@/cep/data/font-extra')
+    const before = JSON.stringify(readValue(await quickFontRepo.read()))
+
+    vi.mocked(getFontList).mockResolvedValue([
+      {
+        family: '坏字体',
+        weights: ['Regular', 'Bold'],
+        names: ['坏字体'], // ← 少一格
+        postScriptNames: ['Bad-Regular', 'Bad-Bold'],
+        star: 0,
+      },
+    ])
+    font.getCurrentFontInfo.mockResolvedValue({ family: '坏字体' })
+
+    const result = await execute('fontSet.quickFont', { action: 'add' })
+
+    expect(result).toMatchObject({ ok: false, code: 'PARSE' })
+    if (result.ok === false) {
+      expect(result.reason).toContain('坏字体')
+      expect(result.reason).toContain('已拒绝写入快选')
+    }
+    const after = JSON.stringify(readValue(await quickFontRepo.read()))
+    expect(after).toBe(before)
+  })
+})
+
 describe('fontSet.fontName 最近使用', () => {
   it('家族应用成功后写入最近列表，重复项提前', async () => {
     await fontHistoryRepo.write(['旧字体', 'MiSans'])
