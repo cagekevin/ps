@@ -55,6 +55,18 @@ export const textInfoRef = shallowRef<TextInfo | null>(null)
 export const textInfoError = ref('')
 
 /**
+ * 快照可能是旧的（TD-13-6）。
+ *
+ * 与 `textInfoError` 分开：`error` 是「这次读失败了」，`stale` 是「宿主事件已经发生、
+ * 但新属性迟迟没回来」——面板上还挂着上一层/上一次的值，和「选区没变所以值没变」
+ * 长得一模一样。判据只认「有事件」这一刻：用户什么都没动时不算旧，不会误报。
+ */
+export const textInfoStale = ref('')
+
+/** 事件触发后这么久还没拿到新属性，就认为快照冻结（读超时是 10s，这里先一步喊） */
+export const STALE_AFTER_MS = 8000
+
+/**
  * 写操作成功后的**本地乐观更新**。
  *
  * 依据原版：`fontSetColor` 的写方法都是先改本地 `fontInfo` 再发 jsx
@@ -154,6 +166,10 @@ export async function refreshTextInfo(): Promise<TextInfo | null> {
   const next = normalizeTextInfo(result.data)
   textInfoRef.value = next
   textInfoError.value = ''
+  if (textInfoStale.value) {
+    textInfoStale.value = ''
+    log.info('selection', '文字属性已跟上当前选区，旧值提示解除')
+  }
   log.info('selection', '文字属性已更新', {
     family: next.family,
     size: next.size,
@@ -185,6 +201,54 @@ function shouldRefresh(
   return true
 }
 
+/**
+ * 跳过原因**写具体**：只写「跳过」等于没有信息——同一句日志既可能是
+ * 「选中的不是文字图层」（正常）也可能是「payload 形状和官方不符」（通道坏了）。
+ * 判据仍按官方口径，不因这条日志改动行为。
+ */
+function skipReason(
+  name: (typeof TEXT_INFO_EVENTS)[number],
+  payload: PhotoshopEventPayload,
+): string {
+  if (name === 'selection') {
+    const ids = payload.eventData?.layerID
+    if (!Array.isArray(ids)) return 'slct 事件没有 layerID 数组'
+    return `slct 选中 ${ids.length} 个图层（官方只处理单选）`
+  }
+  if (name === 'make') {
+    return `Mk 新建的不是文字图层（null._ref = ${String(payload.eventData?.null?._ref)}）`
+  }
+  if (name === 'setd') {
+    return `setd 改的不是文字样式（to._obj = ${String(payload.eventData?.to?._obj)}）`
+  }
+  return '未知原因'
+}
+
+/**
+ * 给一次刷新挂心跳：事件已经发生，属性却迟迟不回来 = 快照冻结在上一层。
+ *
+ * 为什么不给「事件不来」直接报警：用户什么都不做的时候本来就没有事件，那种报警
+ * 会天天误报。能判定的、且后果严重的只有一种：**我们知道有事发生了，值却没跟上**。
+ */
+function withHeartbeat<T>(what: string, task: Promise<T>): Promise<T> {
+  let settled = false
+  const timer = setTimeout(() => {
+    if (settled) return
+    textInfoStale.value =
+      `刚才${what}，但 ${STALE_AFTER_MS / 1000}s 内没读到新的文字属性：` +
+      '面板上现在显示的可能不是当前选区/当前图层的值'
+    log.error('selection', '文字属性更新超时，快照可能还是上一层/上一次的', {
+      what,
+      waitedMs: STALE_AFTER_MS,
+    })
+  }, STALE_AFTER_MS)
+
+  return task.finally(() => {
+    settled = true
+    clearTimeout(timer)
+  })
+}
+
 /** 跟随 PS 的选区 / 变换 / 新建 / 属性变化刷新快照 */
 export async function startTextInfoWatch(): Promise<() => void> {
   log.info('selection', '开始订阅文字属性事件', { events: TEXT_INFO_EVENTS.join(',') })
@@ -192,20 +256,23 @@ export async function startTextInfoWatch(): Promise<() => void> {
     TEXT_INFO_EVENTS.map((name) =>
       subscribeHostEvent(name, (payload) => {
         if (!shouldRefresh(name, payload)) {
-          log.info('selection', `宿主事件跳过：${name}`)
+          log.info('selection', `宿主事件跳过：${name}`, { reason: skipReason(name, payload) })
           return
         }
         log.info('selection', `宿主事件触发：${name}`)
-        void refreshTextInfo().catch((e) => {
-          textInfoError.value = e instanceof Error ? e.message : String(e)
-          log.warn('selection', '事件触发的文字属性读取失败', e)
-        })
+        void withHeartbeat(
+          `在 Photoshop 里触发了「${name}」事件`,
+          refreshTextInfo().catch((e) => {
+            textInfoError.value = e instanceof Error ? e.message : String(e)
+            log.warn('selection', '事件触发的文字属性读取失败', e)
+          }),
+        )
       }),
     ),
   )
   log.info('selection', '文字属性事件订阅完成')
 
-  await refreshTextInfo()
+  await withHeartbeat('面板启动时', refreshTextInfo())
 
   return () => {
     for (const stop of stops) stop()
