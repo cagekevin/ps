@@ -920,6 +920,24 @@
       "when": "（待补：什么时候用）",
       "status": "todo",
       "since": "2026-10-24"
+    },
+    {
+      "id": "cep-data-swatch-repo-ts",
+      "name": "色板数据仓库（三个色板文件 + 数据层唯一写队列）",
+      "entry": "src/cep/data/swatch-repo.ts",
+      "api": "readCustomItems() / readRecentItems() / readRecentLimit() / appendCustomItem(item) → {added} / setRecentLimit(n) / readSwatchItems(path) / writeSwatchItems(path,items) / swatchFilePath() / recentFilePath() / recentLimitPath() / onChange(fn) / enqueue(task)",
+      "when": "色板面板（commands/swatch.ts、stores/swatch.ts）与样式库四条色板命令（commands/style.ts）共用；enqueue 是**全数据层唯一**的写队列（style-library-repo 也 import 它，两套队列并存会交叉覆盖）。色板目录是 %APPDATA%/FengZiSeBan，不在 USER_DIR 里。禁止页面 import",
+      "status": "stable",
+      "since": "2026-10-24"
+    },
+    {
+      "id": "stores-swatch-ts",
+      "name": "色板只读投影（自定义色 / 最近色 / 保留条数）",
+      "entry": "src/stores/swatch.ts",
+      "api": "useSwatchStore() → { custom, recent, recentLimit, loading, error, degraded, customSwatches, recentSwatches, load(), retry() }；bindSwatchData()（装配层调一次）",
+      "when": "色板面板（pages/seBan）展示用，替代原版 sf.js 的 g_aZiDingYi / g_ShuLiang 直接持有真相。**唯一事件订阅点**：onChange（本地写）+ onAppEvent(APP_EVENT_SEBAN)（别处写）。不写文件、不调 jsx，写操作在 commands/swatch.ts",
+      "status": "stable",
+      "since": "2026-10-24"
     }
   ]
 }
