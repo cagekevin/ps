@@ -20,7 +20,8 @@ const ps = vi.hoisted(() => ({
 vi.mock('@/cep/events', () => events)
 vi.mock('@/cep/ps', () => ps)
 
-const { startSelectionWatch, refresh, watchStateRef, __resetWatchForTest } = await import('@/selection')
+const { startSelectionWatch, refresh, watchStateRef, __resetWatchForTest } =
+  await import('@/selection')
 
 beforeEach(() => {
   events.subscribeHostEvent.mockReset()

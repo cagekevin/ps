@@ -21,9 +21,8 @@ vi.mock('@/cep/events', () => ({
   },
 }))
 
-const { startTextInfoWatch, refreshTextInfo, textInfoStale, STALE_AFTER_MS } = await import(
-  '@/selection/current-text'
-)
+const { startTextInfoWatch, refreshTextInfo, textInfoStale, STALE_AFTER_MS } =
+  await import('@/selection/current-text')
 
 const TEXT_INFO = {
   size: '12 点',

@@ -90,10 +90,14 @@ function runScript(
         ),
       )
       graceTimer = setTimeout(() => {
-        log.warn('cep', 'ExtendScript 超时后始终没有回包，强制放行串行队列（PS 侧可能有脚本仍在跑）', {
-          script: script.slice(0, 60),
-          graceMs: LOCK_GRACE_MS,
-        })
+        log.warn(
+          'cep',
+          'ExtendScript 超时后始终没有回包，强制放行串行队列（PS 侧可能有脚本仍在跑）',
+          {
+            script: script.slice(0, 60),
+            graceMs: LOCK_GRACE_MS,
+          },
+        )
         markReturned()
       }, LOCK_GRACE_MS)
     }, timeout)
