@@ -35,7 +35,8 @@ import { useCommand } from '@/components/command/useCommand'
 
 const store = useFontStore()
 const feedback = useFeedbackStore()
-const { tags, tagsError, previewMode, activeFamily, stars, customPreviewText } = storeToRefs(store)
+const { tags, tagsError, stars, starsError, previewMode, activeFamily, customPreviewText } =
+  storeToRefs(store)
 
 // 写操作全部走命令（ADR-16）：页面只拿 boolean，失败由 useCommand 统一提示
 const applyFont = useCommand('font.apply')
@@ -462,6 +463,11 @@ async function apply(font: FontItem, variantIndex = currentWeight(font.family)) 
 
     <p v-if="classificationDegraded" class="data-warning">
       {{ classificationDegraded }}，分类筛选已禁用
+    </p>
+
+    <!-- TD-01-4：评分读不到 ≠ 你没收藏过。同一句 data-warning 通道，不加新控件 -->
+    <p v-if="starsError" class="data-warning">
+      {{ starsError }}：列表里的评分先一律按「未收藏」显示，不是你的评分丢了
     </p>
 
     <div v-if="error" class="state is-error">

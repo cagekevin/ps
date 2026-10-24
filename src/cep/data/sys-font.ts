@@ -7,11 +7,16 @@ import type { FontItem } from '@/domain/font-item'
 import { log } from '@/utils/logger'
 import { readFontStars } from './font-meta'
 
-/** 把收藏等级合并进去（缺文件就当全是 0） */
+/**
+ * 把收藏等级合并进去。
+ *
+ * 星级读不到时**不动列表**（评分按 0 显示），但读不到这件事由 `useFontStore.loadStars`
+ * 单独报给用户——列表能不能显示和评分读不读得到是两件事，不能因为后者失败让列表空掉。
+ */
 export async function mergeFontStars(list: FontItem[]): Promise<FontItem[]> {
-  const stars = await readFontStars()
-  if (!Object.keys(stars).length) return list
-  return list.map((f) => ({ ...f, star: stars[f.family] ?? 0 }))
+  const read = await readFontStars()
+  if (!read.ok || !Object.keys(read.stars).length) return list
+  return list.map((f) => ({ ...f, star: read.stars[f.family] ?? 0 }))
 }
 
 /** 读 SysFont2.json；浏览器没有 userDir，直接当读不到 */

@@ -28,7 +28,7 @@ beforeEach(() => {
   localStorage.clear()
   vi.clearAllMocks()
   ps.getFontTags.mockResolvedValue([])
-  ps.getFontStars.mockResolvedValue({})
+  ps.getFontStars.mockResolvedValue({ ok: true, stars: {} })
   repos.tags.onChange.mockReturnValue(() => {})
   repos.stars.onChange.mockReturnValue(() => {})
 })
@@ -78,19 +78,35 @@ describe('标签读取', () => {
 
 describe('星级读取', () => {
   it('loadStars 填充映射', async () => {
-    ps.getFontStars.mockResolvedValue({ MiSans: 3 })
+    ps.getFontStars.mockResolvedValue({ ok: true, stars: { MiSans: 3 } })
     const store = useFontStore()
 
     await store.loadStars()
     expect(store.stars.MiSans).toBe(3)
+    expect(store.starsError).toBe('')
   })
 
-  it('读取失败按"全未收藏"处理，不抛', async () => {
+  /**
+   * TD-01-4：读不到时**不许**只留一个空映射就走。
+   * 空映射在页面上等于"你还没收藏过"——那是用户的结论，不是我们的故障。
+   */
+  it('读不到星级：starsError 带原因，stars 为空但界面能说出"读不到"', async () => {
+    ps.getFontStars.mockResolvedValue({ ok: false, stars: {}, reason: 'EPERM: 拒绝访问' })
+    const store = useFontStore()
+
+    await store.loadStars()
+    expect(store.stars).toEqual({})
+    expect(store.starsError).toContain('读取不到星级文件')
+    expect(store.starsError).toContain('EPERM')
+  })
+
+  it('读取抛错也不外抛，同样落到 starsError', async () => {
     ps.getFontStars.mockRejectedValue(new Error('权限不足'))
     const store = useFontStore()
 
     await store.loadStars()
     expect(store.stars).toEqual({})
+    expect(store.starsError).toContain('权限不足')
   })
 })
 

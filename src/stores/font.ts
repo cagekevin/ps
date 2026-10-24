@@ -41,6 +41,13 @@ export const useFontStore = defineStore('font', () => {
   const tags = ref<FontTag[]>([])
   const tagsError = ref('')
   const stars = ref<Record<string, number>>({})
+  /**
+   * 星级读不到的原因（TD-01-4）。
+   *
+   * 与 `tagsError` 同一口径：读失败必须落到界面上一句话，不能让"评分全是 0"冒充
+   * "你还没收藏过"。列表本身不受影响——评分是装饰，不因为读不到就不显示字体。
+   */
+  const starsError = ref('')
   /** 最近一次成功应用的家族，仅用于列表高亮（页面写，不算业务真相） */
   const activeFamily = ref('')
   const previewMode = usePersistedRef<PreviewMode>('font.previewMode', 'small')
@@ -59,10 +66,14 @@ export const useFontStore = defineStore('font', () => {
 
   async function loadStars() {
     try {
-      stars.value = await getFontStars()
+      const read = await getFontStars()
+      stars.value = read.stars
+      starsError.value = read.ok ? '' : `读取不到星级文件（${read.reason ?? '原因未知'}）`
+      if (!read.ok) log.warn('font', '星级读不到：界面显示"读不到"，不是"未收藏"', read.reason)
     } catch (e) {
       stars.value = {}
-      log.warn('font', '星级读取失败，按全未收藏处理', e)
+      starsError.value = `读取不到星级文件（${describeCepError(e)}）`
+      log.warn('font', '星级读不到：界面显示"读不到"，不是"未收藏"', e)
     }
   }
 
@@ -86,6 +97,7 @@ export const useFontStore = defineStore('font', () => {
     tags,
     tagsError,
     stars,
+    starsError,
     activeFamily,
     previewMode,
     customPreviewText,
