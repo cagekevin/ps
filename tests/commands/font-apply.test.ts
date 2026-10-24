@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { FontItem } from '@/cep/types'
+import type { FontItem } from '@/domain/font-item'
 
 /**
  * 写 PS 文档的能力只在命令里（`ps.ts` 已不保留写函数）。

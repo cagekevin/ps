@@ -1,5 +1,5 @@
 import type { Classification } from './classification'
-import type { FontItem } from '@/cep/types'
+import type { FontItem } from './font-item'
 
 /**
  * 筛选规则：**纯函数，无 IO**。

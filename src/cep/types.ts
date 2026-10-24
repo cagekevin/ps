@@ -1,28 +1,9 @@
 /**
- * 字体数据有两种形态，别混：
+ * 适配层的原始数据形状（磁盘 / PS 返回的**未归一化**形态）。
  *
- * - jsx 返回 / 页面使用：family / weights / names / postScriptNames
- * - 磁盘缓存 SysFont2.json：name / zz / mz / hjm / show
- *
- * 两者是同一份数据的两套键名（等长数组，同索引对应一个字重），
- * 统一由 ps.ts 里的 normalizeFont 转成 FontItem。
+ * 归一化后的领域类型不在这里：`FontItem` 已下沉到 `src/domain/font-item.ts`
+ * （domain 是最底层，不允许反向 import `@/cep`）。
  */
-
-/** 页面和 store 用的统一结构 */
-export interface FontItem {
-  /** 家族名，如「思源黑体」 */
-  family: string
-  /** 字重，如 Regular、Bold */
-  weights: string[]
-  /** 字体名 */
-  names: string[]
-  /** PostScript 名，设置字体时要传 */
-  postScriptNames: string[]
-  /** 缺字提示，运行期由 ZitiQiZhi.txt 注入 */
-  qz?: string
-  /** 收藏等级，运行期由 sj_ztglStar.ini 注入 */
-  star?: number
-}
 
 /** 字体标签，来自 sj_ztglTags.ini */
 export interface FontTag {

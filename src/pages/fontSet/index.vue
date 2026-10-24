@@ -13,7 +13,7 @@ import { FONT_SET_DEFAULTS, type FontSetSettings } from '@/domain/font-set-confi
 import { openUrl } from '@/cep/open-url'
 import { log } from '@/utils/logger'
 import { deepClone } from '@/utils/clone'
-import type { FontItem } from '@/cep/types'
+import type { FontItem } from '@/domain/font-item'
 import FontColor from './components/FontColor.vue'
 import FontHierarchy from './components/FontHierarchy.vue'
 import FontQuick from './components/FontQuick.vue'

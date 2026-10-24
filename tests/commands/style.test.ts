@@ -52,6 +52,8 @@ vi.mock('@/cep/jsx', () => ({ jsx }))
  * 测试先等命令订阅上，再按名字触发「吸色完成 / 取消」，或交给超时。
  */
 const hostEvents = vi.hoisted(() => ({ listeners: new Map<string, (payload?: unknown) => void>() }))
+/** 发出去的 app event（发送到色板后要通知色板面板重读，`app.v4.js:50216-50218`） */
+const appEvents = vi.hoisted(() => ({ sent: [] as Array<{ channel: string; data: unknown }> }))
 vi.mock('@/cep/events', async (importOriginal) => {
   const actual = await importOriginal<typeof import('@/cep/events')>()
   return {
@@ -60,6 +62,11 @@ vi.mock('@/cep/events', async (importOriginal) => {
     subscribeHostEvent: async (name: string, listener: (payload?: unknown) => void) => {
       hostEvents.listeners.set(name, listener)
       return () => hostEvents.listeners.delete(name)
+    },
+    APP_EVENT_SEBAN: actual.APP_EVENT_SEBAN,
+    sendAppEvent: (channel: string, data: unknown) => {
+      appEvents.sent.push({ channel, data })
+      return true
     },
   }
 })
@@ -863,6 +870,35 @@ describe('style.appendGroupToSwatch（原版 :50269-50290）', () => {
       { name: 'a', color: { hex: '111111' } },
       { name: 'b', color: { hex: '222222' } },
     ])
+  })
+})
+
+describe('发送到色板后通知色板面板（原版 sendMessageToSeBan，:50216-50218 / :52917）', () => {
+  it('四条发送/追加命令写完文件都发一次 GengXin', async () => {
+    seed(COLOR_LIB, [{ name: '灰白', show: true, list: [{ name: 'a', color: { hex: '111111' } }] }])
+    appEvents.sent.length = 0
+
+    await execute('style.sendToSwatch', { kind: 'color', groupIndex: 0, itemIndex: 0 })
+    await execute('style.appendItemToSwatch', { kind: 'color', groupIndex: 0, itemIndex: 0 })
+    await execute('style.sendGroupToSwatch', { kind: 'color', groupIndex: 0 })
+    await execute('style.appendGroupToSwatch', { kind: 'color', groupIndex: 0 })
+
+    expect(appEvents.sent).toEqual([
+      { channel: 'com.fengzi.event.seban', data: 'GengXin' },
+      { channel: 'com.fengzi.event.seban', data: 'GengXin' },
+      { channel: 'com.fengzi.event.seban', data: 'GengXin' },
+      { channel: 'com.fengzi.event.seban', data: 'GengXin' },
+    ])
+  })
+
+  it('写失败不发 GengXin：文件没变，不该惊动另一个进程', async () => {
+    appEvents.sent.length = 0
+
+    await expect(
+      execute('style.sendToSwatch', { kind: 'color', groupIndex: 0, itemIndex: 99 }),
+    ).resolves.toMatchObject({ ok: false })
+
+    expect(appEvents.sent).toEqual([])
   })
 })
 

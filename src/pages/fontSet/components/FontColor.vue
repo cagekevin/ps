@@ -5,7 +5,7 @@ import FontSetIcon from './FontSetIcon.vue'
 import FontSetNumber from './FontSetNumber.vue'
 import FontSetSelect from './FontSetSelect.vue'
 import type { TextInfo } from '@/selection/current-text'
-import type { FontItem } from '@/cep/types'
+import type { FontItem } from '@/domain/font-item'
 import { parseNumericText } from '@/utils/number'
 import { ALIGN_TIP, ALIGN_TITLES } from '../font-set-constants'
 

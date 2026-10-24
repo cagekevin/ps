@@ -1,15 +1,16 @@
-// 是什么：色板面板（独立 CEP 面板 `#/seBan`）的 7 个按钮，一条命令一个按钮
-// 唯一入口：这 7 个动作只能走这里；页面（刀3）经 `useCommand` 调，不直连 jsx / data
-// 替代了什么：原版面板 `%APPDATA%/fz.FengZi3Hao/js/sf.js` 的 7 个全局函数
-//   （`TianJia` / `GuanYu` / `SheZhi` / `TianJiaZT` / `faSongDaoZhuLi` / `SheZhiXingZhuang` /
-//   `DiaoHuanXingZhuangZhuanTai`，`:377-480`）
-// 谁在用：`pages/seBan/*`（刀3）
+// 是什么：色板面板（独立 CEP 面板 `#/seBan`）的命令 + 主面板侧的接收端
+// 唯一入口：色板页面（刀3）只经 `useCommand` 调；上色本身由主面板执行，色板只发事件
+// 替代了什么：原版面板 `%APPDATA%/fz.FengZi3Hao/js/sf.js` 的全局函数（`:377-480`）
+// 谁在用：`pages/seBan/*`（刀3）；`bindSeBanReceiver()` 由 `main.ts` 在主面板调用
 // 禁止：页面不许 import 本文件的值；不许在这里做 UI（prompt / alert 归页面）
 
 import { CepError, type CepErrorCode } from '@/utils/errors'
 import { openUrlInDefaultBrowser } from '@/cep/open-url'
 import { appendCustomItem, readCustomItems, setRecentLimit } from '@/cep/data/swatch-repo'
-import { executeInherited, defineCommand } from './registry'
+import { APP_EVENT_SEBAN, onAppEvent, sendAppEvent } from '@/cep/events'
+import { readCommonUseOptions } from '@/cep/data/legacy-settings'
+import { log } from '@/utils/logger'
+import { execute, executeInherited, defineCommand } from './registry'
 import type { Command, CommandResult } from './types'
 
 /**
@@ -44,6 +45,26 @@ function requireSebanJsx(fn: string): never {
  */
 function assertInherited(result: CommandResult): void {
   if (!result.ok) throw new CepError((result.code ?? 'JSX') as CepErrorCode, result.reason)
+}
+
+/** 色板项的形状（`main.jsx:287-298` 产出）：`{ name, color: { hex, c, m, y, k, isFill? } }` */
+function assertSwatchItem(item: unknown): Record<string, unknown> {
+  if (!item || typeof item !== 'object' || !('color' in (item as Record<string, unknown>))) {
+    throw new CepError('PARSE', '色板项缺少 color 字段，不能上色')
+  }
+  return item as Record<string, unknown>
+}
+
+/** 色板 → 主面板的唯一通道（官方 `sf.js` 发、`app.v4.js:17878` 收） */
+function sendSwatchEvent(
+  type: 'setColor' | 'setWireframeColor',
+  item: Record<string, unknown>,
+): void {
+  if (!sendAppEvent(APP_EVENT_SEBAN, { type, data: item })) {
+    throw new CepError('INIT', 'app event 通道不可用（不在 CEP 里）')
+  }
+  // 发出去不代表有人收：主面板没开这条事件是空转，官方同样不报错。
+  // 所以这里不判"主面板在不在"，只在面板上把失败原因显示出来（刀3 的 toast）。
 }
 
 export const swatchCommands: Command<unknown>[] = [
@@ -179,4 +200,102 @@ export const swatchCommands: Command<unknown>[] = [
       )
     },
   }),
+
+  // ---------- 联动 1：色板侧只发事件（左键填充 / 右键描边）----------
+  // 官方就是这条分工：色板 `sf.js` 发 `{type, data}`，主面板 `handleSeBanEvent`（`:17878`）执行。
+  // 色板不判断"智能填色开关"，也不直接调填色 jsx——那个开关和 jsx 都属于主面板。
+
+  defineCommand({
+    id: 'seban.sendColor',
+    title: '左键点色块：给图层填充这个颜色',
+    group: 'seban',
+    requires: 'layer',
+    kind: 'instant',
+    async run(_ctx, { item }) {
+      sendSwatchEvent('setColor', assertSwatchItem(item))
+    },
+  }),
+
+  defineCommand({
+    id: 'seban.sendWireframeColor',
+    title: '右键点色块：给描边填这个颜色',
+    group: 'seban',
+    requires: 'layer',
+    kind: 'instant',
+    async run(_ctx, { item }) {
+      sendSwatchEvent('setWireframeColor', assertSwatchItem(item))
+    },
+  }),
+
+  // ---------- 联动 2：主面板侧执行（由 `bindSeBanReceiver()` 触发）----------
+
+  defineCommand({
+    id: 'seban.applyColor',
+    title: '（联动）用色板颜色给当前图层上色',
+    group: 'seban',
+    requires: 'layer',
+    kind: 'instant',
+    async run(ctx, { item }) {
+      const color = assertSwatchItem(item)
+      // 官方 `:17894-17901`：智能填色**开** → 补 `isFill = true`（`:17896`）再 `ys_useStyleColor`（`:17897`）；
+      // **关** → 只把颜色设为前景色，不动图层。
+      if (await readAutoFillColor()) {
+        await ctx.jsx.style.useStyleColor({ ...color, isFill: true })
+        return
+      }
+      await ctx.jsx.style.setForegroundColor(color)
+    },
+  }),
+
+  defineCommand({
+    id: 'seban.applyWireframeColor',
+    title: '（联动）用色板颜色给当前图层描边',
+    group: 'seban',
+    requires: 'layer',
+    kind: 'instant',
+    async run(ctx, { item }) {
+      // 官方 `:17902-17906`：`ys_setBorderColor([项])`，**不补 isFill**
+      await ctx.jsx.style.setBorderColor(assertSwatchItem(item))
+    },
+  }),
 ]
+
+/**
+ * 读 `sj_set.json` 的 `cyAutoFillColor`（智能填色开关，官方默认开，`:65784`）。
+ * 判据与 `/commonUse` 同一口径：只有显式 `false` 才算关，缺键按开。
+ */
+async function readAutoFillColor(): Promise<boolean> {
+  const read = await readCommonUseOptions()
+  const options = read.ok ? read.value : read.fallback
+  if (!read.ok) {
+    // ADR-14 扩展一：降级必须留信号。读坏了按官方默认（开）继续，但要让
+    // "我明明关了智能填色，点一下怎么直接改了图层" 能在日志里查到原因。
+    log.warn('seban', '读取智能填色开关失败，按官方默认（开）处理', read.reason)
+  }
+  return options.cyAutoFillColor !== false
+}
+
+/**
+ * 主面板侧接收端 —— 官方 `handleSeBanEvent`（`app.v4.js:17878-17906`）的等价物。
+ *
+ * **只能在主面板入口调用**：色板自己也会收到自己发的广播（`dispatchEvent` 广播不含发送者过滤），
+ * 两个面板都绑就是同一次点击执行两遍。
+ *
+ * 只认 `setColor` / `setWireframeColor`。`"GengXin"` 是主面板发给**色板**的刷新信号，
+ * 方向相反，收到自己的广播时直接忽略（与 `stores/swatch.ts` 的不过滤策略互补：
+ * 那边不过滤是为了不漏刷新，这边不过滤就会重复执行）。
+ */
+export function bindSeBanReceiver(): () => void {
+  return onAppEvent(APP_EVENT_SEBAN, (data) => {
+    const payload = data as { type?: unknown; data?: unknown } | undefined
+    const type = payload?.type
+    if (type !== 'setColor' && type !== 'setWireframeColor') return
+
+    const id = type === 'setColor' ? 'seban.applyColor' : 'seban.applyWireframeColor'
+    const item = (payload?.data ?? {}) as Record<string, unknown>
+    void execute(id, { item }).then((result) => {
+      // 色板那边收不到执行结果（跨扩展单向广播），失败只能落日志；按钮不静默是色板自己的事
+      if (!result.ok) log.warn('seban', '色板联动执行失败', { type, reason: result.reason })
+    })
+  })
+}

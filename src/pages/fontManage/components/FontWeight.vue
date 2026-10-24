@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
-import type { FontItem } from '@/cep/types'
+import type { FontItem } from '@/domain/font-item'
 import Icon from '@/components/Icon.vue'
 
 /**

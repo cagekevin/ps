@@ -140,6 +140,8 @@ export interface StyleJsx {
   useStyle(item: unknown, groupId: string): Promise<unknown>
   /** ys_getForegroundColor()（:50193）：读当前前景色，null = 失败 */
   getForegroundColor(): Promise<unknown>
+  /** ys_setForegroundColor([颜色项])（:17899）：智能填色**关**时，色板点击只设前景色 */
+  setForegroundColor(color: unknown): Promise<unknown>
   /** ys_getGradientInfo()（:50752）：读当前渐变，false / { err, msg?, data } */
   getGradientInfo(): Promise<unknown>
   /** ys_AddStyle([{delArr, groupId, envDir}])（:51538）：保存图层样式 */

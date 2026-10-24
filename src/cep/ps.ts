@@ -5,7 +5,8 @@ import { PS_ENV } from './env'
 import { extensionDir } from './fs'
 import { mergeFontStars, readSysFontFile } from './data/sys-font'
 import { jsx } from './jsx'
-import type { FontItem, LayerState } from './types'
+import type { LayerState } from './types'
+import type { FontItem } from '@/domain/font-item'
 
 let initPromise: Promise<void> | null = null
 

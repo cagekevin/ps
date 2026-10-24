@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
-import type { FontItem } from '@/cep/types'
+import type { FontItem } from '@/domain/font-item'
 import { PREVIEW_LABEL, previewText as defaultPreviewText, useFontStore } from '@/stores/font'
 import { useFeedbackStore } from '@/stores/feedback'
 import { usePagedList } from '@/composables/usePagedList'

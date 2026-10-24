@@ -16,6 +16,7 @@ import { installCommonUseSource } from './stores/common-use'
 import { commonUseRepo } from './cep/data/common-use'
 import { bindRenameData } from './stores/rename'
 import { bindSwatchData } from './stores/swatch'
+import { bindSeBanReceiver } from './commands/swatch'
 import { useTaskStore } from './stores/tasks'
 import { setProgressPort } from './commands/runtime'
 import { startSelectionWatch } from './selection'
@@ -74,9 +75,18 @@ app.mount('#app')
 // UNVERIFIED: 独立面板在 PS 里是否仍被正确识别（CEP 双击面板窗口）——未起真实 PS，未实测。
 const standalonePanel = new URLSearchParams(window.location.search).get('panel')
 const standaloneFreePanel = standalonePanel === 'freePanel'
+// 色板面板（刀3 才建）也是独立入口；它必须**不绑**接收端，否则自己发的广播自己执行一遍
+const standaloneSeban = standalonePanel === 'seBan'
 
 // 事件不可用时会自己降级成"操作前查询"，不阻塞启动
 if (!standaloneFreePanel) {
+  // 色板面板也要选区快照：左键上色前要判"有没有选中图层"（`requires: 'layer'`）
   void startSelectionWatch()
+}
+
+if (!standaloneFreePanel && !standaloneSeban) {
+  // 色板 → 主面板：左键填充 / 右键描边（官方 `handleSeBanEvent`，`app.v4.js:17878`）。
+  // 色板面板自己也会收到自己发的广播，所以那边**不绑**。
+  bindSeBanReceiver()
   startCloudAutoSync()
 }

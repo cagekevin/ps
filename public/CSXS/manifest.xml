@@ -5,6 +5,7 @@
   <ExtensionList>
     <Extension Id="com.local.psz.panel.v5" Version="0.1.0" />
     <Extension Id="com.local.psz.panel.v5.freePanel" Version="0.1.0" />
+    <Extension Id="com.local.psz.panel.v5.seban" Version="0.1.0" />
   </ExtensionList>
   <ExecutionEnvironment>
     <HostList>
@@ -79,6 +80,47 @@
             <MinSize>
               <Height>420</Height>
               <Width>240</Width>
+            </MinSize>
+            <MaxSize>
+              <Height>2400</Height>
+              <Width>1200</Width>
+            </MaxSize>
+          </Geometry>
+          <Icons />
+        </UI>
+      </DispatchInfo>
+    </Extension>
+    <!--
+      色板工具：必须单独一个 Extension。
+      理由（docs/页面/11-色板面板.md §三）：同一 Extension 里两个面板都挂
+      com.fengzi.event.seban 时，主面板发的 GengXin 会被自己收到 → 自激重读。
+      最小宽度按"一个色点"给（14px + 内边距），高度不限。
+    -->
+    <Extension Id="com.local.psz.panel.v5.seban">
+      <DispatchInfo>
+        <Resources>
+          <MainPath>./seBan.html</MainPath>
+          <CEFCommandLine>
+            <Parameter>--enable-nodejs</Parameter>
+            <Parameter>--mixed-context</Parameter>
+            <Parameter>--allow-file-access</Parameter>
+            <Parameter>--allow-file-access-from-files</Parameter>
+          </CEFCommandLine>
+        </Resources>
+        <Lifecycle>
+          <AutoVisible>true</AutoVisible>
+        </Lifecycle>
+        <UI>
+          <Type>Panel</Type>
+          <Menu>色板工具</Menu>
+          <Geometry>
+            <Size>
+              <Height>420</Height>
+              <Width>240</Width>
+            </Size>
+            <MinSize>
+              <Height>40</Height>
+              <Width>24</Width>
             </MinSize>
             <MaxSize>
               <Height>2400</Height>

@@ -20,6 +20,8 @@ export default tseslint.config(
       'node_modules/**',
       'public/**',
       'docs/**',
+      // IDE 自带的 slash command 脚本（不是本仓代码，风格与 Node/CommonJS 由 IDE 决定）
+      '.codebuddy/**',
       '*.log',
       '.tmp-*/**',
       'probe-*',

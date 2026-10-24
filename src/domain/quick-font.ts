@@ -5,7 +5,7 @@
 // 禁止：这里不读文件、不调 jsx（数据由调用方传入）
 
 import type { QuickFont } from '@/domain/font-set-config'
-import type { FontItem } from '@/cep/types'
+import type { FontItem } from './font-item'
 
 /** 原版 sortWeight 的权重顺序，app.v4.js:40220 */
 const WEIGHT_ORDER = [

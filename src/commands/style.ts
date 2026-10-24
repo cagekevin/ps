@@ -24,12 +24,24 @@ import {
   sendKuItemToSwatch,
   setKuGroupShow,
 } from '@/cep/data/style-library-repo'
-import { classifySetd, subscribeHostEvent } from '@/cep/events'
+import { APP_EVENT_SEBAN, classifySetd, sendAppEvent, subscribeHostEvent } from '@/cep/events'
 import { asJsxResult, assertJsxOk } from '@/utils/jsx-result'
 import { encodeText } from '@/domain/translate'
 import { CepError } from '@/utils/errors'
 import { defineCommand } from './registry'
 import type { Command, CommandContext } from './types'
+
+/**
+ * 写完色板文件后通知色板面板重读。
+ *
+ * 官方 `sendMessageToSeBan()`（`app.v4.js:50216-50218`、`:52917`）=
+ * `$cep.sendAppEvent("com.fengzi.event.seban", "GengXin")`。
+ * 色板是**另一个 CEP 扩展**（独立进程、独立 ExtendScript 会话），文件改了它不会自己知道，
+ * 只能靠这条 app event。色板没开时 `sendAppEvent` 返回 false，不抛错（这是正常状态，不是失败）。
+ */
+function notifySwatchChanged(): void {
+  sendAppEvent(APP_EVENT_SEBAN, 'GengXin')
+}
 
 /**
  * 样式域命令（`/style` 第 2 段 + 第 3 段 + 第 5 段）。
@@ -451,9 +463,8 @@ export const styleCommands: Command<unknown>[] = [
     kind: 'instant',
     async run(_ctx, { kind, groupIndex, itemIndex }) {
       // 原版 `:50349-50355`：把 `[item]` 写成色板文件全文（整份替换，不是追加），再发 app event 通知色板面板。
-      // UNVERIFIED: 那条 `com.fengzi.event.seban` 通知没有发（本项目没有通用 app event 发送器），
-      // 色板面板会不会自己刷新未验；详见 `sendKuItemToSwatch` 的注释。
       await sendKuItemToSwatch(kind, groupIndex, itemIndex)
+      notifySwatchChanged()
     },
   }),
 
@@ -466,6 +477,7 @@ export const styleCommands: Command<unknown>[] = [
     async run(_ctx, { kind, groupIndex, itemIndex }) {
       // 原版 `:50356-50364`：读回 seBan 数组 → push 该项 → 写回（与上一条的"整份替换"相反）
       await appendKuItemToSwatch(kind, groupIndex, itemIndex)
+      notifySwatchChanged()
     },
   }),
 
@@ -478,6 +490,7 @@ export const styleCommands: Command<unknown>[] = [
     async run(_ctx, { kind, groupIndex }) {
       // 原版 `:50260-50268`：`write(seBan, JSON.stringify(list))`——整组**替换**色板，不是追加
       await sendKuGroupToSwatch(kind, groupIndex)
+      notifySwatchChanged()
     },
   }),
 
@@ -490,6 +503,7 @@ export const styleCommands: Command<unknown>[] = [
     async run(_ctx, { kind, groupIndex }) {
       // 原版 `:50269-50290`：读回 → 逐项 push 该组 `list` → 写回
       await appendKuGroupToSwatch(kind, groupIndex)
+      notifySwatchChanged()
     },
   }),
 

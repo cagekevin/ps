@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 import { filterFonts, hasActiveFilter, type FontFilter } from '@/domain/font-filter'
 import type { Classification } from '@/domain/classification'
-import type { FontItem } from '@/cep/types'
+import type { FontItem } from '@/domain/font-item'
 
 function font(family: string, names: string[] = [], ps: string[] = []): FontItem {
   return { family, weights: ['Regular'], names, postScriptNames: ps }

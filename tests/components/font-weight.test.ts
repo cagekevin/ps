@@ -1,7 +1,7 @@
 import { mount } from '@vue/test-utils'
 import { describe, expect, it } from 'vitest'
 import FontWeight from '@/pages/fontManage/components/FontWeight.vue'
-import type { FontItem } from '@/cep/types'
+import type { FontItem } from '@/domain/font-item'
 
 function font(over: Partial<FontItem> = {}): FontItem {
   return {

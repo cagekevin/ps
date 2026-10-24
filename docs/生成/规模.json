@@ -10,7 +10,7 @@
     "组件表行数": "docs/页面/<页>.md「一、组件展开」小节表格的数据行数"
   },
   "commands": {
-    "total": 144,
+    "total": 148,
     "byDomain": {
       "action": 19,
       "cloud": 4,
@@ -20,19 +20,19 @@
       "freePanel": 9,
       "legacy": 1,
       "rename": 13,
-      "seban": 7,
+      "seban": 11,
       "style": 32,
       "system": 3
     }
   },
   "tests": {
-    "files": 126,
-    "cases": 1122,
+    "files": 127,
+    "cases": 1137,
     "eachSites": 11
   },
   "components": 31,
   "icons": 189,
-  "pages": 8,
+  "pages": 9,
   "hostEvents": 7,
   "componentTableRows": {
     "fontManage": 33,
@@ -68,7 +68,7 @@
   "layers": {
     "cep": {
       "files": 53,
-      "lines": 6440
+      "lines": 6432
     },
     "cloud": {
       "files": 4,
@@ -76,7 +76,7 @@
     },
     "commands": {
       "files": 16,
-      "lines": 4597
+      "lines": 4750
     },
     "components": {
       "files": 36,
@@ -87,12 +87,12 @@
       "lines": 918
     },
     "domain": {
-      "files": 23,
-      "lines": 3358
+      "files": 24,
+      "lines": 3387
     },
     "pages": {
-      "files": 61,
-      "lines": 12542
+      "files": 63,
+      "lines": 12768
     },
     "selection": {
       "files": 2,
@@ -100,7 +100,7 @@
     },
     "stores": {
       "files": 15,
-      "lines": 1185
+      "lines": 1186
     },
     "utils": {
       "files": 10,

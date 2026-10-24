@@ -24,6 +24,8 @@ const CommonUsePage = () => import('@/pages/commonUse/index.vue')
 const FontManagePage = () => import('@/pages/fontManage/index.vue')
 /** 自由面板：独立 CEP 面板窗口 */
 const FreePanelPage = () => import('@/pages/freePanel/index.vue')
+/** 色板工具：独立 CEP 面板窗口（原版 `ps.sf.SheJiZhuLi.seban`） */
+const SeBanPage = () => import('@/pages/seBan/index.vue')
 /** 动作管理：仓库 → 分组 → 动作（原版 Action.js） */
 const ActionPage = () => import('@/pages/action/index.vue')
 /** 字体面板：翻译/拆分/生成按钮/字体属性/层级（原版 anon_56d7_L34996） */
@@ -61,6 +63,12 @@ export const routes: RouteRecordRaw[] = [
     name: 'FreePanel',
     component: FreePanelPage,
     meta: { title: '自由面板', standalone: true },
+  },
+  {
+    path: '/seBan',
+    name: 'SeBan',
+    component: SeBanPage,
+    meta: { title: '色板', standalone: true },
   },
   {
     path: '/fontSet',

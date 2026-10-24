@@ -41,6 +41,8 @@ export function createStyleJsx(): StyleJsx {
     },
 
     getForegroundColor: () => read('ys_getForegroundColor', [], '读取前景色'),
+    // 智能填色关时的退路（`app.v4.js:17899`）：色板点色只设前景色，不动图层
+    setForegroundColor: (color) => write('ys_setForegroundColor', [color], '设置前景色'),
     getGradientInfo: () => read('ys_getGradientInfo', [], '读取渐变'),
 
     // 原版 :51532-51536：{ delArr, groupId, envDir: "/SheJiZhuLi" }

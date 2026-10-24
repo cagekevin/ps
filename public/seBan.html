@@ -1,0 +1,15 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="UTF-8" />
+    <title>色板工具</title>
+  </head>
+  <body>
+    <script>
+      // 独立 CEP 面板入口：复用同一份前端产物。
+      // 用显式参数 ?panel=seBan 声明"这是独立面板"（D-34：不靠 hash 猜）。
+      // 这个参数还负责一件事：main.ts 见到它就不绑色板接收端，否则自己发的广播自己执行一遍。
+      window.location.replace('./index.html?panel=seBan#/seBan')
+    </script>
+  </body>
+</html>

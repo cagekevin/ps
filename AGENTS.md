@@ -22,7 +22,7 @@ UI 和数据流全部重写；PS 能力层继续调原厂 jsxbin（`public/lib/a
 
 | 层   | 手段                                           | 能证明                                   |
 | ---- | ---------------------------------------------- | ---------------------------------------- |
-| 静态 | `vue-tsc` / `npm run check` / `npm run ledger` | 类型、样式、台账                         |
+| 静态 | `vue-tsc` / `npm run check` / `npm run ledger` | 类型、样式、债务账本                     |
 | 组件 | `npm test`（jsdom）                            | 逻辑、事件、DOM 输出、条件分支           |
 | 运行 | 只能在 PS 里                                   | 真实数据、点击、视觉 —— **不做，标未验** |
 
@@ -151,7 +151,10 @@ grep -rn "export .*<概念词>" src  # 有哪些导出叫这个名字
 | 想知道                                           | 去哪                                                                                  | 能重新生成?                                                       |
 | ------------------------------------------------ | ------------------------------------------------------------------------------------- | ----------------------------------------------------------------- |
 | 每页做到哪、下一步怎么定                         | `docs/状态/进度.md`                                                                   | 散文手写；带 `stats` 注入块的部分由脚本生成                       |
-| **所有待办 / 债务 / 依赖（唯一待办源）**         | `docs/状态/台账.md`                                                                   | 手写，`npm run ledger` 校验                                       |
+| **所有技术债（唯一待办源 · 债侧）**              | `daily/架构日志/债务.md`                                                              | 摘要手写；**读写唯一入口 = `node scripts/debt.mjs`**，禁手写表格行 |
+| **所有任务（唯一待办源 · 任务侧）**              | `daily/架构日志/00-任务-总索引.md`                                                    | 手写，`npm run ledger` 校验                                       |
+| 某笔债的明细、证据与覆盖度表                    | `daily/架构日志/<NN>-<区域>-<日期>.md`                                                | 手写；`债务.md` 的锚点列指向它                                    |
+| 区域审计进度（灯：已审 / 有债 / 未审）            | `daily/架构日志/index.md`                                                             | ✅ 机器生成 `node scripts/arch-index.mjs`（禁手改）                |
 | 单页验收记录（原版 vs 我方逐项）                 | `docs/页面/0N-*.md`（10 份，约 4200 行）                                              | 手写                                                              |
 | **单页 render 结构树 + 全量 class + CSS 实测值** | **`docs/生成/页面规格/0N-*.md`（9 份，约 3700 行）**                                  | ✅ `npm run spec`（读 `docs/原版/01-原版源码/`，与这 9 份产物一一对应）                 |
 | 某页某个 class 有没有绑事件                      | `docs/生成/交互清单.md`（1665 行）                                                    | ❌ 数据源（webcrack 解包输出）**不在仓库**；缺时脚本以退出码 2 说明缺哪条路径 |
@@ -168,23 +171,24 @@ grep -rn "export .*<概念词>" src  # 有哪些导出叫这个名字
 | 控件库现状与准入                                 | `docs/组件库/README.md`、`现有控件.md`、`映射与缺口.md`、`页面契约.md`、`组件宪法.md` | 手写                                                              |
 | 规模数字（命令 / 用例 / 组件 / 图标 / 页面）     | `docs/生成/规模.md`                                                                   | ✅ `npm run stats`                                                |
 | 最近踩过什么坑、做过什么决策                     | `docs/日志/`（13 篇）+ `docs/日志/index.md`                                           | ✅ `npm run log:index`                                            |
+| **工序命令集（写码 / 排错 / 审计 / 治理）**         | `.codebuddy/commands/*.md`（23 篇 + `dep-audit.cjs`）                                 | 手写；**2026-10-24 已整体本仓化**（层名 / 门禁 / 文档来源全部指向本仓，禁再引入外仓口径） |
 
 ### 2. 代码结构（2026-10-23 实测）
 
 | 层 | 规模 | 放什么 |
 | --- | --- | --- |
-| `src/pages/` | <!-- stats:begin layers.pages -->61 文件 / 12542 行<!-- stats:end layers.pages --> | 11 个页面（含 `_atoms` `_probe` `_placeholder` 三个内部页） |
-| `src/cep/` | <!-- stats:begin layers.cep -->53 文件 / 6440 行<!-- stats:end layers.cep --> | PS 出口：`transport` / `jsx/<域>` / `data/`（仓库层）/ `cloud` / `dialog` / `events` |
+| `src/pages/` | <!-- stats:begin layers.pages -->63 文件 / 12768 行<!-- stats:end layers.pages --> | 11 个页面（含 `_atoms` `_probe` `_placeholder` 三个内部页） |
+| `src/cep/` | <!-- stats:begin layers.cep -->53 文件 / 6432 行<!-- stats:end layers.cep --> | PS 出口：`transport` / `jsx/<域>` / `data/`（仓库层）/ `cloud` / `dialog` / `events` |
 | `src/components/` | <!-- stats:begin layers.components -->36 文件 / 3286 行<!-- stats:end layers.components --> | 跨页组件；`G` 前缀 = UI 基础件 |
-| `src/domain/` | <!-- stats:begin layers.domain -->23 文件 / 3358 行<!-- stats:end layers.domain --> | 纯函数与类型，零 IO、零 Vue |
-| `src/commands/` | <!-- stats:begin layers.commands -->16 文件 / 4597 行<!-- stats:end layers.commands --> | 命令注册表 + 分域命令 |
+| `src/domain/` | <!-- stats:begin layers.domain -->24 文件 / 3387 行<!-- stats:end layers.domain --> | 纯函数与类型，零 IO；**唯一例外** `font-missing.ts`（跨层共享 UI 状态，用了 Vue `ref`，已登记为债） |
+| `src/commands/` | <!-- stats:begin layers.commands -->16 文件 / 4750 行<!-- stats:end layers.commands --> | 命令注册表 + 分域命令 |
 | `src/composables/` | <!-- stats:begin layers.composables -->10 文件 / 918 行<!-- stats:end layers.composables --> | 组合式（`useCommand` 在 `components/command/`） |
-| `src/stores/` | <!-- stats:begin layers.stores -->15 文件 / 1185 行<!-- stats:end layers.stores --> | 只读投影 + 少量 UI 状态 |
-| `src/utils/` | <!-- stats:begin layers.utils -->10 文件 / 505 行<!-- stats:end layers.utils --> | 无依赖工具 |
+| `src/stores/` | <!-- stats:begin layers.stores -->15 文件 / 1186 行<!-- stats:end layers.stores --> | 只读投影 + 少量 UI 状态 |
+| `src/utils/` | <!-- stats:begin layers.utils -->10 文件 / 505 行<!-- stats:end layers.utils --> | 通用工具；**唯一例外** `error-handler.ts`（接 `stores/feedback` 做全局错误提示） |
 | `src/cloud/` | <!-- stats:begin layers.cloud -->4 文件 / 952 行<!-- stats:end layers.cloud --> | 同步引擎与台账 |
 | `src/selection/` | <!-- stats:begin layers.selection -->2 文件 / 292 行<!-- stats:end layers.selection --> | 选区 / 当前文字快照 |
 
-**测试**：<!-- stats:begin tests -->**126 个文件、1122 处用例**（静态计数 `it()`/`test()`；非通过数）<!-- stats:end tests -->（`tests/{cep,cloud,commands,components,composables,data,domain,pages,selection,stores,utils}`）。
+**测试**：<!-- stats:begin tests -->**127 个文件、1137 处用例**（静态计数 `it()`/`test()`；非通过数）<!-- stats:end tests -->（`tests/{cep,cloud,commands,components,composables,data,domain,pages,selection,stores,utils}`）。
 
 ### 3. 一手证据已入库，别再问"路径在不在"
 
@@ -205,7 +209,7 @@ grep -rn "export .*<概念词>" src  # 有哪些导出叫这个名字
 ### 4. 三个会让人白跑一趟的陷阱
 
 1. **页面文档标「未提取」，生成物里其实有。** `docs/页面/04`(3 处) / `05`(1) / `06`(1) / `07`(1) / `08`(1) / `09`(12) 都还写着「未提取」，但对应 `docs/生成/页面规格/0N-*.md` **都有完整结构树与 CSS 实测值**。**先查生成物，再信「未提取」**。
-2. **`docs/生成/` 里有两个文件是手写的，不是脚本产物。** `库文件格式契约.md` 与 `jsx返回结构复原.md` 是调查结论，**可以手改**（与 `docs/README.md` 说"生成物别手改"矛盾）。`生成/` 其余文件（`交互清单` / `横切能力` / `注册表.json` / `样式基线.json` / `断言基线.json` / `规模.*` / `页面规格/`）才是产物。
+2. **`docs/生成/` 里有四个文件是手写的，不是脚本产物。** `库文件格式契约.md`、`jsx返回结构复原.md`、`RepoRead消费方清单.md`、`硬规则20违规清单.md` 是调查结论，**可以手改**（与 `docs/README.md` 说"生成物别手改"矛盾；这四份文件的首行都写明了这一点）。`生成/` 其余文件（`交互清单` / `横切能力` / `注册表.json` / `样式基线.json` / `断言基线.json` / `规模.*` / `常用页-左键分派.json` / `jsx派发表.json` / `页面规格/`）才是产物。
 3. **`src/cep/env.ts` 的 `PS_ENV` 常量不是死代码。** 它是**注入给 jsx 的环境契约**（字段名不能改），包括 `VUE_APP_UMS` 这类看起来像账号残留的字段。不做账号**功能** ≠ 删这几个常量。
 
 ### 5. 脚本清单（写清能不能跑、要不要仓库外的数据、门禁管不管）
@@ -214,12 +218,14 @@ grep -rn "export .*<概念词>" src  # 有哪些导出叫这个名字
 
 | 命令 | 干什么 | 状态 |
 | --- | --- | --- |
-| `npm run check` | style-guard + ledger + stats --check + lint + format:check | ✅ **不含测试、不含 tests 类型检查** |
-| `npm test` | vitest run（`<!-- stats:begin tests -->**126 个文件、1122 处用例**（静态计数 `it()`/`test()`；非通过数）<!-- stats:end tests -->`） | ✅ 单独一条，`check` 不调它 |
+| `npm run check` | **12 步**：style-guard → template-guard → assert-guard → dispatch:check → boundary:pages → **layer:boundary** → spec:check → ledger → stats:check → lint → format:check | ✅ **不含测试、不含类型检查** |
+| `npm run layer:boundary` | 层间方向守卫：store 只读 / 命令不自取选区 / 适配层不引文案层 / domain 不反向依赖 `@/cep` | ✅ 已进 `check`；判据见 `docs/架构/目标架构.md` §4.7 |
+| `npm test` | vitest run（`<!-- stats:begin tests -->**127 个文件、1137 处用例**（静态计数 `it()`/`test()`；非通过数）<!-- stats:end tests -->`） | ✅ 单独一条，`check` 不调它 |
 | `npm run deploy` | check → typecheck → build → verify:dist | ✅ 跑全的入口；**不含测试**，测试是流程不是脚本 |
 | `npm run build` | `vite build`，**只此一步** | ✅ 不带任何检查；检查归 `check` / `typecheck` / `verify:dist` |
+| `npm run typecheck` | `vue-tsc --noEmit`（`src/**`）+ `vue-tsc --noEmit -p tsconfig.tests.json`（`tests/**`） | ✅ 独立一条，`check` 不调它，`deploy` 会调 |
 | `npm run stats` | 生成规模数字，改写 `进度.md` 与本文的注入块 | ✅ |
-| `npm run ledger` | 台账格式与依赖自洽 | ✅ |
+| `npm run ledger` | 债务账本与任务索引的格式、依赖自洽（**账本已从 `docs/状态/台账.md` 迁到 `daily/架构日志/`**） | ✅ |
 | `npm run registry` | 横切能力清单 `docs/生成/横切能力.md` | ✅ |
 | `npm run spec` | 重新生成 `docs/生成/页面规格/0N-*.md`（读 `docs/原版/01-原版源码/`，可加 `-- --page X`） | ✅ |
 | `npm run log:index` | `docs/日志/index.md` | ✅ |
@@ -246,7 +252,7 @@ grep -rn "export .*<概念词>" src  # 有哪些导出叫这个名字
 > 自己的 render + scoped CSS，禁止照抄。
 
 1. `docs/状态/进度.md` —— 每页做到哪、下一步怎么定
-2. `docs/状态/台账.md` —— **唯一待办源**，带 id 和依赖，从这里挑活干
+2. `daily/架构日志/债务.md`（债）+ `daily/架构日志/00-任务-总索引.md`（任务）—— **唯一待办源**，带 id 和依赖，从这里挑活干；旧路径 `docs/状态/台账.md` 已于 2026-10-24 删除
 3. `docs/生成/横切能力.md` —— 已有哪些公共能力，别重复造
 4. `docs/规范/视觉规范.md` —— 字号、图标、图标+文字怎么配，**写页面前必查**
 5. `docs/规范/原版缺陷.md` —— **原版不是标准答案**，视觉照搬、工程别照抄（`!important`、`console.log`、字体图标、测试资源…）
@@ -270,8 +276,8 @@ grep -rn "export .*<概念词>" src  # 有哪些导出叫这个名字
 | ------------------------ | ------------------------------------------ | ----------------------- |
 | `AGENTS.md`              | 规范、约束、查证路径                       | 进度、待办              |
 | `docs/状态/进度.md`      | 每页状态快照（占位 / 部分实现 / 静态通过） | 待办、债务              |
-| `docs/状态/台账.md`      | **所有**待办、债务、依赖、归档             | 现状描述                |
-| `docs/页面/0N-<页面>.md` | 单页验收记录（逐项 原版 vs 当前）          | 待办（只能指向台账 id） |
+| `daily/架构日志/债务.md` | **所有**技术债的一行摘要 + 状态         | 叙述（明细在区域日志）   |
+| `docs/页面/0N-<页面>.md` | 单页验收记录（逐项 原版 vs 当前）          | 待办（只能指向债 / 任务 id） |
 | `docs/规范/测试规范.md`  | 测什么 / 不测什么 / 优先级 / 流程          | 具体用例（在 `tests/`） |
 | `docs/生成/横切能力.md`  | 已有能力清单（`npm run registry` 生成）    | 计划中的能力            |
 | `docs/日志/`             | 决策、踩坑、机制变更                       | 日常改动流水账          |
@@ -502,12 +508,12 @@ bind(computed(() => items.value.filter(/* ... */))) // 有筛选才需要
 
 **运行时**（真实加载、点击反应、视觉观感）一律未验。可以写"代码路径存在"，不能写"功能正常"。
 
-### 12. 干活前先看台账
+### 12. 干活前先看债务账本与任务索引
 
-`docs/状态/台账.md` 里每条都有 id、状态、依赖。**只挑依赖已完成的条目做**。
+`daily/架构日志/债务.md`（技术债）与 `daily/架构日志/00-任务-总索引.md`（任务）里每条都有 id、状态、依赖。**只挑依赖已完成的条目做**。
 
-- 新发现的活先登记，再动手
-- 做完了把状态改成 `done`，并把该行**移到台账的「已完成」表**（依赖它的条目会自动解锁）
+- **债**：走 `node scripts/debt.mjs`（`add` / `resolve` / `edit`），**禁手写表格行**；明细与证据写进 `daily/架构日志/<NN>-<区域>-<日期>.md`，账本只留一行摘要
+- **任务**：手改 `00-任务-总索引.md`；做完了把状态改成 `done` 并移到「已完成」表（依赖它的条目会自动解锁）
 - 做不完就写 `blocked` 并在说明里写清卡在哪
 - 代码里留标记用 `TODO(T-23)` 这种格式，id 必须真实存在（`npm run ledger` 会校验）
 
@@ -515,7 +521,7 @@ bind(computed(() => items.value.filter(/* ... */))) // 有筛选才需要
 
 **每次收工只做三件事**，做完就停，别顺手开新页：
 
-1. 台账：状态改对，完成的移到归档表
+1. 账本：债走 `debt.mjs resolve`，任务状态改对、完成项移到归档表
 2. 进度：**只有页面状态档位变了才改**（占位→可用→验收完成），细节不写
 3. 跑 `npm run check`；有决策/踩坑才写日志
 
@@ -634,13 +640,13 @@ npm run log:index         # 重建索引
 ### 19. 证据分两级：一手缺席时，二手证据就是证据
 
 - **一手证据**：原版源码（美化版行号 / 压缩版字符串）、真机样本、已通过的测试。
-- **二手证据**：`docs/` 里已完成的调查结论——`docs/生成/*`、`docs/架构/*`、`docs/页面/0N-*.md`、`docs/状态/台账.md` 的说明列。
+- **二手证据**：`docs/` 里已完成的调查结论——`docs/生成/*`、`docs/架构/*`、`docs/页面/0N-*.md`、`daily/架构日志/` 各区域日志的结论段。
 
 原版面板源码已入库（`docs/原版/01-原版源码/`），行号直接用；只有 jsxbin 里的 jsx 实现（`public/lib/all.decrypted.js`）仍不可读。别的插件安装副本（`~/Library/Application Support/fz.FengZi1Hao/js/`）即使存在也要**先确认版本**——曾有一份与文档调查所用版本不一致（文档引用的 `56d7.js` / `0425.js` 不在其中），那种情况**不得据它核对任何结论**。`app.v4.js:行号` 是**美化版坐标**；源码已入库（`docs/原版/`，ADR-25），**行号就是可当场复核的锚点**——直接按行号读（`Get-Content <文件> | Select-Object -Skip <N-1> -First <M>`），不再要求"字符串定位、不写行号"；核实后标注 `已核（docs/原版/01-原版源码/panel/js/app.v4.js:NNNN）`。**一手证据缺席时（真机行为、webcrack 解包输出这类仓里没有的），二手证据就是唯一证据，可以直接据此实现**，不许停摆或要求重新调查。
 
 二手证据的有效性由**锚点**保证，不由当场复核保证：每条调查结论必须带 `文件:行号`（美化版坐标）、CSS 选择器、契约章节号、测试用例名之一。锚点是给"将来复核"用的，不是"当下必须跑一遍"。
 
-未经一手复核的结论按第 14 条标 `UNVERIFIED`，但**不影响开工**；报告里单列一节，写明依赖的是哪条二手证据。文档与代码冲突时**以代码为准，并立刻改文档**（见 `docs/README.md` 第七节「文档坏了怎么修」；台账证据规则见 `docs/状态/台账.md`「证据规则」）。
+未经一手复核的结论按第 14 条标 `UNVERIFIED`，但**不影响开工**；报告里单列一节，写明依赖的是哪条二手证据。文档与代码冲突时**以代码为准，并立刻改文档**（见 `docs/README.md` 第七节「文档坏了怎么修」；证据规则见 `AGENTS.md` 第 19 条与 `daily/架构日志/00-任务-总索引.md`）。
 
 **不许编造锚点**：写不出 `文件:行号` 的，不许标"已核实"，只能标"未提取"或"待查证"。三档的正面样板见 `docs/页面/09-模板库.md` 的「已核实 / 未提取 / 文档缺失」。机制层面的理由见 ADR-25。
 
@@ -720,7 +726,7 @@ const bridge = (window as unknown as { __adobe_cep__?: Bridge }).__adobe_cep__
 ## 提交前自检
 
 ```powershell
-npm run check      # 样式守卫 + 台账校验（只查文档/样式，不查类型）
+npm run check      # 12 步守卫：样式 / 模板 / 断言 / 边界 / 账本 / 类型风格（不查 TS 类型，不跑测试）
 npm run deploy     # check + 类型检查 + 构建 + 产物校验，唯一强制点
 ```
 
@@ -734,7 +740,7 @@ npm run deploy     # check + 类型检查 + 构建 + 产物校验，唯一强制
 | `npm run check`                        | 收工前顺手跑，秒级                                              |
 | `npm test`                             | 改了组件/逻辑就跑（jsdom，不启浏览器）                          |
 | `npm run deploy`                       | 要进 PS 里验收之前，必须通过                                    |
-| `npm run ledger`                       | 只改了台账                                                      |
+| `npm run ledger`                       | 只改了债 / 任务账本                                             |
 | `npm run registry`                     | 新增了 `src/{cep,composables,stores,utils,styles}` 下的文件     |
 | `npm run template:guard` | 扫 `.vue`：模板里的非法属性名（反引号等）+ SFC 解析错误。**编译与 jsdom 都抓不到**这类问题，所以单独一道 | ✅ 已接进 `check` |
 | `npm run assert:guard` | 扫 `src/`：`as any` / `as unknown as`（双转型）。第三方边界须写 `// 断言理由：…`；存量走基线只许减少 | ✅ 已接进 `check` |

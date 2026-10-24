@@ -100,7 +100,8 @@ useCommand.run(payload, successText)
 
 ## 3. 存储地图
 
-文件都在 `%APPDATA%/SheJiZhuLi/` 下；本仓库不写这个目录以外的位置。
+文件大多在 `%APPDATA%/SheJiZhuLi/` 下，**例外**：色板三个文件在 `%APPDATA%/FengZiSeBan/`（原版 `sf.js:11` 的目录名）。
+本仓库不写这两个目录以外的位置。
 
 | 数据 | 文件 | 仓库 / 入口 | store |
 |---|---|---|---|
@@ -118,6 +119,8 @@ useCommand.run(payload, successText)
 | 样式仓库索引 | `sj_kuStoreInfo.ini` | `cep/data/style-library-repo.ts` | `style-library` |
 | 四库文件 | 索引里的 `sj_ku*.json` | `cep/data/style-library-repo.ts` + `style-library-io.ts` | `style-library` |
 | 云同步台账 | `sj_v5_cloud_sync.json` | `cep/cloud/ledger.ts` | `cloud`（只读状态） |
+| 色板（自定义色 / 最近色 / 最近数量） | `%APPDATA%/FengZiSeBan/userColor.ini`、`vecently.ini`、`zuiJinShuLiang.txt` | `cep/data/swatch-repo.ts`（**唯一写队列**） | `swatch` |
+| 动作库 `.dzx` 导入导出 | 临时文件 + `sj_dz*.json` | `cep/data/action-archive.ts`（索引与回滚） | 无（命令层直接走） |
 
 - 浏览器 dev 下 `settings.ts` 走 `localStorage`；CEP 下读写 `sj_v5_ui.json`。
 - 样式库索引里的四个字段是**相对文件名**，扩展名不代表格式（见 `docs/生成/库文件格式契约.md` §2.2）。

@@ -5,7 +5,8 @@ import { starsRepo, tagsRepo } from '@/cep/data'
 import { describeCepError } from '@/utils/error-text'
 import { log } from '@/utils/logger'
 import { usePersistedRef } from '@/composables/usePersisted'
-import type { FontItem, FontTag } from '@/cep/types'
+import type { FontTag } from '@/cep/types'
+import type { FontItem } from '@/domain/font-item'
 
 /** 预览档位，对齐原面板的 xg 数组 */
 export type PreviewMode = 'none' | 'small' | 'medium' | 'large' | 'extra-large'

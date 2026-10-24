@@ -1,5 +1,6 @@
 import fontsJson from '@/mocks/fonts.json'
-import type { FontItem, LayerState, SysFontFile } from './types'
+import type { LayerState, SysFontFile } from './types'
+import type { FontItem } from '@/domain/font-item'
 
 /**
  * 浏览器里的假数据。

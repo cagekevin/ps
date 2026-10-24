@@ -1,4 +1,4 @@
-import type { FontItem } from '@/cep/types'
+import type { FontItem } from './font-item'
 
 function asArray(value: unknown): string[] {
   if (Array.isArray(value)) return value.map((v) => String(v))

@@ -54,10 +54,35 @@ vi.mock('@/selection', () => ({
 }))
 
 const jsx = vi.hoisted(() => ({
-  style: { getForegroundColor: vi.fn() },
+  style: {
+    getForegroundColor: vi.fn(),
+    useStyleColor: vi.fn(),
+    setForegroundColor: vi.fn(),
+    setBorderColor: vi.fn(),
+  },
   legacy: { call: vi.fn() },
 }))
 vi.mock('@/cep/jsx', () => ({ jsx }))
+
+/** app event 通道：色板 → 主面板（`com.fengzi.event.seban`） */
+const appEvents = vi.hoisted(() => ({
+  sent: [] as Array<{ channel: string; data: unknown }>,
+  handlers: new Map<string, (data: unknown) => void>(),
+}))
+vi.mock('@/cep/events', async (importOriginal) => {
+  const actual = await importOriginal<typeof import('@/cep/events')>()
+  return {
+    ...actual,
+    sendAppEvent: (channel: string, data: unknown) => {
+      appEvents.sent.push({ channel, data })
+      return true
+    },
+    onAppEvent: (channel: string, handler: (data: unknown) => void) => {
+      appEvents.handlers.set(channel, handler)
+      return () => appEvents.handlers.delete(channel)
+    },
+  }
+})
 
 const openUrl = vi.hoisted(() => ({ openUrlInDefaultBrowser: vi.fn(), openUrl: vi.fn() }))
 vi.mock('@/cep/open-url', () => openUrl)
@@ -91,7 +116,17 @@ beforeEach(async () => {
   fsMock.files.set(COLOR_LIB, JSON.stringify([{ name: '灰白', show: true, list: [] }]))
 
   jsx.style.getForegroundColor.mockResolvedValue(RED)
+  jsx.style.useStyleColor.mockResolvedValue(null)
+  jsx.style.setForegroundColor.mockResolvedValue(null)
+  jsx.style.setBorderColor.mockResolvedValue(null)
   jsx.legacy.call.mockResolvedValue(null)
+
+  appEvents.sent.length = 0
+  appEvents.handlers.clear()
+
+  // 智能填色开关落在 sj_set.json：每条用例都从"缺键 = 官方默认开"开始，防用例间互串
+  const { legacySettingsRepo } = await import('@/cep/data/legacy-settings')
+  await legacySettingsRepo.write({})
 })
 
 describe('按钮 1：seban.addForegroundColor（原版 TianJia，sf.js:377-382）', () => {
@@ -241,5 +276,89 @@ describe('按钮 4 / 6：依赖色板面板自带 jsx 的两条，补不到就�
     expect(result.ok).toBe(false)
     expect(result.ok === false && result.reason).toContain('sb_SheZhiXingZhuang')
     expect(result.ok === false && result.reason).toContain('jsx/main.jsx')
+  })
+})
+
+/**
+ * 联动（用户 2026-10-24 定：只有这两条）。
+ *
+ * 分工：**色板只发事件、不执行**；主面板收到后按智能填色开关执行。
+ * 官方 `sf.js` 发 `{type, data}` → `app.v4.js:17878` 的 `handleSeBanEvent` 收。
+ */
+describe('联动 1：色板侧只发事件（左键 setColor / 右键 setWireframeColor）', () => {
+  it('左键发 setColor，且**不**调任何填色 jsx（执行在主面板）', async () => {
+    await expect(execute('seban.sendColor', { item: RED })).resolves.toEqual({ ok: true })
+
+    expect(appEvents.sent).toEqual([
+      { channel: 'com.fengzi.event.seban', data: { type: 'setColor', data: RED } },
+    ])
+    expect(jsx.style.useStyleColor).not.toHaveBeenCalled()
+    expect(jsx.style.setForegroundColor).not.toHaveBeenCalled()
+  })
+
+  it('右键发 setWireframeColor', async () => {
+    await expect(execute('seban.sendWireframeColor', { item: BLUE })).resolves.toEqual({ ok: true })
+
+    expect(appEvents.sent).toEqual([
+      { channel: 'com.fengzi.event.seban', data: { type: 'setWireframeColor', data: BLUE } },
+    ])
+    expect(jsx.style.setBorderColor).not.toHaveBeenCalled()
+  })
+
+  it('项里没有 color → 报错且不发事件（不能让主面板收到脏数据）', async () => {
+    const result = await execute('seban.sendColor', { item: { name: '未命名' } })
+
+    expect(result.ok).toBe(false)
+    expect(appEvents.sent).toEqual([])
+  })
+})
+
+describe('联动 2：主面板侧执行（开关在 /commonUse，不在色板）', () => {
+  it('智能填色**开**（缺键按开，官方默认 :65784）→ useStyleColor 且补 isFill:true', async () => {
+    await expect(execute('seban.applyColor', { item: RED })).resolves.toEqual({ ok: true })
+
+    expect(jsx.style.useStyleColor).toHaveBeenCalledWith({ ...RED, isFill: true })
+    expect(jsx.style.setForegroundColor).not.toHaveBeenCalled()
+  })
+
+  it('智能填色**关**（sj_set.json 显式 false）→ 只设前景色，不动图层', async () => {
+    // 走仓库写入而不是直写文件：`pick()` 决定实现（内存 / 磁盘），直写文件在测试里读不到
+    const { legacySettingsRepo } = await import('@/cep/data/legacy-settings')
+    await legacySettingsRepo.write({ cyAutoFillColor: false })
+
+    await expect(execute('seban.applyColor', { item: RED })).resolves.toEqual({ ok: true })
+
+    expect(jsx.style.setForegroundColor).toHaveBeenCalledWith(RED)
+    expect(jsx.style.useStyleColor).not.toHaveBeenCalled()
+  })
+
+  it('右键 → setBorderColor，**不补** isFill（官方 :17902-17906 只传项）', async () => {
+    await expect(execute('seban.applyWireframeColor', { item: BLUE })).resolves.toEqual({
+      ok: true,
+    })
+
+    expect(jsx.style.setBorderColor).toHaveBeenCalledWith(BLUE)
+    expect(jsx.style.useStyleColor).not.toHaveBeenCalled()
+  })
+})
+
+describe('接收端 bindSeBanReceiver（官方 handleSeBanEvent，:17878-17906）', () => {
+  it('收到 setColor → 执行 applyColor；"GengXin" 是自己的广播，忽略', async () => {
+    const { bindSeBanReceiver } = await import('@/commands/swatch')
+    bindSeBanReceiver()
+
+    const handler = appEvents.handlers.get('com.fengzi.event.seban')
+    expect(handler).toBeTruthy()
+
+    // 不是事件方向的消息（主面板发给色板的刷新信号）→ 不执行
+    handler?.('GengXin')
+    handler?.({ type: 'unknown', data: RED })
+    await Promise.resolve()
+    expect(jsx.style.useStyleColor).not.toHaveBeenCalled()
+
+    // 真正的点击事件 → 走上色
+    handler?.({ type: 'setColor', data: RED })
+    await vi.waitFor(() => expect(jsx.style.useStyleColor).toHaveBeenCalled())
+    expect(jsx.style.useStyleColor).toHaveBeenCalledWith({ ...RED, isFill: true })
   })
 })

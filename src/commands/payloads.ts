@@ -4,7 +4,7 @@ import type {
   PasteFontConfig,
 } from '@/cep/data/legacy-settings'
 import type { QuickFont } from '@/cep/data/font-extra'
-import type { FontItem } from '@/cep/types'
+import type { FontItem } from '@/domain/font-item'
 import type { KuKind } from '@/domain/style-library'
 import type { DropPosition } from '@/domain/reorder'
 
@@ -642,6 +642,16 @@ export interface SwatchSetLimitPayload {
 }
 
 /**
+ * 色板里的一项：`{ name, color: { hex, c, m, y, k, isFill? } }`（`main.jsx:287-298` 的产出）。
+ *
+ * 发事件与收事件都用**磁盘上的原始项**，不用视图模型的 `KuItem`——后者会丢未知键，
+ * 而主面板的 jsx 认这些键（`isFill` 就是其中最重要的一个）。
+ */
+export interface SwatchColorPayload {
+  item: Record<string, unknown>
+}
+
+/**
  * 发送到设计助理。原版 `faSongDaoZhuLi`（`sf.js:426-460`）：`prompt` 收组名 →
  * `{ name: zuMing, show: true, list: GetColorArray() }` → 发 `sendColor`。
  * `kind` 官方没带（它进的是主面板当前 tab），我方必须显式给，命令不猜。
@@ -844,6 +854,16 @@ export interface CommandPayloads {
   'seban.setShapeFill': SwatchShapePayload
   /** 按钮 7 交换线框与填充状态（仅形状图层） */
   'seban.swapWireframeFill': void
+
+  // ---------- 色板 ↔ 设计助理 联动（只有两条，用户 2026-10-24 定）----------
+  /** 色板侧：左键点色块 → 发 `{type:"setColor"}`；**只发事件，不执行**（执行在主面板） */
+  'seban.sendColor': SwatchColorPayload
+  /** 色板侧：右键点色块 → 发 `{type:"setWireframeColor"}` */
+  'seban.sendWireframeColor': SwatchColorPayload
+  /** 主面板侧：收到 `setColor` → 读 `cyAutoFillColor` 决定 `ys_useStyleColor` / `ys_setForegroundColor` */
+  'seban.applyColor': SwatchColorPayload
+  /** 主面板侧：收到 `setWireframeColor` → `ys_setBorderColor`（`app.v4.js:17902-17906`） */
+  'seban.applyWireframeColor': SwatchColorPayload
 
   'legacy.call': LegacyCallPayload
   'cloud.setUrl': CloudSetUrlPayload
