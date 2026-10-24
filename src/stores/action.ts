@@ -25,6 +25,19 @@ export const useActionStore = defineStore('action', () => {
   const groups = ref<ActionGroup[]>([])
   /** 原版 dzShowListType 0/1/2；这里投影成 1/2/3 列 */
   const listType = ref(getPref('dzShowListType', 2) + 1)
+
+  /**
+   * 列数投影的**唯一写入口**（TD-03-2）。
+   *
+   * 以前页面从 `storeToRefs` 拿到 `listType` 就直接 `.value = columns`——页面替 store
+   * 决定投影怎么变，store 自己没有写入口，第二个页面要用时又会各写一遍。
+   *
+   * 落盘不在这里：`dzShowListType` 由命令 `action.setListType` 写（store 只读数据层，
+   * 方向不变）；本函数只管本 store 的投影，调用方是"命令成功之后"的页面。
+   */
+  function setListType(columns: 1 | 2 | 3) {
+    listType.value = columns
+  }
   /** 非空表示当前读到的不是真实数据（索引/库损坏），页面必须提示 */
   const degraded = ref('')
 
@@ -92,6 +105,7 @@ export const useActionStore = defineStore('action', () => {
     activeIndex,
     groups,
     listType,
+    setListType,
     degraded,
     load,
     psGroups,

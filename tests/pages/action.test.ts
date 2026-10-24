@@ -122,6 +122,29 @@ describe('动作页', () => {
     expect(wrapper.text()).toContain('还没有动作')
   })
 
+  /**
+   * TD-03-2：列数的投影只能经 store 的写入口改，落盘归命令。
+   * 判据（可观察）：点「单列」之后 store 的 `listType` 变 1，且偏好里写的是原版 0/1/2 口径（单列 = 0）。
+   * 用「单列」而不是「三列」：默认投影本来就是 3（`dzShowListType` 默认 2 + 1），
+   * 点「三列」的断言在"投影压根没更新"时也会绿——那种断言测不到接线。
+   */
+  it('选「单列」→ 命令落盘 + store 投影更新（页面不自己改 ref）', async () => {
+    const { getPref } = await import('@/cep/data/settings')
+    const { useActionStore } = await import('@/stores/action')
+    const wrapper = await mountPage()
+
+    await wrapper.find('button[title="显示方式"]').trigger('click')
+    const items = wrapper.findAll('.action-layout-menu button')
+    expect(items.map((item) => item.text())).toEqual(['单列', '双列', '三列'])
+
+    await items[0].trigger('click')
+    await flushPromises()
+
+    expect(useActionStore().listType).toBe(1)
+    expect(getPref('dzShowListType', 2)).toBe(0)
+    wrapper.unmount()
+  })
+
   it('仓库触发器渲染当前仓库，点击展开下拉', async () => {
     const wrapper = await mountPage()
     const trigger = wrapper.find('.action-warehouse__trigger')

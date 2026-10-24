@@ -404,7 +404,8 @@ useDismiss(
 async function chooseLayout(columns: 1 | 2 | 3) {
   layoutMenu.value = false
   const ok = await setListTypeCmd.run({ columns })
-  if (ok) listType.value = columns
+  // 投影只经 store 的写入口改（TD-03-2）：页面不再持有 `listType.value` 的赋值权
+  if (ok) store.setListType(columns)
 }
 
 const importMenu = ref(false)
