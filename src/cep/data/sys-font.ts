@@ -19,22 +19,38 @@ export async function mergeFontStars(list: FontItem[]): Promise<FontItem[]> {
   return list.map((f) => ({ ...f, star: read.stars[f.family] ?? 0 }))
 }
 
-/** 读 SysFont2.json；浏览器没有 userDir，直接当读不到 */
-export async function readSysFontFile(): Promise<FontItem[]> {
-  if (!hasCep()) return []
+/**
+ * SysFont2.json 的读取**观测**（TD-09-3）。
+ *
+ * 三态而不是 `FontItem[]`：空数组同时表示"文件不在（首次使用）""读不到""解析失败"，
+ * 而这三件事用户看到的是三种不同结论——`[]` 一折，页面只会显示"没有系统字体"。
+ * 与 `LedgerRead` / `TextRead` 同一判据：原语报观测，结论由调用方下（ADR-0026 ②）。
+ */
+export type SysFontRead =
+  | { status: 'ok'; list: FontItem[] }
+  /** 文件不在：首次使用 / 还没生成，不是失败 */
+  | { status: 'none' }
+  /** 读不到或读不懂：**调用方不许当成"没有字体"** */
+  | { status: 'error'; reason: string }
+
+/** 读 SysFont2.json；浏览器没有 userDir，按"文件不在"处理（不是失败） */
+export async function readSysFontFile(): Promise<SysFontRead> {
+  if (!hasCep()) return { status: 'none' }
   const abs = `${userDir()}/${DATA_FILES.sysFontList}`
   const read = await readTextOutcome(abs)
-  // T-107 **已知欠账**：读失败这里仍返回空列表（"没有系统字体"），与"查不到"同果——
-  // 字体管理页会显示空列表而不是"读盘失败"。补信号要改页面，另开条目
+
   if (read.status === 'error') {
-    log.warn('sys-font', `${abs} 读不到，按无系统字体处理`, read.reason)
-    return []
+    log.warn('sys-font', `${abs} 读不到`, read.reason)
+    return { status: 'error', reason: read.reason }
   }
-  if (read.status === 'notSeen' || !read.text) return []
+  if (read.status === 'notSeen' || !read.text) return { status: 'none' }
+
   try {
     const file = JSON.parse(read.text) as SysFontFile
-    return await mergeFontStars(normalizeFontList(file.arr))
-  } catch {
-    return []
+    return { status: 'ok', list: await mergeFontStars(normalizeFontList(file.arr)) }
+  } catch (e) {
+    // 坏 JSON / 结构不认识：这是失败，不是"没有系统字体"
+    log.warn('sys-font', `${abs} 解析失败`, e)
+    return { status: 'error', reason: '内容读不懂（不是合法 JSON 或结构不符）' }
   }
 }

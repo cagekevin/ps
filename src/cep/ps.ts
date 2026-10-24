@@ -70,18 +70,26 @@ export async function getFontList(opts: { refresh?: boolean } = {}): Promise<Fon
 
   if (!opts.refresh) {
     const cached = await readSysFontFile()
-    if (cached.length) return cached
+    // 只有"读到了且非空"才算命中缓存；读不到继续往下走，让 PS 重建一次
+    if (cached.status === 'ok' && cached.list.length) return cached.list
   }
 
   const res = await jsx.font.initSystemList()
 
   if (res === 'ok') {
     const fromFile = await readSysFontFile()
-    if (!fromFile.length) {
-      throw new CepError('PARSE', 'ztgl_initSystemList 返回 ok，但读不到 SysFont2.json')
+    if (fromFile.status === 'error') {
+      // TD-09-3：把**为什么**读不到带出去，别让页面只写"读不到系统字体"却查不到原因
+      throw new CepError('IO', `读不到系统字体：${fromFile.reason}（SysFont2.json）`)
     }
-    return fromFile
+    if (fromFile.status === 'none' || !fromFile.list.length) {
+      throw new CepError('PARSE', 'ztgl_initSystemList 返回 ok，但 SysFont2.json 里没有字体')
+    }
+    return fromFile.list
   }
+
+  // 空数组 = PS 那边确实一个系统字体都没有（这是"没有"，不是"读不懂"）
+  if (Array.isArray(res) && res.length === 0) return []
 
   const list = normalizeFontList(res)
   if (!list.length) {
