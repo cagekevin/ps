@@ -121,6 +121,7 @@ describe('设置页 · 云同步状态（T-74）', () => {
     expect(page.text()).toContain('无')
   })
 
+  // TD-11-2：队列数（本会话等推送）与冲突数（落盘痕迹）是两个概念，页面上必须各说各的
   it('待推送（队列）与冲突同时存在时，两个数分开显示', () => {
     cloudState.status = status({
       pending: 2,
@@ -130,7 +131,7 @@ describe('设置页 · 云同步状态（T-74）', () => {
 
     const text = mountPage().text()
 
-    expect(text).toContain('3 项（等下一次自动同步）')
+    expect(text).toContain('3 项（本会话的改动，等下一次自动同步；不是失败）')
     expect(text).toContain('2 项 —— 云端和本地都改过，需要你决定保留哪边')
   })
 

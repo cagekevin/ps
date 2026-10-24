@@ -39,15 +39,37 @@ describe('formatSyncedAt', () => {
 })
 
 describe('describeCloudStatus', () => {
-  it('待推送（队列）与没同步成功（痕迹）分开显示，不合成一个数', () => {
+  /**
+   * TD-11-2 的判据：这两个数**不是同一个概念的两种写法**，不许合并。
+   * - 队列数（内存 `queuedUnits`）：本会话改了、还没到点，属于正常等待，用户不用做事；
+   * - 痕迹数（落盘 `pending`）：以前推失败过，要么等重试、要么要用户处理。
+   * 所以正确解法是让用户看出"两件事"，而不是把两个数揉成一个。
+   */
+  it('待推送（队列）与没同步成功（痕迹）分开显示，各自写明出处', () => {
     const view = describeCloudStatus({
       status: status({ pending: 1, pendingItems: [change('font.tags', 'network')] }),
       queuedUnits: 3,
     })
 
-    expect(view.queuedText).toBe('3 项（等下一次自动同步）')
-    expect(view.failedText).toBe('1 项：网络失败，会在后台重试')
+    expect(view.queuedText).toContain('3 项')
+    expect(view.queuedText).toContain('本会话')
+    expect(view.queuedText).toContain('不是失败')
+    expect(view.failedText).toContain('1 项')
+    expect(view.failedText).toContain('之前没推上去的')
+    expect(view.failedText).toContain('网络失败，会在后台重试')
     expect(view.conflictCount).toBe(0)
+  })
+
+  it('两个数同时出现也各说各的：谁的数进谁的句子，不许串台', () => {
+    const view = describeCloudStatus({
+      status: status({ pending: 2, pendingItems: [change('font.tags', 'network')] }),
+      queuedUnits: 5,
+    })
+
+    expect(view.queuedText).not.toContain('之前没推上去')
+    expect(view.failedText).not.toContain('本会话')
+    expect(view.queuedText).toContain('5 项')
+    expect(view.failedText).toContain('1 项')
   })
 
   it('冲突不算进"没同步成功"，且文案要说清该做什么', () => {
@@ -132,7 +154,7 @@ describe('describeCloudStatus', () => {
       queuedUnits: 0,
     })
 
-    expect(view.failedText).toBe('3 项：网络失败，会在后台重试')
+    expect(view.failedText).toBe('3 项（之前没推上去的，记在本地）：网络失败，会在后台重试')
   })
 
   it('队列为空时写「无」，不是 0 项', () => {

@@ -62,9 +62,16 @@ function reasonText(item: { reason: PendingReason; code?: string }): string {
 export interface CloudStatusView {
   /** 上次同步（"尚未同步"） */
   syncedText: string
-  /** 队列里等自动同步的条数 */
+  /**
+   * **本会话**里改了、还没到推送时间的条数（内存脏集合）。
+   *
+   * 与 `failedText` 是**两个不同概念**，不许合并成一个"待同步"（TD-11-2）：
+   * 这个数是正常的等待（60s 静默 / 5min 最大等待，到点自己就推），用户什么都不用做；
+   * 那个数是**推失败过**的痕迹（落盘 `pending`），要等重试或要用户处理。
+   * 两者不同源、可以同时出现且数字不同——文案必须让用户看出"这不是矛盾，是两件事"。
+   */
   queuedText: string
-  /** 推失败过的（不含冲突）；空串表示不显示 */
+  /** 推失败过的（不含冲突），来自落盘痕迹；空串表示不显示 */
   failedText: string
   /** 冲突；空串表示不显示 */
   conflictText: string
@@ -107,8 +114,11 @@ export function describeCloudStatus(input: {
   return {
     // T-114：坏台账不能显示"尚未同步"——那也是"从没同步过"的说法，会误导用户
     syncedText: status.ledgerState.status === 'broken' ? '读不到' : formatSyncedAt(status.syncedAt),
-    queuedText: queuedUnits === 0 ? '无' : `${queuedUnits} 项（等下一次自动同步）`,
-    failedText: failed.length === 0 ? '' : `${failed.length} 项：${reasons.join('；')}`,
+    // 两个数各自写明出处：前者是"本会话还没到点"，后者是"历史没推上去"（TD-11-2）
+    queuedText:
+      queuedUnits === 0 ? '无' : `${queuedUnits} 项（本会话的改动，等下一次自动同步；不是失败）`,
+    failedText:
+      failed.length === 0 ? '' : `${failed.length} 项（之前没推上去的，记在本地）：${reasons.join('；')}`,
     conflictText:
       conflicts.length === 0
         ? ''
