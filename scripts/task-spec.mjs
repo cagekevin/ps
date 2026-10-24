@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env node
+#!/usr/bin/env node
 // 是什么：主控任务书格式守卫——检查"甲区/乙区/丙区"三段式是否合规
 // 替代了什么：口头约定（"甲区写目标+判据、乙区逐条回执"），以前靠人记，漏了就返工
 // 谁在用：`npm run spec:check`（已接进 `npm run check`）与 `tests/scripts/task-spec.test.ts`
@@ -13,43 +13,77 @@
 //   旧接线只传 `docs/规范/任务书模板.md` 一个文件，等于"守着自己那份样本自证"：
 //   真实任务书写成什么样，守卫一次都没看过（TD-17-12）。
 //   现在按**结构**发现任务书，而不是维护一份路径清单：
-//   一个 .md 的**第一个二级标题**是 `## 甲区…` ⇒ 它是任务书。
-//   这样工序文档里"引用"甲区标题（在正文或代码块里出现）不会被误判，
-//   新增任务书也不用回来登记路径。
+//   一份 .md 里**出现 `## 甲区…` 这个二级标题** ⇒ 它是任务书（不限位置）。
+//   上一版判的是"**第一个**二级标题是 `## 甲区`"，于是先写 `## 摘要` 再写甲区的任务书
+//   既不被审、也不进覆盖清单 —— 静默漏审（TD-17-17）。
+//   代码块（``` / ~~~）里的 `## 甲区` 不算标题：工序文档里抄一份任务书示例不是任务书本身。
 //
 // 规则表（报错里直接给编号，方便对方回执）：
-//   R1 甲区标题必须出现，且在前 5 行以内，全文只有一次
+//   R1 甲区标题必须出现，且全文只出现一次
 //   R2 三区齐全、顺序必须是 甲 → 乙 → 丙，各出现一次
-//   R3 三区之外不许有第四区：甲区之前只允许 H1 / 引用块 / 空行；丙区之后不许再出现任何标题
+//   R3 三区之外不许有第四区：甲区之前只允许 H1 / 具名二级小节（如 `## 摘要`）及其正文 / 引用块 / 空行；
+//      丙区之后不许再出现任何标题
 //   R4 甲区必须含「目标」与「判据」两行（允许前置序号或列表符号）
 //   R5 乙区每个非空行必须是编号条目（`1.` / `- [ ]` / `- ` / `* `）或小标题（`###`）
 //
 // ⚠️ R3 的后半句是**实现过的**判据，不是头注释里的承诺：丙区是最后一区，
 //    它之后出现 `## 丁区`（或任何 H1-H6）即违规。旧版只扫了甲区之前，后半句从未实现。
+//   R1 不再要求"甲区在前 5 行以内"：`## 摘要` 在前的任务书是合法结构（TD-17-17），
+//   行数上限只会把合法结构判死；"甲区之前不许倒散装正文"改由 R3 判（正文必须挂在具名小节下）。
 
 import { existsSync, readdirSync, readFileSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
 const RULES = {
-  R1: '甲区标题必须在前 5 行以内且只出现一次',
+  R1: '甲区标题必须出现且只出现一次',
   R2: '三区必须齐全且顺序为 甲 → 乙 → 丙',
-  R3: '三区之外不许有第四区（甲区之前只许 H1/引用/空行；丙区之后不许再有标题）',
+  R3: '三区之外不许有第四区（甲区之前只许 H1/具名二级小节/引用/空行；丙区之后不许再有标题）',
   R4: '甲区必须含「目标」与「判据」',
   R5: '乙区条目必须编号（`1.` / `- [ ]` / `- ` / `* `）',
 }
 
 const ZONE = /^##\s+([甲乙丙])区/
+/** 第四区及以后（`## 丁区`…）：出现在甲区之前也是违规，不许用"摘要"打掩护塞别的区 */
+const FOURTH_ZONE = /^##\s+[丁戊己庚辛壬癸]区/
 const ANY_HEADING = /^#{1,6}\s/
+const H2 = /^##\s/
 const H1 = /^#\s+/
 const NUMBERED = /^\s*(?:\d+\.\s|[-*]\s+(?:\[[ xX]\]\s*)?)/
 const SUBHEAD = /^###\s+/
 const HAS_GOAL = /^\s*(?:\d+\.\s*|[-*]\s*)?\*{0,2}目标\*{0,2}[:：]/
 const HAS_CRITERIA = /^\s*(?:\d+\.\s*|[-*]\s*)?\*{0,2}判据\*{0,2}[:：]/
 
+/**
+ * 把代码块（``` / ~~~）内容抹成空行，**行号与行数不变**。
+ *
+ * 为什么必须抹：工序文档（`.codebuddy/commands/*.md`）里会整段抄一份任务书示例，
+ * 那几行 `## 甲区` 是**示例文本**，不是标题。不抹 ⇒ 示例被当成真任务书去审，
+ * 或者反过来（旧版"第一个二级标题"）真任务书被当成示例漏审。
+ */
+function maskFences(text) {
+  const out = []
+  let fence = ''
+  for (const line of text.split('\n')) {
+    const m = /^\s*(```+|~~~+)/.exec(line)
+    if (m && !fence) {
+      fence = m[1][0]
+      out.push('')
+      continue
+    }
+    if (fence) {
+      if (m && m[1][0] === fence) fence = ''
+      out.push('')
+      continue
+    }
+    out.push(line)
+  }
+  return out.join('\n')
+}
+
 /** 校验一份任务书文本；返回违规列表（空数组 = 合规） */
 export function validateText(text) {
-  const lines = text.split('\n')
+  const lines = maskFences(text).split('\n')
   const violations = []
   const push = (line, rule, detail) => violations.push({ line, rule, detail })
 
@@ -63,10 +97,10 @@ export function validateText(text) {
   const yi = zones.filter((z) => z.name === '乙')
   const bing = zones.filter((z) => z.name === '丙')
 
-  // R1
+  // R1：甲区必须出现且只出现一次。
+  // 不判"前 5 行以内"：先写 `## 摘要` 再写甲区是合法结构（TD-17-17）；行数上限只会把合法结构判死。
   if (!jia.length) push(1, 'R1', '没有 `## 甲区` 标题')
   else if (jia.length > 1) push(jia[1].line, 'R1', `甲区标题出现了 ${jia.length} 次`)
-  else if (jia[0].line > 5) push(jia[0].line, 'R1', `甲区在第 ${jia[0].line} 行，要求 ≤5`)
 
   // R2
   if (!yi.length) push(1, 'R2', '没有 `## 乙区` 标题')
@@ -83,13 +117,27 @@ export function validateText(text) {
     }
   }
 
-  // R3 前半：甲区之前只允许"头信息"（H1 标题 / 引用块 `>` / 空行）
+  // R3 前半：甲区之前只允许"头信息" —— H1 标题 / 具名二级小节（`## 摘要` 这类，含其正文）/
+  //   引用块 `>` / 空行 / `###` 小标题；第四区（`## 丁区`…）写在甲区之前也算违规。
+  // 为什么放行具名二级小节：任务书"先摘要后三区"是常见且合法的结构（TD-17-17）；
+  // 而 `# 标题` 之下直接倾倒、没有任何小节归属的正文仍算散装内容 —— 那正是原先要防的。
   const firstZone = zones.length ? zones[0].line : Infinity
+  let inSection = false
   for (let i = 0; i < firstZone - 1 && i < lines.length; i += 1) {
     const line = lines[i]
     if (!line.trim()) continue
     if (H1.test(line) || /^\s*>/.test(line)) continue
-    push(i + 1, 'R3', '甲区之前只允许 H1 标题、引用块或空行')
+    if (H2.test(line)) {
+      if (FOURTH_ZONE.test(line)) {
+        push(i + 1, 'R3', `甲区之前不许出现第四区（\`${line.trim()}\`）`)
+        continue
+      }
+      inSection = true
+      continue
+    }
+    if (ANY_HEADING.test(line)) continue
+    if (inSection) continue
+    push(i + 1, 'R3', '甲区之前的正文必须挂在具名二级小节下（如 `## 摘要`），不许直接倾倒')
   }
 
   // R3 后半：丙区是最后一区 —— 它之后不许再出现任何标题（`## 丁区` / `# 附录` 都算）
@@ -129,10 +177,16 @@ export function validateText(text) {
   return violations.sort((a, b) => a.line - b.line)
 }
 
-/** `## 甲区` 是不是这份文件的第一个二级标题（结构判据，不是路径清单） */
+/**
+ * 这份 .md 是不是任务书（结构判据，不是路径清单）：
+ * **出现 `## 甲区` 这个二级标题**即算，不要求它是第一个二级标题（TD-17-17：
+ * 旧判据"第一个二级标题是甲区"会把"先摘要后甲区"的任务书静默漏掉 —— 既不报错也不进覆盖清单）。
+ * 代码块里的 `## 甲区` 不算：那是工序文档抄的示例。
+ */
 export function isTaskBook(text) {
-  const firstH2 = text.split('\n').find((line) => /^##\s/.test(line))
-  return Boolean(firstH2 && ZONE.test(firstH2))
+  return maskFences(text)
+    .split('\n')
+    .some((line) => /^##\s+甲区/.test(line))
 }
 
 const SKIP_DIRS = new Set(['node_modules', '.git', 'dist', '.npm-cache', '.codebuddy/.cache'])
@@ -190,15 +244,11 @@ function main(argv) {
   }
 
   // 发现模式：按结构找出全部任务书（模板自己也在其中，不特殊对待）
-  const books = walkMarkdown(root).filter((file) => {
-    // 只读首 4KB 判"第一个二级标题"，避免为判类型读整份长文档
-    const text = readFileSync(file, 'utf8')
-    return isTaskBook(text)
-  })
+  const books = walkMarkdown(root).filter((file) => isTaskBook(readFileSync(file, 'utf8')))
 
   if (!books.length) {
     console.error('[task-spec] 失败：全仓没有发现任何任务书（连模板都不见了？）')
-    console.error('  判据：一个 .md 的第一个二级标题是 `## 甲区…` ⇒ 它是任务书')
+    console.error('  判据：一份 .md 里出现 `## 甲区…` 这个二级标题（代码块里的不算）⇒ 它是任务书')
     process.exit(1)
   }
 

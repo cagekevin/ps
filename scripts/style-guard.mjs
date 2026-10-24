@@ -12,6 +12,8 @@
  *   B. **结构型**（负 margin / 动效裸时长 / 裸类名撞名）：不是"少写几个"，是"写了就是错"，
  *      所以走**具名例外清单**（文件:行 + 为什么现在不改 + 谁负责），不进计数基线。
  *      TD-17-13：负 margin 旧版只认缩写 `margin:`，`margin-left:-9px` 放行。
+ *   C. **静默失败**（store 声明了 `xxxError` 却没人渲染）：判"名字有没有作为**代码**被用上"，
+ *      注释 / 字符串字面量 / 模板纯文本都不算（TD-17-16，判据见 `executableVueText`）。
  *
  *   动效只判 `transition`，不判 `animation`：token 只有 120/180/240ms 三档过渡，
  *   转圈动画（`g-btn-spin 0.7s`）没有对应 token，硬套 token = 逼着改无关代码（A12）。
@@ -19,6 +21,7 @@
 import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
+import { maskComments, walkSources } from './source-scan.mjs'
 
 const root =
   process.argv.find((a) => a.startsWith('--root='))?.slice(7) ??
@@ -442,25 +445,100 @@ function checkIconNames() {
   return problems
 }
 
+/** 只取 `<script>` 块的内容：错误状态可能先经 computed / watch 中转，模板里用的是中转变量 */
+function scriptOf(content) {
+  const blocks = []
+  content.replace(/<script[^>]*>([\s\S]*?)<\/script>/g, (_m, body) => {
+    blocks.push(body)
+    return ''
+  })
+  return blocks.join('\n')
+}
+
 /**
- * 静默失败检查（查 7）：store 里声明的 xxxError 必须在某个组件里被渲染。
+ * 模板里**会执行**的部分：`{{ … }}` 插值 + 指令属性值（`v-*` / `:` / `@` / `#`）。
+ *
+ * 不算的：`<!-- … -->` 注释、标签之间的纯文本、非指令属性值（`class="tagsError"` 是字面量）。
+ * 为什么不用"整段模板文本"：`<p>tagsError</p>` 只是把名字当文案印出来，用户读不到错误内容 ——
+ * 那正是静默失败要防的东西，判它"已渲染"等于给自己放假。
+ */
+function templateCode(content) {
+  const src = templateOf(content).replace(/<!--[\s\S]*?-->/g, '')
+  const parts = []
+  const pushMustaches = (text) => {
+    for (const m of text.matchAll(/\{\{([\s\S]*?)\}\}/g)) parts.push(m[1])
+  }
+  let i = 0
+  while (i < src.length) {
+    const lt = src.indexOf('<', i)
+    pushMustaches(lt < 0 ? src.slice(i) : src.slice(i, lt))
+    if (lt < 0) break
+    // 标签边界：跳过引号里的 '>'（`v-if="n > 0"` 不能把标签截断）
+    let j = lt + 1
+    let quote = ''
+    while (j < src.length) {
+      const ch = src[j]
+      if (quote) {
+        if (ch === quote) quote = ''
+      } else if (ch === '"' || ch === "'") quote = ch
+      else if (ch === '>') break
+      j += 1
+    }
+    for (const attr of src
+      .slice(lt, j + 1)
+      .matchAll(/([^\s/>"'=]+)\s*=\s*(?:"([^"]*)"|'([^']*)')/g)) {
+      if (!/^(?:v-|:|@|#)/.test(attr[1])) continue
+      parts.push(attr[2] ?? attr[3] ?? '')
+    }
+    i = j + 1
+  }
+  return parts.join('\n')
+}
+
+/** 抹掉字符串字面量（含模板串）：`'tagsError'` 只是文本，不是对错误状态的引用 */
+function blankLiterals(text) {
+  return text.replace(/(["'`])(?:\\[\s\S]|(?!\1)[^\\])*\1/g, (m) => ' '.repeat(m.length))
+}
+
+/**
+ * `.vue` 里"会执行"的文本（判据面，供 `checkSilentErrors` 用）。
+ *
+ * 旧判据是 `vueText.includes(名字)`：`.vue` 里写一行 `// TODO: tagsError` 就算"已渲染" ——
+ * 注释骗过守卫，静默失败检查自己成了静默失败（TD-17-16）。
+ * 新判据：名字必须作为**标识符出现在可执行代码**里（脚本代码，或模板表达式），
+ * 注释、字符串字面量、模板纯文本一律不算。
+ * script 也算，是因为 `const showErr = computed(() => store.tagsError)` 再渲染 `showErr`
+ * 是合法写法，只认模板会把真渲染判成"没渲染"（A12：闸不许凌驾正确性）。
+ */
+function executableVueText(content) {
+  const script = blankLiterals(maskComments(scriptOf(content)))
+  const template = blankLiterals(templateCode(content))
+  return `${script}\n${template}`
+}
+
+/**
+ * 静默失败检查（查 7）：store 里声明的 xxxError 必须被某个组件**当代码用上**。
  * 反例：tagsError 赋值 5 次、模板 0 次引用 —— 读失败时用户只看到"空的"。
  */
 function checkSilentErrors() {
   const storeDir = join(SRC, 'stores')
   if (!existsSync(storeDir)) return []
 
-  const vueText = walk(SRC)
+  const code = walk(SRC)
     .filter((f) => f.endsWith('.vue'))
-    .map((f) => readFileSync(f, 'utf8'))
+    .map((f) => executableVueText(readFileSync(f, 'utf8')))
     .join('\n')
 
   const problems = []
-  for (const file of walk(storeDir)) {
+  // stores 是 `.ts`：`walk()` 只收 .vue/.css，用它扫 stores 会**一个文件都扫不到**（恒绿 = 空转）
+  for (const file of walkSources(storeDir, ['.ts'])) {
+    if (file.endsWith('.d.ts')) continue
     const text = readFileSync(file, 'utf8')
     for (const m of text.matchAll(/const (\w*Error) = ref\(/g)) {
-      if (!vueText.includes(m[1])) {
-        problems.push(`${relative(root, file).replace(/\\/g, '/')} 的 ${m[1]} 没有被任何组件渲染`)
+      if (!new RegExp(`\\b${m[1]}\\b`).test(code)) {
+        problems.push(
+          `${relative(root, file).replace(/\\/g, '/')} 的 ${m[1]} 没有被任何组件当成代码使用（注释 / 字符串里的名字不算渲染）`,
+        )
       }
     }
   }
@@ -631,7 +709,12 @@ if (command === 'fix') {
   if (silent.length) {
     console.error('\n[style] 静默失败（读不到 ≠ 没有）：\n')
     for (const p of silent) console.error(`  ${p}`)
-    console.error('\n  这些错误状态被赋值了但没有任何组件渲染，用户只会看到"空的"。\n')
+    console.error(
+      '\n  这些错误状态被赋值了但没有在模板表达式 / 脚本代码里被引用，用户只会看到"空的"；',
+    )
+    console.error(
+      '  判据是"当代码用上"，注释（`// TODO: xxxError`）与字符串字面量里的名字不算渲染。\n',
+    )
     process.exit(1)
   }
 

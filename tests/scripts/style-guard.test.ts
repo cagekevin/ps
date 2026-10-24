@@ -109,3 +109,77 @@ describe('style-guard · 裸类名撞名', () => {
     expect(result.code).toBe(0)
   })
 })
+
+/**
+ * TD-17-16：静默失败检查的判据从"文本里出现这个名字"改成"名字作为**代码**被用上"。
+ *
+ * 旧判据是 `vueText.includes(名字)`：`.vue` 里写一行 `// TODO: tagsError` 就算"已渲染" ——
+ * 注释骗过守卫。这里同时钉住两件事：
+ *   ① 反例：注释 / 字符串字面量 / 模板纯文本里的名字**不算**渲染（四条）；
+ *   ② 正例：模板表达式、指令属性值、脚本里 computed 中转都算（防过度收严）。
+ * 顺带钉住 store 侧真的被扫到（旧版 `walk()` 只收 .vue/.css，扫 `src/stores/*.ts` 恒绿 = 空转）。
+ */
+
+const storeFile = (name: string) => `import { ref } from 'vue'\n\nexport const ${name} = ref('')\n`
+
+const pageWith = (template: string, script = '') =>
+  `<template>\n${template}\n</template>\n${script ? `\n<script setup lang="ts">\n${script}\n</script>\n` : ''}`
+
+describe('style-guard · 静默失败（TD-17-16：只认可执行代码）', () => {
+  it('模板里只有 `<!-- TODO: tagsError -->`（没真用）→ 非 0，文案点出「当成代码使用」', () => {
+    const result = run(
+      makeRoot({
+        'stores/silent.ts': storeFile('tagsError'),
+        'pages/a/A.vue': pageWith('  <!-- TODO: tagsError 待接 -->\n  <p>空</p>'),
+      }),
+    )
+    expect(result.code).not.toBe(0)
+    expect(result.out).toContain('静默失败')
+    expect(result.out).toContain('当成代码使用')
+  })
+
+  it('只在脚本注释里提 `// TODO: tagsError` → 非 0（注释不算渲染）', () => {
+    const result = run(
+      makeRoot({
+        'stores/silent.ts': storeFile('tagsError'),
+        'pages/a/A.vue': pageWith('  <p>空</p>', '// TODO: tagsError 待接'),
+      }),
+    )
+    expect(result.code).not.toBe(0)
+    expect(result.out).toContain('静默失败')
+  })
+
+  it('只在字符串字面量里出现（`:title="\'tagsError\'"` 与模板纯文本）→ 非 0', () => {
+    const result = run(
+      makeRoot({
+        'stores/silent.ts': storeFile('tagsError'),
+        'pages/a/A.vue': pageWith('  <p :title="\'tagsError\'">tagsError</p>'),
+      }),
+    )
+    expect(result.code).not.toBe(0)
+    expect(result.out).toContain('静默失败')
+  })
+
+  it('模板表达式 `v-if="tagsError"` 真用上 → 退出码 0（正例，不误报）', () => {
+    const result = run(
+      makeRoot({
+        'stores/silent.ts': storeFile('tagsError'),
+        'pages/a/A.vue': pageWith('  <p v-if="tagsError">{{ tagsError }}</p>'),
+      }),
+    )
+    expect(result.code).toBe(0)
+  })
+
+  it('脚本里 computed 中转（模板渲染的是 showErr）→ 退出码 0（合法写法不许判死）', () => {
+    const result = run(
+      makeRoot({
+        'stores/silent.ts': storeFile('tagsError'),
+        'pages/a/A.vue': pageWith(
+          '  <p v-if="showErr">{{ showErr }}</p>',
+          "import { computed } from 'vue'\nimport { tagsError } from '@/stores/silent'\n\nconst showErr = computed(() => tagsError.value)",
+        ),
+      }),
+    )
+    expect(result.code).toBe(0)
+  })
+})
