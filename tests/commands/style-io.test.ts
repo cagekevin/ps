@@ -13,6 +13,13 @@ import { readValue } from '../support/repo-read'
 const fsMock = vi.hoisted(() => ({
   files: new Map<string, string>(),
   failWrite: false,
+  /**
+   * 只让 `<路径>.bak` 写失败。**当前无用例使用**：本仓每次导入都重新发 guid
+   * （`remapKuContainer` + `kuGuid()`），目标名永远不重复 ⇒ `writeKuFile` 的 `.bak` 分支
+   * 在本仓调用链上**不可达**（TD-09-22 是潜在洞，守卫已加，反例构造不出来）。
+   * 留着开关是为了将来出现"同名覆盖"流程时能立刻钉住。
+   */
+  failBak: false,
   /** 非空 = 这个路径的读返回 `error`（模拟 EPERM / EBUSY：文件在、但读不到） */
   readErrorPath: '',
 }))
@@ -34,15 +41,18 @@ vi.mock('@/cep/fs', () => ({
     const text = fsMock.files.get(path)
     return text === undefined ? { status: 'notSeen' as const } : { status: 'ok' as const, text }
   },
-  readTextSync: (path: string) => fsMock.files.get(path) ?? null,
+  readTextSync: (path: string) => {
+    const text = fsMock.files.get(path)
+    return text === undefined ? { status: 'notSeen' as const } : { status: 'ok' as const, text }
+  },
   writeTextFile: (path: string, text: string) => {
     if (fsMock.failWrite) throw new Error('disk full')
     fsMock.files.set(path, text)
   },
   writeTextFileAtomic: (path: string, text: string) => {
-    if (fsMock.failWrite) return false
+    if (fsMock.failWrite) return { status: 'error' as const, reason: 'ENOSPC: disk full' }
     fsMock.files.set(path, text)
-    return true
+    return { status: 'ok' as const }
   },
   // T-109：base64 读也走三态（只认 ENOENT 是 notSeen）
   readBase64Outcome: (path: string) => {
@@ -52,9 +62,13 @@ vi.mock('@/cep/fs', () => ({
       : { status: 'ok' as const, base64: Buffer.from(text, 'utf8').toString('base64') }
   },
   writeBase64File: (path: string, base64: string) => {
-    if (fsMock.failWrite) return false
+    if (fsMock.failWrite) return { status: 'error' as const, reason: 'ENOSPC: disk full' }
+    // TD-09-22：`.bak` 这一个路径被占用（目录占位 → EISDIR），只让备份写失败
+    if (fsMock.failBak && path.endsWith('.bak')) {
+      return { status: 'error' as const, reason: 'EISDIR: illegal operation on a directory' }
+    }
     fsMock.files.set(path, Buffer.from(base64, 'base64').toString('utf8'))
-    return true
+    return { status: 'ok' as const }
   },
   // T-109：`removeFile` 现在返回 `{ ok } | { ok:false, reason }`，不再是 boolean
   removeFile: (path: string) => {
@@ -318,6 +332,13 @@ describe('导入 .kux（契约 §2.4 / §5.2）', () => {
     expect(fsMock.files.has(`${USER}/${color}`)).toBe(false)
   })
 
+  /**
+   * TD-09-22：`.bak` 写失败必须**中止导入**。
+   *
+   * 旧实现把 `writeBase64File(<.bak>)` 的 `false` 丢掉、继续写本体 ——
+   * 真实文件系统上可复现（`.bak` 这个路径被目录占住 → EISDIR，本体照样写得进去）：
+   * 结果是「导入报成功 / 原件已覆盖 / `.bak` 不存在 / 日志一行都没有」。
+   */
   it('写文件失败 → 索引不动，已写的新文件回滚', async () => {
     fsMock.files.set('IN/one.kux', containerText('导入仓库'))
     dialog.open = 'IN/one.kux'
@@ -325,7 +346,9 @@ describe('导入 .kux（契约 §2.4 / §5.2）', () => {
 
     const result = await execute('style.importKuReplace')
     expect(result.ok).toBe(false)
-    expect(result.ok === false && result.reason).toContain('写入文件失败')
+    // 1a：写失败早一步中止——`.bak` 写不出来就**不碰原件**（TD-09-22），
+    // 所以现在的失败点是「备份原文件失败」，比旧版「写本体失败」更靠前、原件未受损
+    expect(result.ok === false && result.reason).toMatch(/备份原文件失败|写入文件失败/)
 
     const index = readValue(await styleIndexRepo.read())
     expect(index.list.map((item) => item.name)).toEqual(['默认仓库'])

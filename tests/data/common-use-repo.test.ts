@@ -29,7 +29,12 @@ vi.mock('@/cep/fs', () => ({
     const text = state.files.get(path)
     return text === undefined ? { status: 'notSeen' as const } : { status: 'ok' as const, text }
   },
-  readTextSync: (path: string) => (state.failRead ? null : (state.files.get(path) ?? null)),
+  readTextSync: (path: string) => {
+    // 读不到 ≠ 没有（TD-09-23/24）：failRead 现在是 error，不是 notSeen
+    if (state.failRead) return { status: 'error' as const, reason: 'EACCES: 模拟读不到' }
+    const text = state.files.get(path)
+    return text === undefined ? { status: 'notSeen' as const } : { status: 'ok' as const, text }
+  },
   writeTextFile: (path: string, text: string) => {
     state.files.set(path, text)
   },

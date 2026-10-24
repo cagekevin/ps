@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { TextRead } from '@/cep/fs'
 import type { ActionWarehouseIndex } from '@/domain/action'
 import type { Repo, RepoRead } from '@/cep/data/types'
 
@@ -7,14 +8,12 @@ const fs = vi.hoisted(() => ({
   // T-109：base64 读也是三态（`{ status:'ok', base64 }` / `notSeen` / `error`）
   readBase64Outcome: vi.fn(),
   writeBase64File: vi.fn(),
-  readTextSync: vi.fn(),
-  // T-107：业务读走 `readTextOutcome`（唯一读入口）；用例仍只设 `readTextSync` 的返回值
-  readTextOutcome: vi.fn(async (p: string) => {
-    const text = fs.readTextSync(p) as string | null
-    return text === null ? { status: 'notSeen' as const } : { status: 'ok' as const, text }
-  }),
+  // T-107：业务读走 `readTextOutcome`（唯一读入口）；用例只设 `readTextSync` 的返回值。
+  // 1a：`readTextSync` 现在是三态（`TextRead`），这里原样转发，不再把 error 压成 notSeen。
+  readTextSync: vi.fn<(p: string) => TextRead>(() => ({ status: 'notSeen' })),
+  readTextOutcome: vi.fn(async (p: string) => fs.readTextSync(p)),
   writeTextFile: vi.fn(),
-  removeFile: vi.fn(),
+  removeFile: vi.fn(() => ({ ok: true as const })),
 }))
 
 // `vi.hoisted` 里不能用运行时值（先于 import 执行），所以类型写在 `vi.fn<>()` 上，靠 `import type` 擦除。
@@ -47,7 +46,7 @@ function archive(fileName = 'sj_dz_old.json'): string {
 
 beforeEach(() => {
   vi.clearAllMocks()
-  fs.writeBase64File.mockReturnValue(true)
+  fs.writeBase64File.mockReturnValue({ status: 'ok' as const })
   data.write.mockResolvedValue(undefined)
   data.read.mockResolvedValue({
     ok: true,
@@ -57,7 +56,7 @@ beforeEach(() => {
 
 describe('action-archive', () => {
   it('替换：先写文件，再写索引，最后清理旧文件', async () => {
-    fs.readTextSync.mockReturnValue(archive())
+    fs.readTextSync.mockReturnValue({ status: 'ok' as const, text: archive() })
 
     await importActionArchive(false, '/tmp/import.dzx')
 
@@ -72,8 +71,8 @@ describe('action-archive', () => {
   })
 
   it('替换：写文件失败时不写索引、不删旧文件', async () => {
-    fs.readTextSync.mockReturnValue(archive())
-    fs.writeBase64File.mockReturnValue(false)
+    fs.readTextSync.mockReturnValue({ status: 'ok' as const, text: archive() })
+    fs.writeBase64File.mockReturnValue({ status: 'error' as const, reason: 'EPERM: 模拟写失败' })
 
     await expect(importActionArchive(false, '/tmp/import.dzx')).rejects.toThrow('写入仓库失败')
 
@@ -82,7 +81,7 @@ describe('action-archive', () => {
   })
 
   it('追加：保留当前索引并追加新仓库', async () => {
-    fs.readTextSync.mockReturnValue(archive())
+    fs.readTextSync.mockReturnValue({ status: 'ok' as const, text: archive() })
 
     await importActionArchive(true, '/tmp/import.dzx')
 
@@ -121,7 +120,7 @@ describe('action-archive · 坏索引（T-99-4）', () => {
   }
 
   it('导入（替换）：抛错且一个字节都不写，也不删任何文件', async () => {
-    fs.readTextSync.mockReturnValue(archive())
+    fs.readTextSync.mockReturnValue({ status: 'ok' as const, text: archive() })
     data.read.mockResolvedValue(broken)
 
     await expect(importActionArchive(false, '/tmp/import.dzx')).rejects.toThrow(
@@ -135,7 +134,7 @@ describe('action-archive · 坏索引（T-99-4）', () => {
   })
 
   it('导入（追加）：同样不写盘（否则 fallback 的「默认仓库」会被写进索引）', async () => {
-    fs.readTextSync.mockReturnValue(archive())
+    fs.readTextSync.mockReturnValue({ status: 'ok' as const, text: archive() })
     data.read.mockResolvedValue(broken)
 
     await expect(importActionArchive(true, '/tmp/import.dzx')).rejects.toThrow('导入已中止')

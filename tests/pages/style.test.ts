@@ -5,7 +5,6 @@ import { readFileSync } from 'node:fs'
 import { join } from 'node:path'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 import { setPref } from '@/cep/data/settings'
-import { decodeText } from '@/domain/translate'
 import type { KuGroup, KuKind, StyleWarehouseIndex } from '@/domain/style-library'
 import type { StyleLibrarySnapshot } from '@/cep/data/style-library-repo'
 import type { Repo } from '@/cep/data/types'
@@ -78,11 +77,11 @@ vi.mock('@/cep/fs', () => ({
   hasNode: () => true,
   readTextSmart: async () => null,
   writeTextFile: () => undefined,
-  writeTextFileAtomic: () => true,
+  writeTextFileAtomic: () => ({ status: 'ok' as const }),
   // T-109：base64 读也走三态
   readBase64Outcome: () => ({ status: 'notSeen' as const }),
-  writeBase64File: () => true,
-  removeFile: () => true,
+  writeBase64File: () => ({ status: 'ok' as const }),
+  removeFile: () => ({ ok: true as const }),
   b64ToUtf8: (b64: string) => Buffer.from(b64, 'base64').toString('utf8'),
   utf8ToB64: (text: string) => Buffer.from(text, 'utf8').toString('base64'),
 }))
@@ -326,33 +325,49 @@ describe('样式页第 2 段：应用 / 添加经 useCommand 接线', () => {
     })
   })
 
-  it('点颜色项 → style.applyColor（无修饰键走 ys_useStyleColor）', async () => {
+  /**
+   * 页面职责 = 把 e.ctrlKey / e.altKey **读出来**并分成三条路。
+   * "哪个修饰键对应哪个 jsx（含 payload 形状）"是命令层的事，由
+   * `tests/commands/style.test.ts` 的「style.applyColor：修饰键路由」守 ——
+   * 两边都断就是同一行实现两处红（改命令层路由时页面测试跟着红），已在 2026-10-24 削掉。
+   */
+  it.each<{
+    label: string
+    mods: Record<string, boolean>
+    hit: keyof typeof jsx.style
+    miss: keyof typeof jsx.style
+  }>([
+    {
+      label: '无修饰键 → useStyleColor 这一支',
+      mods: {},
+      hit: 'useStyleColor',
+      miss: 'useShapeFill',
+    },
+    {
+      label: 'ctrl → useShapeFill 这一支',
+      mods: { ctrlKey: true },
+      hit: 'useShapeFill',
+      miss: 'useStyleColor',
+    },
+    {
+      label: 'alt → changeStyleColor 这一支',
+      mods: { altKey: true },
+      hit: 'changeStyleColor',
+      miss: 'useStyleColor',
+    },
+  ])('点颜色项（$label）', async ({ mods, hit, miss }) => {
     seedColor()
 
     const wrapper = mountPage()
     await flushPromises()
-    await wrapper.find('.style-item').trigger('click')
+    await wrapper.find('.style-item').trigger('click', mods)
     await flushPromises()
 
-    expect(jsx.style.useStyleColor).toHaveBeenCalled()
-    expect(jsx.style.useShapeFill).not.toHaveBeenCalled()
+    expect(jsx.style[hit]).toHaveBeenCalled()
+    expect(jsx.style[miss]).not.toHaveBeenCalled()
   })
 
-  it('ctrl+点击颜色项 → ys_useShapeFill', async () => {
-    seedColor()
-
-    const wrapper = mountPage()
-    await flushPromises()
-    await wrapper.find('.style-item').trigger('click', { ctrlKey: true })
-    await flushPromises()
-
-    expect(jsx.style.useShapeFill).toHaveBeenCalledWith({
-      name: '未命名',
-      color: { hex: '302F34', c: 81, m: 77, y: 69, k: 46 },
-    })
-  })
-
-  it('alt+点击颜色项 → cy_changeStyleColor，成功后重新读库', async () => {
+  it('alt+点击颜色项：命令回写后页面重新读库（否则还是旧颜色）', async () => {
     seedColor()
 
     const wrapper = mountPage()
@@ -360,9 +375,6 @@ describe('样式页第 2 段：应用 / 添加经 useCommand 接线', () => {
     await wrapper.find('.style-item').trigger('click', { altKey: true })
     await flushPromises()
 
-    expect(jsx.style.changeStyleColor).toHaveBeenCalled()
-    expect(repo.replaceItem).toHaveBeenCalled()
-    // 回写后要刷新投影，否则页面上还是旧颜色
     expect(repo.read.mock.calls.length).toBeGreaterThan(1)
   })
 
@@ -425,7 +437,7 @@ describe('四库分派：点字体项 / 点字体组"+" 不能落到样式库', 
     jsx.font.useFont.mockResolvedValue(null)
   })
 
-  it('点字体项 → style.applyFont（ys_checkUseFont 再 ys_useFont），**不是** style.applyStyle', async () => {
+  it('点字体项 → style.applyFont，**不是** style.applyStyle（落错库会污染用户文件）', async () => {
     seedFont()
 
     const wrapper = mountPage()
@@ -434,32 +446,11 @@ describe('四库分派：点字体项 / 点字体组"+" 不能落到样式库', 
     await wrapper.find('.style-item').trigger('click')
     await flushPromises()
 
-    // 最重要的断言：字体项走字体命令，图层样式命令一次都不能跑
-    expect(jsx.font.checkUseFont).toHaveBeenCalledTimes(1)
-    expect(jsx.font.useFont).toHaveBeenCalledTimes(1)
+    // 只断页面分派："字体项落到字体命令、不落到图层样式命令"。
+    // 载荷形状 / `checkUseFont` 先于 `useFont` / check 失败即中止，都是命令层的职责，
+    // 由 tests/commands/style.test.ts 的「style.applyFont」守（那边已覆盖两个分支）。
+    expect(jsx.font.useFont).toHaveBeenCalled()
     expect(jsx.style.useStyle).not.toHaveBeenCalled()
-
-    // 载荷形状照 fontSet.pasteFont：整项 JSON → Xv 编码（原版 `:51200`）
-    const payload = jsx.font.useFont.mock.calls[0][0] as string
-    expect(JSON.parse(decodeText(payload))).toEqual({
-      name: '未命名',
-      fonts: [{ family: '等线', weight: 'Regular' }],
-    })
-    expect(jsx.font.checkUseFont).toHaveBeenCalledWith(payload)
-  })
-
-  it('字体不可用（check 返回 err=1）→ 不调 ys_useFont', async () => {
-    seedFont()
-    jsx.font.checkUseFont.mockResolvedValue({ err: 1, msg: '缺少字体' })
-
-    const wrapper = mountPage()
-    await flushPromises()
-    await showFontLib(wrapper)
-    await wrapper.find('.style-item').trigger('click')
-    await flushPromises()
-
-    expect(jsx.font.checkUseFont).toHaveBeenCalled()
-    expect(jsx.font.useFont).not.toHaveBeenCalled()
   })
 
   it('点字体组"+"→ style.addFont（ys_getFontInfo 的 data 入库），**不是** style.addStyle', async () => {
@@ -485,19 +476,6 @@ describe('四库分派：点字体项 / 点字体组"+" 不能落到样式库', 
     // 绝不许把图层样式写进字体库（污染用户库文件）
     expect(jsx.style.addStyle).not.toHaveBeenCalled()
     expect(repo.read.mock.calls.length).toBeGreaterThan(1)
-  })
-
-  it('字体读取失败（fonts 为空）→ 报错且不入库', async () => {
-    seedFont()
-    jsx.font.getFontInfo.mockResolvedValue({ err: 0, data: { fonts: [] } })
-
-    const wrapper = mountPage()
-    await flushPromises()
-    await showFontLib(wrapper)
-    await wrapper.find('.style-item__add').trigger('click')
-    await flushPromises()
-
-    expect(repo.appendItem).not.toHaveBeenCalled()
   })
 
   it('样式库项仍走 style.applyStyle（分派没改错库）', async () => {
@@ -692,20 +670,18 @@ describe('四类库的项尺寸互不相同（原版四个 scoped 段，不是�
     await flushPromises()
   }
 
-  it('section 带 style-lib--<库名>，CSS 才能按库分派尺寸', async () => {
+  it('四个库的 section 各带自己的修饰类，CSS 才能按库分派尺寸', async () => {
     seedAll()
 
     const wrapper = mountPage()
     await flushPromises()
     await showAllTabs(wrapper)
 
-    const classes = wrapper.findAll('.style-lib').map((s) => s.classes().join(' '))
-    expect(classes).toEqual([
-      'style-lib style-lib--color',
-      'style-lib style-lib--gradient',
-      'style-lib style-lib--font',
-      'style-lib style-lib--style',
-    ])
+    // 断"四个库都能被自己的修饰类选中"，不断整串 class ——
+    // 精确列表会在加任何状态类时误红（断实现细节，不改代码也会红）
+    for (const kind of ['color', 'gradient', 'font', 'style']) {
+      expect(wrapper.find(`.style-lib--${kind}`).exists()).toBe(true)
+    }
   })
 
   it('颜色块是纯色、渐变块是换算后的 linear-gradient（不再长得一样）', async () => {

@@ -1,10 +1,4 @@
-import {
-  hasNode,
-  readTextOutcome,
-  readTextSync,
-  writeTextFile,
-  writeTextFileAtomic,
-} from '@/cep/fs'
+import { readTextOutcome, readTextSync, writeTextFile, writeTextFileAtomic } from '@/cep/fs'
 import { CepError } from '@/utils/errors'
 import { log } from '@/utils/logger'
 import type { Repo, RepoRead } from './types'
@@ -118,11 +112,12 @@ export function fileRepo<T>(
    * `unknown` = 无 Node（读不到原文），无从比对；那种情况下写本身会走 NO_NODE 抛错路径。
    */
   function compareSync(target: string, expected: string | null): 'same' | 'diff' | 'unknown' {
-    if (!hasNode()) return 'unknown'
-    // 原来的 `catch { return 'diff' }` 不可达：`readTextSync` 自带 try/catch、
-    // 失败只 return null，从不抛；`===` 比两个原始值也不会抛。
-    // 它只判"原文是不是这段"，不判为什么不是——要区分「查不到/读不到」用 `readTextOutcome`（ADR-26 ④ 的具名例外）。
-    return readTextSync(target) === expected ? 'same' : 'diff'
+    const read = readTextSync(target)
+    // 读不到 ≠ 没人改过（TD-09-24）：旧实现读不到给 null，`expected` 也是 null 时
+    // `null === null` 判 'same'，于是权限错时并发守卫恒真、别的面板刚建的文件被覆盖。
+    if (read.status === 'error') return 'unknown'
+    const actual = read.status === 'ok' ? read.text : null
+    return actual === expected ? 'same' : 'diff'
   }
 
   /**
@@ -140,10 +135,22 @@ export function fileRepo<T>(
     const text = JSON.stringify(value)
 
     if (backup && previous) writeTextFile(`${target}.bak`, previous)
-    if (expected !== undefined && compareSync(target, expected) === 'diff') return false
+    if (expected !== undefined) {
+      const compared = compareSync(target, expected)
+      // 别人改过 → 放弃这次写（原语义：返回 false 让上层丢更新而不是覆盖）
+      if (compared === 'diff') return false
+      // 比不了（读不到原文 / 无 Node）→ **不写**：拿不到原文就没有"没被改过"的证据，
+      // 写下去就是覆盖别人的更新（TD-09-24）
+      if (compared === 'unknown') {
+        throw new CepError('IO', `落盘前比对读不到原文，已中止写入：${target}`)
+      }
+    }
 
-    // 原子写；Node 不可用时返回 false，退回普通写（普通写会抛 NO_NODE）
-    if (!writeTextFileAtomic(target, text)) writeTextFile(target, text)
+    // 原子写失败必须抛：旧实现在这里退回普通写，等于主动摘掉 rename 保护（TD-09-27）
+    const written = writeTextFileAtomic(target, text)
+    if (written.status === 'error') {
+      throw new CepError('IO', `写入失败：${target}（${written.reason}）`)
+    }
     return true
   }
 

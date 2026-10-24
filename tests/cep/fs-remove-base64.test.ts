@@ -126,6 +126,6 @@ describe('dirUsage · 保留两态但不用 existsSync', () => {
   })
 
   it('空目录 → { bytes: 0, files: 0 }，与「读不到」的 null 分得开', () => {
-    expect(dirUsage('/user')).toEqual({ bytes: 0, files: 0 })
+    expect(dirUsage('/user')).toEqual({ bytes: 0, files: 0, skipped: 0 })
   })
 })

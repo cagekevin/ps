@@ -28,7 +28,10 @@ vi.mock('@/cep/fs', () => ({
   hasNode: () => true,
   extensionDir: () => '/ext',
   userDir: () => '/user',
-  readTextSync: (path: string) => files.map.get(path) ?? null,
+  readTextSync: (path: string) => {
+    const text = files.map.get(path)
+    return text === undefined ? { status: 'notSeen' as const } : { status: 'ok' as const, text }
+  },
   readTextSmart: async (path: string) => files.map.get(path) ?? null,
   readTextViaJsx: async (path: string) => files.map.get(path) ?? null,
   // T-105：写路径改用三态读；这个假 fs 没有"读不出"的场景，只会 ok / missing
@@ -45,8 +48,8 @@ vi.mock('@/cep/fs', () => ({
   },
   // T-109：base64 读也走三态
   readBase64Outcome: () => ({ status: 'notSeen' as const }),
-  writeBase64File: () => true,
-  removeFile: () => true,
+  writeBase64File: () => ({ status: 'ok' as const }),
+  removeFile: () => ({ ok: true as const }),
   dirUsage: () => null,
   saveExportedText: () => {},
   psScriptsDir: async () => null,

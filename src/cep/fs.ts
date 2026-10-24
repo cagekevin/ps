@@ -69,6 +69,24 @@ export function userDir(): string {
 export type TextRead =
   { status: 'ok'; text: string } | { status: 'notSeen' } | { status: 'error'; reason: string }
 
+/**
+ * 写结果（**观测**，与 `TextRead` 同形）：`ok` = 内容已落盘；`error` + `reason` = 没写进去。
+ *
+ * 为什么不再是 `boolean`：`false` 说不出"为什么"，于是调用点只能二选一 ——
+ * 要么当成功继续（导入报成功、原件已覆盖），要么退回普通写把原子保证摘掉（TD-09-27）。
+ * 有 `reason` 才能"失败就抛"，把原因一路带到用户面前。
+ */
+export type WriteOutcome = { status: 'ok' } | { status: 'error'; reason: string }
+
+/** 写侧同样只认一份判据：`notSeen` 在写路径上是失败（父目录已 mkdir，还 ENOENT = 中途消失） */
+function classifyWriteError(e: unknown): { status: 'error'; reason: string } {
+  const classified = classifyFsError(e)
+  if (classified.status === 'notSeen') {
+    return { status: 'error', reason: 'ENOENT（写入时路径不存在）' }
+  }
+  return classified
+}
+
 /** Node 系统错误的 `code`（`ENOENT` / `EPERM` / `EACCES` / `EBUSY` …）；取不到返回空串 */
 function errCode(e: unknown): string {
   if (typeof e !== 'object' || e === null || !('code' in e)) return ''
@@ -87,11 +105,26 @@ function readTextNode(absPath: string): TextRead {
   try {
     return { status: 'ok', text: nodeRequire('fs').readFileSync(absPath, 'utf8') as string }
   } catch (e) {
-    const code = errCode(e)
-    const message = e instanceof Error ? e.message : String(e)
-    if (code === 'ENOENT') return { status: 'notSeen' }
-    return { status: 'error', reason: code ? `${code}: ${message}` : message }
+    const classified = classifyFsError(e)
+    return classified.status === 'notSeen' ? { status: 'notSeen' } : classified
   }
+}
+
+/**
+ * **唯一的错误归判据**：只认 `ENOENT` 是"查不到"，其余错误码一律 `error` + 原始原因。
+ *
+ * 为什么必须只有一份：读侧（`readTextNode` / `readBase64Outcome`）与写侧/删除侧原本各自
+ * 写了一遍「是不是 ENOENT」，四份会各自漂移 —— 一处把 `EPERM` 认成"没有"，
+ * 就会出现「读不到 → 当成首次使用 → 拿默认值覆盖用户文件」（D-42 / T-105）。
+ * 想放开哪个错误码当"没有"，只改这里，一次生效、一次被审。
+ */
+export function classifyFsError(
+  e: unknown,
+): { status: 'error'; reason: string } | { status: 'notSeen' } {
+  const code = errCode(e)
+  if (code === 'ENOENT') return { status: 'notSeen' }
+  const message = e instanceof Error ? e.message : String(e)
+  return { status: 'error', reason: code ? `${code}: ${message}` : message }
 }
 
 /**
@@ -103,13 +136,14 @@ function readTextNode(absPath: string): TextRead {
  * `null`，分不出 `ENOENT`（没有台账）与 `EPERM`（读不到），坏台账被读成"没有台账"，
  * 于是 `decideUpload` 判成 `cloud-newer`、用户点「上传」把云端覆盖掉。现在它走 `readTextOutcome`。
  *
- * 它只判"原文是不是这段 / 在不在"，不判"为什么不是"，所以两态够用。
+ * 返回**三态**（`TextRead`）：调用方要分「查不到（可为首次使用）」与「读不到（禁止写回）」。
+ * 两态（`string | null`）会把 `EPERM` 压成"没有"，于是 CAS 比对在权限错时恒判"没人改过"（TD-09-24）、
+ * 偏好读失败被当成默认值再写回覆盖原文件（TD-09-23）。
  * **别处要读文件一律用 `readTextOutcome`**；要加第三处，先改 ADR-26 再动代码。
  */
-export function readTextSync(absPath: string): string | null {
-  if (!hasNode()) return null
-  const outcome = readTextNode(absPath)
-  return outcome.status === 'ok' ? outcome.text : null
+export function readTextSync(absPath: string): TextRead {
+  if (!hasNode()) return { status: 'error', reason: 'Node 不可用（--enable-nodejs 未开）' }
+  return readTextNode(absPath)
 }
 
 /** 用 Node 写文件，目录不存在会建 */
@@ -140,16 +174,14 @@ export function readBase64Outcome(absPath: string): Base64Read {
       base64: nodeRequire('fs').readFileSync(absPath).toString('base64') as string,
     }
   } catch (e) {
-    const code = errCode(e)
-    if (code === 'ENOENT') return { status: 'notSeen' }
-    const message = e instanceof Error ? e.message : String(e)
-    return { status: 'error', reason: code ? `${code}: ${message}` : message }
+    const classified = classifyFsError(e)
+    return classified.status === 'notSeen' ? { status: 'notSeen' } : classified
   }
 }
 
 /** 写 base64 到文件；目录不存在会建 */
-export function writeBase64File(absPath: string, base64: string): boolean {
-  if (!hasNode()) return false
+export function writeBase64File(absPath: string, base64: string): WriteOutcome {
+  if (!hasNode()) return { status: 'error', reason: 'Node 不可用（--enable-nodejs 未开）' }
   try {
     const fs = nodeRequire('fs')
     const path = nodeRequire('path')
@@ -158,9 +190,9 @@ export function writeBase64File(absPath: string, base64: string): boolean {
     ).Buffer
     fs.mkdirSync(path.dirname(absPath), { recursive: true })
     fs.writeFileSync(absPath, buffer.from(base64, 'base64'))
-    return true
-  } catch {
-    return false
+    return { status: 'ok' }
+  } catch (e) {
+    return classifyWriteError(e)
   }
 }
 
@@ -208,17 +240,22 @@ export function removeFile(absPath: string): RemoveOutcome {
     nodeRequire('fs').unlinkSync(absPath)
     return { ok: true }
   } catch (e) {
-    const code = errCode(e)
-    if (code === 'ENOENT') return { ok: true }
-    const message = e instanceof Error ? e.message : String(e)
-    return { ok: false, reason: code ? `${code}: ${message}` : message }
+    // 同一份错误归判据：只有 ENOENT 能证明"这个路径上现在没有它"
+    const classified = classifyFsError(e)
+    return classified.status === 'notSeen' ? { ok: true } : { ok: false, reason: classified.reason }
   }
 }
 
-/** 目录占用（递归求和）；`bytes` 只算普通文件，不跟符号链接 */
+/**
+ * 目录占用（递归求和）；`bytes` 只算普通文件，不跟符号链接。
+ *
+ * `skipped` = 统计时读不到（`EPERM` / 被占用）而**少算**的文件数。它不是装饰：
+ * 有值时 `bytes` 只是下限，UI 必须让用户看出"这个数字不准"（TD-06-5 之前是空 catch，少算了多少没人知道）。
+ */
 export interface DirUsage {
   bytes: number
   files: number
+  skipped: number
 }
 
 /**
@@ -238,6 +275,7 @@ export function dirUsage(absPath: string): DirUsage | null {
     // 调用方对"没有这个目录"与"读不到"做**同一件事**（显示「无法读取」），且没有写路径
     let bytes = 0
     let files = 0
+    let skipped = 0
     const walk = (dir: string): void => {
       const entries = fs.readdirSync(dir, { withFileTypes: true }) as {
         name: string
@@ -256,12 +294,13 @@ export function dirUsage(absPath: string): DirUsage | null {
           bytes += fs.statSync(full).size as number
           files += 1
         } catch {
-          // 权限/占用中的文件
+          // 权限/占用中的文件：算不进 bytes，但必须**数出来**（少算了几个要能说）
+          skipped += 1
         }
       }
     }
     walk(absPath)
-    return { bytes, files }
+    return { bytes, files, skipped }
   } catch {
     return null
   }
@@ -331,15 +370,16 @@ export function saveExportedText(absPath: string, text: string): void {
 
 /**
  * 原子写：先写本进程专属的 tmp 再改名，避免写到一半崩溃留下半截 JSON。
- * Node 不可用时返回 false，调用方退回普通写。
+ * 失败返回 `{status:'error', reason}`，调用方**必须抛/中止**——不许退回普通写。
  */
-export function writeTextFileAtomic(absPath: string, text: string): boolean {
-  if (!hasNode()) return false
+export function writeTextFileAtomic(absPath: string, text: string): WriteOutcome {
+  if (!hasNode()) return { status: 'error', reason: 'Node 不可用（--enable-nodejs 未开）' }
   try {
     atomicReplace(absPath, text)
-    return true
-  } catch {
-    return false
+    return { status: 'ok' }
+  } catch (e) {
+    // 失败**不许退回非原子写**：那等于主动摘掉 rename 保护（TD-09-27）
+    return classifyWriteError(e)
   }
 }
 

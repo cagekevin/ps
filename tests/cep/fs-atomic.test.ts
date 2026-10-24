@@ -58,7 +58,7 @@ describe('writeTextFileAtomic', () => {
   it('落盘内容正确，且不在目录里留下 tmp', () => {
     const target = path.join(dir, 'sj_appFreePanel.json')
 
-    expect(writeTextFileAtomic(target, '{"a":1}')).toBe(true)
+    expect(writeTextFileAtomic(target, '{"a":1}')).toEqual({ status: 'ok' })
 
     expect(fs.readFileSync(target, 'utf8')).toBe('{"a":1}')
     expect(fs.readdirSync(dir)).toEqual(['sj_appFreePanel.json'])
@@ -86,7 +86,7 @@ describe('writeTextFileAtomic', () => {
     const otherProcessTmp = `${target}.tmp`
     fs.writeFileSync(otherProcessTmp, '对方进程写到一半的内容', 'utf8')
 
-    expect(writeTextFileAtomic(target, '{"a":4}')).toBe(true)
+    expect(writeTextFileAtomic(target, '{"a":4}')).toEqual({ status: 'ok' })
 
     // 旧实现会把自己的内容写进这个同名文件再 rename，对方那半截就丢了
     expect(fs.readFileSync(otherProcessTmp, 'utf8')).toBe('对方进程写到一半的内容')
@@ -97,13 +97,20 @@ describe('writeTextFileAtomic', () => {
     const target = path.join(dir, 'sj_appFreePanel.json')
     behavior.failRename = true
 
-    expect(writeTextFileAtomic(target, '{"a":5}')).toBe(false)
+    // 失败必须带原因（`boolean` 说不出为什么，调用方只能猜着退回普通写，TD-09-27）
+    expect(writeTextFileAtomic(target, '{"a":5}')).toEqual({
+      status: 'error',
+      reason: expect.stringContaining('EACCES'),
+    })
     expect(fs.readdirSync(dir)).toEqual([])
   })
 
   it('无 node（未装 window.require）时返回 false，不抛', () => {
     delete (window as unknown as { require?: unknown }).require
-    expect(writeTextFileAtomic(path.join(dir, 'x.json'), '{}')).toBe(false)
+    expect(writeTextFileAtomic(path.join(dir, 'x.json'), '{}')).toEqual({
+      status: 'error',
+      reason: expect.stringContaining('Node 不可用'),
+    })
   })
 })
 

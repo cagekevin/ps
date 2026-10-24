@@ -31,7 +31,12 @@ const limitOptions = [{ label: '未设置' }]
 function refresh() {
   try {
     const usage = dirUsage(userDir())
-    usageText.value = usage ? formatBytes(usage.bytes) : '无法读取'
+    // 有文件读不到时 bytes 只是下限：必须让"这个数字不准"看得见（TD-06-5 之前少算了多少没人知道）
+    usageText.value = !usage
+      ? '无法读取'
+      : usage.skipped > 0
+        ? `${formatBytes(usage.bytes)}（${usage.skipped} 个文件读不到，可能更大）`
+        : formatBytes(usage.bytes)
   } catch {
     // Node 不可用（jsdom / 未开 --enable-nodejs）：显示「无法读取」，不显示 0
     usageText.value = '无法读取'

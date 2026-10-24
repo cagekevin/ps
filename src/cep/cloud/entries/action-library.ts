@@ -1,7 +1,8 @@
-import { readTextOutcome, userDir, writeTextFile, writeTextFileAtomic } from '@/cep/fs'
+import { readTextOutcome, userDir, writeTextFileAtomic } from '@/cep/fs'
 import { actionIndexRepo } from '@/cep/data/actions'
 import type { ActionWarehouseIndex } from '@/domain/action'
 import type { SyncFile, SyncUnitAdapter, WriteOutcome } from '@/domain/cloud'
+import { CepError } from '@/utils/errors'
 import { inlineFile, unitPayload } from './util'
 
 const INDEX_PATH = '/sj_dzStoreInfo.json'
@@ -94,8 +95,9 @@ export const actionLibraryEntry: SyncUnitAdapter = {
         const file = payload.files.find((item) => item.path === `/${entry.fileName}`)
         if (!file || file.content.kind !== 'inline') continue
         const target = `${userDir()}/${entry.fileName}`
-        if (!writeTextFileAtomic(target, file.content.data)) {
-          writeTextFile(target, file.content.data)
+        const written = writeTextFileAtomic(target, file.content.data)
+        if (written.status === 'error') {
+          throw new CepError('IO', `动作库写回失败：${entry.fileName}（${written.reason}）`)
         }
       }
       await actionIndexRepo.write(index)

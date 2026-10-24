@@ -37,7 +37,10 @@ const disk = vi.hoisted(() => ({
 vi.mock('@/cep/fs', () => ({
   hasNode: () => true,
   // 同步读：CAS 比对走这条（async 读会多一个 microtask 边界，正好是上一次丢更新的位置）
-  readTextSync: (p: string) => (fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : null),
+  readTextSync: (p: string) =>
+    fs.existsSync(p)
+      ? { status: 'ok' as const, text: fs.readFileSync(p, 'utf8') }
+      : { status: 'notSeen' as const },
   readTextSmart: async (p: string) => {
     if (disk.failRead) throw new Error('EBUSY')
     const text = fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : null

@@ -1,10 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { WriteOutcome } from '@/cep/fs'
 import { actionIndexRepo } from '@/cep/data/actions'
 import { actionLibraryEntry } from '@/cep/cloud/entries/action-library'
 
 const fsMock = vi.hoisted(() => ({
   readTextOutcome: vi.fn(),
-  writeTextFileAtomic: vi.fn(() => true),
+  writeTextFileAtomic: vi.fn<(p: string, text: string) => WriteOutcome>(() => ({ status: 'ok' })),
   writeTextFile: vi.fn(),
 }))
 
@@ -24,7 +25,7 @@ beforeEach(async () => {
     list: [{ name: '默认仓库', fileName: 'sj_dz_test.json' }],
   })
   fsMock.readTextOutcome.mockResolvedValue({ status: 'ok', text: '[]' })
-  fsMock.writeTextFileAtomic.mockReturnValue(true)
+  fsMock.writeTextFileAtomic.mockReturnValue({ status: 'ok' as const })
 })
 
 describe('action.library 云同步', () => {

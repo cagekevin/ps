@@ -1,5 +1,6 @@
 // 契约测试，非实机：文件读写全部 mock，全程零网络
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import type { WriteOutcome } from '@/cep/fs'
 
 /**
  * 云同步台账（T-114）。
@@ -12,7 +13,9 @@ const fsMock = vi.hoisted(() => ({
   /** 磁盘状态：`ok` 用 `text`，`notSeen` / `error` 走它自己的 status */
   read: { status: 'ok' as 'ok' | 'notSeen' | 'error', text: '', reason: '' },
   writeTextFile: vi.fn<(absPath: string, text: string) => void>(),
-  writeTextFileAtomic: vi.fn<(absPath: string, text: string) => boolean>(() => true),
+  writeTextFileAtomic: vi.fn<(absPath: string, text: string) => WriteOutcome>(() => ({
+    status: 'ok',
+  })),
 }))
 
 vi.mock('@/cep/fs', async (importOriginal) => {
@@ -48,7 +51,7 @@ beforeEach(() => {
   vi.stubGlobal('fetch', fetchGuard)
   fetchGuard.mockClear()
   fsMock.read = { status: 'notSeen', text: '', reason: '' }
-  fsMock.writeTextFileAtomic.mockReset().mockReturnValue(true)
+  fsMock.writeTextFileAtomic.mockReset().mockReturnValue({ status: 'ok' as const })
   fsMock.writeTextFile.mockReset()
 })
 

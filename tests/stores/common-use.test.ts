@@ -28,7 +28,10 @@ vi.mock('@/cep/fs', () => ({
     const text = state.files.get(path)
     return text === undefined ? { status: 'notSeen' as const } : { status: 'ok' as const, text }
   },
-  readTextSync: (path: string) => state.files.get(path) ?? null,
+  readTextSync: (path: string) => {
+    const text = state.files.get(path)
+    return text === undefined ? { status: 'notSeen' as const } : { status: 'ok' as const, text }
+  },
   writeTextFile: (path: string, text: string) => {
     state.files.set(path, text)
   },
@@ -38,8 +41,8 @@ vi.mock('@/cep/fs', () => ({
   },
   // T-109：base64 读也走三态
   readBase64Outcome: () => ({ status: 'notSeen' as const }),
-  writeBase64File: () => true,
-  removeFile: () => true,
+  writeBase64File: () => ({ status: 'ok' as const }),
+  removeFile: () => ({ ok: true as const }),
   dirUsage: () => null,
   saveExportedText: () => {},
   b64ToUtf8: (value: string) => value,

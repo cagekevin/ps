@@ -361,8 +361,9 @@ async function updateKuGroups(kind: KuKind, mutate: (groups: KuRawGroup[]) => vo
 
   // 备份先落盘：备份失败就抛（写文件会抛 NO_NODE），绝不在没有退路的情况下覆盖原件
   if (previous) writeTextFile(`${target.path}.bak`, previous)
-  if (!writeTextFileAtomic(target.path, text)) {
-    throw new CepError('IO', `${kind} 库文件写入失败：${target.fileName}`)
+  const written = writeTextFileAtomic(target.path, text)
+  if (written.status === 'error') {
+    throw new CepError('IO', `${kind} 库文件写入失败：${target.fileName}（${written.reason}）`)
   }
 
   if (target.isNew) {
@@ -544,8 +545,9 @@ async function copyToRecycle(relative: string, recycleDir: string): Promise<bool
     return false
   }
   if (read.status === 'notSeen') return false
-  if (!writeBase64File(`${recycleDir}/${relative}`, read.base64)) {
-    throw new CepError('IO', `复制到回收目录失败：${recycleDir}/${relative}`)
+  const copied = writeBase64File(`${recycleDir}/${relative}`, read.base64)
+  if (copied.status === 'error') {
+    throw new CepError('IO', `复制到回收目录失败：${recycleDir}/${relative}（${copied.reason}）`)
   }
   return true
 }

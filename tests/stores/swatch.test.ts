@@ -19,7 +19,10 @@ vi.mock('@/cep/fs', () => ({
     const text = fsMock.files.get(path)
     return text === undefined ? { status: 'notSeen' as const } : { status: 'ok' as const, text }
   },
-  readTextSync: (path: string) => fsMock.files.get(path) ?? null,
+  readTextSync: (path: string) => {
+    const text = fsMock.files.get(path)
+    return text === undefined ? { status: 'notSeen' as const } : { status: 'ok' as const, text }
+  },
   writeTextFileAtomic: (path: string, text: string) => {
     fsMock.files.set(path, text)
     return true

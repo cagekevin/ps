@@ -9,6 +9,7 @@ import {
 import type { ActionWarehouseIndex } from '@/domain/action'
 import { decodeDzx, encodeDzx, remapDzxFileNames, type DzxFile } from '@/domain/action-dzx'
 import { CepError } from '@/utils/errors'
+import { log } from '@/utils/logger'
 import { actionIndexRepo, currentWarehouseFile, selectActionFile } from './actions'
 import type { RepoRead } from './types'
 
@@ -65,11 +66,10 @@ function validateImported(file: DzxFile): void {
 
 function removeAll(fileNames: string[]): void {
   for (const name of fileNames) {
-    try {
-      removeFile(pathOf(name))
-    } catch {
-      // 清理失败只留下孤儿文件，不回滚已成功的索引
-    }
+    // 删除失败只留下孤儿文件，不回滚已成功的索引——但**必须记下来**（旧实现的 catch 是死代码：
+    // `removeFile` 从不抛，返回值却被丢掉，删没删掉没人知道，TD-06-6）
+    const removed = removeFile(pathOf(name))
+    if (!removed.ok) log.warn('action', `清理旧仓库文件失败（留下孤儿）：${name}`, removed.reason)
   }
 }
 
@@ -150,8 +150,9 @@ export function importActionArchive(append: boolean, sourcePath: string): Promis
     const written: string[] = []
     try {
       for (const entry of imported.arrFileData) {
-        if (!writeBase64File(pathOf(entry.name), entry.data)) {
-          throw new CepError('IO', `写入仓库失败：${entry.name}`)
+        const outcome = writeBase64File(pathOf(entry.name), entry.data)
+        if (outcome.status === 'error') {
+          throw new CepError('IO', `写入仓库失败：${entry.name}（${outcome.reason}）`)
         }
         written.push(entry.name)
       }

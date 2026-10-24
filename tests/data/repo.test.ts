@@ -8,6 +8,8 @@ const state = vi.hoisted(() => ({
   files: new Map<string, string>(),
   failWrite: false,
   failRead: false,
+  /** 只让 CAS 比对用的**同步**读失败（读入口仍 ok）—— TD-09-24 的构造条件 */
+  failCompare: false,
 }))
 
 vi.mock('@/cep/fs', () => ({
@@ -23,13 +25,20 @@ vi.mock('@/cep/fs', () => ({
     return text === undefined ? { status: 'notSeen' as const } : { status: 'ok' as const, text }
   },
   // CAS 比对用的同步读（D-26）：必须读到同一份磁盘内容
-  readTextSync: (path: string) => (state.failRead ? null : (state.files.get(path) ?? null)),
+  readTextSync: (path: string) => {
+    // 读不到 ≠ 没有（TD-09-23/24）：failRead 现在是 error，不是 notSeen
+    if (state.failRead || state.failCompare) {
+      return { status: 'error' as const, reason: 'EACCES: 模拟读不到' }
+    }
+    const text = state.files.get(path)
+    return text === undefined ? { status: 'notSeen' as const } : { status: 'ok' as const, text }
+  },
   writeTextFile: (path: string, text: string) => {
     if (state.failWrite) throw new Error('NO_NODE')
     state.files.set(path, text)
   },
   writeTextFileAtomic: (path: string, text: string) => {
-    if (state.failWrite) return false
+    if (state.failWrite) return { status: 'error' as const, reason: 'ENOSPC: 模拟写失败' }
     state.files.set(path, text)
     return true
   },
@@ -50,6 +59,7 @@ beforeEach(() => {
   state.files.clear()
   state.failWrite = false
   state.failRead = false
+  state.failCompare = false
 })
 
 function createRepo() {
@@ -92,6 +102,27 @@ describe('fileRepo 写', () => {
   it('写失败必须抛，不许吞掉', async () => {
     state.failWrite = true
     await expect(createRepo().write([{ name: 'A' }])).rejects.toThrow()
+  })
+
+  /**
+   * TD-09-24：CAS 比对**读不到**原文时不许当"没人改过"。
+   *
+   * 旧实现 `readTextSync(target) === expected`：读不到给 `null`，`expected` 也是 `null`
+   * （读的那一刻文件还不存在）时 `null === null` 判 'same'，并发守卫恒真 ——
+   * 别的面板刚建的文件就被覆盖。现在读不到 → `unknown` → **不写、抛**。
+   */
+  it('CAS 比对读不到原文 → 不写、抛（不把"读不到"当"没改过"）', async () => {
+    const original = JSON.stringify([{ name: 'A', star: 1 }])
+    state.files.set(PATH, original)
+    // 读入口正常（读得到内容），但落盘前的**同步比对读**失败 —— 正是权限错时的真实组合
+    state.failCompare = true
+
+    await expect(
+      createRepo().update((list) => {
+        list.push({ name: 'B' })
+      }),
+    ).rejects.toThrow('比对读不到原文')
+    expect(state.files.get(PATH)).toBe(original)
   })
 
   it('写之前把原文备份成 .bak', async () => {

@@ -120,7 +120,12 @@ export async function deleteWarehouse(index: number): Promise<void> {
   const target = read.value.list[index]
   if (!target) throw new Error('仓库不存在')
 
-  if (hasNode()) removeFile(`${userDir()}/${target.fileName}`)
+  if (hasNode()) {
+    // 删不掉要说出来：旧实现丢返回值，磁盘上旧 sj_dz*.json 还在而用户以为仓库已删（TD-06-6）
+    const removed = removeFile(`${userDir()}/${target.fileName}`)
+    if (!removed.ok)
+      throw new CepError('IO', `仓库文件删除失败：${target.fileName}（${removed.reason}）`)
+  }
 
   await actionIndexRepo.update((value) => {
     value.list.splice(index, 1)

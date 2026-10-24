@@ -87,8 +87,18 @@ function writeKuFile(relative: string, base64: string): boolean {
   if (read.status === 'error') {
     throw new CepError('IO', `读取原文件失败，已中止导入：${relative}（${read.reason}）`)
   }
-  if (read.status === 'ok') writeBase64File(`${path}.bak`, read.base64)
-  if (!writeBase64File(path, base64)) throw new CepError('IO', `写入文件失败：${relative}`)
+  if (read.status === 'ok') {
+    // TD-09-22：`.bak` 写失败**必须中止**。旧实现把这个失败丢掉继续写本体 ——
+    // 结果是"导入报成功、原件被覆盖、`.bak` 不存在、日志一行都没有"（EISDIR 可复现）
+    const backedUp = writeBase64File(`${path}.bak`, read.base64)
+    if (backedUp.status === 'error') {
+      throw new CepError('IO', `备份原文件失败，已中止导入：${relative}（${backedUp.reason}）`)
+    }
+  }
+  const written = writeBase64File(path, base64)
+  if (written.status === 'error') {
+    throw new CepError('IO', `写入文件失败：${relative}（${written.reason}）`)
+  }
   return read.status === 'ok'
 }
 
@@ -270,9 +280,22 @@ function moveToRecycle(names: readonly string[], keep: ReadonlySet<string>, dir:
     }
     if (read.status === 'notSeen') continue
     try {
-      if (writeBase64File(`${dir}/${name}`, read.base64) && removeFile(`${userDir()}/${name}`).ok) {
-        moved.push(name)
+      const copied = writeBase64File(`${dir}/${name}`, read.base64)
+      if (copied.status === 'error') {
+        // 复制失败就**不能删原件**：删了就等于原件没了、回收目录里也没有
+        log.warn(
+          'style',
+          `替换导入：旧文件没复制进回收目录（原件保留原位）：${name}`,
+          copied.reason,
+        )
+        continue
       }
+      const removed = removeFile(`${userDir()}/${name}`)
+      if (!removed.ok) {
+        log.warn('style', `替换导入：旧文件已复制但删不掉（留下孤儿）：${name}`, removed.reason)
+        continue
+      }
+      moved.push(name)
     } catch (e) {
       log.warn('style', `替换导入：旧文件没能移进回收目录：${name}`, e)
     }
@@ -361,7 +384,12 @@ export async function importKuArchive(
     }
   } catch (e) {
     // 只回滚这次新建的文件：被覆盖的原件还在原位（`.bak` 是它的上一版）
-    for (const name of created) removeFile(`${userDir()}/${name}`)
+    for (const name of created) {
+      const removed = removeFile(`${userDir()}/${name}`)
+      // 回滚删不掉只留下孤儿，但必须留下来历（旧实现丢掉返回值，删没删掉没人知道）
+      if (!removed.ok)
+        log.warn('style', `回滚：删新建文件失败（留下孤儿）：${name}`, removed.reason)
+    }
     throw e
   }
 

@@ -37,7 +37,10 @@ vi.mock('@/cep/fs', () => ({
     const text = state.files.get(path)
     return text === undefined ? { status: 'notSeen' as const } : { status: 'ok' as const, text }
   },
-  readTextSync: (path: string) => state.files.get(path) ?? null,
+  readTextSync: (path: string) => {
+    const text = state.files.get(path)
+    return text === undefined ? { status: 'notSeen' as const } : { status: 'ok' as const, text }
+  },
 }))
 
 const { readCommonUseOptions, updateCommonUseOptions } = await import('@/cep/data/legacy-settings')

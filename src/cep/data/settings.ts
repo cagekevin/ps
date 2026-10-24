@@ -1,5 +1,6 @@
 import { hasCep } from '@/cep/transport'
-import { readTextSync, userDir, writeTextFile, writeTextFileAtomic } from '@/cep/fs'
+import { readTextSync, userDir, writeTextFileAtomic } from '@/cep/fs'
+import { CepError } from '@/utils/errors'
 import { log } from '@/utils/logger'
 
 /**
@@ -19,6 +20,14 @@ const FLUSH_DELAY = 300
 export const PREFS_VERSION = 1
 
 let cache: Record<string, unknown> | null = null
+/**
+ * 读失败的原因；非空 = **本次会话禁止写回**（TD-09-23）。
+ *
+ * 读不到时内存里给默认值，UI 照旧能用；但一旦把这份默认值写回去，用户原有偏好就没了 ——
+ * 所以"读不到"与"新装机没有偏好"必须分开：后者可以写，前者不许写。
+ */
+let readFailure = ''
+let readFailureReported = false
 let timer: ReturnType<typeof setTimeout> | null = null
 let writeQueue: Promise<void> = Promise.resolve()
 const errorListeners = new Set<(message: string) => void>()
@@ -57,10 +66,16 @@ function loadAll(): Record<string, unknown> {
 
   try {
     // 同步读是 ADR-26 ④ 的具名例外之三：`getPref` / `settingsSnapshot` 全链路同步。
-    // 代价：`notSeen` 与 `error` 在这里仍是同一个 `{}`（`text ? … : {}`），读失败零信号——
-    // 这是我们自己的偏好文件（丢了回默认值，不毁用户资产），要补信号另开条目（T-107 已登记）。
-    const text = readTextSync(filePath())
-    cache = text ? (JSON.parse(text) as Record<string, unknown>) : {}
+    // 三态在此分流：`notSeen`（新装机）→ 默认值且允许写回；`error`（读不到）→ 默认值但**禁止写回**。
+    const read = readTextSync(filePath())
+    if (read.status === 'error') {
+      // 读不到 ≠ 没有（ADR-0014）：`cache = {}` 只是给 UI 的默认值，`readFailure` 挡住写回。
+      // 具体提示文案与交互归 1c，这里只保证"不会拿默认值覆盖用户文件"。
+      readFailure = read.reason
+      cache = {}
+    } else {
+      cache = read.status === 'ok' ? (JSON.parse(read.text) as Record<string, unknown>) : {}
+    }
   } catch (e) {
     log.warn('settings', '读取偏好失败，使用默认值', e)
     cache = {}
@@ -75,8 +90,28 @@ function normalizeVersion(all: Record<string, unknown>) {
   all.__version = PREFS_VERSION
 }
 
+/**
+ * 读失败过就拒绝写盘。返回 true = 已拒绝（调用方直接 return）。
+ *
+ * 为什么不是"再试一次读"：此刻仍然读不到，重试只会把同一次失败重复一遍；
+ * 而放行写入的后果是**不可恢复**的（用户偏好被默认值覆盖），拒绝的后果只是本次不保存。
+ */
+function refuseIfReadFailed(): boolean {
+  if (!readFailure) return false
+  if (!readFailureReported) {
+    readFailureReported = true
+    notifyError(
+      new CepError('IO', `偏好文件读不到，本次不保存偏好（避免默认值覆盖原文件）：${readFailure}`),
+    )
+  } else {
+    log.warn('settings', '偏好读不到，本次仍不保存', readFailure)
+  }
+  return true
+}
+
 /** 同步写，只在关闭面板时用（beforeunload 里等不了异步） */
 function persistSync(all: Record<string, unknown>) {
+  if (refuseIfReadFailed()) return
   try {
     const text = JSON.stringify(all)
     if (!hasCep()) {
@@ -84,7 +119,9 @@ function persistSync(all: Record<string, unknown>) {
       return
     }
     const target = filePath()
-    if (!writeTextFileAtomic(target, text)) writeTextFile(target, text)
+    // 原子写失败就报错：旧实现退回普通写，等于把 rename 保护摘掉（TD-09-27）
+    const written = writeTextFileAtomic(target, text)
+    if (written.status === 'error') throw new CepError('IO', `偏好写入失败：${written.reason}`)
   } catch (e) {
     notifyError(e)
   }
@@ -93,13 +130,15 @@ function persistSync(all: Record<string, unknown>) {
 function persist(all: Record<string, unknown>) {
   const text = JSON.stringify(all)
   writeQueue = writeQueue.then(() => {
+    if (refuseIfReadFailed()) return
     try {
       if (!hasCep()) {
         localStorage.setItem(LS_KEY, text)
         return
       }
       const target = filePath()
-      if (!writeTextFileAtomic(target, text)) writeTextFile(target, text)
+      const written = writeTextFileAtomic(target, text)
+      if (written.status === 'error') throw new CepError('IO', `偏好写入失败：${written.reason}`)
     } catch (e) {
       notifyError(e)
     }
@@ -114,6 +153,8 @@ export function settingsSnapshot(): Record<string, unknown> {
 /** 仅测试用：清掉内存缓存 */
 export function __resetSettingsForTest() {
   cache = null
+  readFailure = ''
+  readFailureReported = false
 }
 
 export function getPref<T>(key: string, fallback: T): T {

@@ -20,9 +20,9 @@ const disk = vi.hoisted(() => ({ text: '{"a":1}' }))
 vi.mock('@/cep/fs', () => ({
   hasNode: () => true,
   readTextOutcome: async () => ({ status: 'ok' as const, text: disk.text }),
-  readTextSync: () => disk.text,
+  readTextSync: () => ({ status: 'ok' as const, text: disk.text }),
   writeTextFile: () => undefined,
-  writeTextFileAtomic: () => true,
+  writeTextFileAtomic: () => ({ status: 'ok' as const }),
 }))
 
 // import 时 `hasCep()` 还是 false —— 这正是急求值实现被定死的时刻

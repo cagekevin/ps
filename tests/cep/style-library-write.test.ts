@@ -34,12 +34,15 @@ vi.mock('@/cep/fs', () => ({
     const text = fsMock.files.get(path)
     return text === undefined ? { status: 'notSeen' as const } : { status: 'ok' as const, text }
   },
-  readTextSync: (path: string) => fsMock.files.get(path) ?? null,
+  readTextSync: (path: string) => {
+    const text = fsMock.files.get(path)
+    return text === undefined ? { status: 'notSeen' as const } : { status: 'ok' as const, text }
+  },
   writeTextFileAtomic: (path: string, text: string) => {
-    if (fsMock.failAtomic) return false
+    if (fsMock.failAtomic) return { status: 'error' as const, reason: 'EPERM: 模拟原子写失败' }
     fsMock.atomicWrites.push(path)
     fsMock.files.set(path, text)
-    return true
+    return { status: 'ok' as const }
   },
   writeTextFile: (path: string, text: string) => {
     fsMock.files.set(path, text)
@@ -53,8 +56,9 @@ vi.mock('@/cep/fs', () => ({
       : { status: 'ok' as const, base64: Buffer.from(text).toString('base64') }
   },
   writeBase64File: (path: string, base64: string) => {
+    if (fsMock.failAtomic) return { status: 'error' as const, reason: 'EPERM: 模拟写失败' }
     fsMock.files.set(path, Buffer.from(base64, 'base64').toString('utf8'))
-    return true
+    return { status: 'ok' as const }
   },
   // T-109：`removeFile` 现在返回 `{ ok } | { ok:false, reason }`，不再是 boolean
   removeFile: (path: string) => {

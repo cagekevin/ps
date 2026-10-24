@@ -4,7 +4,7 @@
 // 谁在用：cep/cloud/setup.ts 注入 engine；cloud/auto-sync.ts 的 hasCloudLedger
 // 禁止：不在这里判断冲突、不发请求；这里只做「文件 ↔ 对象」
 
-import { readTextOutcome, userDir, writeTextFile, writeTextFileAtomic } from '@/cep/fs'
+import { readTextOutcome, userDir, writeTextFileAtomic } from '@/cep/fs'
 import type { CloudLedgerRecord, LedgerRead } from '@/cloud/types'
 import { CloudError } from '@/domain/cloud'
 import { log } from '@/utils/logger'
@@ -73,7 +73,11 @@ export function writeCloudLedger(ledger: CloudLedgerRecord): void {
   const text = JSON.stringify(ledger)
   try {
     const target = path()
-    if (!writeTextFileAtomic(target, text)) writeTextFile(target, text)
+    // 原子写失败必须抛：退回普通写等于摘掉 rename 保护（TD-09-27），台账写坏会污染同步判定
+    const written = writeTextFileAtomic(target, text)
+    if (written.status === 'error') {
+      throw new CloudError('CLOUD_WRITE_FAILED', `台账写入失败：${written.reason}`)
+    }
   } catch (error) {
     throw new CloudError(
       'CLOUD_WRITE_FAILED',

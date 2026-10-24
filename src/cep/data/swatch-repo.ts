@@ -117,8 +117,9 @@ export async function writeSwatchItems(path: string, items: unknown[]): Promise<
     throw new CepError('IO', `色板文件读不到，已中止写入：${path}（${read.reason}）`)
   }
   if (read.status === 'ok' && read.text) writeTextFile(`${path}.bak`, read.text)
-  if (!writeTextFileAtomic(path, JSON.stringify(items))) {
-    throw new CepError('IO', `色板文件写入失败：${path}`)
+  const written = writeTextFileAtomic(path, JSON.stringify(items))
+  if (written.status === 'error') {
+    throw new CepError('IO', `色板文件写入失败：${path}（${written.reason}）`)
   }
   emitChange()
 }

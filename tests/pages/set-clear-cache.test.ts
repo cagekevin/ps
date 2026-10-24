@@ -26,7 +26,7 @@ describe('ClearCacheDialog 只读', () => {
   it('清理缓存与上限下拉都是 disabled，且不显示自拟档位', async () => {
     vi.resetModules()
     vi.doMock('@/cep/fs', () => ({
-      dirUsage: () => ({ bytes: 1536 * 1024, files: 3 }),
+      dirUsage: () => ({ bytes: 1536 * 1024, files: 3, skipped: 0 }),
       userDir: () => '/tmp/x',
     }))
     const { default: ClearCacheDialog } =

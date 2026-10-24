@@ -38,7 +38,7 @@ afterAll(() => {
 describe('dirUsage', () => {
   it('递归求和文件字节与个数', () => {
     installRequire()
-    expect(dirUsage(root)).toEqual({ bytes: 150, files: 2 })
+    expect(dirUsage(root)).toEqual({ bytes: 150, files: 2, skipped: 0 })
   })
 
   it('目录不存在返回 null（不是 0——0 会被显示成"空缓存"）', () => {

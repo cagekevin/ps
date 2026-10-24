@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import type { WriteOutcome } from '@/cep/fs'
 import { readValue } from '../support/repo-read'
 
 /**
@@ -15,16 +16,18 @@ const fs = vi.hoisted(() => ({
     return { status: 'ok' as const, text: disk.text }
   }),
   readTextSmart: vi.fn(async () => disk.text),
-  readTextSync: vi.fn(() => disk.text),
+  readTextSync: vi.fn(() => ({ status: 'ok' as const, text: disk.text })),
   writeTextFile: vi.fn((path: string, text: string) => {
     // .bak 之外的目标文件写成功后也算磁盘内容变了，但这两个用例不依赖细节
     if (!path.endsWith('.bak')) disk.text = text
   }),
   // 路径形参只为对齐 `writeTextFileAtomic(absPath, text)` 的签名，用例不按路径分流
-  writeTextFileAtomic: vi.fn((_path: string, text: string) => {
-    disk.text = text
-    return true
-  }),
+  writeTextFileAtomic: vi.fn<(p: string, text: string) => WriteOutcome>(
+    (_path: string, text: string) => {
+      disk.text = text
+      return { status: 'ok' as const }
+    },
+  ),
 }))
 
 vi.mock('@/cep/fs', () => fs)
@@ -45,7 +48,7 @@ beforeEach(() => {
   vi.clearAllMocks()
   disk.text = null
   disk.readError = ''
-  fs.writeTextFileAtomic.mockReturnValue(true)
+  fs.writeTextFileAtomic.mockReturnValue({ status: 'ok' as const })
 })
 
 describe('fileRepo requireExisting', () => {
