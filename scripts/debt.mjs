@@ -69,9 +69,10 @@
  *                                                   # （+ 跑不动 / 人工担保 两张，见文件头）
  *                                                   # **只读：不改任何状态**，改不改账本由人决定
  * 用法（撤销结账 · `resolve` 的严格反向）：
- *   node scripts/debt.mjs reopen <TD-ID> --why "…" [--dry]        # 已结账 → 待还（不要求凭证）
+ *   node scripts/debt.mjs reopen <TD-ID> --why "…" [--dry]        # **已解决** → 待还（不要求凭证）
  *   node scripts/debt.mjs reopen --from-reverify [--dry]           # 直接吃 reverify 的「无凭证」那批
- *                                                                  # 有凭证的债**不许**降级；只能单向
+ *                                                                  # 只降「已解决」：裁定类不降、有凭证的不降
+ *                                                                  # 归档行降级时**搬回主表**（否则 = 假降级）
  * 测试夹具：`--root=<dir>`（任意位置）—— 把账本指到已知答案的夹具，见 `tests/scripts/debt-*.test.ts`。
  */
 import { readFileSync, writeFileSync, existsSync, readdirSync } from 'node:fs'
@@ -1514,18 +1515,24 @@ function cmdReverify(argv) {
  *   它的凭证就是 `reverify` 的输出。
  *
  * 【四条纪律】
- *   ① **单向**：只做 `已解决 / 已裁定 / 已裁定非债 / 已退役 / 不做` → `待还`。
- *      反向（`待还` → `已解决`）走 `resolve`，且必须过凭证闸。
+ *   ① **单向且只降「已解决」**：`已解决` → `待还`。反向（`待还` → `已解决`）走 `resolve`，
+ *      且必须过凭证闸。**裁定类（`已裁定非债` / `已裁定` / `不做` / `已退役`）不许降** ——
+ *      那是**人的判断**（"我核过，这不是债" / "做它不划算"），不是"我说它修好了"，
+ *      降级它们 = 把自己的裁定翻掉、复活明确判过的东西。要翻裁定走 `edit --field solution`。
  *   ② **不要求 `--evidence`，但必须有 `--why`**（单条模式必填；`--from-reverify` 按分组派生三档）——
  *      撤销也得留理由，否则等于无声抹账。
  *   ③ **状态格统一前缀** `[待还 <date> · 凭证缺失 · <why>]` ⇒ `debt search 凭证缺失` 一次拉全。
  *   ④ **有凭证的债不许 reopen**：状态格里出现 `evidence:v1{…}` 就是可复算的真账，
  *      降级它 = 把真账删掉。命中即整批拒改并列出 ID（不部分执行，不留半态）。
  *
- * 【不做什么】不搬行：`--from-reverify` 里有一部分在「归档」里，降级后它们仍是归档行，
- *   `debt list` 默认看不到（搬回主表 = 另一个动作，本命令不替人决定）。
+ *   ⑤ **降级必须搬回主表**（2026-10-25 用户定案）：归档行降完仍是归档行 ⇒ `debt list` 默认看不见
+ *      = **假降级**（账本说它待还，而没人看得见）。故归档行**整行搬回主表**（`archive` 的反向），
+ *      并把归档头的「归档 N 条」跟着减（否则归档头说的是假数）。
  */
 const REOPEN_TO = '待还'
+/** **只许从「已解决」降**：裁定类（已裁定* / 不做 / 已退役）是人的判断，不是"我说它修好了" */
+const REOPEN_FROM = '已解决'
+const RULING_WORDS = ['已裁定非债', '已裁定', '不做', '已退役']
 const REOPEN_MARK = '凭证缺失'
 const EVIDENCE_ANY_RE = /evidence:v1\s*\{/
 /** 分组名与 `analyzeDoneRows().none` 的键一一对应（分组名同时进状态格，故是"真源"） */
@@ -1536,6 +1543,17 @@ const REOPEN_GROUPS = [
 ]
 const reopenWhy = (group) => `reverify: 无凭证（${group}）`
 
+/** 被排除的裁定类：**列出 ID**，不猜、不改（要翻裁定走 `edit`） */
+function printExcludedRulings(excluded) {
+  if (!excluded.length) return
+  console.log(
+    `\n⚠️ 排除 ${excluded.length} 条**裁定类**（不降级）：\`已裁定非债\` / \`不做\` 是你的判断，不是"我说它修好了"`,
+  )
+  const ids = excluded.map((r) => r.fields.id)
+  for (let i = 0; i < ids.length; i += 8) console.log('   ' + ids.slice(i, i + 8).join(' · '))
+  console.log('   ↳ 要翻裁定请走 `edit --field solution` 改判，不要用 reopen')
+}
+
 function cmdReopen(argv) {
   const id = argv.find((a) => /^TD-\d+-\d+|^MD-\d+-\d+/.test(a))
   const fromReverify = argv.includes('--from-reverify')
@@ -1544,7 +1562,7 @@ function cmdReopen(argv) {
   const date = argVal(argv, '--date') || today()
   if (!id && !fromReverify)
     fail(
-      '用法：reopen <TD-ID> --why "…" [--dry] ｜ reopen --from-reverify [--dry]（撤销结账：已结账 → 待还，**不要求凭证**）',
+      `用法：reopen <TD-ID> --why "…" [--dry] ｜ reopen --from-reverify [--dry]（撤销结账：**${REOPEN_FROM}** → ${REOPEN_TO}，不要求凭证）`,
     )
 
   // 闸 ①：单条模式必须给理由（批量模式由分组派生，见下）
@@ -1562,7 +1580,7 @@ function cmdReopen(argv) {
     for (const [label] of REOPEN_GROUPS) console.error(`     ${reopenWhy(label)}`)
     console.error('')
     console.error(
-      '   ↳ 判定口径：`node scripts/debt.mjs reverify <ID>`（只读）；本命令只做 已结账 → 待还',
+      `   ↳ 判定口径：\`node scripts/debt.mjs reverify <ID>\`（只读）；本命令只做 ${REOPEN_FROM} → ${REOPEN_TO}`,
     )
     process.exit(1)
   }
@@ -1572,6 +1590,7 @@ function cmdReopen(argv) {
 
   // 选行：单条 / 直接吃 reverify 的判定（同一份 analyzeDoneRows，防两处口径漂移）
   const plans = []
+  const excluded = [] // 裁定类：**不降级**，只列出
   if (fromReverify) {
     const done = loadAll().filter(
       (r) =>
@@ -1581,9 +1600,17 @@ function cmdReopen(argv) {
     )
     const { none } = analyzeDoneRows(done)
     for (const [label, key] of REOPEN_GROUPS)
-      for (const r of none[key]) plans.push({ r, why: reopenWhy(label), group: label })
+      for (const r of none[key]) {
+        // 只降「已解决」；`已裁定非债 / 不做 / 已退役` 是**人的裁定**，不是"我说它修好了"
+        if (statusWord(r.fields.status) === REOPEN_FROM)
+          plans.push({ r, why: reopenWhy(label), group: label })
+        else excluded.push(r)
+      }
     if (!plans.length) {
-      console.log('✅ 无需降级：reverify 没判出「无凭证」的已结债（③ 清单为空）')
+      console.log(
+        `✅ 无需降级：reverify 的「无凭证」里没有 **${REOPEN_FROM}** 的行（只剩裁定类或为空）`,
+      )
+      printExcludedRulings(excluded)
       return
     }
   } else {
@@ -1594,7 +1621,7 @@ function cmdReopen(argv) {
   }
   plans.sort((a, b) => idKey(a.r.fields.id) - idKey(b.r.fields.id))
 
-  // 闸 ②③：有凭证不许降级；只能单向（已结账 → 待还）。**任一不过 = 整批不执行**
+  // 闸 ②③④：有凭证不许降级；裁定类不许降级；只能单向。**任一不过 = 整批不执行**
   const problems = []
   for (const { r } of plans) {
     const status = String(r.fields.status)
@@ -1603,9 +1630,13 @@ function cmdReopen(argv) {
       problems.push(
         `${r.fields.id}：状态格里已有凭证 → **有凭证的债不许降级**（它可复算，降级等于把真账删掉）`,
       )
-    else if (!DONE_WORDS.includes(word))
+    else if (RULING_WORDS.includes(word))
       problems.push(
-        `${r.fields.id}：当前 [${word || '?'}] → reopen 只做 **已结账 → 待还**（反向请走 \`resolve\`，且必须过凭证闸）`,
+        `${r.fields.id}：当前 [${word}] 是**裁定类**（你的判断，不是"我说它修好了"）→ 不许用 reopen 降级；要翻裁定请走 \`edit --field solution\` 改判`,
+      )
+    else if (word !== REOPEN_FROM)
+      problems.push(
+        `${r.fields.id}：当前 [${word || '?'}] → reopen 只做 **${REOPEN_FROM} → ${REOPEN_TO}**（反向请走 \`resolve\`，且必须过凭证闸）`,
       )
   }
   if (problems.length) {
@@ -1615,7 +1646,7 @@ function cmdReopen(argv) {
     process.exit(1)
   }
 
-  // 落笔（就地改状态格；不新增行、不搬行）
+  // 落笔：主表就地改状态格；归档行**整行搬回主表**（`archive` 的反向），否则 = 假降级
   const files = [{ file: LEDGER, label: '主表', lines: loadLedger().lines }]
   if (existsSync(ARCHIVE))
     files.push({
@@ -1623,8 +1654,10 @@ function cmdReopen(argv) {
       label: '归档',
       lines: readFileSync(ARCHIVE, 'utf8').split(/\r?\n/),
     })
+  const removed = new Set()
+  const moved = []
   const preview = []
-  const touched = new Set()
+  let touchedMain = false
   for (const p of plans) {
     const r = p.r
     if (r.mode === 'manual') fail(`${r.fields.id} 是「列错位需人工」行 → 先修列，再撤销结账`)
@@ -1635,32 +1668,61 @@ function cmdReopen(argv) {
     const newCell = `[${REOPEN_TO} ${date} · ${REOPEN_MARK} · ${p.why}]`
     const parts = f.lines[r.li].split('|')
     parts[1 + C.status] = ` ${newCell} `
-    f.lines[r.li] = parts.join('|')
-    touched.add(f)
-    preview.push({ id: r.fields.id, tag: SRC_TAG(r), oldCell, newCell, group: p.group })
+    const newRow = parts.join('|')
+    const backToMain = r.src === 'archive'
+    if (backToMain) {
+      removed.add(r.li)
+      moved.push(newRow)
+    } else {
+      f.lines[r.li] = newRow
+      touchedMain = true
+    }
+    preview.push({ id: r.fields.id, tag: SRC_TAG(r), oldCell, newCell, group: p.group, backToMain })
   }
 
-  const archived = preview.filter((x) => x.tag).length
   console.log(
-    `🔄 debt reopen（撤销结账：已结账 → ${REOPEN_TO}，**不要求凭证**）｜ 选中 ${preview.length} 条${dry ? ' ｜ --dry 预览（**不落盘**）' : ''}`,
+    `🔄 debt reopen（撤销结账：**${REOPEN_FROM}** → ${REOPEN_TO}，不要求凭证）｜ 选中 ${preview.length} 条${dry ? ' ｜ --dry 预览（**不落盘**）' : ''}`,
   )
   const groups = fromReverify ? REOPEN_GROUPS.map(([label]) => label) : ['']
   for (const g of groups) {
     const rows = preview.filter((x) => x.group === g)
     if (!rows.length) continue
     if (g) console.log(`\n【${g}】${rows.length} 条`)
-    for (const x of rows) console.log(`   ${x.id}${x.tag} ｜ 改前 ${x.oldCell} → 改后 ${x.newCell}`)
+    for (const x of rows)
+      console.log(
+        `   ${x.id}${x.backToMain ? '（归档→主表）' : x.tag} ｜ 改前 ${x.oldCell} → 改后 ${x.newCell}`,
+      )
   }
-  if (dry) {
-    console.log(`\n（dry·未写盘）真降请去掉 --dry；共 ${preview.length} 条会被降级`)
-  } else {
-    for (const f of touched) writeFileSync(f.file, f.lines.join('\n'))
-    console.log(`\n✅ 已降级 ${preview.length} 条（就地改状态格，未新增行、未搬行）`)
-  }
-  if (archived)
+
+  if (!dry) {
+    const mainFile = files.find((x) => x.file === LEDGER)
+    if (touchedMain || moved.length) {
+      const mainText = mainFile.lines.join('\n').replace(/\s*$/, '')
+      writeFileSync(LEDGER, moved.length ? `${mainText}\n${moved.join('\n')}\n` : `${mainText}\n`)
+    }
+    const archFile = files.find((x) => x.file === ARCHIVE)
+    if (archFile && removed.size) {
+      const kept = archFile.lines.filter((_, i) => !removed.has(i))
+      const remaining = kept.filter((l) => TABLE_ROW.test(l)).length
+      // 归档计数跟着减（否则归档头说的是假数）
+      const text = kept
+        .join('\n')
+        .replace(/^(> 最近更新：\S+ ｜ 归档 )\d+( 条)$/m, `$1${remaining}$2`)
+      writeFileSync(ARCHIVE, text)
+    }
     console.log(
-      `⚠️ 其中 ${archived} 条在「归档」里：降级后仍是归档行，\`debt list\` 默认看不到（搬回主表 = 另一个动作，本命令不搬）`,
+      `\n✅ 已降级 ${preview.length} 条（就地改状态格，未新增行）${
+        moved.length ? `；其中 ${moved.length} 条已从归档**搬回主表**` : ''
+      }`,
     )
+  } else {
+    console.log(`\n（dry·未写盘）真降请去掉 --dry；共 ${preview.length} 条会被降级`)
+  }
+  if (moved.length || preview.some((x) => x.backToMain))
+    console.log(
+      `   ↳ ${preview.filter((x) => x.backToMain).length} 条会从归档**搬回主表**（不搬 = 假降级：账本说待还，而 \`debt list\` 看不见）`,
+    )
+  printExcludedRulings(excluded)
   console.log('   ↳ 复核：`node scripts/debt.mjs search 凭证缺失 --all`')
 }
 
@@ -2006,7 +2068,7 @@ switch (cmd) {
       '  复算：reverify <TD-ID> | --all（**只读**：真跑每条已结债的凭证命令，出「可复用 / 数字漂移 / 无凭证待补」）',
     )
     console.log(
-      '  撤销：reopen <TD-ID> --why "…" [--dry] | reopen --from-reverify [--dry]（已结账 → 待还；有凭证的不许降级）',
+      '  撤销：reopen <TD-ID> --why "…" [--dry] | reopen --from-reverify [--dry]（**已解决** → 待还；裁定类/有凭证的不许降级；归档行搬回主表）',
     )
     console.log('  统计：stats（形态/解法分布 —— 供"找债捷径"与"手法排行"，见两份 SOP）')
     process.exit(cmd ? 1 : 0)
