@@ -118,7 +118,9 @@ export function describeCloudStatus(input: {
     queuedText:
       queuedUnits === 0 ? '无' : `${queuedUnits} 项（本会话的改动，等下一次自动同步；不是失败）`,
     failedText:
-      failed.length === 0 ? '' : `${failed.length} 项（之前没推上去的，记在本地）：${reasons.join('；')}`,
+      failed.length === 0
+        ? ''
+        : `${failed.length} 项（之前没推上去的，记在本地）：${reasons.join('；')}`,
     conflictText:
       conflicts.length === 0
         ? ''
