@@ -9,7 +9,7 @@ import type { SyncOutcome } from '@/cloud/change-sync'
 import { createCloudEngine, type CloudEngine } from '@/cloud/engine'
 import { cloudEntries } from './entries'
 import { isAutoSyncEnabled, isCloudConfigured } from './config'
-import { hasCloudLedger, readCloudLedger, writeCloudLedger } from './ledger'
+import { readCloudLedger, writeCloudLedger } from './ledger'
 import { clearPendingChanges, readPendingChanges, recordPendingChanges } from './pending'
 import { pullSnapshot, pushSnapshot } from './transport'
 
@@ -41,21 +41,24 @@ export function allSyncUnitIds(): string[] {
 }
 
 /**
- * 后台同步的闸门。
+ * 后台同步的闸门（T-114 起是 async：台账读取要区分"没有"与"读不到"）。
  *
- * 四个"不发请求就返回"的理由要分开，因为用户该做的事完全不同（T-74 要靠它出文案）：
+ * 五个"不发请求就返回"的理由要分开，因为用户该做的事完全不同（T-74 要靠它出文案）：
  * - 未配置 / 自动同步关：用户去设置页；
  * - 没有台账：新设备先手动下载（`hasCloudLedger` 是"新设备不覆盖云端"的护栏，
  *   见 `docs/架构/云同步底层设施.md`「我们多两条约束」）；
+ * - **台账读不到**：既不能当"没有"（会解除那条护栏），也不能当"有"（没有依据判冲突）；
  * - 离线：等网络，退避会自己重试。
  *
  * 返回 ok:false 是**有意**的：脏集合要留着，退避到点再试；返回 ok:true 会把"还没同步出去"清掉。
  */
-function gate(): SyncOutcome | null {
+async function gate(): Promise<SyncOutcome | null> {
   // `skip: true`：这类原因一次请求都没发，不该吃掉退避额度（退避是留给真网络错误的）
   if (!isCloudConfigured()) return { ok: false, skip: true, errorCode: 'CLOUD_NOT_CONFIGURED' }
   if (!isAutoSyncEnabled()) return { ok: false, skip: true, errorCode: 'CLOUD_AUTO_SYNC_OFF' }
-  if (!hasCloudLedger()) return { ok: false, skip: true, errorCode: 'CLOUD_NO_LEDGER' }
+  const read = await readCloudLedger()
+  if (read.status === 'broken') return { ok: false, skip: true, errorCode: 'CLOUD_LEDGER_BROKEN' }
+  if (read.status === 'none') return { ok: false, skip: true, errorCode: 'CLOUD_NO_LEDGER' }
   if (typeof navigator !== 'undefined' && navigator.onLine === false) {
     return { ok: false, skip: true, errorCode: 'CLOUD_OFFLINE' }
   }
@@ -68,7 +71,7 @@ function gate(): SyncOutcome | null {
  */
 export const cloudSyncQueue = createSyncQueue({
   async sync(units) {
-    const blocked = gate()
+    const blocked = await gate()
     if (blocked) return blocked
     return engine.pushUnits(units.length > 0 ? units : allSyncUnitIds())
   },

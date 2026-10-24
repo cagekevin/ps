@@ -23,7 +23,8 @@ import type {
 } from './types'
 
 export interface CloudEngine {
-  getStatus(): CloudStatus
+  /** T-114：台账读取改成三态后要 await（坏台账必须能被区分出来，见 `CloudStatus.ledgerBroken`） */
+  getStatus(): Promise<CloudStatus>
   upload(options?: UploadOptions): Promise<UploadResult>
   download(options?: DownloadOptions): Promise<DownloadResult>
   /**
@@ -96,6 +97,27 @@ function errorResult(error: unknown): { error: string; errorCode: string } {
   }
 }
 
+/**
+ * 坏台账的统一拒绝结果（T-114）。
+ *
+ * 为什么不按 `cloud-newer` 处理：那是"云端比我们新"的**结论**，而台账读不到时我们
+ * **没有任何依据**下这个结论。用户会照着错误的原因确认，把云端覆盖掉。
+ * 也不按"首次同步"处理：那是"从来没有台账"，会解除"新设备不覆盖云端"的护栏。
+ */
+function ledgerBrokenResult(reason: string): {
+  ok: false
+  count: 0
+  error: string
+  errorCode: string
+} {
+  return {
+    ok: false,
+    count: 0,
+    error: `本地同步台账读不到（${reason}），已停止上传：没有它就无法判断云端和本地谁更新`,
+    errorCode: 'CLOUD_LEDGER_BROKEN',
+  }
+}
+
 /** unit id → unit hash；台账的 per-unit 指纹 */
 function unitHashes(units: Record<string, SyncUnit>): Record<string, string> {
   const out: Record<string, string> = {}
@@ -104,13 +126,16 @@ function unitHashes(units: Record<string, SyncUnit>): Record<string, string> {
 }
 
 export function createCloudEngine(deps: CloudDeps): CloudEngine {
-  function getStatus(): CloudStatus {
-    const ledger = deps.ledger.read()
+  async function getStatus(): Promise<CloudStatus> {
+    const read = await deps.ledger.read()
     const pendingItems = deps.pending.list()
+    // T-114：判别位是 `ledgerState`（三态）。`broken` 不许被压成"没有台账"——
+    // 那会让设置页显示"还没有同步记录"，用户据此点「上传」就把云端覆盖了
+    const ledger = read.status === 'ok' ? read.ledger : null
     return {
       configured: deps.config.isConfigured(),
       autoSyncEnabled: deps.config.isAutoSyncEnabled(),
-      hasLedger: ledger !== null,
+      ledgerState: read,
       rev: ledger?.rev ?? 0,
       syncedAt: ledger?.syncedAt ?? 0,
       localHash: ledger?.localHash ?? '',
@@ -133,7 +158,11 @@ export function createCloudEngine(deps: CloudDeps): CloudEngine {
     }
 
     const localHash = unitsHash(localUnits)
-    const ledger = deps.ledger.read()
+    // T-114：坏台账**不许**当成"没有台账"。后者会让 `decideUpload` 判成 `cloud-newer`，
+    // 用户确认后就把云端那一份覆盖掉；而"读不到"根本不是冲突，是**没有依据判断**。
+    const read = await deps.ledger.read()
+    if (read.status === 'broken') return ledgerBrokenResult(read.reason)
+    const ledger = read.status === 'ok' ? read.ledger : null
 
     let cloud
     try {
@@ -353,7 +382,13 @@ export function createCloudEngine(deps: CloudDeps): CloudEngine {
       return { ok: false, count: 0, pushed: [], pending: ready, ...errorResult(error) }
     }
 
-    const ledger = deps.ledger.read()
+    // T-114：坏台账 → **不许推**。`ledger = null` 时 per-unit 基线全缺，T-76① 的
+    // "没有基线不判冲突"会让**每一个改过的 unit 直接推**，别人在另一台机器上的改动被覆盖
+    const read = await deps.ledger.read()
+    if (read.status === 'broken') {
+      return { ...ledgerBrokenResult(read.reason), pushed: [], pending: ready }
+    }
+    const ledger = read.status === 'ok' ? read.ledger : null
     const cloudUnits = cloud?.units ?? {}
     const changed = ready.filter((id) => cloudUnits[id]?.hash !== localUnits[id].hash)
 

@@ -12,7 +12,8 @@ function status(over: Partial<CloudStatus> = {}): CloudStatus {
   return {
     configured: true,
     autoSyncEnabled: true,
-    hasLedger: true,
+    // T-114：判别位是 `ledgerState`（三态），不再是一个 boolean
+    ledgerState: { status: 'ok', ledger: { rev: 3, syncedAt: 0, localHash: 'h' } },
     rev: 3,
     syncedAt: 0,
     localHash: 'h',
@@ -87,11 +88,35 @@ describe('describeCloudStatus', () => {
 
   it('没台账 / 自动同步关 各有一句解释（用户要做的事不同）', () => {
     expect(
-      describeCloudStatus({ status: status({ hasLedger: false }), queuedUnits: 0 }).notice,
+      describeCloudStatus({
+        status: status({ ledgerState: { status: 'none' } }),
+        queuedUnits: 0,
+      }).notice,
     ).toContain('本地还没有同步记录')
     expect(
       describeCloudStatus({ status: status({ autoSyncEnabled: false }), queuedUnits: 2 }).notice,
     ).toContain('自动同步已关闭')
+  })
+
+  /**
+   * T-114 判据 B：坏台账**不许**显示成"还没有同步记录"。
+   *
+   * 这两句文案的差别就是这次修 bug 的用户可见部分：前者会让用户以为自己是新设备，
+   * 于是点「上传」把云端那一份覆盖掉。
+   */
+  it('坏台账：说的是"读不到 + 已停止上传"，不是"还没有同步记录"', () => {
+    const view = describeCloudStatus({
+      status: status({
+        ledgerState: { status: 'broken', reason: 'EPERM: operation not permitted' },
+      }),
+      queuedUnits: 0,
+    })
+
+    expect(view.notice).toContain('读不到')
+    expect(view.notice).toContain('暂停')
+    expect(view.notice).not.toContain('还没有同步记录')
+    // 「上次同步」也不能显示"尚未同步"——那也是"从没同步过"的说法
+    expect(view.syncedText).not.toBe('尚未同步')
   })
 
   it('同一种原因只写一次，不按 unit 重复五遍', () => {

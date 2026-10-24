@@ -7,10 +7,11 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { cloudEngine, cloudSyncQueue } from '@/cep/cloud/setup'
-import type { CloudStatus } from '@/cloud/types'
+import { emptyCloudStatus, type CloudStatus } from '@/cloud/types'
 
 export const useCloudStore = defineStore('cloud', () => {
-  const status = ref<CloudStatus>(cloudEngine.getStatus())
+  // T-114：台账读取改成三态后 `getStatus()` 是 async，初值先用空状态，`refresh()` 里填真值
+  const status = ref<CloudStatus>(emptyCloudStatus())
   /** 队列里还没到时间推的 unit 数（内存值，和 status.pending 不是一回事） */
   const queuedUnits = ref(cloudSyncQueue.pendingUnits().length)
   /** 正在同步（拉取 / 推送飞行中） */
@@ -23,8 +24,8 @@ export const useCloudStore = defineStore('cloud', () => {
   }
 
   /** 全量刷新：读台账与痕迹（有磁盘 I/O），只在打开页面 / 操作完成后调 */
-  function refresh() {
-    status.value = cloudEngine.getStatus()
+  async function refresh() {
+    status.value = await cloudEngine.getStatus()
     refreshLive()
   }
 

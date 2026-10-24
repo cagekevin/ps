@@ -4,9 +4,10 @@
 // 谁在用：cep/cloud/setup.ts 注入 engine；cloud/auto-sync.ts 的 hasCloudLedger
 // 禁止：不在这里判断冲突、不发请求；这里只做「文件 ↔ 对象」
 
-import { readTextSync, userDir, writeTextFile, writeTextFileAtomic } from '@/cep/fs'
-import type { CloudLedgerRecord } from '@/cloud/types'
+import { readTextOutcome, userDir, writeTextFile, writeTextFileAtomic } from '@/cep/fs'
+import type { CloudLedgerRecord, LedgerRead } from '@/cloud/types'
 import { CloudError } from '@/domain/cloud'
+import { log } from '@/utils/logger'
 
 const FILE = 'sj_v5_cloud_sync.json'
 
@@ -24,27 +25,47 @@ function readUnits(value: unknown): Record<string, string> | undefined {
   return Object.keys(out).length > 0 ? out : undefined
 }
 
-export function readCloudLedger(): CloudLedgerRecord | null {
+/**
+ * 读台账：**三态**（T-114）。`none` = 文件不在（首次使用）；`broken` = 在、但读不到 /
+ * 不是合法 JSON / 缺 `localHash`。
+ *
+ * 为什么必须分开：以前两者都返回 `null`，下游据此报 `hasLedger:false` / `rev:0`，
+ * 设置页显示"本地还没有同步记录，先点「从云端拉取」"——用户可能点「上传」，
+ * 把云端那一份覆盖掉。`broken` 现在一律**拒绝上传**（见 `cloud/engine.ts`）。
+ *
+ * 代价：不再是同步函数（`readTextSync` 只给 `null`，分不出 `ENOENT` 与 `EPERM`）。
+ * 所以 ADR-26 ④ 的"同步例外"从 3 处降到 2 处（CAS 比对、界面偏好）。
+ */
+export async function readCloudLedger(): Promise<LedgerRead> {
+  const read = await readTextOutcome(path())
+  if (read.status === 'notSeen') return { status: 'none' }
+  if (read.status === 'error') {
+    log.error('cloud', `台账读不到：${read.reason}`)
+    return { status: 'broken', reason: read.reason }
+  }
+
+  let raw: Partial<CloudLedgerRecord>
   try {
-    // 同步读是 ADR-26 ④ 的具名例外之二：`hasCloudLedger` 被同步谓词 `gate()` 调用。
-    // 代价：`notSeen` 与 `error` 在这里仍是同一个 `null`（`!text`），坏台账会被读成"没有台账"——
-    // 这是 ADR-14 扩展二的已知欠账（`docs/生成/RepoRead消费方清单.md` §6.6 实证），
-    // 要修得先把 `gate()` 与 `CloudLedgerPort.read` 改成 async，另开条目（T-107 已登记）。
-    const text = readTextSync(path())
-    if (!text) return null
-    const raw = JSON.parse(text) as Partial<CloudLedgerRecord>
-    if (typeof raw.localHash !== 'string' || !raw.localHash) return null
-    const units = readUnits(raw.units)
-    return {
+    raw = JSON.parse(read.text) as Partial<CloudLedgerRecord>
+  } catch (e) {
+    log.error('cloud', '台账不是合法 JSON', e)
+    return { status: 'broken', reason: '不是合法 JSON' }
+  }
+  if (typeof raw.localHash !== 'string' || !raw.localHash) {
+    log.error('cloud', '台账缺少 localHash，无法判断"上次同步到哪"')
+    return { status: 'broken', reason: '缺少 localHash' }
+  }
+  const units = readUnits(raw.units)
+  return {
+    status: 'ok',
+    ledger: {
       rev: Number.isFinite(Number(raw.rev)) ? Math.max(0, Math.floor(Number(raw.rev))) : 0,
       syncedAt: Number.isFinite(Number(raw.syncedAt))
         ? Math.max(0, Math.floor(Number(raw.syncedAt)))
         : 0,
       localHash: raw.localHash,
       ...(units ? { units } : {}),
-    }
-  } catch {
-    return null
+    },
   }
 }
 
@@ -61,6 +82,10 @@ export function writeCloudLedger(ledger: CloudLedgerRecord): void {
   }
 }
 
-export function hasCloudLedger(): boolean {
-  return readCloudLedger() !== null
+/**
+ * "有没有台账"的护栏。**只有 `ok` 才算有**——坏台账不能冒充"没有"，也不能冒充"有"。
+ * 调用方要看区别就用 `readCloudLedger()` 的 `status`（`gate()` 就是这么分的）。
+ */
+export async function hasCloudLedger(): Promise<boolean> {
+  return (await readCloudLedger()).status === 'ok'
 }

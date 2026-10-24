@@ -65,7 +65,8 @@ function status(over: Partial<CloudStatus> = {}): CloudStatus {
   return {
     configured: true,
     autoSyncEnabled: true,
-    hasLedger: true,
+    // T-114：判别位是 `ledgerState`（三态），不再是一个 boolean
+    ledgerState: { status: 'ok', ledger: { rev: 4, syncedAt: 0, localHash: 'h' } },
     rev: 4,
     syncedAt: 0,
     localHash: 'h',
@@ -147,7 +148,7 @@ describe('设置页 · 云同步状态（T-74）', () => {
   })
 
   it('自动同步关着时明说改动只在本地', () => {
-    cloudState.status = status({ autoSyncEnabled: false, hasLedger: true })
+    cloudState.status = status({ autoSyncEnabled: false })
     expect(mountPage().text()).toContain('自动同步已关闭')
   })
 })

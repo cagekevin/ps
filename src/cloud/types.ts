@@ -27,8 +27,21 @@ export interface CloudLedgerRecord extends CloudLedger {
   units?: Record<string, string>
 }
 
+/**
+ * 台账读取的**三态**。
+ *
+ * **"读不到" ≠ "没有"**（T-114）：坏台账曾被读成"没有台账"，于是
+ * `decideUpload` 判成 `cloud-newer`、`gate()` 报 `CLOUD_NO_LEDGER`，
+ * 而设置页显示的是"本地还没有同步记录，先点「从云端拉取」"——用户可能据此
+ * 点「上传」，把云端那一份覆盖掉。三态把这两件事分开，`broken` 一律**拒绝上传**。
+ */
+export type LedgerRead =
+  | { status: 'ok'; ledger: CloudLedgerRecord }
+  | { status: 'none' }
+  | { status: 'broken'; reason: string }
+
 export interface CloudLedgerPort {
-  read(): CloudLedgerRecord | null
+  read(): Promise<LedgerRead>
   write(ledger: CloudLedgerRecord): void
 }
 
@@ -71,7 +84,16 @@ export interface CloudDeps {
 export interface CloudStatus {
   configured: boolean
   autoSyncEnabled: boolean
-  hasLedger: boolean
+  /**
+   * 台账的**三态**（T-114）。
+   *
+   * 以前这里是一个 `hasLedger: boolean` + 三个扁平字段（`rev` / `syncedAt` / `localHash`），
+   * 于是"读不到"只能伪装成"没有"：`hasLedger:false` / `rev:0`。设置页据此显示
+   * "本地还没有同步记录，先点「从云端拉取」"——用户可能点「上传」把云端覆盖掉。
+   *
+   * 现在判别位是 `ledgerState.status`；`rev` / `syncedAt` / `localHash` 只在该值为 `ok` 时有意义。
+   */
+  ledgerState: LedgerRead
   rev: number
   syncedAt: number
   localHash: string
@@ -85,6 +107,20 @@ export interface CloudStatus {
    * 数量上限 32（`cep/cloud/pending.ts:13`），随状态一起读没有额外成本。
    */
   pendingItems: PendingChange[]
+}
+
+/** `CloudStatus` 的空值：store 初始化用（真正的值要 `await getStatus()` 才有） */
+export function emptyCloudStatus(): CloudStatus {
+  return {
+    configured: false,
+    autoSyncEnabled: false,
+    ledgerState: { status: 'none' },
+    rev: 0,
+    syncedAt: 0,
+    localHash: '',
+    pending: 0,
+    pendingItems: [],
+  }
 }
 
 export interface UploadResult {

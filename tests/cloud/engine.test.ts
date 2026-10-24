@@ -9,8 +9,15 @@ import {
   type SyncUnitAdapter,
   type UnitPayload,
 } from '@/domain/cloud'
-import type { CloudDeps } from '@/cloud/types'
+import type { CloudDeps, CloudLedgerRecord } from '@/cloud/types'
 import { createCloudEngine } from '@/cloud/engine'
+
+/**
+ * T-114：坏台账的哨兵。用例把它喂给 `ledgerRead` 就表示"文件在、但读不到"
+ * （与 `null` = 从来没有台账 区分开）。用 `symbol` 而不是 `as unknown as`，
+ * 是为了让类型自己分得开——转型会把"两种东西"又混回一个。
+ */
+const BROKEN = Symbol('broken-ledger')
 
 const payloadA: UnitPayload = {
   schema: 1,
@@ -65,7 +72,13 @@ describe('cloud engine', () => {
   let writeB: Mock<SyncUnitAdapter['write']>
   let pull: Mock<CloudDeps['transport']['pull']>
   let push: Mock<CloudDeps['transport']['push']>
-  let ledgerRead: Mock<CloudDeps['ledger']['read']>
+  /**
+   * T-114：`CloudLedgerPort.read` 现在返回 `Promise<LedgerRead>`（三态）。
+   * 用例仍只表达"台账内容是什么"（`null` = 没有），由下面这层适配成三态——
+   * 这样十几处 `ledgerRead.mockReturnValue(...)` 不用逐个改写，也不会因为
+   * 忘了包一层而静默测到别的东西。
+   */
+  let ledgerRead: Mock<() => CloudLedgerRecord | null | typeof BROKEN>
   let ledgerWrite: Mock<CloudDeps['ledger']['write']>
   let configured: Mock<CloudDeps['config']['isConfigured']>
   let pendingRecord: Mock<CloudDeps['pending']['record']>
@@ -83,7 +96,7 @@ describe('cloud engine', () => {
     writeB = vi.fn<SyncUnitAdapter['write']>().mockResolvedValue({ ok: true })
     pull = vi.fn<CloudDeps['transport']['pull']>().mockResolvedValue(null)
     push = vi.fn<CloudDeps['transport']['push']>().mockResolvedValue(undefined)
-    ledgerRead = vi.fn<CloudDeps['ledger']['read']>().mockReturnValue(null)
+    ledgerRead = vi.fn<() => CloudLedgerRecord | null | typeof BROKEN>().mockReturnValue(null)
     ledgerWrite = vi.fn<CloudDeps['ledger']['write']>()
     configured = vi.fn<CloudDeps['config']['isConfigured']>().mockReturnValue(true)
     pendingRecord = vi.fn<CloudDeps['pending']['record']>()
@@ -93,7 +106,17 @@ describe('cloud engine', () => {
     deps = {
       config: { isConfigured: configured, isAutoSyncEnabled: () => false },
       transport: { pull, push },
-      ledger: { read: ledgerRead, write: ledgerWrite },
+      ledger: {
+        // 用例只设"台账内容"（`null` = 没有台账）；坏台账用 `BROKEN` 哨兵表示
+        read: async () => {
+          const raw = ledgerRead()
+          if (typeof raw === 'symbol') {
+            return { status: 'broken' as const, reason: 'EPERM: operation not permitted' }
+          }
+          return raw === null ? { status: 'none' as const } : { status: 'ok' as const, ledger: raw }
+        },
+        write: ledgerWrite,
+      },
       pending: { record: pendingRecord, list: pendingList, clear: pendingClear },
       entries: [
         { id: 'font.stars', schema: 1, read: readA, write: writeA },
@@ -194,10 +217,10 @@ describe('cloud engine', () => {
     expect(ledgerWrite).not.toHaveBeenCalled()
   })
 
-  it('getStatus 反映待同步痕迹数量', () => {
+  it('getStatus 反映待同步痕迹数量', async () => {
     pendingList.mockReturnValue([{ unit: 'font.tags', at: 1, reason: 'not-configured' }])
 
-    expect(engine.getStatus().pending).toBe(1)
+    expect((await engine.getStatus()).pending).toBe(1)
   })
 
   it('未配置时 pushUnits 明确返回 CLOUD_NOT_CONFIGURED，且不读云端、不发请求', async () => {
@@ -478,5 +501,52 @@ describe('cloud engine', () => {
     expect(second).toMatchObject({ ok: true, skipped: true })
     // 整包上传没有第二次 push：per-unit 台账没有破坏 inSync 判定
     expect(push).toHaveBeenCalledTimes(1)
+  })
+
+  /**
+   * T-114：**坏台账不许被读成"没有台账"**。
+   *
+   * 以前的形态是 `read()` 返回 `CloudLedger | null`，读不到也返回 `null`，于是
+   * `getStatus()` 报 `hasLedger:false` / `rev:0`，`decideUpload` 判成 `cloud-newer`。
+   * 用户看到"本地还没有同步记录"就点「上传」，云端那一份被覆盖掉。
+   */
+  describe('坏台账（T-114）', () => {
+    it('判据 A：EPERM → ledgerState 是 broken，不是 none', async () => {
+      ledgerRead.mockReturnValue(BROKEN)
+
+      const status = await engine.getStatus()
+
+      expect(status.ledgerState.status).toBe('broken')
+      expect(status.ledgerState.status === 'broken' ? status.ledgerState.reason : '').toContain(
+        'EPERM',
+      )
+    })
+
+    it('判据 A：文件不在（ENOENT）→ 才是 none', async () => {
+      ledgerRead.mockReturnValue(null)
+
+      expect((await engine.getStatus()).ledgerState.status).toBe('none')
+    })
+
+    it('判据 B：坏台账 → upload 直接拒绝，一次 push 都不发（不当成首次同步全量重推）', async () => {
+      ledgerRead.mockReturnValue(BROKEN)
+
+      const result = await engine.upload()
+
+      expect(result.ok).toBe(false)
+      expect(result.errorCode).toBe('CLOUD_LEDGER_BROKEN')
+      expect(result.error).toContain('台账读不到')
+      expect(push).not.toHaveBeenCalled()
+    })
+
+    it('判据 B：坏台账 → pushUnits 也拒绝（后台那条路同样不许推）', async () => {
+      ledgerRead.mockReturnValue(BROKEN)
+
+      const result = await engine.pushUnits(['font.tags'])
+
+      expect(result.ok).toBe(false)
+      expect(result.errorCode).toBe('CLOUD_LEDGER_BROKEN')
+      expect(push).not.toHaveBeenCalled()
+    })
   })
 })

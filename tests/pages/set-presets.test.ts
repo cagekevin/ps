@@ -23,7 +23,11 @@ vi.mock('@/stores/cloud', () => ({
   useCloudStore: () => ({
     refresh: vi.fn(),
     refreshLive: vi.fn(),
-    status: reactive({ autoSyncEnabled: false, pendingItems: [] }),
+    status: reactive({
+      autoSyncEnabled: false,
+      pendingItems: [],
+      ledgerState: { status: 'none' as const },
+    }),
     queuedUnits: ref(0),
   }),
 }))

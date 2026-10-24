@@ -71,14 +71,21 @@ export function describeCloudStatus(input: {
   let notice = ''
   if (!status.configured) {
     notice = '没设置同步地址：云同步不会运行。'
-  } else if (!status.hasLedger) {
+  } else if (status.ledgerState.status === 'broken') {
+    // T-114：坏台账**不许**说成"还没有同步记录"——用户会以为自己是新设备，
+    // 然后点「上传」把云端覆盖掉。这里必须说清"读不到"和"已停止上传"。
+    notice =
+      `本地同步记录读不到（${status.ledgerState.reason}）：自动同步和「上传」都已暂停，` +
+      '避免把云端覆盖掉。修好这个文件后重开面板，或点「从云端拉取」重新建立记录。'
+  } else if (status.ledgerState.status === 'none') {
     notice = '本地还没有同步记录。先点「从云端拉取」建立记录；新设备不会自动上传，避免覆盖云端。'
   } else if (!status.autoSyncEnabled) {
     notice = '自动同步已关闭：改动现在只存在本地，打开上面的开关才会推送。'
   }
 
   return {
-    syncedText: formatSyncedAt(status.syncedAt),
+    // T-114：坏台账不能显示"尚未同步"——那也是"从没同步过"的说法，会误导用户
+    syncedText: status.ledgerState.status === 'broken' ? '读不到' : formatSyncedAt(status.syncedAt),
     queuedText: queuedUnits === 0 ? '无' : `${queuedUnits} 项（等下一次自动同步）`,
     failedText:
       failed.length === 0
