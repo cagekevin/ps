@@ -52,6 +52,27 @@ const blockEdit = ref({
 const root = ref<HTMLElement | null>(null)
 const menuOpen = ref(false)
 
+/**
+ * 菜单左缘 clamp（TD-05-5）。
+ *
+ * 菜单是 `position:absolute; right:var(--sp-1); min-width:132px`：窄面板（宽 < 134）时左缘变负，
+ * 被父容器 `overflow` 裁掉一块 —— 用户**点不到**最左边那列勾选。
+ * 只在"装不下"时改成贴左（`left:0; right:auto`），宽面板位置一个像素都不动（反向对照见用例）。
+ */
+const MENU_MIN_WIDTH = 132
+const menuClamped = ref(false)
+
+function toggleMenu(): void {
+  menuOpen.value = !menuOpen.value
+  if (menuOpen.value) refreshMenuClamp()
+}
+
+function refreshMenuClamp(): void {
+  const width = root.value?.getBoundingClientRect().width ?? 0
+  // 可用宽 = 容器宽 - 右侧 gap（--sp-1 = 4px）；装不下就贴左
+  menuClamped.value = width > 0 && width - 4 < MENU_MIN_WIDTH
+}
+
 // ---------- 显示设置的勾选态（D-32：口径是全局，勾选态必须如实反映"是否所有区域一致"）----------
 //
 // 命令一次写所有 block（有意简化，见 `commands/freePanel.ts` 的 `freePanel.setDisplay` 注释），
@@ -261,12 +282,16 @@ onMounted(() => {
         class="free-panel__menu-btn"
         type="button"
         title="工作区菜单"
-        @click.stop="menuOpen = !menuOpen"
+        @click.stop="toggleMenu"
       >
         <Icon name="#iconliebiao" size="2xs" />
       </button>
 
-      <ul v-if="menuOpen" class="free-panel__menu">
+      <ul
+        v-if="menuOpen"
+        class="free-panel__menu"
+        :class="{ 'free-panel__menu--clamped': menuClamped }"
+      >
         <li>
           <button type="button" @click="setColumns(2)">
             <span class="free-panel__check">{{ columnMark(2) }}</span
@@ -385,6 +410,11 @@ onMounted(() => {
   background: var(--c-float);
   box-shadow: var(--shadow-pop);
   list-style: none;
+}
+
+.free-panel__menu--clamped {
+  right: auto;
+  left: 0;
 }
 
 .free-panel__menu button {

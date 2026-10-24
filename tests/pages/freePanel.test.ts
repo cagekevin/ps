@@ -115,6 +115,40 @@ describe('自由面板 · 显示设置勾选态（D-32 全局口径）', () => {
     return wrapper
   }
 
+  /**
+   * TD-05-5：窄面板时菜单左缘不许出框。
+   *
+   * 菜单是 `position:absolute; right:4px; min-width:132px`：容器宽 128 时左缘 = 128-4-132 = -8，
+   * 被父容器 `overflow` 裁掉 —— 用户点不到最左边那列勾选。
+   * jsdom 没有布局，所以用 `getBoundingClientRect` 替身把"容器有多宽"喂进去。
+   */
+  it('窄面板（128 < 134）→ 菜单改成贴左（clamped），不出框', async () => {
+    const wrapper = await mountPage()
+    const root = wrapper.find('.free-panel')
+    Object.defineProperty(root.element, 'getBoundingClientRect', {
+      value: () => ({ width: 128 }) as DOMRect,
+      configurable: true,
+    })
+
+    await wrapper.find('.free-panel__menu-btn').trigger('click')
+
+    const menu = wrapper.find('.free-panel__menu')
+    expect(menu.classes()).toContain('free-panel__menu--clamped')
+  })
+
+  it('宽面板（400）→ 不许贴左（反向对照：位置不变）', async () => {
+    const wrapper = await mountPage()
+    const root = wrapper.find('.free-panel')
+    Object.defineProperty(root.element, 'getBoundingClientRect', {
+      value: () => ({ width: 400 }) as DOMRect,
+      configurable: true,
+    })
+
+    await wrapper.find('.free-panel__menu-btn').trigger('click')
+
+    expect(wrapper.find('.free-panel__menu').classes()).not.toContain('free-panel__menu--clamped')
+  })
+
   it('区域不一致时：列数三条都不打勾，图标显示半选「–」，文字仍打勾', async () => {
     await makeMixed()
     const wrapper = await openMenu()
