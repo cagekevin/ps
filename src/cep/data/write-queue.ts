@@ -4,6 +4,9 @@
 //   ——三份一模一样的实现，其中 action-archive 那份与另外两份互不串行（TD-09-18）
 // 谁在用：swatch-repo / style-library-repo / file-repo / action-archive / protected-text
 // 禁止：在任务体里再排一个任务（会自锁）；调用方不许自己再造一条链
+//   锁内一律用 `Repo` 的 `readInLock` / `writeInLock` / `updateInLock`。
+//   这条禁令**不是靠人记**：`tests/scripts/write-queue-nesting.test.ts` 扫 `src/cep/data/**`
+//   的任务体，触达任何排队入口（含跨文件传递调用）即红（TD-09-35）
 
 /**
  * 一条链，一个语义：**上一条失败不阻塞下一条**（和 transport 的队列同一约定）。
