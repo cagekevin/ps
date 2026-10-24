@@ -114,15 +114,50 @@ export async function getRawActionList(): Promise<unknown> {
   return jsx.action.getActionList()
 }
 
-/** 当前选中图层状态 */
+/**
+ * 当前选中图层状态。
+ *
+ * **值读不懂就抛，不折成「没有选中」**（TD-13-9）：`0` 正是「非文字图层」的合法编码，
+ * 把它当解析失败的兜底 = 把「读失败」说成「你选的东西不对」——用户看到的是文字类命令
+ * 永久不可用，而不是 PS 出了问题。两个查询各自有可判定的区间：
+ * `Layer_isSelectLayer` 只认布尔（或 `'true'`/`'false'`），`Layer_getTypeNumber` 只认有限数；
+ * 其余一律 `PARSE`，带上函数名与原始值片段，由 `describeCepError` 原样带到用户眼前。
+ */
 export async function getLayerState(): Promise<LayerState> {
   await initJsx()
 
   const selected = await jsx.layer.isSelectLayer()
-  const typeNumber = await jsx.layer.getTypeNumber()
-
-  return {
-    hasSelection: selected === true || String(selected) === 'true',
-    typeNumber: Number(typeNumber) || 0,
+  if (selected !== true && selected !== false && selected !== 'true' && selected !== 'false') {
+    throw new CepError(
+      'PARSE',
+      `Layer_isSelectLayer 返回了无法识别的值（${previewValue(selected)}）：无法判断有没有选中图层`,
+    )
   }
+
+  const typeNumber = await jsx.layer.getTypeNumber()
+  const parsed = parseTypeNumber(typeNumber)
+  if (parsed === null) {
+    throw new CepError(
+      'PARSE',
+      `Layer_getTypeNumber 返回了无法识别的值（${previewValue(typeNumber)}）：无法判断图层类型`,
+    )
+  }
+
+  return { hasSelection: selected === true || selected === 'true', typeNumber: parsed }
+}
+
+/** 原始值片段：文案/日志里只放这么多，不把整段 jsx 返回抄进 toast */
+function previewValue(value: unknown): string {
+  const text = typeof value === 'string' ? value : (JSON.stringify(value) ?? String(value))
+  return text.slice(0, 60)
+}
+
+/** 只接受有限数（含数字字符串）；其余返回 null，由调用方决定抛什么 */
+function parseTypeNumber(value: unknown): number | null {
+  if (typeof value === 'number') return Number.isFinite(value) ? value : null
+  if (typeof value !== 'string') return null
+  const trimmed = value.trim()
+  if (trimmed === '') return null
+  const parsed = Number(trimmed)
+  return Number.isFinite(parsed) ? parsed : null
 }

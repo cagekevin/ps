@@ -30,8 +30,14 @@ export interface SysFontFile {
   arr: SysFontRecord[]
 }
 
-/** 选中图层状态 */
+/**
+ * 选中图层状态。
+ *
+ * 两个字段都只承载**读成功**的值：`getLayerState` 在读不懂时抛 `PARSE`，不产出
+ * 「hasSelection=false / typeNumber=0」这种和「真的没有选中」同值的快照（TD-13-9）。
+ */
 export interface LayerState {
   hasSelection: boolean
+  /** 原版 `Layer_getTypeNumber`：2 = 文字图层（UNVERIFIED：未在真机确认） */
   typeNumber: number
 }
