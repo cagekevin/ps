@@ -60,13 +60,21 @@ export interface KuGroupsSource {
   note: string
 }
 
+/** 组对象的形状下限：非 null、非数组的对象（字段归 `domain/style-library.ts`） */
+function isGroupRecord(item: unknown): boolean {
+  return item !== null && typeof item === 'object' && !Array.isArray(item)
+}
+
 function parseArrayText(text: string | null, note: string): KuGroupsSource {
   if (text === null) return { groups: null, note }
   try {
     const parsed: unknown = JSON.parse(text)
-    return Array.isArray(parsed)
-      ? { groups: parsed, note: '' }
-      : { groups: null, note: `${note}：内层不是数组` }
+    if (!Array.isArray(parsed)) return { groups: null, note: `${note}：内层不是数组` }
+    // 同 `resolveKuGroups` 的 groups 分支：内层数组的每一项也必须是对象（TD-12-21）
+    if (!parsed.every(isGroupRecord)) {
+      return { groups: null, note: `${note}：内层数组里有非对象项` }
+    }
+    return { groups: parsed, note: '' }
   } catch {
     return { groups: null, note: `${note}：内层不是合法 JSON` }
   }
@@ -83,7 +91,13 @@ export function resolveKuGroups(
 ): KuGroupsSource {
   const shape = kuShapeOf(parsed)
   if (!shape) return { groups: null, note: '结构不认识（既不是数组也不是容器）' }
-  if (shape === 'groups') return { groups: parsed as unknown[], note: '' }
+  if (shape === 'groups') {
+    if (!Array.isArray(parsed)) return { groups: null, note: '组数据不是数组' }
+    // 组数组的**每个元素都得是对象**：以前直接 `parsed as unknown[]`，
+    // `[42]` 这种也被当成"三个组"，字段归一处再崩/静默（TD-12-21）
+    if (!parsed.every(isGroupRecord)) return { groups: null, note: '组数组里有非对象项' }
+    return { groups: parsed, note: '' }
+  }
 
   if (shape === 'flat') {
     const entries = parsed as unknown[]
