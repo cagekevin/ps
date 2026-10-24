@@ -1,4 +1,4 @@
-import { readTextSmart, userDir } from '@/cep/fs'
+import { readTextOutcome, userDir } from '@/cep/fs'
 import { hasCep } from '@/cep/transport'
 import { log } from '@/utils/logger'
 import type { RepoRead } from './types'
@@ -86,26 +86,29 @@ export async function getClassification(): Promise<RepoRead<Classification>> {
   if (!hasCep()) return { ok: true, value: MOCK }
 
   const abs = `${userDir()}/${FILE}`
-  let text: string | null
-  try {
-    text = await readTextSmart(abs)
-  } catch (e) {
-    log.warn('classification', `${abs} 读取失败`, e)
+  const read = await readTextOutcome(abs)
+
+  // 读不到 → 整份不可用。这条分支以前靠 `readTextSmart` 抛错触发，而它从不抛，
+  // 所以一次都没跑到过（读失败被当成"文件不存在"）；三态分对后它第一次可达（T-107 / ADR-26 ②）
+  if (read.status === 'error') {
+    log.warn('classification', `${abs} 读取失败`, read.reason)
     return { ok: false, reason: '分类数据读取失败', fallback: emptyClassification() }
   }
 
-  // 文件不存在 = 首次使用的正常状态，不是读失败（T-103）。
+  // 查不到 = 首次使用的正常状态，不是读失败（T-103）。
   // 依据：`file-repo.ts:71-72` 同一条规则；原版 `app.v4.js:45717-45721` 读本地抛 `ENOENT`
   // 时走的是"下载并写回"（`ww`，`:45713`），从不把"没有这个文件"报给用户。
   // 这个文件也不随面板分发（`getClassificationURL` → `v1/font/link`，`:49501`），
   // 所以新机器上第一次用确实没有。值给空分类，`reason` 保留：去掉它就是静默回退（20(b)）。
-  if (!text) {
+  if (read.status === 'notSeen') {
     return {
       ok: true,
       value: emptyClassification(),
       reason: '分类数据文件不存在',
     }
   }
+
+  const text = read.text
 
   try {
     const raw = JSON.parse(text) as {

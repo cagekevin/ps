@@ -9,7 +9,7 @@ import {
   b64ToUtf8,
   hasNode,
   readBase64File,
-  readTextSmart,
+  readTextOutcome,
   removeFile,
   userDir,
   writeBase64File,
@@ -58,11 +58,16 @@ export interface KuLibraryRead {
 export async function readKuLibrary(kind: KuKind, fileName: string): Promise<KuLibraryRead> {
   if (!fileName) return { groups: [], note: '' }
 
-  const text = await readTextSmart(`${userDir()}/${fileName}`)
-  // 文件不存在是首次使用的正常状态（索引里还没写文件名时同理），不算读失败
-  if (text === null || text === '') return { groups: [], note: '' }
+  const read = await readTextOutcome(`${userDir()}/${fileName}`)
+  // T-107 **已知欠账**：`notSeen`（首次使用）与 `error`（读不到）这里仍同果——都返回空库。
+  // 分开写会把 `note` 变成"读不到"，页面文案随之变化，先按原行为报，另开条目
+  if (read.status === 'error') {
+    log.error('style', `${kind} 库文件读不到，按空库展示：${read.reason}`)
+    return { groups: [], note: '' }
+  }
+  if (read.status === 'notSeen' || read.text === '') return { groups: [], note: '' }
 
-  return readKuGroups(kind, text, b64ToUtf8)
+  return readKuGroups(kind, read.text, b64ToUtf8)
 }
 
 export interface StyleLibrarySnapshot {
@@ -130,14 +135,20 @@ async function currentLibPath(kind: KuKind): Promise<string> {
 export async function readKuFileText(fileName: string): Promise<string | null> {
   if (!fileName) return null
   if (/[\\/]/.test(fileName)) throw new CepError('PARSE', `库文件名不合法：${fileName}`)
-  return readTextSmart(`${userDir()}/${fileName}`)
+  const read = await readTextOutcome(`${userDir()}/${fileName}`)
+  // T-107：调用方（导出旁路图）对两种不 ok 的处理相同——跳过这个库，只会少带图片。
+  // 合并是**调用方的语义**，所以留在这里；日志把原因留住，不让它无声消失
+  if (read.status === 'error') log.warn('style', `导出：${fileName} 读不到，跳过`, read.reason)
+  return read.status === 'ok' ? read.text : null
 }
 
 /** 读库文件里的原始组数组；读不到一律抛（不猜、不补默认） */
 async function readRawGroups(kind: KuKind): Promise<{ path: string; groups: KuRawGroup[] }> {
   const path = await currentLibPath(kind)
-  const text = await readTextSmart(path)
-  if (text === null) throw new CepError('IO', `${kind} 库文件读不到：${path}`)
+  const read = await readTextOutcome(path)
+  // T-107：两种不 ok 这里同果（都抛）。文案本来就写的是"读不到"，对两种都成立，不改
+  if (read.status !== 'ok') throw new CepError('IO', `${kind} 库文件读不到：${path}`)
+  const text = read.text
 
   let groups: unknown
   try {
@@ -325,7 +336,14 @@ async function resolveKuFile(kind: KuKind): Promise<KuFileTarget> {
  */
 async function updateKuGroups(kind: KuKind, mutate: (groups: KuRawGroup[]) => void): Promise<void> {
   const target = await resolveKuFile(kind)
-  const previous = await readTextSmart(target.path)
+  const read = await readTextOutcome(target.path)
+  // T-107 **已知欠账（P1）**：`error` 这里仍按"首次使用"处理（`groups = []`）然后写回，
+  // 等于把一份读不到的库文件换成空数组、且没有 `.bak`。修法是让 error 中止写入——
+  // 那会改变现有行为（一次追加从成功变失败），按判据 C 先报不改，另开条目
+  if (read.status === 'error') {
+    log.error('style', `${kind} 库文件读不到，本次写入可能覆盖它：${read.reason}`)
+  }
+  const previous = read.status === 'ok' ? read.text : null
 
   let groups: KuRawGroup[] = []
   if (previous !== null && previous !== '') {
@@ -460,11 +478,17 @@ function isRecord(value: unknown): value is Record<string, unknown> {
  */
 async function groupsOfFile(fileName: string | undefined): Promise<Record<string, unknown>[]> {
   if (!fileName) return []
-  const text = await readTextSmart(`${userDir()}/${fileName}`)
-  if (!text) return []
+  const read = await readTextOutcome(`${userDir()}/${fileName}`)
+  // 这里的合并是**有意的**（上面注释：删仓库不该被一个读不动的库文件卡住），不是欠账。
+  // 代价只可能是留下孤儿文件，不会丢数据；原因仍进日志
+  if (read.status === 'error') {
+    log.warn('style', `删除仓库：${fileName} 读不到，跳过它的图片文件`, read.reason)
+    return []
+  }
+  if (read.status === 'notSeen' || read.text === '') return []
 
   try {
-    const parsed: unknown = JSON.parse(text)
+    const parsed: unknown = JSON.parse(read.text)
     return Array.isArray(parsed) ? parsed.filter(isRecord) : []
   } catch (e) {
     log.warn('style', `删除仓库：${fileName} 不是合法 JSON，跳过它的图片文件`, e)
@@ -810,12 +834,19 @@ function swatchFilePath(): string {
  * 用户的色板会被一次追加抹平。这里坏文件直接抛，宁可这次追加失败。
  */
 async function readSwatchItems(path: string): Promise<unknown[]> {
-  const text = await readTextSmart(path)
-  if (text === null || text === '') return []
+  const read = await readTextOutcome(path)
+  // T-107 **已知欠账（P1）**：`error` 这里仍按"没有色板"处理（返回 `[]`），随后调用方会把
+  // 追加后的内容整份写回 —— 一份读不到的色板会被一次追加抹平。修法是让 error 中止写入，
+  // 会改变现有行为，按判据 C 先报不改，另开条目
+  if (read.status === 'error') {
+    log.error('style', `色板文件读不到，本次写入可能覆盖它：${read.reason}`)
+    return []
+  }
+  if (read.status === 'notSeen' || read.text === '') return []
 
   let parsed: unknown
   try {
-    parsed = JSON.parse(text)
+    parsed = JSON.parse(read.text)
   } catch (e) {
     log.error('style', '色板文件不是合法 JSON', e)
     throw new CepError('PARSE', `色板文件不是合法 JSON，已中止写入：${path}`)
@@ -827,8 +858,13 @@ async function readSwatchItems(path: string): Promise<unknown[]> {
 
 /** 写色板全文：旧内容先进 `.bak`，再原子写；写不进去抛（不让用户以为发送成功） */
 async function writeSwatchItems(path: string, items: unknown[]): Promise<void> {
-  const previous = await readTextSmart(path)
-  if (previous) writeTextFile(`${path}.bak`, previous)
+  const read = await readTextOutcome(path)
+  // T-107 **已知欠账（P1）**：`error` 时 `.bak` 不写，紧接着整份覆盖 —— 旧色板没有第二份。
+  // 修法是让 error 中止写入（改变现有行为），按判据 C 先报不改，另开条目
+  if (read.status === 'error') {
+    log.error('style', `色板文件读不到，本次写入没有 .bak：${read.reason}`)
+  }
+  if (read.status === 'ok' && read.text) writeTextFile(`${path}.bak`, read.text)
   if (!writeTextFileAtomic(path, JSON.stringify(items))) {
     throw new CepError('IO', `色板文件写入失败：${path}`)
   }

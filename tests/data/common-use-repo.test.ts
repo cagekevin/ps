@@ -27,9 +27,9 @@ vi.mock('@/cep/fs', () => ({
   readTextOutcome: async (path: string) => {
     if (state.failRead) return { status: 'error' as const, reason: 'EBUSY' }
     const text = state.files.get(path)
-    return text === undefined ? { status: 'missing' as const } : { status: 'ok' as const, text }
+    return text === undefined ? { status: 'notSeen' as const } : { status: 'ok' as const, text }
   },
-  readTextFile: (path: string) => (state.failRead ? null : (state.files.get(path) ?? null)),
+  readTextSync: (path: string) => (state.failRead ? null : (state.files.get(path) ?? null)),
   writeTextFile: (path: string, text: string) => {
     state.files.set(path, text)
   },

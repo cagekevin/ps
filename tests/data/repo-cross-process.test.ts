@@ -37,7 +37,7 @@ const disk = vi.hoisted(() => ({
 vi.mock('@/cep/fs', () => ({
   hasNode: () => true,
   // 同步读：CAS 比对走这条（async 读会多一个 microtask 边界，正好是上一次丢更新的位置）
-  readTextFile: (p: string) => (fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : null),
+  readTextSync: (p: string) => (fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : null),
   readTextSmart: async (p: string) => {
     if (disk.failRead) throw new Error('EBUSY')
     const text = fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : null
@@ -48,7 +48,7 @@ vi.mock('@/cep/fs', () => ({
   // T-105：写路径走三态读。`onRead` 钩子与微任务让步照旧接在这里，跨进程竞态用例才拦得住
   readTextOutcome: async (p: string) => {
     if (disk.failRead) return { status: 'error' as const, reason: 'EBUSY' }
-    if (!fs.existsSync(p)) return { status: 'missing' as const }
+    if (!fs.existsSync(p)) return { status: 'notSeen' as const }
     const text = fs.readFileSync(p, 'utf8')
     disk.onRead?.()
     if (disk.yieldEveryRead) await Promise.resolve()

@@ -1,4 +1,4 @@
-import { readTextSmart, userDir, writeTextFile, writeTextFileAtomic } from '@/cep/fs'
+import { readTextOutcome, userDir, writeTextFile, writeTextFileAtomic } from '@/cep/fs'
 import { actionIndexRepo } from '@/cep/data/actions'
 import type { ActionWarehouseIndex } from '@/domain/action'
 import type { SyncFile, SyncUnitAdapter, WriteOutcome } from '@/domain/cloud'
@@ -64,9 +64,11 @@ export const actionLibraryEntry: SyncUnitAdapter = {
       if (seen.has(name)) throw new Error(`动作仓库文件名重复：${name}`)
       seen.add(name)
 
-      const text = await readTextSmart(`${userDir()}/${name}`)
-      if (text === null) throw new Error(`动作仓库文件不存在：${name}`)
-      files.push(inlineFile(`/${name}`, text))
+      const read = await readTextOutcome(`${userDir()}/${name}`)
+      // 上传前读不到就不许上传（拿默认值顶上去等于把空仓库推给云端）。
+      // T-107：`notSeen` 与 `error` 这里仍同果（都抛同一句），文案不变——分开报会改用户看到的字
+      if (read.status !== 'ok') throw new Error(`动作仓库文件不存在：${name}`)
+      files.push(inlineFile(`/${name}`, read.text))
     }
 
     return unitPayload(files)

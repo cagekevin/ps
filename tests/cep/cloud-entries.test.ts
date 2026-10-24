@@ -7,7 +7,7 @@ import { fontTagsEntry } from '@/cep/cloud/entries/font-tags'
 import { readValue } from '../support/repo-read'
 
 const fsMock = vi.hoisted(() => ({
-  readTextSmart: vi.fn(),
+  readTextOutcome: vi.fn(),
 }))
 
 vi.mock('@/cep/fs', async (importOriginal) => {
@@ -15,7 +15,7 @@ vi.mock('@/cep/fs', async (importOriginal) => {
   return {
     ...actual,
     userDir: () => '/user',
-    readTextSmart: fsMock.readTextSmart,
+    readTextOutcome: fsMock.readTextOutcome,
   }
 })
 
@@ -24,7 +24,7 @@ beforeEach(async () => {
   await legacySettingsRepo.write({})
   await starsRepo.write([])
   await tagsRepo.write([])
-  fsMock.readTextSmart.mockResolvedValue('{}')
+  fsMock.readTextOutcome.mockResolvedValue({ status: 'ok', text: '{}' })
 })
 
 describe('cloud entries', () => {
@@ -34,7 +34,7 @@ describe('cloud entries', () => {
       ztPasteFont: { scriptFamily: true, color: true },
     }
     await legacySettingsRepo.write(raw)
-    fsMock.readTextSmart.mockResolvedValue(JSON.stringify(raw))
+    fsMock.readTextOutcome.mockResolvedValue({ status: 'ok', text: JSON.stringify(raw) })
 
     const read = await fontSettingsEntry.read()
     const data = JSON.parse(
@@ -63,7 +63,7 @@ describe('cloud entries', () => {
   })
 
   it('font.settings 缺文件时读取失败', async () => {
-    fsMock.readTextSmart.mockResolvedValue(null)
+    fsMock.readTextOutcome.mockResolvedValue({ status: 'notSeen' })
     await expect(fontSettingsEntry.read()).rejects.toThrow('不存在')
   })
 

@@ -1,7 +1,7 @@
 import {
   hasNode,
-  readTextFile,
   readTextOutcome,
+  readTextSync,
   writeTextFile,
   writeTextFileAtomic,
 } from '@/cep/fs'
@@ -66,7 +66,7 @@ export function fileRepo<T>(
     const target = resolvePath()
     const outcome = await readTextOutcome(target)
 
-    // 「读不到」≠「文件不存在」。读失败必须是 `ok: false`：压成 `ok: true` 时 `update` 会拿
+    // 查不到 ≠ 读不到。读失败必须是 `ok: false`：压成 `ok: true` 时 `update` 会拿
     // `fallback()` 派生的值覆盖用户文件，而且因为"原文为空"连 `.bak` 都不留（D-42 / T-105）
     if (outcome.status === 'error') {
       log.error('repo', `${target} 读取失败，使用默认值`, outcome.reason)
@@ -76,8 +76,8 @@ export function fileRepo<T>(
       }
     }
 
-    // 文件不存在是首次使用的正常状态，不算读失败
-    if (outcome.status === 'missing') {
+    // 查不到 = 首次使用的正常状态，不算读失败（数据层在这里下的结论，原语只报观测：ADR-26 ②）
+    if (outcome.status === 'notSeen') {
       return { read: { ok: true, value: fallback() }, text: null }
     }
 
@@ -119,10 +119,10 @@ export function fileRepo<T>(
    */
   function compareSync(target: string, expected: string | null): 'same' | 'diff' | 'unknown' {
     if (!hasNode()) return 'unknown'
-    // 原来的 `catch { return 'diff' }` 不可达：`readTextFile` 自带 try/catch、
+    // 原来的 `catch { return 'diff' }` 不可达：`readTextSync` 自带 try/catch、
     // 失败只 return null，从不抛；`===` 比两个原始值也不会抛。
-    // 注意它只判"原文是不是这段"，不判为什么不是——要区分「不存在/读不到」用 `readTextOutcome`。
-    return readTextFile(target) === expected ? 'same' : 'diff'
+    // 它只判"原文是不是这段"，不判为什么不是——要区分「查不到/读不到」用 `readTextOutcome`（ADR-26 ④ 的具名例外）。
+    return readTextSync(target) === expected ? 'same' : 'diff'
   }
 
   /**

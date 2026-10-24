@@ -29,9 +29,9 @@ vi.mock('@/cep/fs', () => ({
   // T-105：写路径改用三态读；这个假 fs 没有"读不出"的场景，只会 ok / missing
   readTextOutcome: async (path: string) => {
     const text = fsMock.files.get(path)
-    return text === undefined ? { status: 'missing' as const } : { status: 'ok' as const, text }
+    return text === undefined ? { status: 'notSeen' as const } : { status: 'ok' as const, text }
   },
-  readTextFile: (path: string) => fsMock.files.get(path) ?? null,
+  readTextSync: (path: string) => fsMock.files.get(path) ?? null,
   writeTextFile: (path: string, text: string) => {
     fsMock.files.set(path, text)
   },

@@ -6,7 +6,7 @@
 
 import { DATA_FILES } from '@/cep/env'
 import { CepError } from '@/utils/errors'
-import { readTextSmart, userDir } from '@/cep/fs'
+import { readTextOutcome, userDir } from '@/cep/fs'
 import { FONT_SET_DEFAULTS, type FontSetSettings } from '@/domain/font-set-config'
 import { pick } from './pick'
 import type { Repo, RepoRead } from './types'
@@ -110,8 +110,11 @@ export async function readFontSetSettings(): Promise<RepoRead<FontSetSettings>> 
  * 缺文件时页面可以显示默认值，但同步不能把默认值当成用户数据上传。
  */
 export async function readFontSetSettingsForSync(): Promise<FontSetSettings> {
-  const text = await readTextSmart(`${userDir()}/${DATA_FILES.ztSet}`)
-  if (text === null) throw new Error(`${DATA_FILES.ztSet} 不存在`)
+  const read = await readTextOutcome(`${userDir()}/${DATA_FILES.ztSet}`)
+  // T-107：同步要的是"真实存在且可读"。两种不 ok 这里同果（都抛）——
+  // 分开写文案会改用户看到的字，先按原句报，台账记欠账
+  if (read.status !== 'ok') throw new Error(`${DATA_FILES.ztSet} 不存在`)
+  const text = read.text
   let raw: Record<string, unknown>
   try {
     raw = JSON.parse(text) as Record<string, unknown>

@@ -1,6 +1,6 @@
 import {
   readBase64File,
-  readTextFile,
+  readTextOutcome,
   removeFile,
   userDir,
   writeBase64File,
@@ -124,8 +124,10 @@ export function exportActionArchive(current: boolean, targetPath: string): Promi
 
 export function importActionArchive(append: boolean, sourcePath: string): Promise<void> {
   return enqueue(async () => {
-    const text = readTextFile(sourcePath)
-    if (text === null) throw new CepError('IO', '读取导入文件失败')
+    const read = await readTextOutcome(sourcePath)
+    // T-107：导入前读不到就不许继续。两种不 ok 这里同果（都抛同一句），文案不变
+    if (read.status !== 'ok') throw new CepError('IO', '读取导入文件失败')
+    const text = read.text
 
     let imported: DzxFile
     try {

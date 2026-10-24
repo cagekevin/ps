@@ -4,7 +4,7 @@
 // 谁在用：cep/cloud/setup.ts 注入 engine；cloud/auto-sync.ts 的 hasCloudLedger
 // 禁止：不在这里判断冲突、不发请求；这里只做「文件 ↔ 对象」
 
-import { readTextFile, userDir, writeTextFile, writeTextFileAtomic } from '@/cep/fs'
+import { readTextSync, userDir, writeTextFile, writeTextFileAtomic } from '@/cep/fs'
 import type { CloudLedgerRecord } from '@/cloud/types'
 import { CloudError } from '@/domain/cloud'
 
@@ -26,7 +26,11 @@ function readUnits(value: unknown): Record<string, string> | undefined {
 
 export function readCloudLedger(): CloudLedgerRecord | null {
   try {
-    const text = readTextFile(path())
+    // 同步读是 ADR-26 ④ 的具名例外之二：`hasCloudLedger` 被同步谓词 `gate()` 调用。
+    // 代价：`notSeen` 与 `error` 在这里仍是同一个 `null`（`!text`），坏台账会被读成"没有台账"——
+    // 这是 ADR-14 扩展二的已知欠账（`docs/生成/RepoRead消费方清单.md` §6.6 实证），
+    // 要修得先把 `gate()` 与 `CloudLedgerPort.read` 改成 async，另开条目（T-107 已登记）。
+    const text = readTextSync(path())
     if (!text) return null
     const raw = JSON.parse(text) as Partial<CloudLedgerRecord>
     if (typeof raw.localHash !== 'string' || !raw.localHash) return null

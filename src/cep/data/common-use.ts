@@ -1,11 +1,11 @@
-﻿// 是什么：常用页数据仓库——`%APPDATA%/SheJiZhuLi/sj_commonFunction.json` 的唯一读写入口
+// 是什么：常用页数据仓库——`%APPDATA%/SheJiZhuLi/sj_commonFunction.json` 的唯一读写入口
 // 唯一入口：该文件的读写只经过这里；命令层（`commands/commonUse.ts`）调这些方法，页面只读投影
 // 替代了什么：原版存储类单例 `Lt`（`app.v4.js:11088-11108`）+ App 根的 deep watch 整份重写（`:16887-16893`）
 // 谁在用：`commands/commonUse.ts`（T-86）、`stores/common-use.ts`（T-87）
 // 禁止：把页面视图字段（`created`）写回文件；用 fallback 覆盖已有文件；在读坏时建种子
 
 import { hasCep } from '@/cep/transport'
-import { readTextSmart, userDir } from '@/cep/fs'
+import { readTextOutcome, userDir } from '@/cep/fs'
 import { DATA_FILES } from '@/cep/env'
 import {
   createCommonUseSeed,
@@ -63,17 +63,21 @@ export async function ensureCommonUseFile(): Promise<EnsureResult> {
     return { created: true }
   }
 
-  let text: string | null
-  try {
-    text = await readTextSmart(resolvePath())
-  } catch {
+  const read = await readTextOutcome(resolvePath())
+
+  // 读不到 → 拒绝写。这条分支以前靠 `readTextSmart` 抛错触发，而它从不抛，
+  // 所以一次都没跑到过（读失败被当成"首次使用"，直接写种子覆盖）；三态分对后第一次可达（T-107）
+  if (read.status === 'error') {
     throw new CepError('IO', `${FILE_NAME} 读取失败，拒绝写入`)
   }
 
-  if (text === null) {
+  // 查不到 = 首次使用，写种子（`requireExisting` 在这条路上是"文件确实没有"，不是"读不出"）
+  if (read.status === 'notSeen') {
     await base.write(createCommonUseSeed())
     return { created: true }
   }
+
+  const text = read.text
 
   let parsed: unknown
   try {

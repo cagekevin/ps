@@ -78,6 +78,12 @@ vi.mock('@/cep/fs', () => ({
   hasNode: () => true,
   userDir: () => 'ROAM/SheJiZhuLi',
   readTextSmart: async (path: string) => store.files.get(path) ?? null,
+  // T-107：唯一读入口（三态）+ 同步例外（CAS / 结构上同步的调用方）
+  readTextOutcome: async (path: string) => {
+    const text = store.files.get(path)
+    return text === undefined ? { status: 'notSeen' as const } : { status: 'ok' as const, text }
+  },
+  readTextSync: (path: string) => store.files.get(path) ?? null,
   writeTextFileAtomic: (path: string, text: string) => {
     store.files.set(path, text)
     return true

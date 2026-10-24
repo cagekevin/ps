@@ -1,5 +1,5 @@
-﻿import { hasCep } from '@/cep/transport'
-import { readTextFile, userDir, writeTextFile, writeTextFileAtomic } from '@/cep/fs'
+import { hasCep } from '@/cep/transport'
+import { readTextSync, userDir, writeTextFile, writeTextFileAtomic } from '@/cep/fs'
 import { log } from '@/utils/logger'
 
 /**
@@ -56,7 +56,10 @@ function loadAll(): Record<string, unknown> {
   }
 
   try {
-    const text = readTextFile(filePath())
+    // 同步读是 ADR-26 ④ 的具名例外之三：`getPref` / `settingsSnapshot` 全链路同步。
+    // 代价：`notSeen` 与 `error` 在这里仍是同一个 `{}`（`text ? … : {}`），读失败零信号——
+    // 这是我们自己的偏好文件（丢了回默认值，不毁用户资产），要补信号另开条目（T-107 已登记）。
+    const text = readTextSync(filePath())
     cache = text ? (JSON.parse(text) as Record<string, unknown>) : {}
   } catch (e) {
     log.warn('settings', '读取偏好失败，使用默认值', e)

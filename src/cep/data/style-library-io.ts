@@ -9,7 +9,7 @@ import { DATA_FILES } from '@/cep/env'
 import {
   b64ToUtf8,
   readBase64File,
-  readTextSmart,
+  readTextOutcome,
   removeFile,
   userDir,
   utf8ToB64,
@@ -293,8 +293,10 @@ export async function importKuArchive(
   sourcePath: string,
   onProgress?: KuIoProgress,
 ): Promise<KuImportResult> {
-  const text = await readTextSmart(sourcePath)
-  if (text === null) throw new CepError('IO', '读取导入文件失败')
+  const read = await readTextOutcome(sourcePath)
+  // T-107：导入前读不到就不许继续。两种不 ok 这里同果（都抛同一句），文案不变
+  if (read.status !== 'ok') throw new CepError('IO', '读取导入文件失败')
+  const text = read.text
 
   onProgress?.('解析导入文件')
   const imported = parseOrThrow(() => parseKuContainer(text))
@@ -327,9 +329,16 @@ export async function importKuArchive(
         return { ...value, index: list.length - 1, list }
       })
     } else {
-      // `fileRepo.write` 不备份，替换索引前自己留一份原文
-      const previous = await readTextSmart(indexPath())
-      if (previous) writeTextFile(`${indexPath()}.bak`, previous)
+      // `fileRepo.write` 不备份，替换索引前自己留一份原文。
+      // T-107 **已知欠账（P1）**：`notSeen` 与 `error` 这里仍同果——读不到旧索引时 `.bak` 不写，
+      // 紧接着整份替换索引，旧内容就没有第二份了。要修得让 error 分支中止替换（会改变现有行为，另开条目）
+      const previous = await readTextOutcome(indexPath())
+      if (previous.status === 'error') {
+        log.error('style', `索引读不到，本次替换没有 .bak：${previous.reason}`)
+      }
+      if (previous.status === 'ok' && previous.text) {
+        writeTextFile(`${indexPath()}.bak`, previous.text)
+      }
       await styleIndexRepo.write(nextIndex)
     }
   } catch (e) {

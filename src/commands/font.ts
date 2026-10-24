@@ -1,6 +1,6 @@
 import { openFile, saveFile } from '@/cep/dialog'
 import type { RawStar, RawTag } from '@/cep/data'
-import { readTextSmart, saveExportedText } from '@/cep/fs'
+import { readTextOutcome, saveExportedText } from '@/cep/fs'
 import { CepError } from '@/utils/errors'
 import { assertJsxOk } from '@/utils/jsx-result'
 import { fontListRefresh } from '@/utils/signal'
@@ -261,8 +261,11 @@ export const fontCommands: Command<unknown>[] = [
       // 取消文件对话框 = 取消导入，不写盘（与 `action.importWarehouse` 同口径）
       if (!path) throw new CepError('PARSE', '取消操作')
 
-      const text = await readTextSmart(path)
-      if (text === null) throw new CepError('IO', '导入失败，文件读取失败')
+      const read = await readTextOutcome(path)
+      // T-107：两种不 ok 这里同果（都抛同一句），文案不变。
+      // 已知：这个命令自己读文件还撞 ADR-16（导入应收到 `data/`，参照 `action-archive.ts`），另开条目
+      if (read.status !== 'ok') throw new CepError('IO', '导入失败，文件读取失败')
+      const text = read.text
 
       // 先校验：校验不过不碰任何文件
       const parsed = parseTagImport(text)

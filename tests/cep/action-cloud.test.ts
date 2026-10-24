@@ -3,7 +3,7 @@ import { actionIndexRepo } from '@/cep/data/actions'
 import { actionLibraryEntry } from '@/cep/cloud/entries/action-library'
 
 const fsMock = vi.hoisted(() => ({
-  readTextSmart: vi.fn(),
+  readTextOutcome: vi.fn(),
   writeTextFileAtomic: vi.fn(() => true),
   writeTextFile: vi.fn(),
 }))
@@ -23,7 +23,7 @@ beforeEach(async () => {
     index: 0,
     list: [{ name: '默认仓库', fileName: 'sj_dz_test.json' }],
   })
-  fsMock.readTextSmart.mockResolvedValue('[]')
+  fsMock.readTextOutcome.mockResolvedValue({ status: 'ok', text: '[]' })
   fsMock.writeTextFileAtomic.mockReturnValue(true)
 })
 
@@ -37,7 +37,7 @@ describe('action.library 云同步', () => {
   })
 
   it('缺仓库文件时明确失败', async () => {
-    fsMock.readTextSmart.mockResolvedValue(null)
+    fsMock.readTextOutcome.mockResolvedValue({ status: 'notSeen' })
     await expect(actionLibraryEntry.read()).rejects.toThrow('不存在')
   })
 

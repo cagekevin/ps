@@ -6,7 +6,12 @@ const fs = vi.hoisted(() => ({
   userDir: () => '/user',
   readBase64File: vi.fn(),
   writeBase64File: vi.fn(),
-  readTextFile: vi.fn(),
+  readTextSync: vi.fn(),
+  // T-107：业务读走 `readTextOutcome`（唯一读入口）；用例仍只设 `readTextSync` 的返回值
+  readTextOutcome: vi.fn(async (p: string) => {
+    const text = fs.readTextSync(p) as string | null
+    return text === null ? { status: 'notSeen' as const } : { status: 'ok' as const, text }
+  }),
   writeTextFile: vi.fn(),
   removeFile: vi.fn(),
 }))
@@ -51,7 +56,7 @@ beforeEach(() => {
 
 describe('action-archive', () => {
   it('替换：先写文件，再写索引，最后清理旧文件', async () => {
-    fs.readTextFile.mockReturnValue(archive())
+    fs.readTextSync.mockReturnValue(archive())
 
     await importActionArchive(false, '/tmp/import.dzx')
 
@@ -66,7 +71,7 @@ describe('action-archive', () => {
   })
 
   it('替换：写文件失败时不写索引、不删旧文件', async () => {
-    fs.readTextFile.mockReturnValue(archive())
+    fs.readTextSync.mockReturnValue(archive())
     fs.writeBase64File.mockReturnValue(false)
 
     await expect(importActionArchive(false, '/tmp/import.dzx')).rejects.toThrow('写入仓库失败')
@@ -76,7 +81,7 @@ describe('action-archive', () => {
   })
 
   it('追加：保留当前索引并追加新仓库', async () => {
-    fs.readTextFile.mockReturnValue(archive())
+    fs.readTextSync.mockReturnValue(archive())
 
     await importActionArchive(true, '/tmp/import.dzx')
 
@@ -115,7 +120,7 @@ describe('action-archive · 坏索引（T-99-4）', () => {
   }
 
   it('导入（替换）：抛错且一个字节都不写，也不删任何文件', async () => {
-    fs.readTextFile.mockReturnValue(archive())
+    fs.readTextSync.mockReturnValue(archive())
     data.read.mockResolvedValue(broken)
 
     await expect(importActionArchive(false, '/tmp/import.dzx')).rejects.toThrow(
@@ -129,7 +134,7 @@ describe('action-archive · 坏索引（T-99-4）', () => {
   })
 
   it('导入（追加）：同样不写盘（否则 fallback 的「默认仓库」会被写进索引）', async () => {
-    fs.readTextFile.mockReturnValue(archive())
+    fs.readTextSync.mockReturnValue(archive())
     data.read.mockResolvedValue(broken)
 
     await expect(importActionArchive(true, '/tmp/import.dzx')).rejects.toThrow('导入已中止')

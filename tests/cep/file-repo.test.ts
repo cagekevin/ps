@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { readValue } from '../support/repo-read'
 
 /**
- * 磁盘上的原文；`readTextOutcome`（三态读，写路径用它）与 `readTextFile`（CAS 比对用的同步读）
+ * 磁盘上的原文；`readTextOutcome`（三态读，写路径用它）与 `readTextSync`（CAS 比对用的同步读）
  * 读的是同一份。`readError` 非空 = 文件在、但读不出来（T-105 的用例靠它）。
  */
 const disk = vi.hoisted(() => ({ text: null as string | null, readError: '' }))
@@ -11,11 +11,11 @@ const fs = vi.hoisted(() => ({
   hasNode: () => true,
   readTextOutcome: vi.fn(async () => {
     if (disk.readError) return { status: 'error' as const, reason: disk.readError }
-    if (disk.text === null) return { status: 'missing' as const }
+    if (disk.text === null) return { status: 'notSeen' as const }
     return { status: 'ok' as const, text: disk.text }
   }),
   readTextSmart: vi.fn(async () => disk.text),
-  readTextFile: vi.fn(() => disk.text),
+  readTextSync: vi.fn(() => disk.text),
   writeTextFile: vi.fn((path: string, text: string) => {
     // .bak 之外的目标文件写成功后也算磁盘内容变了，但这两个用例不依赖细节
     if (!path.endsWith('.bak')) disk.text = text
@@ -76,7 +76,7 @@ describe('fileRepo requireExisting', () => {
     expect(fs.writeTextFileAtomic).toHaveBeenCalledWith('/tmp/config.json', '{"a":1}')
   })
 
-  it('CAS 比对走同步读 readTextFile，不走 async 的 readTextSmart', async () => {
+  it('CAS 比对走同步读 readTextSync，不走 async 的读入口', async () => {
     disk.text = '{}'
     const repo = fileRepo(
       () => '/tmp/config.json',
@@ -85,7 +85,7 @@ describe('fileRepo requireExisting', () => {
 
     await repo.update((value) => Object.assign(value, { a: 1 }))
 
-    expect(fs.readTextFile).toHaveBeenCalledWith('/tmp/config.json')
+    expect(fs.readTextSync).toHaveBeenCalledWith('/tmp/config.json')
   })
 })
 

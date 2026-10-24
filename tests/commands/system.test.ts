@@ -26,7 +26,9 @@ vi.mock('@/cep/fs', () => ({
   psScriptsDir: async () => fsMock.scriptsDir,
   b64ToUtf8: (b: string) => Buffer.from(b, 'base64').toString('utf8'),
   utf8ToB64: (t: string) => Buffer.from(t, 'utf8').toString('base64'),
-  readTextFile: () => null,
+  readTextSync: () => null,
+  // T-107：唯一读入口（三态）；这些用例不读文件，一律"查不到"
+  readTextOutcome: async () => ({ status: 'notSeen' as const }),
   readTextSmart: async () => null,
   writeTextFileAtomic: () => true,
   readBase64File: () => null,

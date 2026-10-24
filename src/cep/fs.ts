@@ -53,22 +53,28 @@ export function userDir(): string {
 }
 
 /**
- * 三态读取结果。
+ * 三态读取结果（**观测**，不是结论）。
  *
- * **「文件不存在」与「读不到」必须分得开**：前者是首次使用的正常状态（可以给默认值），
- * 后者是错误——压成两态（`null`）就会让写路径拿 fallback 派生值覆盖用户文件（D-42 / T-105）。
+ * 三个状态各自只描述"原语看到了什么"：
+ * - `ok`：读到了内容；
+ * - `notSeen`：文件系统在那个路径上**查不到东西**（`existsSync` 为 false）。
+ *   **这不等于"文件不存在"**——权限、路径拼错、同步盘没挂都长这样。
+ *   要不要当"首次使用"由数据层按各自语义判（ADR-26 ②）；
+ * - `error`：有东西但读不出来，`reason` 是原始错误文本。
+ *
+ * 压成两态（`string | null`）就会让写路径拿 fallback 派生值覆盖用户文件（D-42 / T-105）。
  */
 export type TextRead =
-  { status: 'ok'; text: string } | { status: 'missing' } | { status: 'error'; reason: string }
+  { status: 'ok'; text: string } | { status: 'notSeen' } | { status: 'error'; reason: string }
 
 /**
- * Node 侧三态读：`existsSync` 判「不存在」，`readFileSync` 抛错判「读不到」。
+ * Node 侧三态读：`existsSync` 为 false → `notSeen`（观测），`readFileSync` 抛错 → `error` + 原因。
  * 两者**不许**合成一个 `null`——那是 T-105 的根因。
  */
 function readTextNode(absPath: string): TextRead {
   try {
     const fs = nodeRequire('fs')
-    if (!fs.existsSync(absPath)) return { status: 'missing' }
+    if (!fs.existsSync(absPath)) return { status: 'notSeen' }
     return { status: 'ok', text: fs.readFileSync(absPath, 'utf8') as string }
   } catch (e) {
     return { status: 'error', reason: e instanceof Error ? e.message : String(e) }
@@ -76,12 +82,15 @@ function readTextNode(absPath: string): TextRead {
 }
 
 /**
- * 两态同步读：`null` = **不存在或读不到**。
+ * **唯一的同步读 = ADR-26 ④ 的具名例外**，只给**结构上必须同步**的调用方，现登记三处：
+ * 1. 落盘前的 CAS 比对（`file-repo.ts` 的 `compareSync`）——`await` 会多一个 microtask 边界，正是 D-26 丢更新的位置；
+ * 2. 云同步的"有没有台账"护栏（`cloud/ledger.ts` 的 `readCloudLedger`）——上层 `gate()` 是同步谓词；
+ * 3. 面板界面偏好（`data/settings.ts` 的 `loadAll`）——`getPref` / `settingsSnapshot` 全链路同步。
  *
- * **写路径不要用**：它分不清两者，正是 D-42 守不住的原因（T-105）。要分就用 `readTextOutcome`。
- * 保留它是因为 CAS 比对（`file-repo.ts` 的 `compareSync`）只关心"原文是不是这段"，不关心为什么不是。
+ * 它只判"原文是不是这段 / 在不在"，不判"为什么不是"，所以两态够用。
+ * **别处要读文件一律用 `readTextOutcome`**；要加第四处，先改 ADR-26 再动代码。
  */
-export function readTextFile(absPath: string): string | null {
+export function readTextSync(absPath: string): string | null {
   if (!hasNode()) return null
   const outcome = readTextNode(absPath)
   return outcome.status === 'ok' ? outcome.text : null
@@ -307,17 +316,11 @@ async function readTextViaJsxOutcome(absPath: string): Promise<TextRead> {
     const raw = await evalScriptRaw(script, 15000)
     if (!raw.startsWith(ERR_PREFIX)) return { status: 'ok', text: raw }
     const message = raw.slice(ERR_PREFIX.length)
-    if (message.startsWith(JSX_MISSING_PREFIX)) return { status: 'missing' }
+    if (message.startsWith(JSX_MISSING_PREFIX)) return { status: 'notSeen' }
     return { status: 'error', reason: message }
   } catch (e) {
     return { status: 'error', reason: e instanceof Error ? e.message : String(e) }
   }
-}
-
-/** 两态：`null` = **不存在或读不到**。写路径不要用，见 `readTextOutcome` */
-export async function readTextViaJsx(absPath: string): Promise<string | null> {
-  const outcome = await readTextViaJsxOutcome(absPath)
-  return outcome.status === 'ok' ? outcome.text : null
 }
 
 /**
@@ -346,30 +349,30 @@ export async function psScriptsDir(): Promise<string | null> {
 }
 
 /**
- * 两态：`null` = **不存在或读不到**。写路径不要用，见 `readTextOutcome`。
- * Node 优先，失败再走 jsx File；浏览器里两者都没有，直接当读不到（不发注定失败的 evalScript）。
+ * 多来源优先级（**策略，不是观测**）。
+ *
+ * 同一路径有两个来源（Node / jsx `File`）时，怎么合并两条观测是一条**决定**，不是事实：
+ * 这里选「读不到」压过「查不到」——宁可报错，也不许把读失败降级成首次使用（D-42）。
+ *
+ * 它只能留在原语层：数据层根本看不到"有两个来源"这件事，挪过去就没法判。
+ * 所以本条**必须**是具名的、可测的、注释写明是策略——不许再往里塞别的规则（ADR-26 ②）。
  */
-export async function readTextSmart(absPath: string): Promise<string | null> {
-  const text = readTextFile(absPath)
-  if (text !== null) return text
-  if (!hasCep()) return null
-  return readTextViaJsx(absPath)
+export function combineReads(node: TextRead | null, viaJsx: TextRead): TextRead {
+  if (viaJsx.status === 'ok') return viaJsx
+  if (node?.status === 'error') return node
+  return viaJsx
 }
 
 /**
- * **三态**读取：Node 优先，失败退 jsx `File`。
+ * **唯一读入口**（ADR-26 ④）：Node 优先，失败退 jsx `File`。
  *
- * 只有两条路都确认"没有这个文件"才返回 `missing`；只要有一条路说"读不到"，就是 `error`。
- * 写路径（`file-repo` 的 `update`）必须用它：读失败被当成"文件不存在"时，
+ * 只有两条路都确认"查不到"才返回 `notSeen`；只要有一条路说"读不到"，就是 `error`
+ * （合并规则见 `combineReads`，那是策略）。写路径必须用它：读失败被当成"文件不存在"时，
  * `update` 会拿 `fallback()` 派生的值覆盖用户文件，而且因为"原文为空"连 `.bak` 都不留（D-42 / T-105）。
  */
 export async function readTextOutcome(absPath: string): Promise<TextRead> {
   const node = hasNode() ? readTextNode(absPath) : null
   if (node?.status === 'ok') return node
   if (!hasCep()) return node ?? { status: 'error', reason: '当前环境没有 Node，也没有 CEP' }
-  const viaJsx = await readTextViaJsxOutcome(absPath)
-  if (viaJsx.status === 'ok') return viaJsx
-  // 「读不到」优先于「不存在」：宁可报错，也不许把读失败降级成首次使用
-  if (node?.status === 'error') return node
-  return viaJsx
+  return combineReads(node, await readTextViaJsxOutcome(absPath))
 }

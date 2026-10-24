@@ -1,6 +1,6 @@
 import { openFile, saveFile } from '@/cep/dialog'
 import { renameRepo } from '@/cep/data/rename'
-import { readTextSmart, writeTextFile } from '@/cep/fs'
+import { readTextOutcome, writeTextFile } from '@/cep/fs'
 import {
   addGroupAt,
   addItemAt,
@@ -211,8 +211,11 @@ export const renameCommands: Command<unknown>[] = [
       const path = openFile('导入重命名预设', ['cmm'])
       if (!path) throw new CepError('PARSE', '取消操作')
 
-      const text = await readTextSmart(path)
-      if (text === null) throw new CepError('IO', '导入失败，文件读取失败')
+      const read = await readTextOutcome(path)
+      // T-107：两种不 ok 这里同果（都抛同一句），文案不变。
+      // 已知：这个命令自己读文件还撞 ADR-16（导入应收到 `data/`），另开条目
+      if (read.status !== 'ok') throw new CepError('IO', '导入失败，文件读取失败')
+      const text = read.text
 
       // JSON 优先、旧格式 `<z>`/`<>` 兜底，见 domain/rename.ts 的 parsePreset（原版 :57036-57045）
       await renameRepo.write(parsePreset(text))
