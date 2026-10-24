@@ -1,5 +1,6 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
+import { familyLang } from '@/domain/font-lang'
 import { getFontList, getFontStars, getFontTags } from '@/cep/ps'
 import { starsRepo, tagsRepo } from '@/cep/data'
 import { describeCepError } from '@/utils/error-text'
@@ -21,10 +22,12 @@ export const PREVIEW_LABEL: Record<PreviewMode, string> = {
   'extra-large': '超大预览',
 }
 
-/** 原面板的判定：家族名是纯 ASCII 就当英文，否则中文 */
-export function familyLang(family: string): 'en' | 'cn' {
-  return /^[a-zA-Z0-9. -_?]*$/.test(family) ? 'en' : 'cn'
-}
+/**
+ * 家族名 → 中/英。**判据只有一处**：`domain/font-lang`（TD-12-26）。
+ * 这里保留同名转发，是因为 `fontSet` 页的字体下拉已经在 import 它（页面轮之前不动那些文件）；
+ * 转发不是第二份实现——规则本身不在这个文件里。
+ */
+export { familyLang }
 
 export function previewText(family: string): string {
   return familyLang(family) === 'en' ? 'Crazy Design' : '设计助理'

@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import { computed, ref } from 'vue'
+import { isAsciiFamily } from '@/domain/font-lang'
 import type { FontItem } from '@/domain/font-item'
 import Icon from '@/components/Icon.vue'
 
@@ -25,11 +26,11 @@ const previews = computed(() =>
   props.font.postScriptNames.length > 1 ? props.font.postScriptNames.slice(0, 7) : [],
 )
 
-const glyph = computed(() => (isAscii(props.font.family) ? 'A' : '永'))
-
-function isAscii(family: string) {
-  return /^[a-zA-Z0-9. -_?]*$/.test(family)
-}
+/**
+ * 字重预览用「A」还是「永」——判据委托 `domain/font-lang`（TD-12-26）。
+ * 以前这里自己抄了一份正则：`°` 这类名字在预览里显示「A」，语言筛选却说它是中文。
+ */
+const glyph = computed(() => (isAsciiFamily(props.font.family) ? 'A' : '永'))
 
 function pick(index: number) {
   open.value = false

@@ -26,6 +26,22 @@ describe('FontWeight', () => {
     expect(wrapper.find('.fw__glyph').text()).toBe('永')
   })
 
+  /**
+   * TD-12-26 的第三个调用点：字形判据必须和 domain/font-lang 同答。
+   * 以前这里自己抄了一份正则，`°` 这类名字会渲染成「A」，而语言筛选说它是中文。
+   */
+  it('字形与字体语言判据同答（边界名不再分歧）', () => {
+    for (const [family, expected] of [
+      ['MiSans', 'A'],
+      ['思源黑体', '永'],
+      ['ヒラギノ明朝', '永'],
+      ['°', '永'],
+    ] as const) {
+      const wrapper = mount(FontWeight, { props: { font: font({ family }), current: 0 } })
+      expect(wrapper.find('.fw__glyph').text(), family).toBe(expected)
+    }
+  })
+
   it('只有一个字重时整行不渲染', () => {
     const wrapper = mount(FontWeight, {
       props: {

@@ -1,4 +1,5 @@
 import type { Classification } from './classification'
+import { isAsciiFamily } from './font-lang'
 import type { FontItem } from './font-item'
 
 /**
@@ -15,15 +16,21 @@ export type FilterState = Record<string, number[]>
  * 类型 / 风格 / 评分依赖 `presets`，而那 1178 条全是云端字体，
  * 系统字体一条都没有 —— 放出来点了也不会有任何变化，所以不显示。
  */
+
 const USABLE_KEYS = new Set(['language', 'commercial'])
 
 export function usableCategories(data: Classification) {
   return data.categories.filter((category) => USABLE_KEYS.has(category.key))
 }
 
-/** 字体语言：按名称判断中英（和 stores/font.ts 的 familyLang 同规则） */
+/**
+ * 字体语言：**委托 `font-lang` 的唯一判据**（TD-12-26）。
+ *
+ * 以前这里写 `/[\u4e00-\u9fa5]/` 并注释"与 familyLang 同规则"——两句话都不是事实：
+ * 规则不同（一个查汉字、一个查 ASCII 集），`°` 这种名字在预览里算英文、在筛选里算中文。
+ */
 function isChinese(family: string): boolean {
-  return /[\u4e00-\u9fa5]/.test(family)
+  return !isAsciiFamily(family)
 }
 
 export function matchFilter(family: string, state: FilterState, data: Classification): boolean {

@@ -27,8 +27,8 @@
   },
   "tests": {
     "files": 158,
-    "cases": 1312,
-    "eachSites": 16
+    "cases": 1309,
+    "eachSites": 17
   },
   "components": 31,
   "icons": 189,
@@ -87,12 +87,12 @@
       "lines": 918
     },
     "domain": {
-      "files": 24,
-      "lines": 3492
+      "files": 25,
+      "lines": 3525
     },
     "pages": {
       "files": 63,
-      "lines": 12798
+      "lines": 12799
     },
     "selection": {
       "files": 2,
@@ -100,7 +100,7 @@
     },
     "stores": {
       "files": 15,
-      "lines": 1217
+      "lines": 1220
     },
     "utils": {
       "files": 11,
