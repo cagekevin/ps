@@ -172,12 +172,31 @@ describe('jsxCall', () => {
     await expect(jsxCall('x')).resolves.toBeUndefined()
   })
 
-  it('合法 JSON 解析，非法 JSON 原样返回', async () => {
+  it('合法 JSON 解析', async () => {
     setBridge((_script, cb) => cb('{"ok":true}'))
     await expect(jsxCall('x')).resolves.toEqual({ ok: true })
+  })
 
+  it('jsxbin 的成功哨兵 ok / OK 原样返回（不是"读不懂"）', async () => {
+    setBridge((_script, cb) => cb('ok'))
+    await expect(jsxCall('x')).resolves.toBe('ok')
+    setBridge((_script, cb) => cb('OK'))
+    await expect(jsxCall('x')).resolves.toBe('OK')
+  })
+
+  /**
+   * TD-12-9：非 JSON 且不是哨兵 = **读不懂**。
+   * 旧实现 `return raw as unknown as T` 把字符串当对象交给消费侧——
+   * 形状错误从此一路流进业务，只在很下游才炸，而且报错指不回这里。
+   */
+  it('非 JSON 且非哨兵 → 抛 PARSE，带 label 与原值片段（不再原样返回）', async () => {
     setBridge((_script, cb) => cb('纯文本'))
-    await expect(jsxCall('x')).resolves.toBe('纯文本')
+
+    const error = await jsxCall('x', [], { label: '读取字体' }).catch((e: unknown) => e)
+    expect(error).toMatchObject({ code: 'PARSE' })
+    expect((error as Error).message).toContain('读取字体')
+    expect((error as Error).message).toContain('纯文本')
+    expect((error as Error).message).toContain('不是 JSON')
   })
 
   it('错误码是 CepError.JSX，不是普通 Error', async () => {

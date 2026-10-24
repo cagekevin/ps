@@ -165,20 +165,10 @@ for (const [file, hits] of found) counts[file] = hits.length
 
 /** 具名例外清单：文件:行 + 为什么现在不改 + 谁负责 */
 const NAMED = [
-  {
-    file: 'src/cep/data/common-use.ts',
-    count: 1,
-    where: 'src/cep/data/common-use.ts:106  `(file as unknown as { info?: unknown } | null)?.info`',
-    why: '读坏文件仍要渲染 + `degraded` 提示（ADR-0014 合规降级），转型在数据层归一旧格式；改成形状守卫要动 repo 的读侧契约',
-    owner: '阶段 3（G1 剩余）/ 用户决定',
-  },
-  {
-    file: 'src/cep/transport.ts',
-    count: 1,
-    where: 'src/cep/transport.ts:118  `return raw as unknown as T`',
-    why: 'jsx 回包是 `unknown`（CEP 注入），transport 是唯一把它交给泛型的口子；应改成出口处形状守卫，属契约折叠',
-    owner: '阶段 4（G3 契约折叠）/ 用户决定',
-  },
+  // 2026-10-25：两条存量豁免已随 G3「契约折叠」还清——
+  //   · src/cep/data/common-use.ts 旧形状 `{info:[]}` 改用 `in` 守卫（证明，不断言）
+  //   · src/cep/transport.ts 非 JSON 回包改成抛 PARSE（不再把字符串当对象返回）
+  // 磁盘上现为 0 处：基线（docs/生成/断言基线.json）也是 {}，两边对齐。
 ]
 
 const eagerPick = checkTopLevelHasCep()

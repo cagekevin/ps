@@ -180,9 +180,17 @@ export async function jsxCall<T = unknown>(
     throw new CepError('JSX', `${opts.label ?? fn}：${raw.slice(ERR_PREFIX.length)}`)
   }
   if (raw === '' || raw === 'undefined') return undefined as T
+  // jsxbin 的成功哨兵：写操作没有返回值时它就回 'ok'。这是**合法值**，
+  // 由 `utils/jsx-result` 的 EMPTY_STRINGS 解释，不是"读不懂"（TD-12-9 的边界）
+  if (raw === 'ok' || raw === 'OK') return raw as T
   try {
     return JSON.parse(raw) as T
   } catch {
-    return raw as unknown as T
+    // 非 JSON 且不是哨兵 = **读不懂**。以前这里 `return raw as unknown as T`，
+    // 把字符串当对象交给消费侧，形状错误一路流到业务（TD-12-9）
+    throw new CepError(
+      'PARSE',
+      `${opts.label ?? fn}：返回值不是 JSON（也不是成功哨兵 ok）：${raw.slice(0, 80)}`,
+    )
   }
 }

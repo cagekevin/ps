@@ -101,10 +101,12 @@ export async function ensureCommonUseFile(): Promise<EnsureResult> {
  * **mutator 必须 `return items`**（不是 `return file`）：写回一律归一成裸数组，
  * 旧形状 `{ info: [...] }` 在第一次写入时就被转正（官方只认数组，`:6401`）。
  */
-function requireItems(file: CommonUseFile): CommonUseItem[] {
+function requireItems(file: unknown): CommonUseItem[] {
   if (Array.isArray(file)) return file
-  const legacy = (file as unknown as { info?: unknown } | null)?.info
-  if (Array.isArray(legacy)) return legacy as CommonUseItem[]
+  // 旧形状 `{ info: [...] }`：`in` 收窄本身就是证明，不再用 `as unknown as` 断言（撒谎）
+  if (file !== null && typeof file === 'object' && 'info' in file && Array.isArray(file.info)) {
+    return file.info
+  }
   throw new CepError('PARSE', `${FILE_NAME} 根不是数组，无法改写`)
 }
 
