@@ -31,14 +31,15 @@ import {
 } from '@/domain/ku-io'
 import {
   defaultStyleIndex,
+  fileNameOf,
   readStyleWarehouseIndex,
-  type KuKind,
   type StyleWarehouse,
   type StyleWarehouseIndex,
 } from '@/domain/style-library'
 import { CepError } from '@/utils/errors'
 import { log } from '@/utils/logger'
 import { kuGuid, readKuFileText, styleIndexRepo } from './style-library-repo'
+import { isRecord } from '@/utils/guards'
 
 /** 进度回调：只报"正在做什么"，不猜百分比（仓库数量差异太大） */
 export type KuIoProgress = (detail: string) => void
@@ -54,10 +55,6 @@ export interface KuImportResult {
   recycleDir: string
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return !!value && typeof value === 'object' && !Array.isArray(value)
-}
-
 function indexPath(): string {
   return `${userDir()}/${DATA_FILES.styleLibrary}`
 }
@@ -68,11 +65,6 @@ function parseOrThrow<T>(read: () => T): T {
   } catch (e) {
     throw new CepError('PARSE', e instanceof Error ? e.message : '导入文件结构不正确')
   }
-}
-
-function fileNameOf(warehouse: StyleWarehouse | undefined, kind: KuKind): string {
-  const value = warehouse?.[kind]
-  return typeof value === 'string' ? value : ''
 }
 
 /**
@@ -91,7 +83,8 @@ function fileNameOf(warehouse: StyleWarehouse | undefined, kind: KuKind): string
  */
 function backupOriginal(relative: string, path: string, base64: string): void {
   if (isKuLibraryFileName(relative)) {
-    let text = ''
+    // 解不出来（二进制乱码）就是"不可用"，与解析失败同一条判据
+    let text: string
     try {
       text = b64ToUtf8(base64)
     } catch {

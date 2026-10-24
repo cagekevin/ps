@@ -6,6 +6,7 @@
 
 import { decodeKuData, isKuLibraryFileName } from './ku-format'
 import type { KuKind, StyleWarehouseIndex } from './style-library'
+import { isRecord } from '@/utils/guards'
 
 /** 导出文件里的一个条目。`data` 是布尔 `false` 时表示「这个文件当时读不到」（契约 §2.5/§2.6） */
 export interface KuFileEntry {
@@ -35,10 +36,6 @@ export type KuGuid = () => string
 export const KU_CONTAINER_ORDER: readonly KuKind[] = ['color', 'style', 'font', 'gradient']
 
 const KU_LIBRARY_FIELDS = ['color', 'gradient', 'font', 'style'] as const
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return !!value && typeof value === 'object' && !Array.isArray(value)
-}
 
 function parseJson(text: string): unknown {
   try {

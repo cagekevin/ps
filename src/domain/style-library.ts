@@ -4,6 +4,7 @@
 // 禁止：不读文件、不写文件；未知键不猜（读进来原样保留，见 库文件格式契约 §2.2/§2.3）
 
 import { resolveKuGroups } from './ku-format'
+import { isRecord } from '@/utils/guards'
 
 /** 四类库。顺序 = 页面 tab 顺序（原版 `switchval`，`app.v4.js:54590`） */
 export type KuKind = 'color' | 'gradient' | 'font' | 'style'
@@ -35,12 +36,19 @@ export interface StyleWarehouseIndex {
 }
 
 /** 原版初始值 `app.v4.js:53311-53315`：一个「默认仓库」+ 四个库文件名（由 `P_()` 生成，见第 2 段 T-48） */
-export function defaultStyleIndex(): StyleWarehouseIndex {
-  return { index: 0, list: [{ name: '默认仓库' }] }
+/**
+ * 索引里登记的某个库文件名（TD-09-17：`data/` 的两份同名实现收进这里）。
+ *
+ * 读和写都要用它：**索引里没登记文件名就等于没有这个库，不许猜路径**。
+ * 返回空串表示"没登记"，调用方决定是"首次使用"还是"该报错"。
+ */
+export function fileNameOf(warehouse: StyleWarehouse | undefined, kind: KuKind): string {
+  const value = warehouse?.[kind]
+  return typeof value === 'string' ? value : ''
 }
 
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return !!value && typeof value === 'object' && !Array.isArray(value)
+export function defaultStyleIndex(): StyleWarehouseIndex {
+  return { index: 0, list: [{ name: '默认仓库' }] }
 }
 
 export interface KuIndexRead {

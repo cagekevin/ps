@@ -36,6 +36,8 @@ import { pick } from './pick'
 import { readSwatchItems, swatchFilePath, writeSwatchItems } from './swatch-repo'
 import { runQueued } from './write-queue'
 import type { Repo } from './types'
+import { isRecord } from '@/utils/guards'
+import { fileNameOf } from '@/domain/style-library'
 
 /**
  * 索引仓库。读走 `fileRepo`（失败带 `degraded`，不抛）。
@@ -80,11 +82,6 @@ export interface StyleLibrarySnapshot {
   libraries: Record<KuKind, KuGroup[]>
   /** 非空 = 读到的不是真数据（索引损坏 / 某个库文件读不到） */
   degraded: string
-}
-
-function fileNameOf(warehouse: StyleWarehouse | undefined, kind: KuKind): string {
-  const value = warehouse?.[kind]
-  return typeof value === 'string' ? value : ''
 }
 
 /**
@@ -458,10 +455,6 @@ export interface WarehouseDeleteResult {
   moved: string[]
   /** 没能删掉原件的（副本已在回收目录，原件仍在原位，需人工处理） */
   failed: string[]
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return !!value && typeof value === 'object' && !Array.isArray(value)
 }
 
 /**
