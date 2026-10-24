@@ -109,6 +109,9 @@ describe('action-archive · 坏索引（T-99-4）', () => {
   const broken: RepoRead<ActionWarehouseIndex> = {
     ok: false,
     reason: '内容不是合法 JSON',
+    // 坏读臂必带默认值（T-102）。这里**故意**不用生产者那份 `defaultActionIndex()`（本文件的
+    // `@/cep/data/actions` 是 mock 掉的）：空 list 与真实默认值不同，万一被测代码读了它，断言会变。
+    fallback: { index: 0, list: [] },
   }
 
   it('导入（替换）：抛错且一个字节都不写，也不删任何文件', async () => {

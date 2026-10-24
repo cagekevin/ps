@@ -23,20 +23,29 @@ export interface RepoReadOk<T> {
   reason?: string
 }
 
-/** 读失败：磁盘上的内容不能当数据用（`value` 是 fallback，类型上取不到） */
-export interface RepoReadBad {
+/**
+ * 读失败：磁盘上的内容不能当数据用（类型上取不到 `value`）。
+ *
+ * `fallback` 是**仓库自己规定的默认值**，由 `fileRepo(resolvePath, fallback)` 的
+ * `fallback()` 产生（`file-repo.ts:36`）——与"文件不存在"（`file-repo.ts:72`）**同一个来源**。
+ * 消费侧要展示时取它，不许自己再写一份默认值（ADR-24 / 硬规则 20）。
+ *
+ * 代价（ADR-14 扩展二）：`fallback` 与"文件不存在"在**值上不可分辨**，
+ * 要区分只能看 `ok`——所以 `ok` 是唯一判别位，不是调试字段。
+ */
+export interface RepoReadBad<T> {
   ok: false
   reason: string
+  fallback: T
 }
 
 /**
- * 判别联合：取 `.value` 前必须先判 `ok`。
+ * 判别联合：取 `.value` 前必须先判 `ok`；坏读时展示 `fallback`（生产者给的）。
  *
- * 纯展示处（坏了就等于"这份数据不存在"）不要各写 `if (!ok) return []`——
- * 那是把兜底从 `?? []` 搬成 `if (!ok) return []`。走 `read-or.ts` 的 `readOr`，
- * 名单见 `docs/生成/RepoRead消费方清单.md` §二。
+ * 两臂各自带值，所以消费侧写 `read.ok ? read.value : read.fallback` 一行就够：
+ * 不传默认值、不写 `if (!ok) return []`，也不需要中间的折叠层（`read-or.ts` 已删，T-102）。
  */
-export type RepoRead<T> = RepoReadOk<T> | RepoReadBad
+export type RepoRead<T> = RepoReadOk<T> | RepoReadBad<T>
 
 export interface Repo<T> {
   /** 读；文件不存在时返回 fallback，且**不算**失败（首次使用是正常状态） */

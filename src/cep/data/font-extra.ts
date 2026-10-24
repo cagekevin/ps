@@ -148,8 +148,9 @@ const COUNTER_DEFAULTS: TranslateCounter = { num: 0, max: TRANSLATE_DAILY_LIMIT,
 const clone = deepClone
 
 /**
- * 生产者自己的默认值。消费方（store）读到坏文件时必须用这里的，不许再写一份
- * （ADR-24：缺默认值补生产者）。`pick` 的 fallback 也取这里，两条路径同源。
+ * 生产者自己的默认值。`pick` 的 fallback 形参就是它，坏读时由 `fileRepo` 经
+ * `RepoReadBad.fallback` 交给消费侧（T-102）——**消费侧不要直接调这里**，
+ * 调了就是绕开仓库自己拼一份默认值（ADR-24）。保留导出只给 `pick` 与测试造坏读桩用。
  */
 export const fontExtraDefaults = {
   quickFont: (): QuickFontFile => clone(QUICK_FONT_DEFAULTS),

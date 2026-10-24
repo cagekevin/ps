@@ -1,6 +1,6 @@
 // 契约测试，非实机：仓库用内存实现，全程零网络（fetch 被 stub 成"一调用就失败"）
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { hierarchyRepo } from '@/cep/data/font-extra'
+import { fontExtraDefaults, hierarchyRepo } from '@/cep/data/font-extra'
 import { fontHierarchyEntry } from '@/cep/cloud/entries/font-hierarchy'
 import { cloudEntries } from '@/cep/cloud/entries'
 import { readValue } from '../support/repo-read'
@@ -104,6 +104,8 @@ describe('font.hierarchy 云同步项（T-55）', () => {
     vi.spyOn(hierarchyRepo, 'read').mockResolvedValue({
       ok: false,
       reason: '读取失败',
+      // 坏读臂必带仓库自己的默认值（T-102）；本条断言的是"读坏必须抛、不上传假数据"
+      fallback: fontExtraDefaults.hierarchy(),
     })
 
     await expect(fontHierarchyEntry.read()).rejects.toThrow('读取失败')

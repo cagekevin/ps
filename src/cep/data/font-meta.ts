@@ -1,10 +1,10 @@
 import type { FontTag } from '@/cep/types'
 import { starsRepo, tagsRepo } from './index'
-import { readOr } from './read-or'
 
-/** 读字体标签（我的标签那一排）；坏文件按空列表展示，坏因进日志（清单 §二，`readOr`） */
+/** 读字体标签（我的标签那一排）；坏文件的默认值取仓库自己的 `fallback`（空列表），坏因由 `fileRepo` 记 */
 export async function readFontTags(): Promise<FontTag[]> {
-  const raw = readOr(await tagsRepo.read(), [], 'font-meta.tags')
+  const read = await tagsRepo.read()
+  const raw = read.ok ? read.value : read.fallback
   return raw
     .filter((item) => typeof item.text === 'string')
     .map((item) => ({
@@ -14,9 +14,10 @@ export async function readFontTags(): Promise<FontTag[]> {
     }))
 }
 
-/** 读星级：{ 家族名: 1~3 }；坏文件按"全未收藏"展示，坏因进日志（清单 §二，`readOr`） */
+/** 读星级：{ 家族名: 1~3 }；坏文件按"全未收藏"展示，坏因由 `fileRepo` 记 */
 export async function readFontStars(): Promise<Record<string, number>> {
-  const raw = readOr(await starsRepo.read(), [], 'font-meta.stars')
+  const read = await starsRepo.read()
+  const raw = read.ok ? read.value : read.fallback
   const map: Record<string, number> = {}
   for (const item of raw) {
     if (typeof item.name !== 'string') continue

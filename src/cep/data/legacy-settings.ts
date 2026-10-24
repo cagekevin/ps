@@ -98,9 +98,10 @@ export function mergeFontSetSettings(
 
 export async function readFontSetSettings(): Promise<RepoRead<FontSetSettings>> {
   const read = await legacySettingsRepo.read()
-  // 坏文件不给 fallback（判别联合里取不到 value）：消费方要用默认值时调 `mergeFontSetSettings({})`，
-  // 与 `legacySettingsRepo` 的 fallback `{}` 走同一条归一，不另写一份默认值（ADR-24）
-  if (!read.ok) return { ok: false, reason: read.reason }
+  // 坏文件的默认值由 `legacySettingsRepo` 的 fallback `{}` 经**同一条**归一产生，
+  // 消费侧直接取 `fallback`，不再自己调 `mergeFontSetSettings({})`（ADR-24）
+  if (!read.ok)
+    return { ok: false, reason: read.reason, fallback: mergeFontSetSettings(read.fallback) }
   return { ok: true, value: mergeFontSetSettings(read.value) }
 }
 
@@ -185,15 +186,22 @@ function assignDeep(target: Record<string, unknown>, patch: Record<string, unkno
   }
 }
 
+/** 从整份 `sj_set.json` 里挑出常用页那 8 个键；两条臂（真实值 / 坏读默认值）共用这一处 */
+function pickCommonUseOptions(all: Record<string, unknown>): Partial<CommonUseOptions> {
+  const picked: Partial<CommonUseOptions> = {}
+  for (const key of COMMON_USE_SETTING_KEYS) {
+    if (key in all) picked[key] = all[key]
+  }
+  return picked
+}
+
 /** 读常用页那 8 个键；文件里没有的键**不补默认值**（缺 = 官方默认，由面板决定） */
 export async function readCommonUseOptions(): Promise<RepoRead<Partial<CommonUseOptions>>> {
   const read = await legacySettingsRepo.read()
-  if (!read.ok) return { ok: false, reason: read.reason }
-  const picked: Partial<CommonUseOptions> = {}
-  for (const key of COMMON_USE_SETTING_KEYS) {
-    if (key in read.value) picked[key] = read.value[key]
+  if (!read.ok) {
+    return { ok: false, reason: read.reason, fallback: pickCommonUseOptions(read.fallback) }
   }
-  return { ok: true, value: picked }
+  return { ok: true, value: pickCommonUseOptions(read.value) }
 }
 
 /**

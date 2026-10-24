@@ -65,7 +65,7 @@ export function fileRepo<T>(
     } catch (e) {
       // 读不抛：文件可能在原面板那边被占用，回退默认值但要标记
       log.warn('repo', `${target} 读取失败，使用默认值`, e)
-      return { read: { ok: false, reason: '读取失败' }, text: null }
+      return { read: { ok: false, reason: '读取失败', fallback: fallback() }, text: null }
     }
 
     // 文件不存在是首次使用的正常状态，不算读失败
@@ -77,7 +77,7 @@ export function fileRepo<T>(
     } catch (e) {
       // 坏文件是错误不是警告：与 `style-library-repo.ts:136` 同一档（用户能在「打开日志」里查到）
       log.error('repo', `${target} 不是合法 JSON，使用默认值`, e)
-      return { read: { ok: false, reason: '内容不是合法 JSON' }, text }
+      return { read: { ok: false, reason: '内容不是合法 JSON', fallback: fallback() }, text }
     }
 
     // 没接归一的仓库：解析结果直接当 T。这是"形状"的第二份真相，逐仓库接归一后消失（T-99-2）
@@ -87,7 +87,7 @@ export function fileRepo<T>(
     if (value === null) {
       // 结构不认识 ≠ 文件不存在：两者必须能分辨，否则坏文件在页面上就是"空面板"
       log.error('repo', `${target} 内容结构不认识，使用默认值`)
-      return { read: { ok: false, reason: '内容结构不认识' }, text }
+      return { read: { ok: false, reason: '内容结构不认识', fallback: fallback() }, text }
     }
     return { read: { ok: true, value }, text }
   }

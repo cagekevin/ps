@@ -66,8 +66,8 @@
   "stylePageCases": 73,
   "layers": {
     "cep": {
-      "files": 53,
-      "lines": 5860
+      "files": 52,
+      "lines": 5851
     },
     "cloud": {
       "files": 4,
@@ -75,7 +75,7 @@
     },
     "commands": {
       "files": 15,
-      "lines": 4324
+      "lines": 4323
     },
     "components": {
       "files": 36,
@@ -99,7 +99,7 @@
     },
     "stores": {
       "files": 14,
-      "lines": 933
+      "lines": 931
     },
     "utils": {
       "files": 10,

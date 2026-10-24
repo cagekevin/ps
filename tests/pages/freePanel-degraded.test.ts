@@ -1,7 +1,7 @@
 import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia, type Pinia } from 'pinia'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { FreePanelFile } from '@/domain/free-panel'
+import { createEmptyFreePanel, type FreePanelFile } from '@/domain/free-panel'
 import type { Repo } from '@/cep/data/types'
 
 /**
@@ -58,6 +58,8 @@ describe('自由面板 · 读坏提示', () => {
     repo.read.mockResolvedValue({
       ok: false,
       reason: '内容结构不认识',
+      // 坏读臂必带默认值（T-102）；本条钉的是"页面显示坏因，不显示默认空面板的空态文案"
+      fallback: createEmptyFreePanel(),
     })
 
     const wrapper = await mountPage()

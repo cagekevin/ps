@@ -7,7 +7,6 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import {
-  fontExtraDefaults,
   fontHistoryRepo,
   hierarchyRepo,
   quickFontRepo,
@@ -16,10 +15,8 @@ import {
   type QuickFontFile,
   type TranslateCounter,
 } from '@/cep/data/font-extra'
-import { readOr } from '@/cep/data/read-or'
 import {
   FONT_SET_DEFAULTS,
-  mergeFontSetSettings,
   readFontSetSettings,
   type FontSetSettings,
 } from '@/cep/data/legacy-settings'
@@ -55,18 +52,19 @@ export const useFontSetStore = defineStore('fontSet', () => {
       fontHistoryRepo.read(),
     ])
 
-    // 坏设置文件：数据层不再给 fallback（判别联合里取不到 value），默认值取生产者的归一出
-    // `mergeFontSetSettings({})`——与 `legacySettingsRepo` 的 fallback `{}` 同一条路径（ADR-24）
-    settings.value = settingsRead.ok ? settingsRead.value : mergeFontSetSettings({})
+    // 坏设置文件：默认值由数据层给（`legacySettingsRepo` 的 fallback `{}` 经同一处归一出），
+    // store 只转发，不再自己调 `mergeFontSetSettings({})`（ADR-24）
+    settings.value = settingsRead.ok ? settingsRead.value : settingsRead.fallback
     // 清单 §6.7 判据：设置 / 快捷字体 / 层级预设 / 翻译计数 的 fallback **非空**（S2 档）——
     // 渲染成默认值与"用户自己配的"在界面上不可分辨，本该进页面级 `degraded`；本页没这个槽，
-    // 现在只有日志。此前那个无人消费的 `settingsDegraded` 已在 T-101-2b 删除，留着只是假信号。
-    // TODO(T-101-3): 补页面级 `degraded` 槽后，这 4 份的 reason 要汇进去，不再只靠 `log.warn`
-    quickFonts.value = readOr(quickRead, fontExtraDefaults.quickFont(), 'fontSet.quickFont')
-    hierarchy.value = readOr(hierarchyRead, fontExtraDefaults.hierarchy(), 'fontSet.hierarchy')
-    counter.value = readOr(counterRead, fontExtraDefaults.counter(), 'fontSet.counter')
+    // 现在只有日志（`file-repo` 的 log.warn / log.error）。此前那个无人消费的 `settingsDegraded`
+    // 已在 T-101-2b 删除，留着只是假信号。
+    // TODO(T-101-3): 补页面级 `degraded` 槽后，这 4 份的 reason 要汇进去，不再只靠日志
+    quickFonts.value = quickRead.ok ? quickRead.value : quickRead.fallback
+    hierarchy.value = hierarchyRead.ok ? hierarchyRead.value : hierarchyRead.fallback
+    counter.value = counterRead.ok ? counterRead.value : counterRead.fallback
     // 最近字体 fallback 是 `[]`（S3 档）："没有最近记录"本来就是合法状态，日志够了
-    recentFonts.value = readOr(historyRead, fontExtraDefaults.history(), 'fontSet.history')
+    recentFonts.value = historyRead.ok ? historyRead.value : historyRead.fallback
   }
 
   return {

@@ -1,6 +1,6 @@
 import { createPinia, setActivePinia } from 'pinia'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { FreePanelFile } from '@/domain/free-panel'
+import { createEmptyFreePanel, type FreePanelFile } from '@/domain/free-panel'
 import type { Repo } from '@/cep/data/types'
 
 /**
@@ -45,6 +45,8 @@ describe('free-panel store · degraded', () => {
     repo.read.mockResolvedValue({
       ok: false,
       reason: '内容结构不认识',
+      // 坏读臂必带默认值（T-102）。本条要钉的正是"投影**不**用这个默认区域"（`stores/free-panel.ts:26`）
+      fallback: createEmptyFreePanel(),
     })
 
     const store = useFreePanelStore()

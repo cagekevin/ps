@@ -91,10 +91,10 @@ export async function getClassification(): Promise<RepoRead<Classification>> {
     text = await readTextSmart(abs)
   } catch (e) {
     log.warn('classification', `${abs} 读取失败`, e)
-    return { ok: false, reason: '分类数据读取失败' }
+    return { ok: false, reason: '分类数据读取失败', fallback: emptyClassification() }
   }
 
-  if (!text) return { ok: false, reason: '分类数据文件不存在' }
+  if (!text) return { ok: false, reason: '分类数据文件不存在', fallback: emptyClassification() }
 
   try {
     const raw = JSON.parse(text) as {
@@ -123,6 +123,6 @@ export async function getClassification(): Promise<RepoRead<Classification>> {
     }
   } catch (e) {
     log.warn('classification', `${abs} 不是合法 JSON`, e)
-    return { ok: false, reason: '分类数据格式不正确' }
+    return { ok: false, reason: '分类数据格式不正确', fallback: emptyClassification() }
   }
 }

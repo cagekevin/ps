@@ -37,7 +37,7 @@ vi.mock('@/cep/data/legacy-settings', () => ({
   // 返回类型写死：旧形状 `{ value, degraded }` 在这里编译不过，不用等运行时才发现
   readCommonUseOptions: async (): Promise<RepoRead<Partial<CommonUseOptions>>> =>
     diskOptions.degraded
-      ? { ok: false, reason: diskOptions.degraded }
+      ? { ok: false, reason: diskOptions.degraded, fallback: {} }
       : { ok: true, value: diskOptions.current },
   updateCommonUseOptions: async () => ({}),
   COMMON_USE_SETTING_KEYS: [],

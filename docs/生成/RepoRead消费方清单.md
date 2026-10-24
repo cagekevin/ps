@@ -420,21 +420,23 @@ git revert --abort 2>/dev/null; git checkout -- .
 | ② B≈11 / A≈59 | **驳回（口径错）** | 11 是**全文** B 总数（§2.1 生产 9 + §2.2 tests 2），不是 70 里的。70 = A 57 + P 13 + B 0。59 这个数对不上：差的不是 B，是 P（13 处生产/装配点） |
 | ③ 静默用坏数据 2–3 处 | **驳回（数量少算）** | 清单内 2 处（`commands/fontSet.ts:138`、`stores/action.ts:36`），清单外另 2 处（`stores/common-use.ts:58`、`commands/commonUse.ts:619`）。`action-archive` 已修，确实不再是其中之一 |
 
-## 6.6 落地形状（T-101-2 已实现，待用户复核）
+## 6.6 落地形状（T-101-2 实现，T-102 改成两臂都带值）
 
-`RepoRead<T>` = `{ ok: true; value: T; reason?: string } | { ok: false; reason: string }`。
-取 `.value` 前必须判 `ok`；`reason` 两支都有，所以"提示语"不用判 `ok` 就能取。
+`RepoRead<T>` = `{ ok: true; value: T; reason?: string } | { ok: false; reason: string; fallback: T }`。
+取 `.value` 前必须判 `ok`；`reason` 两支都有，所以"提示语"不用判 `ok` 就能取；
+坏读要展示默认值时取 `fallback`——**由 `fileRepo` 的 `fallback` 形参产生，消费侧不许再写一份**（T-102）。
 
 - **为什么不是纯两支**：`classification-repo.ts:119`（合法 JSON、分组为空）必须同时交出
   `value`（`presets` / `commercials` 还有用）和原因。砍成 `ok: false` 会让字体管理页的
   "免费商用"筛选跟着空——那是功能变化，不是信号变化。
-- **B 类走 `src/cep/data/read-or.ts` 的 `readOr`**，不是 9 个 `if (!ok) return []`：
-  一个函数折叠，坏因统一 `log.warn`（`打开日志` 可查）。所以本刀**新增静默点为 0**。
-  账目见 §6.7（§二 的 9 个**条目** = 7 个**独立读**；现在 6 个走 `readOr`，1 个在命令层自己写分支）。
+- **B 类不再需要折叠层**（`src/cep/data/read-or.ts` 已在 T-102 删除）：两臂各自带值，
+  消费侧写 `read.ok ? read.value : read.fallback` 一行；坏因由 `file-repo.ts:67/79/89` 记。
+  账目见 §6.7（§二 的 9 个**条目** = 7 个**独立读**）。
 - **P 类 13 处**只改构造，不写 `if`。**C 类仍是 0**。
-- 需要"坏读时仍要显示默认值"的 4 处（`stores/action.ts`、`stores/rename.ts`、`stores/font-set.ts:60`、
-  `commands/fontSet.ts` 计数），默认值一律取自**生产者导出的默认**（`defaultActionIndex()`、
-  `seedPreset`、`mergeFontSetSettings({})`、`fontExtraDefaults.*`），没有在消费侧另写一份（ADR-24）。
+- 需要"坏读时仍要显示默认值"的 4 处（`stores/action.ts`、`stores/rename.ts`、`stores/font-set.ts`、
+  `commands/fontSet.ts` 计数），T-102 之后一律取坏读臂的 `fallback`（生产者给的）；
+  `stores/action.ts` / `stores/rename.ts` 仍是取生产者导出的默认（`defaultActionIndex()`、`seedPreset`），
+  因为它们的仓库不是 `fileRepo`。两种都符合 ADR-24。
 
 ## 6.7 T-101-2b：账目对齐 + `readOr` 边界 + 信号分档
 
@@ -442,15 +444,15 @@ git revert --abort 2>/dev/null; git checkout -- .
 
 | §二 条目 | 独立读 | 信号出口 |
 | --- | --- | --- |
-| `font-meta.ts:6` 取 `raw` | ① `tagsRepo.read()` | `readOr`（`:7`）`log.warn` |
+| `font-meta.ts:6` 取 `raw` | ① `tagsRepo.read()` | `file-repo.ts` 的 `log.warn`/`log.error`（T-102 删掉 `readOr` 后不再有第二条） |
 | `font-meta.ts:8` `.filter(...)` | — 同 ① 的**同一表达式**，没有自己的读 | 与 ① 共用 |
 | `font-meta.ts:9` `.map(...)` | — 同 ① | 与 ① 共用 |
-| `font-meta.ts:18` 取 `raw` | ② `starsRepo.read()` | `readOr`（`:19`） |
+| `font-meta.ts:18` 取 `raw` | ② `starsRepo.read()` | 同 ① |
 | `commands/fontSet.ts:234` 计数器 | ③ `translateCounterRepo.read()` | 命令层显式分支 + `log.warn`（见 (b)） |
-| `stores/font-set.ts:58` | ④ `quickFontRepo.read()`（现 `:52`） | `readOr`（`:65`） |
-| `stores/font-set.ts:59` | ⑤ `hierarchyRepo.read()`（现 `:53`） | `readOr`（`:66`） |
-| `stores/font-set.ts:60` | ⑥ `translateCounterRepo.read()`（现 `:54`） | `readOr`（`:67`） |
-| `stores/font-set.ts:61` | ⑦ `fontHistoryRepo.read()`（现 `:55`） | `readOr`（`:69`） |
+| `stores/font-set.ts:58` | ④ `quickFontRepo.read()`（现 `:52`） | `file-repo.ts` 的日志 |
+| `stores/font-set.ts:59` | ⑤ `hierarchyRepo.read()`（现 `:53`） | 同上 |
+| `stores/font-set.ts:60` | ⑥ `translateCounterRepo.read()`（现 `:54`） | 同上 |
+| `stores/font-set.ts:61` | ⑦ `fontHistoryRepo.read()`（现 `:55`） | 同上 |
 
 差的 2 个条目是 ① 那条表达式的 `.filter` / `.map`：它们没有自己的读，坏值在 ① 已经折成 `[]`，
 后续两步在空数组上是恒等操作。**所以不是漏 2 处，是"条目"和"读"两个单位。**
@@ -461,19 +463,22 @@ git revert --abort 2>/dev/null; git checkout -- .
 **选留禁令**：`readOr` 的存在前提是"坏值只流向渲染"，而计数器那个值决定**是否放行翻译**，
 是判断不是渲染。为它放宽禁令（改成"只禁写路径"）会放行以后所有"判断点"用它，正是要防的 bug 类。
 改成显式分支后行为逐字不变（同一 fallback、同一放行结果），坏因仍落日志。
-可核：`git grep -n "readOr(" -- src/commands` = 0。
+
+**T-102 之后**：`readOr` 整个删了，这条禁令由类型本身承担——两臂都带值，所以不存在
+"某个折叠函数只能给渲染用"的问题；命令层取 `counterRead.fallback`，判断点照样有 `ok` 可判。
+可核：`git grep -n "readOr(" -- src` = 0。
 
 ### (c) 信号分档（判"坏值出口"，不判"这处重不重要"）
 
 | 档 | 判据（可 grep） | 信号去哪 |
 | --- | --- | --- |
 | **S1** | 坏值会进 写盘（`update`/`write`/`writeTextFile`）/ jsx 实参 / "是否放行·是否中止"的判断 | **抛**。这些出口里坏值会让一次操作照常成功但作用在错的输入上，或写坏磁盘 |
-| **S2** | 只进渲染，但 fallback **非空**（渲染成默认值，与"用户自己配的就是这个"不可分辨） | **页面级 `degraded`**。`readOr` 的日志只是兜底，不算达标 |
+| **S2** | 只进渲染，但 fallback **非空**（渲染成默认值，与"用户自己配的就是这个"不可分辨） | **页面级 `degraded`**。`file-repo` 的日志只是兜底，不算达标 |
 | **S3** | 只进渲染，且 fallback 是 `[]`（"空"本身就是合法状态：没有标签 / 没有收藏 / 没有最近记录） | `log.warn` 够：界面上"没有"与"坏了"的正确反应相同 |
 
 **怎么用它判任意一处**：先看这个值往后 30 行有没有 `jsx.` / `update(` / `write(` / 依赖它的 `throw`
-→ S1；没有就看 `readOr` 的第二个实参是不是 `[]` → 是 `[]` 则 S3，非空则 S2。
-两个 grep 就能核：`git grep -n "readOr(" -- src` 里 fallback 非空的每一处都必须同时欠一条页面提示。
+→ S1；没有就看坏读臂 `fallback` 是不是 `[]` → 是 `[]` 则 S3，非空则 S2。
+两个 grep 就能核：`git grep -n "\.fallback" -- src` 里 fallback 非空的每一处都必须同时欠一条页面提示。
 
 **现状欠账**：`/fontSet` 没有页面级 `degraded` 槽，S2 档的 4 份（设置 / 快捷字体 / 层级预设 /
 翻译计数）现在只有日志。旧的那个 `settingsDegraded` **全仓零消费方**（`git grep -n settingsDegraded`
