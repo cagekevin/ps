@@ -7,6 +7,8 @@ import { injectSprite } from './components/icon/sprite'
 import { installErrorHandlers } from './utils/error-handler'
 import { installStartupCheck } from './utils/build-info'
 import { onSettingsWriteError } from './cep/data/settings'
+import { attachLogSink, log } from './utils/logger'
+import { createLogFileSink } from './cep/log-file'
 import { useFeedbackStore } from './stores/feedback'
 import { bindFontData } from './stores/font'
 import { bindActionData } from './stores/action'
@@ -25,6 +27,10 @@ import './styles/tokens.css'
 import './styles/global.css'
 import './styles/layout.css'
 import './styles/motion.css'
+
+// 日志落盘必须最先接：之后任何模块的 log.* 都会被留下来（关掉重开还查得到）。
+// 落盘口自己负责节流/上限/失败留痕，这里只装配。
+attachLogSink(createLogFileSink((reason) => log.warn('logger', '日志落盘失败', reason)))
 
 // 图标 sprite 必须先注入，<use href="#id"> 才有东西可引
 injectSprite()
