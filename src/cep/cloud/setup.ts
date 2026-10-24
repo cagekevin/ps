@@ -91,13 +91,31 @@ function retryPolicy(errorCode?: string): Pick<SyncOutcome, 'retry' | 'retryAfte
 }
 
 /**
+ * 闸门挡下时的痕迹（TD-11-7）。
+ *
+ * **离线不算失败**（ADR-21：闸门返回 skip，不消耗退避），但它必须可观测：
+ * 否则"离线期间本地改了没上去"与"全部已同步"在界面与日志里逐字相同。
+ * 只给离线留 pending：其它四个理由（未配置 / 自动同步关 / 无台账 / 坏台账）
+ * 用户能在设置页直接看到状态，写 5 条"待同步"只会让痕迹变得没用。
+ *
+ * sweep（没有具体 unit）不记：那时确实没有"哪一项被卡住"可指，日志里那一句就够。
+ */
+function markSkipped(outcome: SyncOutcome, units: string[]): void {
+  if (outcome.errorCode !== 'CLOUD_OFFLINE' || units.length === 0) return
+  recordPendingChanges(units, 'network', 'CLOUD_OFFLINE')
+}
+
+/**
  * 后台同步的唯一队列（ADR-21）：触发点只 `markDirty`，请求只从这里发。
  * 手动整包（upload/download）走 `cloudSyncQueue.runSerial`，与自动推送共用一条串行链。
  */
 export const cloudSyncQueue = createSyncQueue({
   async sync(units) {
     const blocked = await gate()
-    if (blocked) return blocked
+    if (blocked) {
+      markSkipped(blocked, units)
+      return blocked
+    }
     const result = await engine.pushUnits(units.length > 0 ? units : allSyncUnitIds())
     return { ...result, ...retryPolicy(result.errorCode) }
   },

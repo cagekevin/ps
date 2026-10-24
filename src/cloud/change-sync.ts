@@ -170,7 +170,9 @@ export function createSyncQueue(deps: SyncQueueDeps): SyncQueue {
         // 没脏但还在退避（sweep 失败）：到期重试，否则启动补偿失败一次就再也不试了。
         // 被闸门挡下则按最大等待做一次慢轮询——用户把自动同步打开后就自己恢复，不用等下一次改动。
         const delay = skipped ? maxWaitMs : Math.max(nextDelay(), retryAt - Date.now())
-        if (!parked && (dirty.size > 0 || retryAt > Date.now())) schedule(delay)
+        // `skipped` 必须进条件：启动/变可见的 sweep 脏集为空、又不进退避，
+        // 旧写法这一轮跳过之后就再也不排了——离线一小时等于彻底静默（TD-11-7）
+        if (!parked && (dirty.size > 0 || retryAt > Date.now() || skipped)) schedule(delay)
       }
       skipped = false
     }
