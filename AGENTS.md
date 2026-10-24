@@ -188,7 +188,7 @@ grep -rn "export .*<概念词>" src  # 有哪些导出叫这个名字
 | `src/cloud/` | <!-- stats:begin layers.cloud -->4 文件 / 1089 行<!-- stats:end layers.cloud --> | 同步引擎与台账 |
 | `src/selection/` | <!-- stats:begin layers.selection -->2 文件 / 426 行<!-- stats:end layers.selection --> | 选区 / 当前文字快照 |
 
-**测试**：<!-- stats:begin tests -->**177 个文件、1443 处用例**（静态计数 `it()`/`test()`；非通过数）<!-- stats:end tests -->（`tests/{cep,cloud,commands,components,composables,data,domain,pages,selection,stores,utils}`）。
+**测试**：<!-- stats:begin tests -->**178 个文件、1448 处用例**（静态计数 `it()`/`test()`；非通过数）<!-- stats:end tests -->（`tests/{cep,cloud,commands,components,composables,data,domain,pages,selection,stores,utils}`）。
 
 ### 3. 一手证据已入库，别再问"路径在不在"
 
@@ -221,7 +221,7 @@ grep -rn "export .*<概念词>" src  # 有哪些导出叫这个名字
 | `npm run check` | **12 步**：style-guard → template-guard → assert-guard → dispatch:check → boundary:pages → **layer:boundary** → spec:check → ledger → stats:check → lint → format:check | ✅ **不含测试、不含类型检查、不含 `scripts/`** |
 | `npm run check:tools` | **2 步**（**工具层**）：`lint:tools`（eslint scripts）→ `format:check:tools`（prettier scripts/**） | ✅ **不进 `deploy`** —— 工具脚本的风格问题不许卡产品交付（2026-10-24 裁定） |
 | `npm run layer:boundary` | 层间方向守卫：store 只读 / 命令不自取选区 / 适配层不引文案层 / domain 不反向依赖 `@/cep` | ✅ 已进 `check`；判据见 `docs/架构/目标架构.md` §4.7 |
-| `npm test` | vitest run（`<!-- stats:begin tests -->**177 个文件、1443 处用例**（静态计数 `it()`/`test()`；非通过数）<!-- stats:end tests -->`） | ✅ 单独一条，`check` 不调它 |
+| `npm test` | vitest run（`<!-- stats:begin tests -->**178 个文件、1448 处用例**（静态计数 `it()`/`test()`；非通过数）<!-- stats:end tests -->`） | ✅ 单独一条，`check` 不调它 |
 | `npm run deploy` | check → typecheck → build → verify:dist | ✅ 跑全的入口；**不含测试**，测试是流程不是脚本 |
 | `npm run build` | `vite build`，**只此一步** | ✅ 不带任何检查；检查归 `check` / `typecheck` / `verify:dist` |
 | `npm run typecheck` | `vue-tsc --noEmit`（`src/**`）+ `vue-tsc --noEmit -p tsconfig.tests.json`（`tests/**`） | ✅ 独立一条，`check` 不调它，`deploy` 会调 |
