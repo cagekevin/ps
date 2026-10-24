@@ -7,12 +7,14 @@
 import { getFontList } from '@/cep/ps'
 import {
   dayKey,
+  fontExtraDefaults,
   fontHistoryRepo,
   hierarchyRepo,
   normalizeCounter,
   quickFontRepo,
   translateCounterRepo,
 } from '@/cep/data/font-extra'
+import { readOr } from '@/cep/data/read-or'
 import type { QuickFont } from '@/cep/data/font-extra'
 import { patchFontSetSettings, readFontSetSettings } from '@/cep/data/legacy-settings'
 import { jsonp } from '@/cep/http'
@@ -136,10 +138,10 @@ export const fontSetCommands: Command<unknown>[] = [
       if (!text) throw new CepError('PARSE', '不能输入空字符')
 
       const settingsRead = await readFontSetSettings()
-      // 坏设置文件 → `mergeFontSetSettings` 会补默认值：照常跑等于拿默认 `ztDistributionFilter`
+      // 坏设置文件 → 数据层不再给 fallback：照常跑等于拿默认 `ztDistributionFilter`
       // 去动用户的文档，用户以为用的是自己的设置（T-101-1）
-      if (settingsRead.degraded) {
-        throw new CepError('IO', `字体设置文件损坏（${settingsRead.degraded}），按间距分布已中止`)
+      if (!settingsRead.ok) {
+        throw new CepError('IO', `字体设置文件损坏（${settingsRead.reason}），按间距分布已中止`)
       }
       assertJsxOk(
         await ctx.jsx.font.distributeByPitch(axis, text, settingsRead.value.ztDistributionFilter),
@@ -236,8 +238,11 @@ export const fontSetCommands: Command<unknown>[] = [
     requires: 'layer',
     kind: 'long',
     async run(ctx, payload) {
-      const { value } = await translateCounterRepo.read()
-      const counter = normalizeCounter(value, dayKey())
+      // 计数器坏了等价于"今天还没翻译过"（清单 §二）：按 0 次继续，坏因由 `readOr` 落日志
+      const counter = normalizeCounter(
+        readOr(await translateCounterRepo.read(), fontExtraDefaults.counter(), 'fontSet.translate'),
+        dayKey(),
+      )
       if (counter.num >= counter.max) {
         throw new CepError('PARSE', `每天最多使用${counter.max}次翻译功能`)
       }

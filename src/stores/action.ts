@@ -4,6 +4,7 @@ import {
   actionIndexRepo,
   actionLibraryRepo,
   currentWarehouseFile,
+  defaultActionIndex,
   selectActionFile,
 } from '@/cep/data/actions'
 import { getRawActionList } from '@/cep/ps'
@@ -29,22 +30,23 @@ export const useActionStore = defineStore('action', () => {
 
   async function load() {
     const index = await actionIndexRepo.read()
-    warehouses.value = index.value.list
-    activeIndex.value = index.value.index
+    // 坏索引没有 value（判别联合）：显式回退到生产者自己的默认索引，并把"当前显示的是默认仓库"
+    // 同时写进提示与日志——不许静默拿默认值冒充用户的仓库（T-101-1 / T-101-2）
+    const indexValue = index.ok ? index.value : defaultActionIndex()
+    warehouses.value = indexValue.list
+    activeIndex.value = indexValue.index
 
     const reasons: string[] = []
-    // 坏索引的 `value` 是 fallback `DEFAULT_INDEX`，下面 `selectActionFile` 会把当前仓库切成
-    // `sj_dz_default.json`。只说"索引坏了"不够——用户会把默认仓库当成自己的仓库（T-101-1）
-    const indexFile = currentWarehouseFile(index.value)
-    if (index.degraded) {
-      reasons.push(`动作库索引文件损坏（${index.degraded}），当前显示的是默认仓库 ${indexFile}`)
-      log.error('action', `索引损坏，已回退默认仓库 ${indexFile}`, index.degraded)
+    const indexFile = currentWarehouseFile(indexValue)
+    if (!index.ok) {
+      reasons.push(`动作库索引文件损坏（${index.reason}），当前显示的是默认仓库 ${indexFile}`)
+      log.error('action', `索引损坏，已回退默认仓库 ${indexFile}`, index.reason)
     }
     selectActionFile(indexFile)
 
     const library = await actionLibraryRepo.read()
-    groups.value = library.value
-    if (library.degraded) reasons.push(`动作库文件损坏（${library.degraded}）`)
+    groups.value = library.ok ? library.value : []
+    if (!library.ok) reasons.push(`动作库文件损坏（${library.reason}）`)
     degraded.value = reasons.join('；')
   }
 

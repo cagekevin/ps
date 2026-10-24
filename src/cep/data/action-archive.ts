@@ -10,6 +10,7 @@ import type { ActionWarehouseIndex } from '@/domain/action'
 import { decodeDzx, encodeDzx, remapDzxFileNames, type DzxFile } from '@/domain/action-dzx'
 import { CepError } from '@/utils/errors'
 import { actionIndexRepo, currentWarehouseFile, selectActionFile } from './actions'
+import type { RepoRead } from './types'
 
 /**
  * 动作仓库 .dzx 导入导出。
@@ -82,13 +83,13 @@ function removeAll(fileNames: string[]): void {
  * 文案要求：让人看出"是文件坏了"，不是"你没有仓库"——后者会让人以为数据被清了。
  */
 function requireIndex(
-  read: { value: ActionWarehouseIndex; degraded?: string },
+  read: RepoRead<ActionWarehouseIndex>,
   action: '导入' | '导出',
 ): ActionWarehouseIndex {
-  if (read.degraded) {
+  if (!read.ok) {
     throw new CepError(
       'IO',
-      `动作库索引文件损坏（${read.degraded}），${action}已中止：磁盘上的仓库文件没动`,
+      `动作库索引文件损坏（${read.reason}），${action}已中止：磁盘上的仓库文件没动`,
     )
   }
   return read.value

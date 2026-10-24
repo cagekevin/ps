@@ -10,7 +10,7 @@ export const fontStarsEntry: SyncUnitAdapter = {
 
   async read() {
     const read = await starsRepo.read()
-    if (read.degraded) throw new Error(read.degraded)
+    if (!read.ok) throw new Error(read.reason)
     return unitPayload([inlineFile(PATH, JSON.stringify(read.value))])
   },
 

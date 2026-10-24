@@ -58,10 +58,18 @@ const SEED: ActionLibrary = [
   },
 ]
 
+/**
+ * 生产者自己的默认索引：坏读时消费方（store）用它，不许自己写一份（ADR-24）。
+ * `actionIndexRepo` 的 fallback 也取这里，两条路径同源。
+ */
+export function defaultActionIndex(): ActionWarehouseIndex {
+  return clone(DEFAULT_INDEX)
+}
+
 export const actionIndexRepo: Repo<ActionWarehouseIndex> = pick(
   () => `${userDir()}/${DATA_FILES.actionLibrary}`,
-  () => clone(DEFAULT_INDEX),
-  () => clone(DEFAULT_INDEX),
+  defaultActionIndex,
+  defaultActionIndex,
 )
 
 export const actionLibraryRepo: Repo<ActionLibrary> = pick(
@@ -103,10 +111,10 @@ export async function renameWarehouse(index: number, name: string): Promise<void
 /** 删除仓库：删文件 → 改索引；删当前项时 index=0（原版 wh.delete 6580-6596） */
 export async function deleteWarehouse(index: number): Promise<void> {
   const read = await actionIndexRepo.read()
-  // 坏索引的 `value` 是 fallback `DEFAULT_INDEX`（1 条「默认仓库」）：不先判这一行，下面两句
-  // 会分别说成「至少保留一个仓库」和「仓库不存在」——把"文件坏了"说成"你没有仓库"（T-101-1）
-  if (read.degraded) {
-    throw new CepError('IO', `动作库索引文件损坏（${read.degraded}），删除已中止`)
+  // 坏索引没有 value（判别联合）：不先判这一行，下面两句会分别说成「至少保留一个仓库」
+  // 和「仓库不存在」——把"文件坏了"说成"你没有仓库"（T-101-1 / T-101-2）
+  if (!read.ok) {
+    throw new CepError('IO', `动作库索引文件损坏（${read.reason}），删除已中止`)
   }
   if (read.value.list.length <= 1) throw new Error('至少保留一个仓库')
   const target = read.value.list[index]

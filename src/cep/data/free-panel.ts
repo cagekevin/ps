@@ -114,6 +114,8 @@ function emit(value: FreePanelFile): void {
 export const freePanelRepo: Repo<FreePanelFile> = {
   async read(): Promise<RepoRead<FreePanelFile>> {
     const result = await base.read()
+    // 坏文件不给 fallback（判别联合里取不到 value）：没有块可挂会话态，原样返回，坏因在 reason 里
+    if (!result.ok) return result
     const blocks = result.value.obj.list
     seedShowText(blocks)
     stripShowText(blocks)

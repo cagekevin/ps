@@ -83,7 +83,7 @@ export function emptyClassification(): Classification {
 
 export async function getClassification(): Promise<RepoRead<Classification>> {
   // dev：浏览器里没有真实文件，用 MOCK 才能开发 UI
-  if (!hasCep()) return { value: MOCK }
+  if (!hasCep()) return { ok: true, value: MOCK }
 
   const abs = `${userDir()}/${FILE}`
   let text: string | null
@@ -91,10 +91,10 @@ export async function getClassification(): Promise<RepoRead<Classification>> {
     text = await readTextSmart(abs)
   } catch (e) {
     log.warn('classification', `${abs} 读取失败`, e)
-    return { value: emptyClassification(), degraded: '分类数据读取失败' }
+    return { ok: false, reason: '分类数据读取失败' }
   }
 
-  if (!text) return { value: emptyClassification(), degraded: '分类数据文件不存在' }
+  if (!text) return { ok: false, reason: '分类数据文件不存在' }
 
   try {
     const raw = JSON.parse(text) as {
@@ -110,16 +110,19 @@ export async function getClassification(): Promise<RepoRead<Classification>> {
       categories.push({ key, name: item.name ?? key, extraTag: item.extraTag, tags: item.tags })
     }
 
+    // 文件是合法 JSON，只是分组为空：`presets` / `commercials` 仍然可用，所以是 `ok: true` + reason，
+    // 不是 `ok: false`（丢掉 value 会让"免费商用"筛选一起空）
     return {
+      ok: true,
       value: {
         categories,
         presets: raw.presets ?? {},
         commercials: Array.isArray(raw.commercials) ? raw.commercials : [],
       },
-      degraded: categories.length ? undefined : '分类数据里没有可用分组',
+      reason: categories.length ? undefined : '分类数据里没有可用分组',
     }
   } catch (e) {
     log.warn('classification', `${abs} 不是合法 JSON`, e)
-    return { value: emptyClassification(), degraded: '分类数据格式不正确' }
+    return { ok: false, reason: '分类数据格式不正确' }
   }
 }

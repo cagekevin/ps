@@ -7,6 +7,7 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import {
+  fontExtraDefaults,
   fontHistoryRepo,
   hierarchyRepo,
   quickFontRepo,
@@ -15,8 +16,10 @@ import {
   type QuickFontFile,
   type TranslateCounter,
 } from '@/cep/data/font-extra'
+import { readOr } from '@/cep/data/read-or'
 import {
   FONT_SET_DEFAULTS,
+  mergeFontSetSettings,
   readFontSetSettings,
   type FontSetSettings,
 } from '@/cep/data/legacy-settings'
@@ -53,12 +56,15 @@ export const useFontSetStore = defineStore('fontSet', () => {
       fontHistoryRepo.read(),
     ])
 
-    settings.value = settingsRead.value
-    settingsDegraded.value = settingsRead.degraded ?? ''
-    quickFonts.value = quickRead.value
-    hierarchy.value = hierarchyRead.value
-    counter.value = counterRead.value
-    recentFonts.value = historyRead.value
+    // 坏设置文件：数据层不再给 fallback（判别联合里取不到 value），默认值取生产者的归一出
+    // `mergeFontSetSettings({})`——与 `legacySettingsRepo` 的 fallback `{}` 同一条路径（ADR-24）
+    settings.value = settingsRead.ok ? settingsRead.value : mergeFontSetSettings({})
+    settingsDegraded.value = settingsRead.reason ?? ''
+    // 以下四份是纯展示数据（清单 §二）：坏了按空/默认展示，坏因由 `readOr` 落日志
+    quickFonts.value = readOr(quickRead, fontExtraDefaults.quickFont(), 'fontSet.quickFont')
+    hierarchy.value = readOr(hierarchyRead, fontExtraDefaults.hierarchy(), 'fontSet.hierarchy')
+    counter.value = readOr(counterRead, fontExtraDefaults.counter(), 'fontSet.counter')
+    recentFonts.value = readOr(historyRead, fontExtraDefaults.history(), 'fontSet.history')
   }
 
   return {

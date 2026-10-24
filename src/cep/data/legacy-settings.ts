@@ -97,8 +97,11 @@ export function mergeFontSetSettings(
 }
 
 export async function readFontSetSettings(): Promise<RepoRead<FontSetSettings>> {
-  const { value, degraded } = await legacySettingsRepo.read()
-  return { value: mergeFontSetSettings(value), degraded }
+  const read = await legacySettingsRepo.read()
+  // 坏文件不给 fallback（判别联合里取不到 value）：消费方要用默认值时调 `mergeFontSetSettings({})`，
+  // 与 `legacySettingsRepo` 的 fallback `{}` 走同一条归一，不另写一份默认值（ADR-24）
+  if (!read.ok) return { ok: false, reason: read.reason }
+  return { ok: true, value: mergeFontSetSettings(read.value) }
 }
 
 /**
@@ -183,17 +186,14 @@ function assignDeep(target: Record<string, unknown>, patch: Record<string, unkno
 }
 
 /** 读常用页那 8 个键；文件里没有的键**不补默认值**（缺 = 官方默认，由面板决定） */
-export async function readCommonUseOptions(): Promise<{
-  value: Partial<CommonUseOptions>
-  /** 非空表示读到的是坏文件（UI 要提示），与 RepoRead 同义 */
-  degraded?: string
-}> {
-  const { value, degraded } = await legacySettingsRepo.read()
+export async function readCommonUseOptions(): Promise<RepoRead<Partial<CommonUseOptions>>> {
+  const read = await legacySettingsRepo.read()
+  if (!read.ok) return { ok: false, reason: read.reason }
   const picked: Partial<CommonUseOptions> = {}
   for (const key of COMMON_USE_SETTING_KEYS) {
-    if (value && key in value) picked[key] = value[key]
+    if (key in read.value) picked[key] = read.value[key]
   }
-  return { value: picked, degraded }
+  return { ok: true, value: picked }
 }
 
 /**

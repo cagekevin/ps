@@ -297,8 +297,8 @@ export const freePanelCommands: Command<unknown>[] = [
       const read = await ctx.data.freePanel.read()
       // 读边界（`data/free-panel.ts` 的 normalize）已经归一过，这里不再归一第二次。
       // 坏文件必须说"文件坏了"：以前拿 fallback 空面板继续找，报的是"自由面板项不存在"（T-101-1）
-      if (read.degraded) {
-        throw new CepError('IO', `自由面板文件损坏（${read.degraded}），执行已中止`)
+      if (!read.ok) {
+        throw new CepError('IO', `自由面板文件损坏（${read.reason}），执行已中止`)
       }
       const block = findBlock(read.value.obj.list, blockId)
       const item = block?.data.find((entry) => entry.btnId === btnId)

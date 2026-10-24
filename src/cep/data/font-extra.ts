@@ -147,25 +147,36 @@ const COUNTER_DEFAULTS: TranslateCounter = { num: 0, max: TRANSLATE_DAILY_LIMIT,
 
 const clone = deepClone
 
+/**
+ * 生产者自己的默认值。消费方（store）读到坏文件时必须用这里的，不许再写一份
+ * （ADR-24：缺默认值补生产者）。`pick` 的 fallback 也取这里，两条路径同源。
+ */
+export const fontExtraDefaults = {
+  quickFont: (): QuickFontFile => clone(QUICK_FONT_DEFAULTS),
+  hierarchy: (): HierarchyFile => clone(HIERARCHY_DEFAULTS),
+  counter: (): TranslateCounter => ({ ...COUNTER_DEFAULTS }),
+  history: (): string[] => [],
+}
+
 export const quickFontRepo: Repo<QuickFontFile> = pick(
   () => `${userDir()}/${DATA_FILES.ztQuickFont}`,
-  () => clone(QUICK_FONT_DEFAULTS),
+  fontExtraDefaults.quickFont,
 )
 
 export const hierarchyRepo: Repo<HierarchyFile> = pick(
   () => `${userDir()}/${DATA_FILES.ztHierarych}`,
-  () => clone(HIERARCHY_DEFAULTS),
+  fontExtraDefaults.hierarchy,
 )
 
 export const translateCounterRepo: Repo<TranslateCounter> = pick(
   () => `${userDir()}/${DATA_FILES.ztTranslate}`,
-  () => ({ ...COUNTER_DEFAULTS }),
+  fontExtraDefaults.counter,
 )
 
 /** 原版 `sj_ztglHistory.json`：最近使用的字体家族，最多 10 个 */
 export const fontHistoryRepo: Repo<string[]> = pick(
   () => `${userDir()}/${DATA_FILES.ztglHistory}`,
-  () => [],
+  fontExtraDefaults.history,
 )
 
 /** 原版 `Jv.getTime()`：日 + 年 + 月，不补零 */

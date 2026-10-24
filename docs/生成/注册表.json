@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-10-23",
+  "updated": "2026-10-24",
   "note": "横切能力注册表。新增 src/{cep,composables,stores,utils,styles} 下的文件必须在这里登记，否则 npm run build 会失败。",
   "items": [
     {
@@ -911,6 +911,15 @@
       "when": "（待补：什么时候用）",
       "status": "todo",
       "since": "2026-10-23"
+    },
+    {
+      "id": "cep-data-read-or-ts",
+      "name": "（待补：中文名）",
+      "entry": "src/cep/data/read-or.ts",
+      "api": "（待补：怎么调）",
+      "when": "（待补：什么时候用）",
+      "status": "todo",
+      "since": "2026-10-24"
     }
   ]
 }

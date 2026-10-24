@@ -420,6 +420,23 @@ git revert --abort 2>/dev/null; git checkout -- .
 | ② B≈11 / A≈59 | **驳回（口径错）** | 11 是**全文** B 总数（§2.1 生产 9 + §2.2 tests 2），不是 70 里的。70 = A 57 + P 13 + B 0。59 这个数对不上：差的不是 B，是 P（13 处生产/装配点） |
 | ③ 静默用坏数据 2–3 处 | **驳回（数量少算）** | 清单内 2 处（`commands/fontSet.ts:138`、`stores/action.ts:36`），清单外另 2 处（`stores/common-use.ts:58`、`commands/commonUse.ts:619`）。`action-archive` 已修，确实不再是其中之一 |
 
+## 6.6 落地形状（T-101-2 已实现，待用户复核）
+
+`RepoRead<T>` = `{ ok: true; value: T; reason?: string } | { ok: false; reason: string }`。
+取 `.value` 前必须判 `ok`；`reason` 两支都有，所以"提示语"不用判 `ok` 就能取。
+
+- **为什么不是纯两支**：`classification-repo.ts:119`（合法 JSON、分组为空）必须同时交出
+  `value`（`presets` / `commercials` 还有用）和原因。砍成 `ok: false` 会让字体管理页的
+  "免费商用"筛选跟着空——那是功能变化，不是信号变化。
+- **B 类（§二 那 9 处）走 `src/cep/data/read-or.ts` 的 `readOr`**，不是 9 个 `if (!ok) return []`：
+  一个函数折叠，坏因统一 `log.warn`（`打开日志` 可查）。所以本刀**新增静默点为 0**。
+  调用点全表：`git grep -n "readOr(" -- src`（7 处调用，覆盖 9 个清单条目）。
+- **P 类 13 处**只改构造，不写 `if`。**C 类仍是 0**。
+- 需要"坏读时仍要显示默认值"的 4 处（`stores/action.ts`、`stores/rename.ts`、`stores/font-set.ts:61`、
+  `commands/fontSet.ts` 计数），默认值一律取自**生产者导出的默认**（`defaultActionIndex()`、
+  `seedPreset`、`mergeFontSetSettings({})`、`fontExtraDefaults.*`），没有在消费侧另写一份（ADR-24）。
+
+
 ---
 
 # 七、T-101-1：8 处补可见信号（已修，不动 `RepoRead` 形状）

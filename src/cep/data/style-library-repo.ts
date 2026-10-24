@@ -85,7 +85,8 @@ function fileNameOf(warehouse: StyleWarehouse | undefined, kind: KuKind): string
  */
 export async function readStyleLibrary(): Promise<StyleLibrarySnapshot> {
   const stored = await styleIndexRepo.read()
-  const parsed = readStyleWarehouseIndex(stored.value)
+  // 坏索引没有 value：用仓库自己的 fallback 继续归一，坏因在下面拼进 degraded 交给页面
+  const parsed = readStyleWarehouseIndex(stored.ok ? stored.value : defaultStyleIndex())
   const current = parsed.value.list[parsed.value.index]
 
   const libraries = {} as Record<KuKind, KuGroup[]>
@@ -100,7 +101,9 @@ export async function readStyleLibrary(): Promise<StyleLibrarySnapshot> {
   return {
     index: parsed.value,
     libraries,
-    degraded: [stored.degraded ?? '', parsed.degraded, ...notes].filter(Boolean).join('；'),
+    degraded: [stored.ok ? '' : stored.reason, parsed.degraded, ...notes]
+      .filter(Boolean)
+      .join('；'),
   }
 }
 
@@ -108,8 +111,8 @@ export async function readStyleLibrary(): Promise<StyleLibrarySnapshot> {
 async function currentLibPath(kind: KuKind): Promise<string> {
   const stored = await styleIndexRepo.read()
   // 「索引文件坏了」≠「这个仓库没登记库文件名」：不分开说，用户会以为是自己没建过库（T-101-1）
-  if (stored.degraded) {
-    throw new CepError('IO', `仓库索引文件损坏（${stored.degraded}），已中止：不猜库文件路径`)
+  if (!stored.ok) {
+    throw new CepError('IO', `仓库索引文件损坏（${stored.reason}），已中止：不猜库文件路径`)
   }
   const parsed = readStyleWarehouseIndex(stored.value)
   if (parsed.degraded) {
@@ -273,8 +276,8 @@ function itemAt(groups: KuRawGroup[], groupIndex: number, itemIndex: number): Ku
  */
 async function usableIndex(): Promise<StyleWarehouseIndex> {
   const stored = await styleIndexRepo.read()
-  const parsed = readStyleWarehouseIndex(stored.value)
-  const broken = [stored.degraded ?? '', parsed.degraded].filter(Boolean).join('；')
+  const parsed = readStyleWarehouseIndex(stored.ok ? stored.value : defaultStyleIndex())
+  const broken = [stored.ok ? '' : stored.reason, parsed.degraded].filter(Boolean).join('；')
   if (broken) throw new CepError('PARSE', `仓库索引不可用，已中止写入：${broken}`)
   return parsed.value
 }

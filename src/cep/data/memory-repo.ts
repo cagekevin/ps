@@ -23,7 +23,8 @@ export function memoryRepo<T>(initial: () => T): Repo<T> {
   }
 
   return {
-    read: () => Promise.resolve({ value }),
+    // 内存态没有"从磁盘读到坏内容"这一步，所以永远是成功读（`ok: true`）
+    read: async () => ({ ok: true as const, value }),
 
     write: (next) =>
       enqueue(() => {

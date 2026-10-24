@@ -307,9 +307,9 @@ export const fontCommands: Command<unknown>[] = [
       if (!path) throw new CepError('PARSE', '取消操作')
 
       const tagRead = await ctx.data.tags.read()
-      if (tagRead.degraded) throw new CepError('IO', `标签读取失败：${tagRead.degraded}`)
+      if (!tagRead.ok) throw new CepError('IO', `标签读取失败：${tagRead.reason}`)
       const starRead = await ctx.data.stars.read()
-      if (starRead.degraded) throw new CepError('IO', `评分读取失败：${starRead.degraded}`)
+      if (!starRead.ok) throw new CepError('IO', `评分读取失败：${starRead.reason}`)
 
       const payload: TagImportFile = { tags: tagRead.value, stars: starRead.value }
       saveExportedText(path, JSON.stringify(payload))

@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { renameRepo } from '@/cep/data/rename'
-import type { RenamePreset } from '@/domain/rename'
+import { seedPreset, type RenamePreset } from '@/domain/rename'
 import { describeCepError } from '@/utils/error-text'
 
 /**
@@ -23,8 +23,10 @@ export const useRenameStore = defineStore('rename', () => {
     error.value = ''
     try {
       const read = await renameRepo.read()
-      preset.value = read.value
-      degraded.value = read.degraded ?? ''
+      // 坏文件没有 value：回退到生产者自己的默认预设（`renameRepo` 的 fallback 就是它），
+      // 与改前"坏文件 → fallback 种子"逐字一致；坏因进 `degraded` 让页面提示
+      preset.value = read.ok ? read.value : seedPreset()
+      degraded.value = read.reason ?? ''
     } catch (e) {
       error.value = describeCepError(e)
       preset.value = []

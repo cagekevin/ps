@@ -5,6 +5,7 @@ import { describeCepError } from '@/utils/error-text'
 import { log } from '@/utils/logger'
 import { commonUseRepo } from '@/cep/data/common-use'
 import { readCommonUseOptions } from '@/cep/data/legacy-settings'
+import type { RepoRead } from '@/cep/data/types'
 import { subscribeHostEvent, type HostEventName } from '@/cep/events'
 import {
   COMMON_USE_SETTING_KEYS,
@@ -549,10 +550,10 @@ export interface PlaceImageDeps {
    * 这里写同步签名会让实现方被迫 `as unknown as` 把 Promise 当对象用（T-97-8 真机 bug 就是这么来的），
    * 而 `as` 能过编译、过测试、运行时静默返回 `'none'`。
    *
-   * 返回值必须**连 `degraded` 一起交出来**：设置文件坏了时 17 个开关全缺，只拿 `.value`
-   * 就等于消费侧替生产者捏造"一切正常"（T-101-1）。
+   * 返回值必须是 `RepoRead`：设置文件坏了时 17 个开关全缺，`ok: false` 且取不到 `.value`，
+   * 消费侧就不可能替生产者捏造"一切正常"（T-101-1 / T-101-2）。
    */
-  readOptions: () => Promise<{ value: Record<string, unknown>; degraded?: string }>
+  readOptions: () => Promise<RepoRead<Record<string, unknown>>>
   embedImage: (options: { path: string; bLink2: unknown; bDelete: unknown }) => Promise<unknown>
   relinkToFile: (path: string) => Promise<unknown>
 }
@@ -594,10 +595,10 @@ export async function dispatchPlaceImage(
   // 设置文件坏了 → 开关全缺，`placeImageAction` 会一路静默走 'none'（与 T-97-8 同一个症状）。
   // 事件回调没有 `useCommand` 接住，弹不了 toast（命令层不许 import 视图层，ADR-16），
   // 所以按本文件既有口径落 error 日志（`设置页 → 打开日志` 能看到），并且**不按默认值猜**。
-  if (read.degraded) {
+  if (!read.ok) {
     log.error(
       'commonUse.placeImage',
-      `常用页设置文件损坏（${read.degraded}），${name} 未处理：请到设置页修复 sj_set.json 后重试`,
+      `常用页设置文件损坏（${read.reason}），${name} 未处理：请到设置页修复 sj_set.json 后重试`,
     )
     return 'none'
   }

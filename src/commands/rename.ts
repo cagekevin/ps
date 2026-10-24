@@ -190,7 +190,7 @@ export const renameCommands: Command<unknown>[] = [
     kind: 'instant',
     async run() {
       const read = await renameRepo.read()
-      if (read.degraded) throw new CepError('IO', read.degraded)
+      if (!read.ok) throw new CepError('IO', read.reason)
 
       // 原版 saveFile("导出", ["cmm"], "重命名.cmm", "设计助理导出文件")（:57020）
       const path = saveFile('导出', ['cmm'], '重命名.cmm')

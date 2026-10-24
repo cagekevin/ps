@@ -20,10 +20,10 @@ export const useFreePanelStore = defineStore('freePanel', () => {
 
   async function load() {
     const read = await freePanelRepo.read()
-    degraded.value = read.degraded ?? ''
+    degraded.value = read.reason ?? ''
     // 读坏时不投影 fallback 的空区域：那会显示成"工作区还在，只是空了"，
-    // 用户点新增又会被 `file-repo.update` 以 degraded 拒绝（D-42），白点一次
-    blocks.value = read.degraded ? [] : read.value.obj.list
+    // 用户点新增又会被 `file-repo.update` 以坏因拒绝（D-42），白点一次
+    blocks.value = read.ok ? read.value.obj.list : []
   }
 
   return { blocks, degraded, load }

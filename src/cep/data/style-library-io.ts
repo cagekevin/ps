@@ -28,6 +28,7 @@ import {
   type KuRawGroup,
 } from '@/domain/ku-io'
 import {
+  defaultStyleIndex,
   readStyleWarehouseIndex,
   type KuKind,
   type StyleWarehouse,
@@ -170,10 +171,12 @@ function validateContainer(file: KuContainerFile): void {
 /** 当前索引 + 归一化（越界 `index` 夹回合法范围），读坏了也返回，调用方决定是否中止 */
 async function indexState(): Promise<{ value: StyleWarehouseIndex; degraded: string }> {
   const stored = await styleIndexRepo.read()
-  const parsed = readStyleWarehouseIndex(stored.value)
+  // 坏索引没有 value：用仓库自己的 fallback 继续归一，坏因照旧拼进 degraded——
+  // 本函数的契约就是"读坏了也返回，调用方决定是否中止"
+  const parsed = readStyleWarehouseIndex(stored.ok ? stored.value : defaultStyleIndex())
   return {
     value: parsed.value,
-    degraded: [stored.degraded ?? '', parsed.degraded].filter(Boolean).join('；'),
+    degraded: [stored.ok ? '' : stored.reason, parsed.degraded].filter(Boolean).join('；'),
   }
 }
 

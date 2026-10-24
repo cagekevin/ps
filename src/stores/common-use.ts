@@ -1,6 +1,7 @@
 import { defineStore } from 'pinia'
 import { computed, ref } from 'vue'
 import { readCommonUseOptions } from '@/cep/data/legacy-settings'
+import type { RepoRead } from '@/cep/data/types'
 import { getCommonUseCollapsed } from '@/cep/data/settings'
 import { toTiles, type CommonUseFile, type CommonUseTile } from '@/domain/common-use'
 import { describeCepError } from '@/utils/error-text'
@@ -14,7 +15,8 @@ import { log } from '@/utils/logger'
  * `read` / `onChange` 两个方法——**拿不到写入口，就不可能顺手改数据**（装配在 `main.ts`）。
  */
 export interface CommonUseSource {
-  read(): Promise<{ value: CommonUseFile | null; degraded?: string }>
+  /** 用 `RepoRead`：以前这里自声明了一份 `{ value, degraded }` 的第三份同义形状（T-101-0 P 类） */
+  read(): Promise<RepoRead<CommonUseFile | null>>
   onChange(listener: (value: CommonUseFile) => void): () => void
 }
 
@@ -65,12 +67,12 @@ export const useCommonUseStore = defineStore('common-use', () => {
   /** 读子面板参数（`sj_set.json` 的 17 个 cy* 键）；命令写成功后由页面重读一次 */
   async function loadOptions() {
     const read = await readCommonUseOptions()
-    options.value = read.value
-    // 坏 sj_set.json → 17 个键全缺、控件全按缺省显示：必须进 `degraded` 让页面提示，
+    // 坏 sj_set.json → 17 个键全缺（`read.value` 取不到，按空对象）：必须进 `degraded` 让页面提示，
     // 否则用户以为设置被清了（T-101-1）
-    reasons.value.options = read.degraded ?? ''
-    if (read.degraded) {
-      log.error('common-use', `常用页设置读取失败，子面板参数按缺省显示：${read.degraded}`)
+    options.value = read.ok ? read.value : {}
+    reasons.value.options = read.reason ?? ''
+    if (!read.ok) {
+      log.error('common-use', `常用页设置读取失败，子面板参数按缺省显示：${read.reason}`)
     }
   }
 
@@ -84,8 +86,8 @@ export const useCommonUseStore = defineStore('common-use', () => {
     error.value = ''
     try {
       const read = await requireSource().read()
-      applyFile(read.value)
-      reasons.value.tiles = read.degraded ?? ''
+      applyFile(read.ok ? read.value : null)
+      reasons.value.tiles = read.reason ?? ''
     } catch (e) {
       error.value = describeCepError(e)
       applyFile(null)
