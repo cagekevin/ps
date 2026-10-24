@@ -66,6 +66,7 @@ vi.mock('@/cep/fs', () => ({
 
 const {
   styleIndexRepo,
+  readKuLibrary,
   addKuGroup,
   addKuItem,
   deleteKuItem,
@@ -597,5 +598,30 @@ describe('拖拽落点（moveKuItemTo / moveKuGroupTo）', () => {
     ).rejects.toThrow('不存在')
 
     expect(fsMock.files.get(COLOR_LIB)).toBe(twoGroups)
+  })
+})
+
+/**
+ * T-116：`readKuLibrary` 的 `note` 必须分得开"空库"与"读不到"。
+ *
+ * `note` 经 `readKuLib` 汇进 `degraded`，由样式页渲染——所以这不是"日志多一行"，
+ * 是用户在页面上能不能看出"这个库读不到"。
+ */
+describe('读库文件：读不到 ≠ 没有组（T-116）', () => {
+  it('文件不在（notSeen）→ 空库且 note 为空（首次使用，本来就是空的）', async () => {
+    const read = await readKuLibrary('color', 'sj_kuColA.ini')
+
+    expect(read.groups).toEqual([])
+    expect(read.note).toBe('')
+  })
+
+  it('文件在、读不到（EPERM）→ note 带上原因（页面据此显示 degraded）', async () => {
+    fsMock.readErrorPath = COLOR_LIB
+
+    const read = await readKuLibrary('color', 'sj_kuColA.ini')
+
+    expect(read.groups).toEqual([])
+    expect(read.note).toContain('读不到')
+    expect(read.note).toContain('EPERM')
   })
 })

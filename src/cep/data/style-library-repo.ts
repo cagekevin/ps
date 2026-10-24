@@ -59,11 +59,12 @@ export async function readKuLibrary(kind: KuKind, fileName: string): Promise<KuL
   if (!fileName) return { groups: [], note: '' }
 
   const read = await readTextOutcome(`${userDir()}/${fileName}`)
-  // T-107 **已知欠账**：`notSeen`（首次使用）与 `error`（读不到）这里仍同果——都返回空库。
-  // 分开写会把 `note` 变成"读不到"，页面文案随之变化，先按原行为报，另开条目
+  // T-116：`notSeen`（首次使用，本来就没有库文件）返回空库、`note` 留空；
+  // `error`（文件在、读不到）必须把原因放进 `note`——它经 `readKuLib` 汇进 `degraded`
+  // 由样式页渲染出来。否则用户看到的是"空库"，与"这个库本来就没有组"分不开
   if (read.status === 'error') {
-    log.error('style', `${kind} 库文件读不到，按空库展示：${read.reason}`)
-    return { groups: [], note: '' }
+    log.error('style', `${kind} 库文件读不到：${read.reason}`)
+    return { groups: [], note: `库文件读不到（${read.reason}）` }
   }
   if (read.status === 'notSeen' || read.text === '') return { groups: [], note: '' }
 

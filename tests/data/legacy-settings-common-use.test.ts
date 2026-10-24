@@ -10,7 +10,11 @@ import { readValue } from '../support/repo-read'
  * 3. 未知键拒写；文件里其它几十个键原样保留。
  */
 
-const state = vi.hoisted(() => ({ files: new Map<string, string>() }))
+const state = vi.hoisted(() => ({
+  files: new Map<string, string>(),
+  /** 非空 = 读返回 `error`（T-116：模拟"文件在、但读不到"） */
+  readError: '',
+}))
 
 vi.mock('@/cep/transport', () => ({ hasCep: () => true }))
 
@@ -18,8 +22,9 @@ vi.mock('@/cep/fs', () => ({
   hasNode: () => true,
   userDir: () => '/user',
   readTextSmart: async (path: string) => state.files.get(path) ?? null,
-  // T-105：写路径改用三态读；这个假 fs 没有"读不出"的场景，只会 ok / missing
+  // T-105：写路径改用三态读；T-116 起支持"读不到"（`readError`）这个分支
   readTextOutcome: async (path: string) => {
+    if (state.readError) return { status: 'error' as const, reason: state.readError }
     const text = state.files.get(path)
     return text === undefined ? { status: 'notSeen' as const } : { status: 'ok' as const, text }
   },
@@ -35,8 +40,12 @@ vi.mock('@/cep/fs', () => ({
 
 const PATH = '/user/sj_set.json'
 
-const { COMMON_USE_SETTING_KEYS, readCommonUseOptions, updateCommonUseOptions } =
-  await import('@/cep/data/legacy-settings')
+const {
+  COMMON_USE_SETTING_KEYS,
+  readCommonUseOptions,
+  readFontSetSettingsForSync,
+  updateCommonUseOptions,
+} = await import('@/cep/data/legacy-settings')
 
 function writeDisk(value: unknown): void {
   state.files.set(PATH, JSON.stringify(value))
@@ -48,6 +57,29 @@ function readDisk(): Record<string, unknown> {
 
 beforeEach(() => {
   state.files.clear()
+  state.readError = ''
+})
+
+/**
+ * T-116：`readFontSetSettingsForSync` 的两种"不 ok"必须分开报。
+ *
+ * 动作相同（都中止同步），但用户该做的事不同：文件不在 = 设置丢了要重建；
+ * 读不到 = 关掉占用它的程序再试。以前两种都说"不存在"。
+ */
+describe('同步读设置：读不到 ≠ 不存在（T-116）', () => {
+  it('文件不在（notSeen）→ 报"不存在"', async () => {
+    await expect(readFontSetSettingsForSync()).rejects.toThrow('不存在')
+  })
+
+  it('文件在、读不到（EPERM）→ 报"读不到"并带原因，不说"不存在"', async () => {
+    writeDisk({ ztSize: 12 })
+    state.readError = 'EPERM: operation not permitted'
+
+    const failed = readFontSetSettingsForSync()
+    await expect(failed).rejects.toThrow('读不到')
+    await expect(failed).rejects.toThrow('EPERM')
+    await expect(failed).rejects.not.toThrow('不存在')
+  })
 })
 
 describe('读那 8 个键', () => {

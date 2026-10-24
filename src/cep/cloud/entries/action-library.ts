@@ -66,8 +66,13 @@ export const actionLibraryEntry: SyncUnitAdapter = {
 
       const read = await readTextOutcome(`${userDir()}/${name}`)
       // 上传前读不到就不许上传（拿默认值顶上去等于把空仓库推给云端）。
-      // T-107：`notSeen` 与 `error` 这里仍同果（都抛同一句），文案不变——分开报会改用户看到的字
-      if (read.status !== 'ok') throw new Error(`动作仓库文件不存在：${name}`)
+      // T-116：两种不 ok 的**动作相同**（都中止上传），但**用户该做什么不同**——
+      // 文件不在 = 索引指向了一个已删的仓库；读不到 = 关掉占用它的程序再试。
+      // 以前都说"不存在"，后者会让用户去重建仓库，白折腾
+      if (read.status === 'notSeen') throw new Error(`动作仓库文件不存在：${name}`)
+      if (read.status === 'error') {
+        throw new Error(`动作仓库文件读不到：${name}（${read.reason}）`)
+      }
       files.push(inlineFile(`/${name}`, read.text))
     }
 

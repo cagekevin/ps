@@ -111,9 +111,10 @@ export async function readFontSetSettings(): Promise<RepoRead<FontSetSettings>> 
  */
 export async function readFontSetSettingsForSync(): Promise<FontSetSettings> {
   const read = await readTextOutcome(`${userDir()}/${DATA_FILES.ztSet}`)
-  // T-107：同步要的是"真实存在且可读"。两种不 ok 这里同果（都抛）——
-  // 分开写文案会改用户看到的字，先按原句报，台账记欠账
-  if (read.status !== 'ok') throw new Error(`${DATA_FILES.ztSet} 不存在`)
+  // T-116：同步要的是"真实存在且可读"。两种不 ok 都中止，但原因必须分开报——
+  // "不存在"会让用户以为设置丢了要去重建，"读不到"是关掉占用文件的程序再试
+  if (read.status === 'notSeen') throw new Error(`${DATA_FILES.ztSet} 不存在`)
+  if (read.status === 'error') throw new Error(`${DATA_FILES.ztSet} 读不到：${read.reason}`)
   const text = read.text
   let raw: Record<string, unknown>
   try {

@@ -41,6 +41,24 @@ describe('action.library 云同步', () => {
     await expect(actionLibraryEntry.read()).rejects.toThrow('不存在')
   })
 
+  /**
+   * T-116：**"读不到"与"不存在"必须分开报**。
+   *
+   * 两者都中止上传（动作相同），但用户该做的事不同：文件不在 = 索引指向了已删的仓库，
+   * 去重建；读不到 = 关掉占用它的程序再试。以前都说"不存在"，后者会让用户白折腾。
+   */
+  it('仓库文件读不到（EPERM）→ 报"读不到"，不是"不存在"', async () => {
+    fsMock.readTextOutcome.mockResolvedValue({
+      status: 'error',
+      reason: 'EPERM: operation not permitted',
+    })
+
+    const failed = actionLibraryEntry.read()
+    await expect(failed).rejects.toThrow('读不到')
+    await expect(failed).rejects.toThrow('EPERM')
+    await expect(failed).rejects.not.toThrow('不存在')
+  })
+
   it('写回先写仓库文件，再写索引', async () => {
     const payload = await actionLibraryEntry.read()
     const changed = payload.files.map((file) =>
