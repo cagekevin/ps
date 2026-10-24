@@ -6,12 +6,23 @@
  *   node scripts/style-guard.mjs --update   把当前违规数量写进 docs/生成/样式基线.json
  *
  * 设计依据见 docs/架构/决策记录.md ADR-10：自动修复的成本 ≈ 0，报错阻止要人肉改，贵一个数量级。
+ *
+ * 【两类判据，别混】
+ *   A. **计数型**（色值/字号/圆角/!important）：按文件记上限，`docs/生成/样式基线.json` 只许减。
+ *   B. **结构型**（负 margin / 动效裸时长 / 裸类名撞名）：不是"少写几个"，是"写了就是错"，
+ *      所以走**具名例外清单**（文件:行 + 为什么现在不改 + 谁负责），不进计数基线。
+ *      TD-17-13：负 margin 旧版只认缩写 `margin:`，`margin-left:-9px` 放行。
+ *
+ *   动效只判 `transition`，不判 `animation`：token 只有 120/180/240ms 三档过渡，
+ *   转圈动画（`g-btn-spin 0.7s`）没有对应 token，硬套 token = 逼着改无关代码（A12）。
  */
 import { existsSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import { fileURLToPath } from 'node:url'
 
-const root = fileURLToPath(new URL('..', import.meta.url))
+const root =
+  process.argv.find((a) => a.startsWith('--root='))?.slice(7) ??
+  fileURLToPath(new URL('..', import.meta.url))
 const SRC = join(root, 'src')
 const TOKENS = join(root, 'src', 'styles', 'tokens.css')
 const BASELINE = join(root, 'docs', '生成/样式基线.json')
@@ -188,8 +199,12 @@ function countTemplate(content) {
 /**
  * 注释里的色值不算违规（注释里写「原版是 #535353」是正常文档行为）。
  * 修复时也要跳过注释，否则会把注释内容也改写掉。
+ *
+ * 与 `scripts/source-scan.mjs` 的 `maskComments` **不是同一个东西**，别互换：
+ * 那份是 JS 注释（还会遮蔽字符串/模板串），返回同长字符串；这份是 **CSS 注释**（`/* … *\/`），
+ * 返回 `{masked, restore}` —— `restore` 是 `--fix` 改写回原文件必须的。
  */
-function maskComments(css) {
+function maskCssComments(css) {
   const store = []
   const masked = css.replace(/\/\*[\s\S]*?\*\//g, (match) => {
     store.push(match)
@@ -242,8 +257,161 @@ function checkLayering() {
   return problems
 }
 
-/** 负 margin 是布局补丁，一律禁止（查 1） */
-const MARGIN_NEG_RE = /margin:\s*-/g
+/**
+ * 负 margin 是布局补丁，一律禁止（查 1）。
+ *
+ * 判据不是"冒号后面紧跟减号"，而是**值的任一分量是负数**：
+ * `margin: 0 -8px` / `margin-left: -9px` / `margin-block-start: -4px` 都算。
+ * 旧版只认 `margin:\s*-`，长写（`margin-left`）与两值缩写（`margin: 0 -8px`）全放行。
+ */
+const MARGIN_NEG_RE = /(?:^|[;{\s])margin(?:-[a-z-]+)?\s*:\s*([^;}]+)/g
+
+function hasNegativeMargin(value) {
+  return value
+    .trim()
+    .split(/\s+/)
+    .some((part) => /^-(?:\d|\.\d)/.test(part))
+}
+
+/**
+ * 结构型判据（不是"少写几个"，是"写了就是错"）。三条，全部按结构判、不用名单：
+ *
+ * 1. `neg-margin`：`margin` 值的任一分量是负数（缩写与长写一视同仁）
+ * 2. `motion-raw`：`transition` / `transition-duration` 里写时间字面量（硬规则 3：动效只用 token）
+ *    —— 只判 transition：token 只有 120/180/240ms 三档过渡，转圈动画（`g-btn-spin 0.7s`）
+ *       没有对应 token，逼它套 token = 改无关代码（A12）
+ * 3. `bare-collision`：**裸类名**（无 `-` / `__` / `--` 的单词类名）在同一仓里被 ≥2 个文件定义。
+ *    为什么不判"裸类名一律禁"：盘上有 35 个裸类名（`.tag` `.modal` `.nav`…），
+ *    一律禁 = 让几十处无关代码变红，说明判据错了（A12）。硬规则 6 给的理由本身就是
+ *    "最容易撞" ⇒ 判**撞**，不判**写法**。
+ */
+const MOTION_RAW_RE = /(?:^|[;{\s])transition(?:-duration)?\s*:\s*([^;}]+)/g
+const TIME_LITERAL_RE = /\d+(?:\.\d+)?m?s\b/
+
+function styleText(file, content) {
+  const isVue = file.endsWith('.vue')
+  const blocks = []
+  if (isVue) {
+    content.replace(/<style[^>]*>([\s\S]*?)<\/style>/g, (_m, body) => {
+      blocks.push(body)
+      return ''
+    })
+    return blocks.length ? blocks.join('\n') : null // 没有 <style> = 不参与
+  }
+  return content
+}
+
+/** 只取选择器里的类名（跳过属性值 / 注释），带类名首次出现的行号 */
+function selectorClasses(css) {
+  const out = []
+  const masked = maskCssComments(css).masked
+  for (const rule of masked.matchAll(/([^{}]+)\{[^}]*\}/g)) {
+    const line = masked.slice(0, rule.index).split('\n').length
+    for (const cls of rule[1].matchAll(/\.([a-zA-Z][\w-]*)/g)) out.push({ name: cls[1], line })
+  }
+  return out
+}
+
+function structuralProblems() {
+  const hits = []
+  /** 类名 → 定义过它的文件（撞名判据） */
+  const owners = new Map()
+
+  for (const abs of walk(SRC)) {
+    const rel = relative(root, abs).replace(/\\/g, '/')
+    if (ALLOW_FILES.has(rel)) continue
+    const css = styleText(abs, readFileSync(abs, 'utf8'))
+    if (!css) continue
+
+    // 注释里的字面值不算违规（注释里写"原版 -9px"是文档行为）
+    const { masked } = maskCssComments(css)
+    masked.split('\n').forEach((line, index) => {
+      for (const m of line.matchAll(new RegExp(MARGIN_NEG_RE.source, 'g'))) {
+        if (hasNegativeMargin(m[1])) {
+          hits.push({ rule: 'neg-margin', file: rel, line: index + 1, text: line.trim() })
+        }
+      }
+      for (const m of line.matchAll(new RegExp(MOTION_RAW_RE.source, 'g'))) {
+        const value = m[1]
+        if (!TIME_LITERAL_RE.test(value) || value.includes('var(')) continue
+        hits.push({ rule: 'motion-raw', file: rel, line: index + 1, text: line.trim() })
+      }
+    })
+
+    for (const cls of selectorClasses(css)) {
+      if (/[-_]/.test(cls.name)) continue // g- / u- / page__x / is-x 都带分隔符
+      if (!owners.has(cls.name)) owners.set(cls.name, [])
+      const list = owners.get(cls.name)
+      if (!list.some((item) => item.file === rel)) list.push({ file: rel, line: cls.line })
+    }
+  }
+
+  for (const [name, list] of owners) {
+    if (list.length < 2) continue
+    for (const item of list) {
+      hits.push({
+        rule: 'bare-collision',
+        file: item.file,
+        line: item.line,
+        text: `.${name} —— 同一个裸类名被 ${list.map((x) => x.file).join(' / ')} 定义`,
+      })
+    }
+  }
+
+  return hits
+}
+
+/**
+ * 结构型判据的具名例外（文件 + 规则 + 为什么现在不改 + 谁负责）。
+ * 与 `docs/生成/样式基线.json` 的计数基线**分开**：那是"少写几个"，这是"写了就是错"。
+ */
+const NAMED = [
+  {
+    rule: 'neg-margin',
+    file: 'src/components/PageShell.vue',
+    count: 1,
+    where: 'src/components/PageShell.vue  `margin-left: -9px`',
+    why: '页面骨架对原版做的一处视觉对位，挪掉要动布局（PageShell 是全站骨架，撞已冻结页）',
+    owner: '用户 / 阶段 3（视觉对位统一时一并处理）',
+  },
+  {
+    rule: 'motion-raw',
+    file: 'src/pages/seBan/components/SwatchDot.vue',
+    count: 1,
+    where: 'src/pages/seBan/components/SwatchDot.vue  `transition: transform 0.12s`',
+    why: '色板面板遗留的裸时长（0.12s ≈ --dur-fast），改成 var(--dur-fast) 属改页面样式，本轮不碰 src/',
+    owner: '用户 / seBan 页面收尾',
+  },
+]
+
+/** 具名例外扣减：允许 N 处，只报第 N+1 处；未具名的、过期的都算失败 */
+function checkStructural() {
+  const hits = structuralProblems()
+  const quota = new Map(NAMED.map((n) => [`${n.rule} ${n.file}`, n.count]))
+  const fresh = []
+  for (const hit of hits) {
+    const key = `${hit.rule} ${hit.file}`
+    const left = quota.get(key) ?? 0
+    if (left > 0) {
+      quota.set(key, left - 1)
+      continue
+    }
+    fresh.push(hit)
+  }
+  const isRepoRun = !process.argv.some((a) => a.startsWith('--root='))
+  const unnamed = isRepoRun
+    ? [...quota].filter(
+        ([key, left]) => left > 0 && !NAMED.some((n) => `${n.rule} ${n.file}` === key),
+      )
+    : []
+  const expired = isRepoRun
+    ? NAMED.filter((n) => {
+        const seen = hits.filter((h) => h.rule === n.rule && h.file === n.file).length
+        return seen < n.count
+      })
+    : []
+  return { fresh, unnamed, expired, total: hits.length }
+}
 
 /**
  * 图标名检查：`<Icon name="iconxxx">` 里的名字必须真实存在于 sprite。
@@ -300,12 +468,15 @@ function checkSilentErrors() {
 }
 
 function countViolations(css) {
-  const { masked } = maskComments(css)
+  const { masked } = maskCssComments(css)
   let count = 0
-  for (const re of [COLOR_RE, FS_RE, RADIUS_RE, IMPORTANT_RE, MARGIN_NEG_RE]) {
+  for (const re of [COLOR_RE, FS_RE, RADIUS_RE, IMPORTANT_RE]) {
     const hits = masked.match(re)
     if (hits) count += hits.length
   }
+  // 负 margin 归结构型判据（见 structuralProblems）：它的数量在计数基线里保持 0，
+  // 由具名例外放行，避免"负 margin 也算可配额"这种荒唐语义。
+
   return count
 }
 
@@ -349,7 +520,7 @@ function fix() {
     let fixed = 0
 
     const applyFix = (rawCss) => {
-      const { masked, restore } = maskComments(rawCss)
+      const { masked, restore } = maskCssComments(rawCss)
       let out = masked.replace(COLOR_RE, (match) => {
         const hit = maps.colorMap.get(norm(match))
         if (!hit) return match
@@ -464,10 +635,48 @@ if (command === 'fix') {
     process.exit(1)
   }
 
+  // 结构型判据：负 margin / 动效裸值 / 裸类名撞名（具名例外放行）
+  const structural = checkStructural()
+  if (structural.fresh.length || structural.unnamed.length || structural.expired.length) {
+    if (structural.fresh.length) {
+      console.error('\n[style] 结构型样式违规（写了就是错，不是"少写几个"）：\n')
+      for (const hit of structural.fresh) {
+        console.error(`  ${hit.file}:${hit.line}  [${hit.rule}]`)
+        console.error(`    ${hit.text.slice(0, 120)}`)
+      }
+      console.error(
+        '\n  负 margin = 布局补丁，改用 padding / gap；transition 写时长 = 绕过 token，',
+      )
+      console.error(
+        '  改 var(--dur-fast|--dur-base|--dur-slow)；裸类名撞名 = 加 g- / u- / 页面前缀。\n',
+      )
+    }
+    if (structural.unnamed.length) {
+      console.error('[style] 结构型违规被放行但没进 NAMED（不许出现没人认领的放行）：')
+      for (const [key] of structural.unnamed) {
+        console.error(`  ${key} —— 在 NAMED 里补「为什么现在不改 + 谁负责」`)
+      }
+      console.error('')
+    }
+    if (structural.expired.length) {
+      console.error('[style] NAMED 里的例外已经不存在了（过期豁免要删）：')
+      for (const n of structural.expired) console.error(`  ${n.rule} ${n.where}`)
+      console.error('')
+    }
+    process.exit(1)
+  }
+
   const tightened = Object.entries(baseline).filter(
     ([file, allowed]) => (current[file] ?? 0) < allowed,
   )
-  console.log('[style] 通过：无新增硬编码、无负 margin、无静默失败')
+  const named = NAMED.reduce((sum, n) => sum + n.count, 0)
+  console.log(
+    '[style] 通过：无新增硬编码、无新增负 margin、动效无裸时长、无新增裸类名撞名、无静默失败',
+  )
+  if (named)
+    console.log(
+      `[style] 放行结构型存量 ${named} 处，全部在 NAMED 里具名（为什么现在不改 / 谁负责）`,
+    )
   if (tightened.length)
     console.log(
       `[style] ${tightened.length} 个文件的违规数已下降，可执行 npm run style:baseline 收紧`,

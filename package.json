@@ -13,7 +13,7 @@
     "style:guard": "node scripts/style-guard.mjs",
     "boundary:pages": "node scripts/page-boundary.mjs",
     "layer:boundary": "node scripts/layer-boundary.mjs",
-    "spec:check": "node scripts/task-spec.mjs docs/规范/任务书模板.md",
+    "spec:check": "node scripts/task-spec.mjs",
     "template:guard": "node scripts/vue-template-guard.mjs",
     "assert:guard": "node scripts/assertion-guard.mjs",
     "assert:baseline": "node scripts/assertion-guard.mjs --update",

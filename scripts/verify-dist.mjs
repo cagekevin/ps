@@ -3,6 +3,12 @@
  *
  * 为什么只有三条：其余（manifest、sprite、体积）在构建流程里已经被保证，
  * 测了也不会失败。见 docs/日志 里关于 ROI 的判断。
+ *
+ * 【判据形态：判「属性」，不判「子串」】
+ *   旧版用 `/<script[^>]*\bdefer\b/` 与 `/type\s*=\s*"module"/` 在整份 HTML 上找子串，
+ *   于是 `<script data-note="defer">` 会被报成"有 defer"、`data-type="module"` 会被报成
+ *   "有 type=module"（两个方向都错：既放过假产物，也误杀真产物）。TD-17-14。
+ *   现在把 `<script …>` 的**属性名**解析出来再判：属性名是结构，子串只是文本。
  */
 import { existsSync, readFileSync, readdirSync, statSync } from 'node:fs'
 import { join, relative } from 'node:path'
@@ -10,6 +16,38 @@ import { join, relative } from 'node:path'
 const EXT_ID = 'com.local.psz.panel.v5'
 const appData = process.env.APPDATA ?? ''
 const outDir = process.env.PSZ_EXT_DIR || join(appData, 'Adobe', 'CEP', 'extensions', EXT_ID)
+
+/**
+ * 解析出所有 `<script …>` 开标签，返回每个标签的属性（名字小写 → 原始值）。
+ * 不引 HTML 解析器：只需要开标签里的属性，而属性语法本身很小（名 [= 值]）。
+ */
+export function scriptAttrs(html) {
+  const tags = []
+  for (const start of html.matchAll(/<script\b/gi)) {
+    // 找开标签结束：引号内的 `>` 不算结束
+    let i = start.index + '<script'.length
+    let quote = ''
+    for (; i < html.length; i += 1) {
+      const ch = html[i]
+      if (quote) {
+        if (ch === quote) quote = ''
+        continue
+      }
+      if (ch === '"' || ch === "'") {
+        quote = ch
+        continue
+      }
+      if (ch === '>') break
+    }
+    const inner = html.slice(start.index + '<script'.length, i)
+    const attrs = new Map()
+    for (const m of inner.matchAll(/([^\s=/>]+)(?:\s*=\s*(?:"([^"]*)"|'([^']*)'|([^\s>]*)))?/g)) {
+      attrs.set(m[1].toLowerCase(), m[2] ?? m[3] ?? m[4] ?? '')
+    }
+    tags.push(attrs)
+  }
+  return tags
+}
 
 const problems = []
 
@@ -20,15 +58,27 @@ if (!existsSync(indexPath)) {
 }
 
 const html = readFileSync(indexPath, 'utf8')
+const tags = scriptAttrs(html)
 
 // 1. 模块脚本在 file:// 下会被 CORS 拦，直接白屏
-if (/type\s*=\s*"module"/.test(html)) {
-  problems.push('index.html 里还有 type="module" —— file:// 下会被 CORS 拦，面板白屏')
+const moduleTags = tags.filter(
+  (attrs) => (attrs.get('type') ?? '').trim().toLowerCase() === 'module',
+)
+if (moduleTags.length) {
+  problems.push(
+    `index.html 有 ${moduleTags.length} 个 <script type="module"> —— file:// 下会被 CORS 拦，面板白屏`,
+  )
 }
 
 // 2. 脚本在 head 里，没有 defer 会在 <body> 之前执行，mount('#app') 拿不到节点
-if (!/<script[^>]*\bdefer\b/.test(html)) {
-  problems.push('index.html 的 <script> 没有 defer —— 会在 body 之前执行，Vue 挂载失败')
+const deferred = tags.filter((attrs) => attrs.has('defer'))
+if (!deferred.length) {
+  problems.push(
+    'index.html 没有任何带 defer 属性的 <script> —— 会在 body 之前执行，Vue 挂载失败（判据：标签上真有 defer 属性，不是文本里出现 defer）',
+  )
+}
+if (deferred.length && !deferred.some((attrs) => attrs.has('src'))) {
+  problems.push('带 defer 的 <script> 没有 src —— 没有外部脚本可延后执行')
 }
 
 // 3. jsxbin 没进产物的话，页面能打开但所有 PS 操作都会报错
@@ -78,4 +128,6 @@ if (bundleSize > SIZE_LIMIT) {
   console.warn(`[verify] 警告：JS 产物超过 ${(SIZE_LIMIT / 1024 / 1024).toFixed(0)} MB，建议分包`)
 }
 
-console.log('[verify] 产物通过：无 type="module"、有 defer、jsxbin 就位')
+console.log(
+  `[verify] 产物通过：${tags.length} 个 script 标签里无 type="module"、有 defer+src、jsxbin 就位`,
+)
