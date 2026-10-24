@@ -26,8 +26,8 @@
     }
   },
   "tests": {
-    "files": 143,
-    "cases": 1237,
+    "files": 144,
+    "cases": 1240,
     "eachSites": 16
   },
   "components": 31,
@@ -96,7 +96,7 @@
     },
     "selection": {
       "files": 2,
-      "lines": 292
+      "lines": 359
     },
     "stores": {
       "files": 15,
