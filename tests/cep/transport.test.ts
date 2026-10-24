@@ -44,7 +44,7 @@ describe('evalScriptRaw', () => {
     await expect(evalScriptRaw('1')).rejects.toThrow('bridge boom')
   })
 
-  it('超时抛 TIMEOUT，且晚到的回调不会二次结算', async () => {
+  it('超时抛 TIMEOUT_UNKNOWN（不是「失败」，是「不知道做没做成」），晚到的回调不会二次结算', async () => {
     vi.useFakeTimers()
     let late: ((res: string) => void) | undefined
     setBridge((_script, cb) => {
@@ -52,11 +52,54 @@ describe('evalScriptRaw', () => {
     })
 
     const task = evalScriptRaw('long', 1000)
-    const assertion = expect(task).rejects.toMatchObject({ code: 'TIMEOUT' })
+    const assertion = expect(task).rejects.toMatchObject({ code: 'TIMEOUT_UNKNOWN' })
     await vi.advanceTimersByTimeAsync(1001)
     await assertion
 
     expect(() => late?.('too late')).not.toThrow()
+  })
+
+  it('超时后队列锁不提前释放：PS 那条还没回包，下一条不许进 ExtendScript', async () => {
+    vi.useFakeTimers()
+    const calls: { script: string; cb: (res: string) => void }[] = []
+    setBridge((script, cb) => calls.push({ script, cb }))
+
+    const first = evalScriptRaw('one', 1000)
+    const second = evalScriptRaw('two', 1000)
+
+    const assertion = expect(first).rejects.toMatchObject({ code: 'TIMEOUT_UNKNOWN' })
+    await vi.advanceTimersByTimeAsync(1001)
+    await assertion
+
+    // 关键：我们不等了，但 PS 侧那条可能还在跑，队列不许放行
+    expect(calls).toHaveLength(1)
+
+    // PS 终于回包 → 这时才轮到下一条
+    calls[0].cb('1')
+    await vi.advanceTimersByTimeAsync(0)
+    expect(calls).toHaveLength(2)
+
+    calls[1].cb('2')
+    await expect(second).resolves.toBe('2')
+  })
+
+  it('超时后 PS 始终不回包 → 到宽限期强制放行，且留 warn（队列不许永久卡死）', async () => {
+    vi.useFakeTimers()
+    const calls: { script: string; cb: (res: string) => void }[] = []
+    setBridge((script, cb) => calls.push({ script, cb }))
+
+    const first = evalScriptRaw('one', 1000)
+    const second = evalScriptRaw('two', 1000)
+    const assertion = expect(first).rejects.toMatchObject({ code: 'TIMEOUT_UNKNOWN' })
+    await vi.advanceTimersByTimeAsync(1001)
+    await assertion
+    expect(calls).toHaveLength(1)
+
+    await vi.advanceTimersByTimeAsync(120_000 + 1)
+    expect(calls).toHaveLength(2)
+
+    calls[1].cb('2')
+    await expect(second).resolves.toBe('2')
   })
 
   it('严格串行：前一条没回来，后一条不进入 ExtendScript', async () => {

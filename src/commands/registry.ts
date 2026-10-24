@@ -133,7 +133,8 @@ async function runWith(
   } catch (e) {
     const reason = describeCepError(e)
     const code = e instanceof CepError ? e.code : undefined
-    log.warn('cmd', `${id} 失败：${reason}`)
+    // 带上原 error：文案层只给用户看「能看懂的那句」，日志必须留 PS 侧原话
+    log.warn('cmd', `${id} 失败：${reason}`, e)
     return { ok: false, reason, code }
   } finally {
     progress.end()

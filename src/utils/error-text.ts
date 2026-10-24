@@ -15,6 +15,9 @@ export function describeCepError(e: unknown): string {
         return 'Node 不可用，请检查 manifest 里的 --enable-nodejs'
       case 'TIMEOUT':
         return 'Photoshop 没有响应，请稍后重试'
+      case 'TIMEOUT_UNKNOWN':
+        // 不说「没做成」，也不劝重试：PS 侧可能已经执行完，重试 = 重复执行（TD-13-2）
+        return 'Photoshop 没有及时回应，无法确认这条操作是否生效：可能已经执行，也可能还在执行。请先确认结果，再决定要不要再做一次'
       case 'NO_SELECTION':
         return e.message
       case 'INIT':

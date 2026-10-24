@@ -15,6 +15,17 @@ describe('describeCepError', () => {
     expect(describeCepError(new CepError('TIMEOUT', 'x'))).toContain('没有响应')
   })
 
+  it('TIMEOUT_UNKNOWN：不说「没做成」、不劝重试，只让用户先确认（TD-13-2）', () => {
+    const text = describeCepError(new CepError('TIMEOUT_UNKNOWN', 'x'))
+
+    // 可能已执行 / 也可能还在执行
+    expect(text).toContain('可能已经执行')
+    // 必须让用户先看一眼结果，而不是直接重做
+    expect(text).toContain('请先确认结果')
+    // 不许诱导重试：写操作重试一次 = PS 里可能执行两遍
+    expect(text).not.toMatch(/请重试|请稍后重试|重新操作|再试一次/)
+  })
+
   it('INIT 带出原始 message', () => {
     expect(describeCepError(new CepError('INIT', 'jsxbin 未加载'))).toBe(
       'Photoshop 脚本初始化失败：jsxbin 未加载',
