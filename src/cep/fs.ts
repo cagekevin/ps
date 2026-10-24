@@ -179,17 +179,22 @@ export function readBase64Outcome(absPath: string): Base64Read {
   }
 }
 
-/** 写 base64 到文件；目录不存在会建 */
+/**
+ * 写 base64 到文件；目录不存在会建。
+ *
+ * **原子**：写本进程专属 tmp 再 rename（与 `writeTextFileAtomic` 同族、同错误判据）。
+ * 库文件（`sj_ku*` / `sj_dz*`）走这条路 —— 直写会在崩溃/磁盘满时留下半截文件，
+ * 而半截 JSON 会让整库读不回来（TD-09-15）。
+ */
 export function writeBase64File(absPath: string, base64: string): WriteOutcome {
   if (!hasNode()) return { status: 'error', reason: 'Node 不可用（--enable-nodejs 未开）' }
   try {
-    const fs = nodeRequire('fs')
-    const path = nodeRequire('path')
     const buffer = nodeRequire<{ Buffer: { from(data: string, encoding: string): unknown } }>(
       'buffer',
     ).Buffer
-    fs.mkdirSync(path.dirname(absPath), { recursive: true })
-    fs.writeFileSync(absPath, buffer.from(base64, 'base64'))
+    // 原子写：先写本进程专属 tmp 再 rename，**写出的字节与直写完全一致**
+    // （同一个 `buffer.from(base64,'base64')`，只是落到目标前多一次 rename）
+    atomicReplaceBytes(absPath, buffer.from(base64, 'base64'))
     return { status: 'ok' }
   } catch (e) {
     return classifyWriteError(e)
@@ -335,6 +340,34 @@ function dropTmp(fs: { unlinkSync: (path: string) => void }, tmp: string): void 
     fs.unlinkSync(tmp)
   } catch {
     // tmp 可能根本没写出来，删不掉属正常
+  }
+}
+
+/** 直写字节（内部用；与 `writeTextFile` 对称）：目录不存在会建 */
+function writeBytesFile(absPath: string, bytes: unknown): void {
+  const fs = nodeRequire('fs')
+  const path = nodeRequire('path')
+  fs.mkdirSync(path.dirname(absPath), { recursive: true })
+  fs.writeFileSync(absPath, bytes)
+}
+
+/**
+ * 写 tmp → rename（**二进制**版，与 `atomicReplace` 同族）。
+ *
+ * 为什么不能省：`writeFileSync` 直写目标，进程被杀/磁盘满就留半截文件 ——
+ * 库文件（`sj_ku*` / `sj_dz*`）是用户资产里最贵的，半截 JSON 会让整库回退默认值（TD-09-15）。
+ * tmp 名仍走 `uniqueTmpPath`（每进程每次不同），失败清理仍走 `dropTmp`，错误仍由
+ * `classifyWriteError` 归一 —— 与文本版共用同一套机制，不新建第二套。
+ */
+function atomicReplaceBytes(absPath: string, bytes: unknown): void {
+  const fs = nodeRequire('fs')
+  const tmp = uniqueTmpPath(absPath)
+  try {
+    writeBytesFile(tmp, bytes)
+    fs.renameSync(tmp, absPath)
+  } catch (e) {
+    dropTmp(fs, tmp)
+    throw e
   }
 }
 
