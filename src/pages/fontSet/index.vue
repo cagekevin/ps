@@ -8,7 +8,9 @@ import { useFeedbackStore } from '@/stores/feedback'
 import { useLoadingStore } from '@/stores/loading'
 import { useFreePanelAdd } from '@/composables/useFreePanelAdd'
 import { refreshTextInfo, refreshTypeUnits, startTextInfoWatch } from '@/selection/current-text'
-import { clearMissingFont, FONT_DOWNLOAD_URL, missingFont } from '@/domain/font-missing'
+import { FONT_DOWNLOAD_URL } from '@/domain/font-missing'
+import { storeToRefs } from 'pinia'
+import { useFontMissingStore } from '@/stores/font-missing'
 import { FONT_SET_DEFAULTS, type FontSetSettings } from '@/domain/font-set-config'
 import { openUrl } from '@/cep/open-url'
 import { log } from '@/utils/logger'
@@ -61,16 +63,20 @@ const feedback = useFeedbackStore()
 const settings = reactive<FontSetSettings>(deepClone(FONT_SET_DEFAULTS))
 const fonts = ref<FontItem[]>([])
 
+// 缺字体提示：状态在 store（domain 零框架，TD-12-20），命令经端口置位
+const fontMissing = useFontMissingStore()
+const { missingFont } = storeToRefs(fontMissing)
+
 const missingFontVisible = computed({
   get: () => missingFont.value !== null,
   set: (visible: boolean) => {
-    if (!visible) clearMissingFont()
+    if (!visible) fontMissing.clear()
   },
 })
 
 function downloadMissingFont(): void {
   openUrl(FONT_DOWNLOAD_URL)
-  clearMissingFont()
+  fontMissing.clear()
 }
 
 /** 原版 setFontShow：one0-2 / two0-2，同一时间只开一个 */

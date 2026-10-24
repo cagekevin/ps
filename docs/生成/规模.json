@@ -26,8 +26,8 @@
     }
   },
   "tests": {
-    "files": 161,
-    "cases": 1328,
+    "files": 162,
+    "cases": 1338,
     "eachSites": 17
   },
   "components": 31,
@@ -76,7 +76,7 @@
     },
     "commands": {
       "files": 16,
-      "lines": 4832
+      "lines": 4859
     },
     "components": {
       "files": 36,
@@ -88,19 +88,19 @@
     },
     "domain": {
       "files": 25,
-      "lines": 3549
+      "lines": 3555
     },
     "pages": {
       "files": 63,
-      "lines": 12799
+      "lines": 12805
     },
     "selection": {
       "files": 2,
       "lines": 426
     },
     "stores": {
-      "files": 15,
-      "lines": 1220
+      "files": 16,
+      "lines": 1244
     },
     "utils": {
       "files": 11,

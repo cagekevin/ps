@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { createPinia, setActivePinia } from 'pinia'
 import { readValue } from '../support/repo-read'
 
 const font = vi.hoisted(() => ({
@@ -61,7 +62,8 @@ const { getFontList } = await import('@/cep/ps')
 const { translateCounterRepo } = await import('@/cep/data/font-extra')
 const { __resetFontClipboardForTest } = await import('@/domain/font-set-clipboard')
 const { decodeText } = await import('@/domain/translate')
-const { clearMissingFont, missingFont } = await import('@/domain/font-missing')
+const { useFontMissingStore } = await import('@/stores/font-missing')
+const { setMissingFontPort, resetMissingFontPort } = await import('@/commands/runtime')
 const { fontHistoryRepo } = await import('@/cep/data/font-extra')
 
 const keeps = {
@@ -76,7 +78,11 @@ const keeps = {
 beforeEach(() => {
   vi.clearAllMocks()
   __resetFontClipboardForTest()
-  clearMissingFont()
+  // 缺字体提示已搬到 store（TD-12-20）：这里建一个 pinia，并接上与 main.ts 同形状的端口
+  setActivePinia(createPinia())
+  resetMissingFontPort()
+  setMissingFontPort({ signal: (name) => useFontMissingStore().signal(name) })
+  useFontMissingStore().clear()
   for (const fn of Object.values(font)) fn.mockResolvedValue(null)
   vi.mocked(getFontList).mockResolvedValue([])
 })
@@ -224,7 +230,7 @@ describe('fontSet.fontName 字体缺失', () => {
     })
 
     expect(result).toMatchObject({ ok: false, code: 'FONT_MISSING' })
-    expect(missingFont.value).toBe('Missing Font')
+    expect(useFontMissingStore().missingFont).toBe('Missing Font')
   })
 })
 

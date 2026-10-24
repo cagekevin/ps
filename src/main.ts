@@ -20,10 +20,11 @@ import { bindRenameData } from './stores/rename'
 import { bindSwatchData } from './stores/swatch'
 import { bindSeBanReceiver } from './commands/swatch'
 import { useTaskStore } from './stores/tasks'
-import { setProgressPort } from './commands/runtime'
+import { setMissingFontPort, setProgressPort } from './commands/runtime'
 import { startSelectionWatch } from './selection'
 import { startCloudAutoSync } from './cloud/auto-sync'
 import { bindCloudData } from './stores/cloud'
+import { useFontMissingStore } from './stores/font-missing'
 import './styles/tokens.css'
 import './styles/global.css'
 import './styles/layout.css'
@@ -66,6 +67,11 @@ setProgressPort({
       setCancel: (cancel) => store.setCancel(id, cancel),
     }
   },
+})
+
+// 命令发现字体缺失时只经端口说一声，弹窗归页面（TD-12-20：状态搬出 domain）
+setMissingFontPort({
+  signal: (name) => useFontMissingStore().signal(name),
 })
 
 // 偏好写失败必须可见（ADR-14），不能只留在控制台

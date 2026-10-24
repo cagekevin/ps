@@ -194,13 +194,6 @@ if (!methods) {
 /** 具名例外清单：每条 = 文件:行 + 为什么现在不改 + 谁负责（条数必须与基线一致） */
 const NAMED = [
   {
-    key: 'L5 src/domain/font-missing.ts',
-    count: 1,
-    where: "src/domain/font-missing.ts:1  `import { ref } from 'vue'`",
-    why: '跨层 UI 状态（缺字体提示）暂存在 domain，已登记 TD-12-20；消除要动 stores + pages',
-    owner: '阶段 3（G1 剩余）/ 用户决定',
-  },
-  {
     key: 'L6 src/utils/error-handler.ts',
     count: 2,
     where: 'src/utils/error-handler.ts:1,3  `vue` + `@/stores/feedback`',

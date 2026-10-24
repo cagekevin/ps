@@ -25,7 +25,6 @@ import {
   TRANSLATE_URL,
 } from '@/domain/translate'
 import { getFontClipboard, hasFontClipboard, setFontClipboard } from '@/domain/font-set-clipboard'
-import { signalMissingFont } from '@/domain/font-missing'
 import { canAddQuickFont, toQuickFont } from '@/domain/quick-font'
 import { applyTextPatch, normalizeTextColor, refreshTextInfo } from '@/selection/current-text'
 import { CepError } from '@/utils/errors'
@@ -33,6 +32,7 @@ import { asJsxResult, assertJsxOk, requireJsxOk } from '@/utils/jsx-result'
 import { log } from '@/utils/logger'
 import { deepClone } from '@/utils/clone'
 import { defineCommand } from './registry'
+import { missingFontPort } from './runtime'
 import type { Command } from './types'
 
 const LEVELS = 6
@@ -47,7 +47,7 @@ function requireFontApplied(raw: unknown, name: string): void {
   const result = asJsxResult(raw)
   if (!result.ok) {
     if (Number(result.code) === 1) {
-      signalMissingFont(name)
+      missingFontPort().signal(name)
       throw new CepError('FONT_MISSING', '字体缺失')
     }
     throw new CepError('JSX', result.msg || '设置字体失败')
