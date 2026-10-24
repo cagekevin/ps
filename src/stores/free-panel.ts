@@ -21,8 +21,11 @@ export const useFreePanelStore = defineStore('freePanel', () => {
   async function load() {
     const read = await freePanelRepo.read()
     degraded.value = read.reason ?? ''
-    // 读坏时不投影 fallback 的空区域：那会显示成"工作区还在，只是空了"，
-    // 用户点新增又会被 `file-repo.update` 以坏因拒绝（D-42），白点一次
+    // **故意不用 `read.fallback`**（T-104 逐处判过，这处不是 F 类）：生产者的默认值
+    // `createEmptyFreePanel()` 带**一个** `norow` 区域（`domain/free-panel.ts:56-76`），
+    // 不是空数组。投影它 = 坏文件和"新装首次使用"在界面上长得一模一样（ADR-14 扩展二），
+    // 而且用户点新增会被 `file-repo.ts:161` 以坏因拒绝写（D-42），白点一次。
+    // 这里给 `[]` 是**显示决策 + 可见信号（`degraded`）**，不是替生产者捏造值。
     blocks.value = read.ok ? read.value.obj.list : []
   }
 

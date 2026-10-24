@@ -45,7 +45,9 @@ export const useActionStore = defineStore('action', () => {
     selectActionFile(indexFile)
 
     const library = await actionLibraryRepo.read()
-    groups.value = library.ok ? library.value : []
+    // 坏库的默认值取生产者给的 `fallback`（`actionLibraryRepo` 的 `pick(…, () => [])`，`actions.ts:75-79`），
+    // 消费侧不另写一份空数组（T-104 / ADR-24）
+    groups.value = library.ok ? library.value : library.fallback
     if (!library.ok) reasons.push(`动作库文件损坏（${library.reason}）`)
     degraded.value = reasons.join('；')
   }

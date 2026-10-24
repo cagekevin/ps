@@ -67,9 +67,10 @@ export const useCommonUseStore = defineStore('common-use', () => {
   /** 读子面板参数（`sj_set.json` 的 17 个 cy* 键）；命令写成功后由页面重读一次 */
   async function loadOptions() {
     const read = await readCommonUseOptions()
-    // 坏 sj_set.json → 17 个键全缺（`read.value` 取不到，按空对象）：必须进 `degraded` 让页面提示，
-    // 否则用户以为设置被清了（T-101-1）
-    options.value = read.ok ? read.value : {}
+    // 坏 sj_set.json → 17 个键全缺：必须进 `degraded` 让页面提示，否则用户以为设置被清了（T-101-1）。
+    // 默认值取生产者给的 `fallback`（`legacySettingsRepo` 的 `{}` 经 `pickCommonUseOptions` 归一），
+    // 消费侧不另写一份空对象（T-104 / ADR-24）
+    options.value = read.ok ? read.value : read.fallback
     reasons.value.options = read.reason ?? ''
     if (!read.ok) {
       log.error('common-use', `常用页设置读取失败，子面板参数按缺省显示：${read.reason}`)
@@ -86,7 +87,9 @@ export const useCommonUseStore = defineStore('common-use', () => {
     error.value = ''
     try {
       const read = await requireSource().read()
-      applyFile(read.ok ? read.value : null)
+      // 坏读的默认值取生产者给的 `fallback`（`commonUseRepo` 的 `createEmptyCommonUseFile()` 就是 `[]`，
+      // `common-use.ts:31-36`）——`toTiles([])` 与旧写法 `toTiles(null)` 逐项同结果（T-104）
+      applyFile(read.ok ? read.value : read.fallback)
       reasons.value.tiles = read.reason ?? ''
     } catch (e) {
       error.value = describeCepError(e)

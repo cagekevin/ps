@@ -179,7 +179,7 @@ grep -rn "export .*<概念词>" src  # 有哪些导出叫这个名字
 | `src/domain/` | <!-- stats:begin layers.domain -->23 文件 / 3358 行<!-- stats:end layers.domain --> | 纯函数与类型，零 IO、零 Vue |
 | `src/commands/` | <!-- stats:begin layers.commands -->15 文件 / 4323 行<!-- stats:end layers.commands --> | 命令注册表 + 分域命令 |
 | `src/composables/` | <!-- stats:begin layers.composables -->10 文件 / 918 行<!-- stats:end layers.composables --> | 组合式（`useCommand` 在 `components/command/`） |
-| `src/stores/` | <!-- stats:begin layers.stores -->14 文件 / 932 行<!-- stats:end layers.stores --> | 只读投影 + 少量 UI 状态 |
+| `src/stores/` | <!-- stats:begin layers.stores -->14 文件 / 940 行<!-- stats:end layers.stores --> | 只读投影 + 少量 UI 状态 |
 | `src/utils/` | <!-- stats:begin layers.utils -->10 文件 / 505 行<!-- stats:end layers.utils --> | 无依赖工具 |
 | `src/cloud/` | <!-- stats:begin layers.cloud -->4 文件 / 881 行<!-- stats:end layers.cloud --> | 同步引擎与台账 |
 | `src/selection/` | <!-- stats:begin layers.selection -->2 文件 / 292 行<!-- stats:end layers.selection --> | 选区 / 当前文字快照 |
