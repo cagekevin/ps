@@ -56,8 +56,10 @@
  *   node scripts/debt.mjs add --area 22 --summary "…" [--class 增债] [--rate 中] [--owner 结构债]
  *                              [--anchor 22-视频-横切全量-2026-09-13.md] [--refs "@见 TD-xx"]
  *   node scripts/debt.mjs resolve <TD-ID> --evidence "cmd=…;claim=…;fail=…;cplx=…;impl=…"
- *                              [--status 已解决] [--note "…"] [--date YYYY-MM-DD]
+ *                              [--status 已解决] [--note "…"] [--date YYYY-MM-DD] [--drop-original]
  *                              # **凭证强制**（见文件头【结账闸】）；没有 `--evidence` 直接拒写
+ *                              # 该行已有 `原记「…」` ⇒ **默认逐字保留**（重结账 ≠ 销毁历史）；
+ *                              # 要丢必须显式 `--drop-original`（会打印被丢掉的原文）
  *   node scripts/debt.mjs edit <TD-ID> --field summary｜solution｜classify｜rate --value "…"
  *                              # 整格/文本替换：现象 · 解法（寄居状态格）· 归类 · 利息率
  *                              # `solution` 只替换解法那一段：`原记「…」` 与 `evidence:v1{…}`
@@ -1052,7 +1054,16 @@ function cmdResolve(argv) {
     if (r.mode === 'manual') fail(`${id} 在${t.label}是「列错位需人工」行 → 先修列，再改状态`)
     const C = MAP[r.kind]
     const parts = t.lines[r.li].split('|')
-    const newStatus = `[${status} ${date}${note ? ' · ' + note : ''} · ${evidence.blob}]`
+    // 已登记的 `原记「…」` **默认逐字保留**（重结账 ≠ 销毁历史；要丢必须 --drop-original）
+    const orig = originalMarker(String(parts[1 + C.status] || ''))
+    const dropOriginal = argv.includes('--drop-original')
+    if (orig && dropOriginal)
+      console.log(
+        `⚠️ 按 --drop-original 丢掉原文：${(orig.match(/原记「([\s\S]*)」/) ?? [])[1] ?? ''}`,
+      )
+    const newStatus = `[${status} ${date}${note ? ' · ' + note : ''} · ${evidence.blob}${
+      orig && !dropOriginal ? ' · ' + orig : ''
+    }]`
     parts[1 + C.status] = ` ${newStatus} `
     t.lines[r.li] = parts.join('|')
     writeFileSync(t.file, t.lines.join('\n'))
@@ -1583,6 +1594,17 @@ function originalSettlement(statusCell) {
     .replace(/^\d{4}-\d{2}-\d{2}\s*/, '')
     .replace(/^[·：:]\s*/, '')
     .trim()
+}
+
+/**
+ * 状态格里已登记的 `原记「…」` —— **逐字取出**（含内嵌 ASCII 方括号 / 〔〕标注）。
+ *
+ * 【为什么 resolve 也要它】降级（`reopen`）把原结账句搬进 `原记「…」`；随后补凭证要重新
+ * `resolve`。若 resolve 写全新状态格，就把刚救回来的历史又冲掉了 —— **一边修销毁口、
+ * 一边用另一个命令销毁同一批历史**。故 resolve 默认**保留**，要丢必须 `--drop-original`。
+ */
+function originalMarker(cell) {
+  return (String(cell ?? '').match(/原记「[\s\S]*」(?=\s*(?:\]|$))/) ?? [])[0] ?? ''
 }
 
 /**
@@ -2137,7 +2159,7 @@ switch (cmd) {
       '  读：list [--area NN] [--status X] [--all] | area <NN> | search <关键词> | show <TD-ID>',
     )
     console.log(
-      '  写：add --area NN --summary "…" | resolve <TD-ID> --evidence "cmd=…;claim=…;fail=…;cplx=…;impl=…"（**凭证强制**） | edit <TD-ID> --field summary｜solution｜classify｜rate --value "…" | reanchor <TD-ID> --anchor <区域文件> | move <TD-ID> --to <NN>',
+      '  写：add --area NN --summary "…" | resolve <TD-ID> --evidence "cmd=…;claim=…;fail=…;cplx=…;impl=…"（**凭证强制**；已有 原记 默认保留，丢要 --drop-original） | edit <TD-ID> --field summary｜solution｜classify｜rate --value "…" | reanchor <TD-ID> --anchor <区域文件> | move <TD-ID> --to <NN>',
     )
     console.log('  维护：archive [--dry] | audit [--liveness] | fix [--dry]（规范化历史列错位行）')
     console.log(
