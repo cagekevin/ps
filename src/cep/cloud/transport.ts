@@ -39,6 +39,25 @@ function serial<T>(task: () => Promise<T>): Promise<T> {
   return next
 }
 
+/**
+ * HTTP 状态 → 错误码（TD-11-8）。**只分「重试策略」或「用户该做什么」不同的那些**：
+ * - 401/403：权限，自己不会好 → 不自动重试，用户去修 GAS 部署权限；
+ * - 429：服务端要我们慢一点 → 可重试，但直接按最长一档退避；
+ * - 其余（4xx/5xx/网络/超时）：一律 `CLOUD_NETWORK`——重试方式和用户动作都一样，再多一个码就是死码。
+ */
+function httpError(status: number): CloudError {
+  if (status === 401 || status === 403) {
+    return new CloudError(
+      'CLOUD_PERMISSION',
+      `云同步网关拒绝访问（HTTP ${status}）：请确认 GAS 部署权限是「所有人」，并检查同步地址`,
+    )
+  }
+  if (status === 429) {
+    return new CloudError('CLOUD_RATE_LIMITED', '云同步网关限流（HTTP 429）：会等更久再自动重试')
+  }
+  return new CloudError('CLOUD_NETWORK', `GAS HTTP ${status}`)
+}
+
 async function callGateway(
   action: 'push_data' | 'pull_data',
   data?: CloudSnapshot,
@@ -66,12 +85,13 @@ async function request(
     })
 
     if (!response.ok) {
-      throw new CloudError('CLOUD_NETWORK', `GAS HTTP ${response.status}`)
+      throw httpError(response.status)
     }
 
     const text = await response.text()
     if (text.includes('<html')) {
-      throw new CloudError('CLOUD_PERMISSION_HTML', 'GAS 返回了权限页，请确认部署权限为“所有人”')
+      // 登录页/权限页与 401/403 是同一件事：用户要做的事与重试策略完全一样，共用一个码
+      throw new CloudError('CLOUD_PERMISSION', 'GAS 返回了权限页，请确认部署权限为“所有人”')
     }
 
     let json: Record<string, unknown>

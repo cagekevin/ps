@@ -76,10 +76,38 @@ describe('cloud transport', () => {
     expect(await pullSnapshot()).toEqual({ status: 'empty' })
   })
 
-  it('HTML 权限页报 CLOUD_PERMISSION_HTML', async () => {
+  it('HTML 权限页报 CLOUD_PERMISSION（与 401/403 同一类：用户要做的事和重试策略都一样）', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response('<html>login</html>')))
 
-    await expect(pullSnapshot()).rejects.toMatchObject({ code: 'CLOUD_PERMISSION_HTML' })
+    await expect(pullSnapshot()).rejects.toMatchObject({ code: 'CLOUD_PERMISSION' })
+  })
+
+  /**
+   * TD-11-8：HTTP 状态必须分开到"重试策略或用户动作不同"的粒度。
+   * 判据（每一条都在这里有用例兜住）：
+   * - 401/403 → 权限（不会自己好，别劝重试）→ `CLOUD_PERMISSION`
+   * - 429 → 限流（可以好，但要慢）→ `CLOUD_RATE_LIMITED`
+   * - 500 / 其它 → 与网络失败同待遇 → 仍是 `CLOUD_NETWORK`
+   */
+  it('401 / 403 报 CLOUD_PERMISSION，且文案指出去查部署权限', async () => {
+    for (const status of [401, 403]) {
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response('', false, status)))
+      const error = await pullSnapshot().catch((e: unknown) => e)
+      expect(error).toMatchObject({ code: 'CLOUD_PERMISSION' })
+      expect((error as Error).message).toContain('部署权限')
+    }
+  })
+
+  it('429 报 CLOUD_RATE_LIMITED（不退化成网络错误）', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response('', false, 429)))
+
+    await expect(pullSnapshot()).rejects.toMatchObject({ code: 'CLOUD_RATE_LIMITED' })
+  })
+
+  it('500 仍是 CLOUD_NETWORK：重试方式与用户动作都和网络失败一样，再分一个码就是死码', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response('', false, 500)))
+
+    await expect(pullSnapshot()).rejects.toMatchObject({ code: 'CLOUD_NETWORK' })
   })
 
   it('非 JSON 报 CLOUD_BAD_RESPONSE', async () => {

@@ -251,3 +251,50 @@ describe('同步队列：防抖 / 最大等待 / 退避 / 串行（ADR-21）', (
     expect(queue.pendingUnits()).toEqual([])
   })
 })
+
+/**
+ * TD-11-8：错误码要真的改变**行为**，否则就是死码。
+ *
+ * 这里的两个码各自钉一条策略：
+ * - `retry:false`（权限错）：不再自己排重试——重试改变不了结果，只是每 15 分钟写一遍同样的错；
+ * - `retryAfterMs`（限流）：可以再试，但按服务端要求拉长间隔。
+ */
+describe('同步队列：失败后的重试策略（TD-11-8）', () => {
+  it('retry:false 的失败不再自动重试（不是"每档退避都试一遍"）', async () => {
+    const sync = vi.fn(async (): Promise<SyncOutcome> => ({ ok: false, retry: false }))
+    const queue = createSyncQueue({ sync })
+
+    queue.markDirty('font.tags')
+    await vi.advanceTimersByTimeAsync(CLOUD_SYNC_DEBOUNCE_MS)
+    expect(sync).toHaveBeenCalledTimes(1)
+
+    // 推进整整一小时（远超最长一档 15 分钟）：不再有任何自动重试
+    await vi.advanceTimersByTimeAsync(60 * 60_000)
+    expect(sync).toHaveBeenCalledTimes(1)
+
+    // 但脏集合不丢，下一次触发点会再试一次（用户可能已经修好权限）
+    queue.requestSync('manual')
+    await vi.advanceTimersByTimeAsync(0)
+    expect(sync).toHaveBeenCalledTimes(2)
+
+    queue.stop()
+  })
+
+  it('retryAfterMs 拉长等待：到点前不重试，到点才重试', async () => {
+    const sync = vi.fn(async (): Promise<SyncOutcome> => ({ ok: false, retryAfterMs: 10 * 60_000 }))
+    const queue = createSyncQueue({ sync })
+
+    queue.markDirty('font.tags')
+    await vi.advanceTimersByTimeAsync(CLOUD_SYNC_DEBOUNCE_MS)
+    expect(sync).toHaveBeenCalledTimes(1)
+
+    // 走完常规第一档（1 分钟）也不许重试
+    await vi.advanceTimersByTimeAsync(60_000)
+    expect(sync).toHaveBeenCalledTimes(1)
+
+    await vi.advanceTimersByTimeAsync(10 * 60_000 - 60_000)
+    expect(sync).toHaveBeenCalledTimes(2)
+
+    queue.stop()
+  })
+})

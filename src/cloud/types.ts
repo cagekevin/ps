@@ -65,10 +65,19 @@ export interface PendingChange {
   /** 最近一次记为待同步的时间戳 */
   at: number
   reason: PendingReason
+  /**
+   * 具体错误码（如 `CLOUD_PERMISSION` / `CLOUD_OFFLINE` / `CLOUD_RATE_LIMITED`，TD-11-8）。
+   *
+   * 为什么不直接多几个 `reason` 桶：`reason` 是"用户该做什么"的粗分类，页面按它选文案；
+   * 错误码是"技术上到底怎么了"，给日志与后续按码做不同处理用。两者维度不同，
+   * 硬塞进一个字段会让五桶变成十几桶，而 `PendingReason` 的每个成员都必须有专属文案。
+   */
+  code?: string
 }
 
 export interface CloudPendingPort {
-  record(units: string[], reason: PendingReason): void
+  /** `code` 给得出就带上：日志和状态里能看出"是哪一类失败"，而不只是"失败了" */
+  record(units: string[], reason: PendingReason, code?: string): void
   list(): PendingChange[]
   /** 不传 = 全清（整包上传/下载成功后所有 unit 都已对齐） */
   clear(units?: string[]): void

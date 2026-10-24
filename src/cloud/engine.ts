@@ -14,6 +14,7 @@ import {
 } from '@/domain/cloud'
 import type {
   CloudDeps,
+  CloudPendingPort,
   CloudStatus,
   DownloadOptions,
   DownloadResult,
@@ -109,6 +110,18 @@ function errorResult(error: unknown): { error: string; errorCode: string } {
     error: error instanceof Error ? error.message : '云同步失败',
     errorCode: 'CLOUD_NETWORK',
   }
+}
+
+/**
+ * 记一条"网络类"待同步痕迹，并带上具体错误码（TD-11-8）。
+ *
+ * 为什么要码：`pending` 只有 5 个 reason 桶，"网络失败"里混着限流/权限/超时，
+ * 日志和状态里看不出该做什么。码只在给得出的时候带，老调用处/老痕迹的写法不变。
+ */
+function recordNetworkPending(port: CloudPendingPort, units: string[], error: unknown): void {
+  const code = error instanceof CloudError ? error.code : undefined
+  if (code) port.record(units, 'network', code)
+  else port.record(units, 'network')
 }
 
 /**
@@ -402,7 +415,7 @@ export function createCloudEngine(deps: CloudDeps): CloudEngine {
     try {
       pulled = await deps.transport.pull()
     } catch (error) {
-      deps.pending.record(ready, 'network')
+      recordNetworkPending(deps.pending, ready, error)
       return { ok: false, count: 0, pushed: [], pending: ready, ...errorResult(error) }
     }
     // TD-11-5：读不懂就**不推**。旧版这里 `cloud?.units ?? {}` 把"读不懂"折成"云端空"，
@@ -516,7 +529,7 @@ export function createCloudEngine(deps: CloudDeps): CloudEngine {
     try {
       await deps.transport.push(snapshot)
     } catch (error) {
-      deps.pending.record(changed, 'network')
+      recordNetworkPending(deps.pending, changed, error)
       return { ok: false, count: 0, pushed: [], pending: changed, ...errorResult(error) }
     }
 

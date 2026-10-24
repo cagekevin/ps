@@ -89,7 +89,10 @@ export interface CloudLedger {
 export type CloudErrorCode =
   | 'CLOUD_NOT_CONFIGURED'
   | 'CLOUD_NETWORK'
-  | 'CLOUD_PERMISSION_HTML'
+  /** 权限（HTTP 401/403 或 GAS 的登录页）：**不会自己好**，重试只是刷日志 */
+  | 'CLOUD_PERMISSION'
+  /** 限流（HTTP 429）：会好，但要慢——退避直接跳到最长一档 */
+  | 'CLOUD_RATE_LIMITED'
   | 'CLOUD_BAD_RESPONSE'
   | 'CLOUD_COLLECT_FAILED'
   | 'CLOUD_WRITE_FAILED'

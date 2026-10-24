@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
 import {
+  CloudError,
   buildSnapshot,
   unitHash,
   unitsHash,
@@ -460,6 +461,22 @@ describe('cloud engine', () => {
     expect(result).toMatchObject({ ok: false, errorCode: 'CLOUD_NETWORK', pending: ['font.tags'] })
     expect(ledgerWrite).not.toHaveBeenCalled()
     expect(pendingRecord).toHaveBeenCalledWith(['font.tags'], 'network')
+  })
+
+  /**
+   * TD-11-8：失败痕迹要带得上"到底哪一类失败"。
+   *
+   * 只记 `network` 的结果：日志与状态里 401/403/429/超时逐字相同，
+   * 用户按"网络失败，会在后台重试"去等一个**永远不会自己好**的权限错。
+   */
+  it('权限错误记 pending 时带上错误码（不是只有 reason）', async () => {
+    pull.mockResolvedValue(cloudView({}, 0))
+    push.mockRejectedValue(new CloudError('CLOUD_PERMISSION', 'HTTP 403'))
+
+    const result = await engine.pushUnits(['font.tags'], { force: true })
+
+    expect(result).toMatchObject({ ok: false, errorCode: 'CLOUD_PERMISSION' })
+    expect(pendingRecord).toHaveBeenCalledWith(['font.tags'], 'network', 'CLOUD_PERMISSION')
   })
 
   it('未注册的 unit 直接报错，不 pull 不 push', async () => {

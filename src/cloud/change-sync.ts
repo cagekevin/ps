@@ -22,6 +22,16 @@ export interface SyncOutcome {
    * 而且退避额度是给真网络错误用的，被闸门吃掉之后会把"网络恢复"也拖到 15 分钟。
    */
   skip?: boolean
+  /**
+   * 失败后要不要**自己**再排一轮（默认 true）。
+   *
+   * 权限错（401/403）不会自己好：按退避重试只是每 15 分钟往日志里写一遍同样的错，
+   * 用户永远等不到成功。这类失败置 false = 停手，等下一次触发点（新的改动 / 手动 / 变可见）。
+   * 判据见 TD-11-8：每个新错误码要么改重试策略、要么改用户该做什么，否则不该分。
+   */
+  retry?: boolean
+  /** 下次重试至少等这么久（服务端明确要求"慢点"时用）；与退避梯度取大 */
+  retryAfterMs?: number
 }
 
 export interface SyncQueueDeps {
@@ -75,6 +85,8 @@ export function createSyncQueue(deps: SyncQueueDeps): SyncQueue {
   let retryAt = 0
   /** 本轮是被闸门挡下的（没发请求）：下一步按"慢轮询"排，不进退避 */
   let skipped = false
+  /** 失败原因是"自己不会好"的（`retry:false`）：不再自己排重试，等下一次触发点 */
+  let parked = false
   /** 一次同步在飞（pull→push 全程） */
   let running = false
   let stopped = false
@@ -135,9 +147,14 @@ export function createSyncQueue(deps: SyncQueueDeps): SyncQueue {
       } else if (outcome.skip) {
         // 没发请求：脏留着，但不计失败、不进退避
         skipped = true
+      } else if (outcome.retry === false) {
+        // 重试改变不了结果（权限）：停手，但不丢脏集合——下一次触发点会再试一次
+        attempts += 1
+        parked = true
+        retryAt = 0
       } else {
         attempts += 1
-        retryAt = Date.now() + backoffDelay()
+        retryAt = Date.now() + Math.max(backoffDelay(), outcome.retryAfterMs ?? 0)
       }
       deps.onOutcome?.(outcome, units)
     } catch (error) {
@@ -151,7 +168,7 @@ export function createSyncQueue(deps: SyncQueueDeps): SyncQueue {
         // 没脏但还在退避（sweep 失败）：到期重试，否则启动补偿失败一次就再也不试了。
         // 被闸门挡下则按最大等待做一次慢轮询——用户把自动同步打开后就自己恢复，不用等下一次改动。
         const delay = skipped ? maxWaitMs : Math.max(nextDelay(), retryAt - Date.now())
-        if (dirty.size > 0 || retryAt > Date.now()) schedule(delay)
+        if (!parked && (dirty.size > 0 || retryAt > Date.now())) schedule(delay)
       }
       skipped = false
     }
@@ -161,6 +178,8 @@ export function createSyncQueue(deps: SyncQueueDeps): SyncQueue {
     if (stopped) return
     if (onlyIfDirty && dirty.size === 0) return
     if (running) return // 在飞时不再开一轮；跑完的 finally 会按脏集合补排
+    // 有人重新要同步了（手动 / 变可见 / 新的改动）⇒ 解除"停手"，再试一次
+    parked = false
     clearTimer()
     void execute()
   }
@@ -168,6 +187,7 @@ export function createSyncQueue(deps: SyncQueueDeps): SyncQueue {
   return {
     markDirty(unit) {
       if (stopped || !unit) return
+      parked = false
       if (dirty.size === 0) firstDirtyAt = Date.now()
       dirty.add(unit)
       if (running) return // 跑完的 finally 会补排，避免两轮并发

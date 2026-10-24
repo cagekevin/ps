@@ -26,8 +26,8 @@
     }
   },
   "tests": {
-    "files": 147,
-    "cases": 1254,
+    "files": 148,
+    "cases": 1264,
     "eachSites": 16
   },
   "components": 31,
@@ -68,11 +68,11 @@
   "layers": {
     "cep": {
       "files": 54,
-      "lines": 6926
+      "lines": 6975
     },
     "cloud": {
       "files": 4,
-      "lines": 984
+      "lines": 1026
     },
     "commands": {
       "files": 16,
@@ -88,7 +88,7 @@
     },
     "domain": {
       "files": 24,
-      "lines": 3432
+      "lines": 3435
     },
     "pages": {
       "files": 63,

@@ -6,6 +6,7 @@
 
 import { createSyncQueue } from '@/cloud/change-sync'
 import type { SyncOutcome } from '@/cloud/change-sync'
+import { CLOUD_SYNC_BACKOFF_MS } from '@/config/cloud'
 import { createCloudEngine, type CloudEngine } from '@/cloud/engine'
 import { cloudEntries } from './entries'
 import { isAutoSyncEnabled, isCloudConfigured } from './config'
@@ -66,6 +67,20 @@ async function gate(): Promise<SyncOutcome | null> {
 }
 
 /**
+ * 错误码 → 重试策略（TD-11-8）。**只有"重试方式不同"的码才进这张表**：
+ * - 权限（401/403/登录页）：自己不会好 → 停手，等下一次触发点；
+ * - 限流（429）：会好但要慢 → 直接按最长一档退避。
+ * 其余失败（网络 / 超时 / 5xx / 写盘失败）走常规梯度，不进表——进了也是同一个值。
+ */
+function retryPolicy(errorCode?: string): Pick<SyncOutcome, 'retry' | 'retryAfterMs'> {
+  if (errorCode === 'CLOUD_PERMISSION') return { retry: false }
+  if (errorCode === 'CLOUD_RATE_LIMITED') {
+    return { retryAfterMs: CLOUD_SYNC_BACKOFF_MS[CLOUD_SYNC_BACKOFF_MS.length - 1] }
+  }
+  return {}
+}
+
+/**
  * 后台同步的唯一队列（ADR-21）：触发点只 `markDirty`，请求只从这里发。
  * 手动整包（upload/download）走 `cloudSyncQueue.runSerial`，与自动推送共用一条串行链。
  */
@@ -73,7 +88,8 @@ export const cloudSyncQueue = createSyncQueue({
   async sync(units) {
     const blocked = await gate()
     if (blocked) return blocked
-    return engine.pushUnits(units.length > 0 ? units : allSyncUnitIds())
+    const result = await engine.pushUnits(units.length > 0 ? units : allSyncUnitIds())
+    return { ...result, ...retryPolicy(result.errorCode) }
   },
 })
 
