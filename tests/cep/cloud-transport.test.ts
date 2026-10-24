@@ -55,9 +55,25 @@ describe('cloud transport', () => {
       ),
     )
 
-    const view = await pullSnapshot()
+    const pulled = await pullSnapshot()
+    expect(pulled.status).toBe('ok')
+    const view = pulled.status === 'ok' ? pulled.snapshot : null
     expect(view?.rev).toBe(2)
     expect(view?.units['font.tags']).toBeTruthy()
+  })
+
+  /**
+   * TD-11-5：网关回 200 但**结构不符**时，`pull` 必须报"读不懂"，
+   * 不能报"云端是空的"（后者会让引擎以 rev=1 覆盖云端）。
+   */
+  it('pull_data 回 {"ok":true}（无 units）→ unreadable，不是 empty', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(JSON.stringify({ ok: true }))))
+    expect(await pullSnapshot()).toMatchObject({ status: 'unreadable' })
+  })
+
+  it('pull_data 回 {data:null} → empty（服务端显式说没有）', async () => {
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(JSON.stringify({ data: null }))))
+    expect(await pullSnapshot()).toEqual({ status: 'empty' })
   })
 
   it('HTML 权限页报 CLOUD_PERMISSION_HTML', async () => {
@@ -94,8 +110,10 @@ describe('cloud transport', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1)
 
     releaseFirst(response('{"ok":true}'))
-    await expect(first).resolves.toBeNull()
-    await expect(second).resolves.toBeNull()
+    // 这份回包本身没有 units（TD-11-5 之后是 unreadable）——本用例只关心"排队"，
+    // 所以断言三态而不是 null
+    await expect(first).resolves.toMatchObject({ status: 'unreadable' })
+    await expect(second).resolves.toMatchObject({ status: 'unreadable' })
     expect(fetchMock).toHaveBeenCalledTimes(2)
   })
 })

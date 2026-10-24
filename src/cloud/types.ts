@@ -1,7 +1,7 @@
 import type {
   CloudLedger,
   CloudSnapshot,
-  CloudSnapshotView,
+  CloudPullOutcome,
   SyncUnitAdapter,
   SyncDiff,
   UploadDecision,
@@ -9,7 +9,8 @@ import type {
 
 export interface CloudTransportPort {
   push(snapshot: CloudSnapshot): Promise<void>
-  pull(): Promise<CloudSnapshotView | null>
+  /** 三态：`ok` 有快照 / `empty` 服务端明说没有 / `unreadable` 读不懂（调用方必须拒绝写云端） */
+  pull(): Promise<CloudPullOutcome>
 }
 
 /**

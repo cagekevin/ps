@@ -11,8 +11,8 @@
 import {
   CloudError,
   normalizeCloudPayload,
+  type CloudPullOutcome,
   type CloudSnapshot,
-  type CloudSnapshotView,
 } from '@/domain/cloud'
 import { getCloudUrl } from './config'
 
@@ -104,7 +104,12 @@ export async function pushSnapshot(snapshot: CloudSnapshot): Promise<void> {
   await callGateway('push_data', snapshot)
 }
 
-export async function pullSnapshot(): Promise<CloudSnapshotView | null> {
+/**
+ * 拉云端快照。**三态**（TD-11-5）：网络/权限/非 JSON 仍然抛 `CloudError`（既有语义不变），
+ * 200 但结构不符返回 `{status:'unreadable'}` —— 由引擎决定"拒绝覆盖云端"，
+ * 这里不替它判（ADR-0026 ②：原语只报观测）。
+ */
+export async function pullSnapshot(): Promise<CloudPullOutcome> {
   const response = await callGateway('pull_data')
   return normalizeCloudPayload(response)
 }

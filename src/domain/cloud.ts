@@ -205,27 +205,72 @@ function normalizeUnit(raw: unknown): SyncUnit | null {
 }
 
 /**
+ * 云端快照读取的**三态**（与 `LedgerRead` 同形：观测，不是结论）。
+ *
+ * 为什么必须三态（TD-11-5）：两态（`| null`）里"读不懂"与"没有"同值，
+ * 引擎据此判"云端是空的"，用本地 rev=1 把云端覆盖掉 —— 用户看到的是一次**成功**同步。
+ * 网关回 200 但结构不符（错误页 / `{ok:true}` / 字段改名）恰恰走这条路。
+ *
+ * - `ok`：读到了快照（`units` 可以是空对象 = 云端有记录但还没有内容，这是合法快照）；
+ * - `empty`：服务端**明确**说"还没有数据"（`{data:null}` 或整体 `null`）——
+ *   只有显式声明才算，**不靠"没看到 units"倒推**；
+ * - `unreadable`：回包结构不符（含坏 unit）→ 调用方必须**拒绝写云端**。
+ */
+export type CloudPullOutcome =
+  | { status: 'ok'; snapshot: CloudSnapshotView }
+  | { status: 'empty' }
+  | { status: 'unreadable'; reason: string }
+
+/** 给 reason 用的一句话形状描述（不抛、不猜） */
+function describeShape(raw: unknown): string {
+  if (raw === undefined) return 'undefined'
+  if (raw === null) return 'null'
+  if (Array.isArray(raw)) return 'array'
+  return typeof raw === 'object' ? `object{${Object.keys(raw as object).join(',')}}` : typeof raw
+}
+
+/**
  * 兼容：
  * A. { data: CloudSnapshot }
  * B. CloudSnapshot 裸包
- * 无有效 units → null。
+ *
+ * **读不懂 ≠ 没有**：只有 `{data:null}` / 整体 `null` 才算 `empty`；
+ * 缺 `units`、unit 坏掉、回包不是对象一律 `unreadable`（调用方据此拒绝覆盖云端）。
  */
-export function normalizeCloudPayload(raw: unknown): CloudSnapshotView | null {
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) return null
+export function normalizeCloudPayload(raw: unknown): CloudPullOutcome {
+  // 1. 显式的"没有"：服务端把 data 置 null（唯一能证明"没有"的信号）
+  if (raw === null || raw === undefined) return { status: 'empty' }
+  if (typeof raw !== 'object' || Array.isArray(raw)) {
+    return { status: 'unreadable', reason: `回包不是对象（${describeShape(raw)}）` }
+  }
   const outer = raw as Record<string, unknown>
+  if ('data' in outer && outer.data === null) return { status: 'empty' }
+
   const candidate =
     outer.data && typeof outer.data === 'object' && !Array.isArray(outer.data)
       ? (outer.data as Record<string, unknown>)
       : outer
 
   if (!candidate.units || typeof candidate.units !== 'object' || Array.isArray(candidate.units)) {
-    return null
+    // 这里以前 return null = "云端是空的"。`{ok:true}` 这类回包正好落进来，
+    // 于是引擎拿 rev=1 覆盖云端（TD-11-5）。
+    return {
+      status: 'unreadable',
+      reason: `回包没有 units，且没明说"没有"（${describeShape(raw)}）`,
+    }
   }
 
   const units: Record<string, SyncUnit> = {}
+  const dropped: string[] = []
   for (const [id, value] of Object.entries(candidate.units as Record<string, unknown>)) {
     const unit = normalizeUnit(value)
+    // 坏 unit 不再静默丢弃：丢掉它 = 下一次 push 的整包会**少一个 unit**，
+    // 云端那份就被我们这次写入抹掉了（同一条母体）。
     if (unit) units[id] = unit
+    else dropped.push(id)
+  }
+  if (dropped.length) {
+    return { status: 'unreadable', reason: `云端有读不懂的 unit：${dropped.join('、')}` }
   }
 
   const meta =
@@ -244,7 +289,7 @@ export function normalizeCloudPayload(raw: unknown): CloudSnapshotView | null {
     __meta: { rev, updatedAt, schema: 1 },
   }
 
-  return { rev, updatedAt, units, raw: snapshot }
+  return { status: 'ok', snapshot: { rev, updatedAt, units, raw: snapshot } }
 }
 
 export function buildSnapshot(

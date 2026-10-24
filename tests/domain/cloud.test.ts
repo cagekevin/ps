@@ -37,7 +37,7 @@ describe('cloud snapshot', () => {
   })
 
   it('normalize 支持 { data: snapshot }', () => {
-    const view = normalizeCloudPayload({
+    const pulled = normalizeCloudPayload({
       data: {
         type: 'psz_sync',
         schema: 1,
@@ -47,25 +47,44 @@ describe('cloud snapshot', () => {
       },
     })
 
+    expect(pulled.status).toBe('ok')
+    const view = pulled.status === 'ok' ? pulled.snapshot : null
     expect(view?.rev).toBe(3)
     expect(view?.units['font.tags'].hash).toBe('hash-a')
   })
 
   it('normalize 支持裸包 + __meta', () => {
-    const view = normalizeCloudPayload({
+    const pulled = normalizeCloudPayload({
       type: 'psz_sync',
       schema: 1,
       units: { 'font.stars': unit() },
       __meta: { rev: 4, updatedAt: 200, schema: 1 },
     })
 
+    expect(pulled.status).toBe('ok')
+    const view = pulled.status === 'ok' ? pulled.snapshot : null
     expect(view?.rev).toBe(4)
     expect(view?.updatedAt).toBe(200)
   })
 
-  it('无 units 返回 null', () => {
-    expect(normalizeCloudPayload({ data: {} })).toBeNull()
-    expect(normalizeCloudPayload(null)).toBeNull()
+  it('缺 units → unreadable（不是"云端为空"）', () => {
+    // 网关回 `{ok:true}`（无 units）曾经被判成 null = 云端为空 → rev=1 覆盖云端（TD-11-5）
+    expect(normalizeCloudPayload({ ok: true })).toMatchObject({ status: 'unreadable' })
+    expect(normalizeCloudPayload({ data: {} })).toMatchObject({ status: 'unreadable' })
+    expect(normalizeCloudPayload('x')).toMatchObject({ status: 'unreadable' })
+  })
+
+  it('服务端显式说"没有" → empty（只有显式 null 才算）', () => {
+    expect(normalizeCloudPayload(null)).toEqual({ status: 'empty' })
+    expect(normalizeCloudPayload({ data: null })).toEqual({ status: 'empty' })
+  })
+
+  it('坏 unit → unreadable（丢掉它等于下次 push 抹掉云端那条）', () => {
+    const pulled = normalizeCloudPayload({
+      units: { 'font.tags': unit(), 'font.stars': { files: 'not-an-array' } },
+    })
+    expect(pulled.status).toBe('unreadable')
+    expect(pulled.status === 'unreadable' && pulled.reason).toContain('font.stars')
   })
 
   it('buildSnapshot 写入 __meta，且 unitsHash 不含 rev', () => {

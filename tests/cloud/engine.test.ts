@@ -4,6 +4,7 @@ import {
   unitHash,
   unitsHash,
   type CloudLedger,
+  type CloudPullOutcome,
   type CloudSnapshotView,
   type SyncUnit,
   type SyncUnitAdapter,
@@ -49,13 +50,18 @@ function toUnit(payload: UnitPayload): SyncUnit {
   }
 }
 
-function cloudView(units: Record<string, SyncUnit>, rev = 3): CloudSnapshotView {
-  return {
+/**
+ * pull 的 `ok` 三态。TD-11-5 之后 `pull()` 不再返回裸 view / null，
+ * 所以这里把"造一份云端快照"封成 outcome，用例侧写法不变。
+ */
+function cloudView(units: Record<string, SyncUnit>, rev = 3): CloudPullOutcome {
+  const snapshot: CloudSnapshotView = {
     rev,
     updatedAt: 100,
     units,
     raw: buildSnapshot(units, rev, 100),
   }
+  return { status: 'ok', snapshot }
 }
 
 /** 契约测试，非实机：任何真实网络请求都让用例失败 */
@@ -94,7 +100,7 @@ describe('cloud engine', () => {
     writeA = vi.fn<SyncUnitAdapter['write']>().mockResolvedValue({ ok: true })
     readB = vi.fn<SyncUnitAdapter['read']>().mockResolvedValue(payloadB)
     writeB = vi.fn<SyncUnitAdapter['write']>().mockResolvedValue({ ok: true })
-    pull = vi.fn<CloudDeps['transport']['pull']>().mockResolvedValue(null)
+    pull = vi.fn<CloudDeps['transport']['pull']>().mockResolvedValue({ status: 'empty' })
     push = vi.fn<CloudDeps['transport']['push']>().mockResolvedValue(undefined)
     ledgerRead = vi.fn<() => CloudLedgerRecord | null | typeof BROKEN>().mockReturnValue(null)
     ledgerWrite = vi.fn<CloudDeps['ledger']['write']>()
@@ -358,10 +364,13 @@ describe('cloud engine', () => {
     // 模拟推送生效：云端 = 刚推上去的快照；台账 = 刚写入的记录
     const snapshot = push.mock.calls[0][0]
     pull.mockResolvedValue({
-      rev: snapshot.rev,
-      updatedAt: snapshot.updatedAt,
-      units: snapshot.units,
-      raw: snapshot,
+      status: 'ok',
+      snapshot: {
+        rev: snapshot.rev,
+        updatedAt: snapshot.updatedAt,
+        units: snapshot.units,
+        raw: snapshot,
+      },
     })
     ledgerRead.mockReturnValue(ledgerWrite.mock.calls[0][0])
 
@@ -489,10 +498,13 @@ describe('cloud engine', () => {
     // 模拟推送生效：云端 = 刚 push 的快照；台账 = 刚写入的记录
     const snapshot = push.mock.calls[0][0]
     pull.mockResolvedValue({
-      rev: snapshot.rev,
-      updatedAt: snapshot.updatedAt,
-      units: snapshot.units,
-      raw: snapshot,
+      status: 'ok',
+      snapshot: {
+        rev: snapshot.rev,
+        updatedAt: snapshot.updatedAt,
+        units: snapshot.units,
+        raw: snapshot,
+      },
     })
     ledgerRead.mockReturnValue(ledgerWrite.mock.calls[0][0])
 

@@ -5,6 +5,7 @@ import {
   diffUnits,
   unitHash,
   unitsHash,
+  type CloudPullOutcome,
   type CloudSnapshotView,
   type SyncDiff,
   type SyncUnit,
@@ -34,6 +35,19 @@ export interface CloudEngine {
    * `pushUnits` 是后台跟随本地改动触发的局部推送（没有用户在场，冲突只能记痕迹）。
    */
   pushUnits(ids: string[], options?: PushUnitsOptions): Promise<PushUnitsResult>
+}
+
+/**
+ * "云端读不懂"的唯一处置（TD-11-5）：**拒绝写云端**。
+ *
+ * 为什么不退一步当"云端为空"继续推：那样 rev 从 1 起算，用户看到的是**一次成功同步**，
+ * 而云端原来那份已经被覆盖掉了 —— 不可恢复。宁可这次不同步、把原因交上去。
+ */
+function cloudUnreadable(reason: string): { error: string; errorCode: 'CLOUD_BAD_RESPONSE' } {
+  return {
+    error: `云端返回读不懂（${reason}），已拒绝覆盖云端`,
+    errorCode: 'CLOUD_BAD_RESPONSE',
+  }
 }
 
 function adapterMap(entries: SyncUnitAdapter[]): Map<string, SyncUnitAdapter> {
@@ -164,12 +178,17 @@ export function createCloudEngine(deps: CloudDeps): CloudEngine {
     if (read.status === 'broken') return ledgerBrokenResult(read.reason)
     const ledger = read.status === 'ok' ? read.ledger : null
 
-    let cloud
+    let pulled: CloudPullOutcome
     try {
-      cloud = await deps.transport.pull()
+      pulled = await deps.transport.pull()
     } catch (error) {
       return { ok: false, count: 0, ...errorResult(error) }
     }
+    // TD-11-5：读不懂 ≠ 云端为空。后者会以 rev=1 覆盖云端
+    if (pulled.status === 'unreadable') {
+      return { ok: false, count: 0, ...cloudUnreadable(pulled.reason) }
+    }
+    const cloud = pulled.status === 'ok' ? pulled.snapshot : null
 
     const decision = decideUpload({
       cloudReadable: true,
@@ -234,12 +253,17 @@ export function createCloudEngine(deps: CloudDeps): CloudEngine {
       }
     }
 
-    let cloud
+    let pulled: CloudPullOutcome
     try {
-      cloud = await deps.transport.pull()
+      pulled = await deps.transport.pull()
     } catch (error) {
       return { ok: false, count: 0, hasCloud: false, ...errorResult(error) }
     }
+    // TD-11-5：读不懂不许说成"云端没有数据"（用户会以为云端真的是空的）
+    if (pulled.status === 'unreadable') {
+      return { ok: false, count: 0, hasCloud: false, ...cloudUnreadable(pulled.reason) }
+    }
+    const cloud = pulled.status === 'ok' ? pulled.snapshot : null
 
     if (!cloud) return { ok: false, count: 0, hasCloud: false, error: '云端没有数据' }
 
@@ -374,13 +398,20 @@ export function createCloudEngine(deps: CloudDeps): CloudEngine {
       }
     }
 
-    let cloud: CloudSnapshotView | null
+    let pulled: CloudPullOutcome
     try {
-      cloud = await deps.transport.pull()
+      pulled = await deps.transport.pull()
     } catch (error) {
       deps.pending.record(ready, 'network')
       return { ok: false, count: 0, pushed: [], pending: ready, ...errorResult(error) }
     }
+    // TD-11-5：读不懂就**不推**。旧版这里 `cloud?.units ?? {}` 把"读不懂"折成"云端空"，
+    // 于是每个改过的 unit 都判成"云端没有"直接推上去
+    if (pulled.status === 'unreadable') {
+      deps.pending.record(ready, 'conflict')
+      return { ok: false, count: 0, pushed: [], pending: ready, ...cloudUnreadable(pulled.reason) }
+    }
+    const cloud: CloudSnapshotView | null = pulled.status === 'ok' ? pulled.snapshot : null
 
     // T-114：坏台账 → **不许推**。`ledger = null` 时 per-unit 基线全缺，T-76① 的
     // "没有基线不判冲突"会让**每一个改过的 unit 直接推**，别人在另一台机器上的改动被覆盖
