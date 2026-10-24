@@ -63,6 +63,16 @@ function confirmLimit(): void {
     </p>
 
     <template v-else>
+      <!--
+        降级（只坏一个数据文件 / 有条目认不出）：**复用上面那套 `strip__error` markup 与样式**，
+        不新增控件、不新增样式。它只在"这一次读的结果真的不全"时出现
+        （`degraded` 每次 load 开头都清空，读全了就是空串）⇒ 不刷屏、不 toast。
+        文案与数量由 store 说（生产者），页面只转发（ADR-0023）。
+      -->
+      <p v-if="store.degraded" class="strip__error" role="status">
+        {{ store.degraded }}
+        <button type="button" class="strip__retry" @click="store.retry()">重试</button>
+      </p>
       <div class="group" aria-label="最近颜色">
         <SwatchDot
           v-for="(item, index) in store.recent"

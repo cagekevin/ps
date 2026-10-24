@@ -146,26 +146,40 @@ export const useSwatchStore = defineStore('swatch', () => {
       if (customRead.ok) {
         const result = convert(customRead.value)
         custom.value = result.items
-        if (result.skipped) notes.push(`自定义色有 ${result.skipped} 条认不出，已跳过`)
+        // 认不出的条目：数量如实写出来（用户"存了 16 条显示 15 条"就靠这句查）
+        if (result.skipped) {
+          notes.push(
+            `自定义色有 ${result.skipped} 条认不出，已跳过（色板文件里有无法识别的颜色项）`,
+          )
+        }
       } else {
         custom.value = []
-        notes.push(`自定义色读取失败（${describeCepError(customRead.reason)}）`)
+        notes.push(
+          `自定义色读取失败（${describeCepError(customRead.reason)}），这一组颜色暂时显示不出来`,
+        )
       }
 
       if (recentRead.ok) {
         const result = convert(recentRead.value)
         recent.value = result.items
-        if (result.skipped) notes.push(`最近色有 ${result.skipped} 条认不出，已跳过`)
+        if (result.skipped) {
+          notes.push(`最近色有 ${result.skipped} 条认不出，已跳过（色板文件里有无法识别的颜色项）`)
+        }
       } else {
         recent.value = []
-        notes.push(`最近色读取失败（${describeCepError(recentRead.reason)}）`)
+        notes.push(
+          `最近色读取失败（${describeCepError(recentRead.reason)}），这一组颜色暂时显示不出来`,
+        )
       }
 
       if (limitRead.ok) recentLimit.value = limitRead.value
 
-      degraded.value = notes.join('；')
       // 两个数据文件都读不到才算"整页读失败"；只坏一个时用 degraded 提示，另一个照常显示
-      if (!customRead.ok && !recentRead.ok) error.value = degraded.value
+      const reason = notes.join('；')
+      if (!customRead.ok && !recentRead.ok) error.value = reason
+      // 降级说明 = **这一次读的结果**（数量 / 原因 / 要不要重试），不是常驻文案：
+      // 每次 load 开头都清空，读全了就是空串 ⇒ 页面不显示任何提示。
+      degraded.value = reason ? `${reason}；可点"重试"重新读取（文件被改动或权限恢复后即恢复）` : ''
       if (notes.length) log.warn('swatch', '色板读取有降级', notes)
     } catch (e) {
       error.value = describeCepError(e)
