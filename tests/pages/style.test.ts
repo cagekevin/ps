@@ -79,7 +79,8 @@ vi.mock('@/cep/fs', () => ({
   readTextSmart: async () => null,
   writeTextFile: () => undefined,
   writeTextFileAtomic: () => true,
-  readBase64File: () => null,
+  // T-109：base64 读也走三态
+  readBase64Outcome: () => ({ status: 'notSeen' as const }),
   writeBase64File: () => true,
   removeFile: () => true,
   b64ToUtf8: (b64: string) => Buffer.from(b64, 'base64').toString('utf8'),

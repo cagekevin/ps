@@ -38,18 +38,22 @@ vi.mock('@/cep/fs', () => ({
     fsMock.files.set(path, text)
     return true
   },
-  readBase64File: (path: string) => {
+  // T-109：base64 读也走三态（只认 ENOENT 是 notSeen）
+  readBase64Outcome: (path: string) => {
     const text = fsMock.files.get(path)
-    return text === undefined ? null : Buffer.from(text, 'utf8').toString('base64')
+    return text === undefined
+      ? { status: 'notSeen' as const }
+      : { status: 'ok' as const, base64: Buffer.from(text, 'utf8').toString('base64') }
   },
   writeBase64File: (path: string, base64: string) => {
     if (fsMock.failWrite) return false
     fsMock.files.set(path, Buffer.from(base64, 'base64').toString('utf8'))
     return true
   },
+  // T-109：`removeFile` 现在返回 `{ ok } | { ok:false, reason }`，不再是 boolean
   removeFile: (path: string) => {
     fsMock.files.delete(path)
-    return true
+    return { ok: true as const }
   },
   b64ToUtf8: (base64: string) => Buffer.from(base64, 'base64').toString('utf8'),
   utf8ToB64: (text: string) => Buffer.from(text, 'utf8').toString('base64'),

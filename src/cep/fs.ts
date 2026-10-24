@@ -117,15 +117,30 @@ export function writeTextFile(absPath: string, text: string): void {
   fs.writeFileSync(absPath, text, 'utf8')
 }
 
-/** 读文件为 base64；失败返回 null */
-export function readBase64File(absPath: string): string | null {
-  if (!hasNode()) return null
+/** base64 读取的三态（与 `TextRead` 同形：**观测**，不是结论） */
+export type Base64Read =
+  { status: 'ok'; base64: string } | { status: 'notSeen' } | { status: 'error'; reason: string }
+
+/**
+ * 读文件为 base64。与 `readTextOutcome` 同一条规矩：**只认 `ENOENT` 是 `notSeen`**，
+ * 其余错误码一律 `error`（不用 `existsSync`，它对"存在但读不到"也返回 `false`）。
+ *
+ * 为什么它也需要三态：`style-library-io.ts` 的 `writeKuFile` 用"读没读到原文"判断
+ * "这个文件是不是本次新建的"，回滚时只删新建的那些。把"读不到"当成"没有"，
+ * 回滚就会删掉一个本来就存在的文件（T-109 的 P1）。
+ */
+export function readBase64Outcome(absPath: string): Base64Read {
+  if (!hasNode()) return { status: 'error', reason: 'Node 不可用（--enable-nodejs 未开）' }
   try {
-    const fs = nodeRequire('fs')
-    if (!fs.existsSync(absPath)) return null
-    return fs.readFileSync(absPath).toString('base64') as string
-  } catch {
-    return null
+    return {
+      status: 'ok',
+      base64: nodeRequire('fs').readFileSync(absPath).toString('base64') as string,
+    }
+  } catch (e) {
+    const code = errCode(e)
+    if (code === 'ENOENT') return { status: 'notSeen' }
+    const message = e instanceof Error ? e.message : String(e)
+    return { status: 'error', reason: code ? `${code}: ${message}` : message }
   }
 }
 
@@ -174,16 +189,26 @@ export function utf8ToB64(text: string): string {
   return btoa(binary)
 }
 
-/** 删除文件；文件不存在视为成功（原版 delete 同语义） */
-export function removeFile(absPath: string): boolean {
-  if (!hasNode()) return false
+/** 删除结果：成功（删掉了，或本来就不在） / 失败 + 原因 */
+export type RemoveOutcome = { ok: true } | { ok: false; reason: string }
+
+/**
+ * 删除文件。**幂等**：文件本来就不在算成功（原版 `delete` 同语义）。
+ *
+ * `ok: true` 的语义是**"这个路径上现在没有这个文件了"**，不是"我调用成功了"。
+ * 但"不在"只能由 `ENOENT` 证明——**不许用 `existsSync`**：它对"存在但 stat 不到"（权限）
+ * 也返回 `false`，会把 `EPERM` 谎报成删成功，调用方据此以为旧文件已清走（T-109）。
+ */
+export function removeFile(absPath: string): RemoveOutcome {
+  if (!hasNode()) return { ok: false, reason: 'Node 不可用（--enable-nodejs 未开）' }
   try {
-    const fs = nodeRequire('fs')
-    if (!fs.existsSync(absPath)) return true
-    fs.unlinkSync(absPath)
-    return true
-  } catch {
-    return false
+    nodeRequire('fs').unlinkSync(absPath)
+    return { ok: true }
+  } catch (e) {
+    const code = errCode(e)
+    if (code === 'ENOENT') return { ok: true }
+    const message = e instanceof Error ? e.message : String(e)
+    return { ok: false, reason: code ? `${code}: ${message}` : message }
   }
 }
 
@@ -205,7 +230,9 @@ export function dirUsage(absPath: string): DirUsage | null {
   try {
     const fs = nodeRequire('fs')
     const path = nodeRequire('path')
-    if (!fs.existsSync(absPath)) return null
+    // 不用 `existsSync` 先判存在：`readdirSync` 自己对不存在抛 `ENOENT`，结果同样是 `null`，
+    // 而 `existsSync` 会把"存在但 stat 不到"也说成不存在（T-108 实测）。这里两态是对的：
+    // 调用方对"没有这个目录"与"读不到"做**同一件事**（显示「无法读取」），且没有写路径
     let bytes = 0
     let files = 0
     const walk = (dir: string): void => {

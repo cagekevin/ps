@@ -8,7 +8,7 @@ import { DATA_FILES, USER_DIR } from '@/cep/env'
 import {
   b64ToUtf8,
   hasNode,
-  readBase64File,
+  readBase64Outcome,
   readTextOutcome,
   removeFile,
   userDir,
@@ -545,9 +545,15 @@ async function warehouseFiles(warehouse: StyleWarehouse): Promise<string[]> {
  * 复制失败抛：这一步在写索引之前，抛出去时索引与原件都还没动。
  */
 async function copyToRecycle(relative: string, recycleDir: string): Promise<boolean> {
-  const base64 = readBase64File(`${userDir()}/${relative}`)
-  if (base64 === null) return false
-  if (!writeBase64File(`${recycleDir}/${relative}`, base64)) {
+  const read = readBase64Outcome(`${userDir()}/${relative}`)
+  // T-109：读不到 ≠ 没有。返回 `false` 只表示"没东西可移"——原件不会被删，留在原位。
+  // 读不到也走这条（不抛）：抛会中止整次删仓库，而留下的只是一个孤儿文件
+  if (read.status === 'error') {
+    log.warn('style', `删除仓库：${relative} 读不到，跳过回收（原件保留）`, read.reason)
+    return false
+  }
+  if (read.status === 'notSeen') return false
+  if (!writeBase64File(`${recycleDir}/${relative}`, read.base64)) {
     throw new CepError('IO', `复制到回收目录失败：${recycleDir}/${relative}`)
   }
   return true
@@ -592,7 +598,12 @@ export async function deleteWarehouse(index: number): Promise<WarehouseDeleteRes
   // 索引已经不再引用这些文件，删不掉只会留下孤儿文件 —— 记下来报给调用方，不抛
   const failed: string[] = []
   for (const relative of moved) {
-    if (!removeFile(`${userDir()}/${relative}`)) failed.push(relative)
+    const removed = removeFile(`${userDir()}/${relative}`)
+    // 删不掉要说出来：T-109 之前这里靠 existsSync，EPERM 会被谎报成删成功
+    if (!removed.ok) {
+      log.warn('style', `删除仓库：旧文件删不掉：${relative}`, removed.reason)
+      failed.push(relative)
+    }
   }
   log.info('style', `仓库 ${warehouse.name} 已移入回收目录`, { recycleDir, moved, failed })
 

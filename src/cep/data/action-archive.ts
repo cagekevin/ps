@@ -1,5 +1,5 @@
 import {
-  readBase64File,
+  readBase64Outcome,
   readTextOutcome,
   removeFile,
   userDir,
@@ -109,9 +109,10 @@ export function exportActionArchive(current: boolean, targetPath: string): Promi
     if (!list.length) throw new CepError('PARSE', '没有可导出的仓库')
 
     const arrFileData = list.map((item) => {
-      const data = readBase64File(pathOf(item.fileName))
-      if (data === null) throw new CepError('IO', `读取仓库失败：${item.fileName}`)
-      return { name: item.fileName, data }
+      const read = readBase64Outcome(pathOf(item.fileName))
+      // T-109：导出前读不到就不许导出。两种不 ok 这里同果（都抛同一句），文案不变
+      if (read.status !== 'ok') throw new CepError('IO', `读取仓库失败：${item.fileName}`)
+      return { name: item.fileName, data: read.base64 }
     })
 
     const store: ActionWarehouseIndex = current

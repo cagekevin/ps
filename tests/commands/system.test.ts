@@ -31,7 +31,8 @@ vi.mock('@/cep/fs', () => ({
   readTextOutcome: async () => ({ status: 'notSeen' as const }),
   readTextSmart: async () => null,
   writeTextFileAtomic: () => true,
-  readBase64File: () => null,
+  // T-109：base64 读也走三态
+  readBase64Outcome: () => ({ status: 'notSeen' as const }),
   writeBase64File: () => true,
   removeFile: () => true,
   extensionDir: () => '',

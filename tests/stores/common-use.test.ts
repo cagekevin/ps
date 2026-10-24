@@ -36,7 +36,8 @@ vi.mock('@/cep/fs', () => ({
     state.files.set(path, text)
     return true
   },
-  readBase64File: () => null,
+  // T-109：base64 读也走三态
+  readBase64Outcome: () => ({ status: 'notSeen' as const }),
   writeBase64File: () => true,
   removeFile: () => true,
   dirUsage: () => null,

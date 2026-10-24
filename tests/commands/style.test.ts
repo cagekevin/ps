@@ -93,17 +93,21 @@ vi.mock('@/cep/fs', () => ({
     store.files.set(path, text)
   },
   // 删除仓库把文件搬进回收目录：base64 只是原样搬运的载体
-  readBase64File: (path: string) => {
+  // T-109：base64 读也走三态（只认 ENOENT 是 notSeen）
+  readBase64Outcome: (path: string) => {
     const text = store.files.get(path)
-    return text === undefined ? null : Buffer.from(text).toString('base64')
+    return text === undefined
+      ? { status: 'notSeen' as const }
+      : { status: 'ok' as const, base64: Buffer.from(text).toString('base64') }
   },
   writeBase64File: (path: string, base64: string) => {
     store.files.set(path, Buffer.from(base64, 'base64').toString('utf8'))
     return true
   },
+  // T-109：`removeFile` 现在返回 `{ ok } | { ok:false, reason }`，不再是 boolean
   removeFile: (path: string) => {
     store.files.delete(path)
-    return true
+    return { ok: true as const }
   },
   b64ToUtf8: (b64: string) => Buffer.from(b64, 'base64').toString('utf8'),
   utf8ToB64: (text: string) => Buffer.from(text, 'utf8').toString('base64'),

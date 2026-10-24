@@ -8,7 +8,7 @@
 import { DATA_FILES } from '@/cep/env'
 import {
   b64ToUtf8,
-  readBase64File,
+  readBase64Outcome,
   readTextOutcome,
   removeFile,
   userDir,
@@ -81,10 +81,15 @@ function fileNameOf(warehouse: StyleWarehouse | undefined, kind: KuKind): string
  */
 function writeKuFile(relative: string, base64: string): boolean {
   const path = `${userDir()}/${relative}`
-  const previous = readBase64File(path)
-  if (previous !== null) writeBase64File(`${path}.bak`, previous)
+  const read = readBase64Outcome(path)
+  // T-109：**读不到 ≠ 没有**。读不到时若当成"本次新建"，回滚会删掉一个本来就存在的文件；
+  // 若照旧覆盖，原文没进 `.bak` 就再也回不去。所以读不到直接中止这次导入
+  if (read.status === 'error') {
+    throw new CepError('IO', `读取原文件失败，已中止导入：${relative}（${read.reason}）`)
+  }
+  if (read.status === 'ok') writeBase64File(`${path}.bak`, read.base64)
   if (!writeBase64File(path, base64)) throw new CepError('IO', `写入文件失败：${relative}`)
-  return previous !== null
+  return read.status === 'ok'
 }
 
 /**
@@ -226,16 +231,20 @@ export async function exportKuArchive(
     for (const kind of KU_CONTAINER_ORDER) {
       const fileName = fileNameOf(warehouse, kind)
       if (!fileName) continue
-      arrFileData.push({
-        name: fileName,
-        data: readBase64File(`${userDir()}/${fileName}`) ?? false,
-      })
+      // 契约 §2.5：`data` 不是字符串时就是布尔 `false`，语义是"这个文件当时读不到"。
+      // 所以这里**有意**把 `notSeen` 与 `error` 合成都写成 `false`（导出格式要求的形状）
+      const read = readBase64Outcome(`${userDir()}/${fileName}`)
+      if (read.status === 'error') log.warn('style', `导出：${fileName} 读不到`, read.reason)
+      arrFileData.push({ name: fileName, data: read.status === 'ok' ? read.base64 : false })
     }
 
     // UNVERIFIED: 契约 §3.4 只写“4 个库文件 + 旁路图”，实测样本 A 没有旁路图；
     // 这里按「每个仓库先 4 个库文件、再该仓库的旁路图」落，顺序未在真实样本上核对
     for (const name of await sidecarNamesOfWarehouse(warehouse)) {
-      arrFileData.push({ name, data: readBase64File(`${userDir()}/${name}`) ?? false })
+      // 同上：契约 §2.5 要求 `false` 表示"读不到"，这里有意把两态合成 `false`
+      const sidecar = readBase64Outcome(`${userDir()}/${name}`)
+      if (sidecar.status === 'error') log.warn('style', `导出：${name} 读不到`, sidecar.reason)
+      arrFileData.push({ name, data: sidecar.status === 'ok' ? sidecar.base64 : false })
     }
 
     done += 1
@@ -253,10 +262,15 @@ function moveToRecycle(names: readonly string[], keep: ReadonlySet<string>, dir:
   const moved: string[] = []
   for (const name of names) {
     if (keep.has(name)) continue
-    const base64 = readBase64File(`${userDir()}/${name}`)
-    if (base64 === null) continue
+    const read = readBase64Outcome(`${userDir()}/${name}`)
+    // 读不到就跳过：旧文件留在原位，不会丢；只是没进回收目录（宁留孤儿，不丢原件）
+    if (read.status === 'error') {
+      log.warn('style', `替换导入：旧文件读不到，跳过回收：${name}`, read.reason)
+      continue
+    }
+    if (read.status === 'notSeen') continue
     try {
-      if (writeBase64File(`${dir}/${name}`, base64) && removeFile(`${userDir()}/${name}`)) {
+      if (writeBase64File(`${dir}/${name}`, read.base64) && removeFile(`${userDir()}/${name}`).ok) {
         moved.push(name)
       }
     } catch (e) {

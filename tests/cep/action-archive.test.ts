@@ -4,7 +4,8 @@ import type { Repo, RepoRead } from '@/cep/data/types'
 
 const fs = vi.hoisted(() => ({
   userDir: () => '/user',
-  readBase64File: vi.fn(),
+  // T-109：base64 读也是三态（`{ status:'ok', base64 }` / `notSeen` / `error`）
+  readBase64Outcome: vi.fn(),
   writeBase64File: vi.fn(),
   readTextSync: vi.fn(),
   // T-107：业务读走 `readTextOutcome`（唯一读入口）；用例仍只设 `readTextSync` 的返回值
@@ -93,12 +94,12 @@ describe('action-archive', () => {
   })
 
   it('导出当前只读取当前仓库文件', async () => {
-    fs.readBase64File.mockReturnValue('YmFzZTY0')
+    fs.readBase64Outcome.mockReturnValue({ status: 'ok', base64: 'YmFzZTY0' })
 
     await exportActionArchive(true, '/tmp/export.dzx')
 
-    expect(fs.readBase64File).toHaveBeenCalledTimes(1)
-    expect(fs.readBase64File).toHaveBeenCalledWith('/user/sj_dz_current.json')
+    expect(fs.readBase64Outcome).toHaveBeenCalledTimes(1)
+    expect(fs.readBase64Outcome).toHaveBeenCalledWith('/user/sj_dz_current.json')
     expect(fs.writeTextFile).toHaveBeenCalledWith('/tmp/export.dzx', expect.any(String))
   })
 })
@@ -150,7 +151,7 @@ describe('action-archive · 坏索引（T-99-4）', () => {
     await expect(exportActionArchive(true, '/tmp/export.dzx')).rejects.toThrow('导出已中止')
     await expect(archiveDefaultName(true)).rejects.toThrow('导出已中止')
 
-    expect(fs.readBase64File).not.toHaveBeenCalled()
+    expect(fs.readBase64Outcome).not.toHaveBeenCalled()
     expect(fs.writeTextFile).not.toHaveBeenCalled()
   })
 })
