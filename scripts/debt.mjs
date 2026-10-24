@@ -68,6 +68,10 @@
  *                                                   # 汇总三张清单：可复用 / 数字漂移 / 无凭证待补
  *                                                   # （+ 跑不动 / 人工担保 两张，见文件头）
  *                                                   # **只读：不改任何状态**，改不改账本由人决定
+ * 用法（撤销结账 · `resolve` 的严格反向）：
+ *   node scripts/debt.mjs reopen <TD-ID> --why "…" [--dry]        # 已结账 → 待还（不要求凭证）
+ *   node scripts/debt.mjs reopen --from-reverify [--dry]           # 直接吃 reverify 的「无凭证」那批
+ *                                                                  # 有凭证的债**不许**降级；只能单向
  * 测试夹具：`--root=<dir>`（任意位置）—— 把账本指到已知答案的夹具，见 `tests/scripts/debt-*.test.ts`。
  */
 import { readFileSync, writeFileSync, existsSync, readdirSync } from 'node:fs'
@@ -1354,34 +1358,19 @@ function cmdArchive(argv) {
  *   ④ 跑不动：命令现在跑不起来（exit≠0）→ 凭证已失效，等同无凭证
  *   ⑤ 人工担保：`kind=人工`（不可机验，按 `by` 追责）—— 显式降级通道，单列不与机验混算
  */
-function cmdReverify(argv) {
-  const id = argv.find((a) => /^TD-\d+-\d+|^MD-\d+-\d+/.test(a))
-  const all = argv.includes('--all')
-  if (!id && !all)
-    fail('用法：node scripts/debt.mjs reverify <TD-ID> | --all（**只读**：不改任何状态）')
-  const pool = loadAll().filter((r) => r.fields.kind === 'TD' && r.src !== 'full')
-  const done = pool.filter((r) => DONE_WORDS.includes(statusWord(r.fields.status)))
-  let targets
-  if (all) targets = done
-  else {
-    const row = pool.find((r) => r.fields.id === id)
-    if (!row) fail(`主表 ∪ 归档 中均无 ${id}`)
-    if (!DONE_WORDS.includes(statusWord(row.fields.status))) {
-      console.log(
-        `✅ ${id} 未结账（[${statusWord(row.fields.status)}]）→ 无需复算（本命令只管已结的账）`,
-      )
-      return
-    }
-    targets = [row]
-  }
-  targets.sort((a, b) => idKey(a.fields.id) - idKey(b.fields.id))
-
+/**
+ * 已结账行的**唯一**判定 —— `reverify` 与 `reopen --from-reverify` 共用这一份。
+ * 【为什么必须共用】降级要"直接吃 reverify 的判定结果"（任务单 §4）；两处各写一份分类，
+ * 早晚会出现「reverify 说无凭证、reopen 却漏了它」这种口径漂移。
+ * 分类口径见 `cmdReverify` 头注释（① 可复用 / ② 漂移 / ④ 跑不动 / ⑤ 人工 / ③ 无凭证三档）。
+ */
+function analyzeDoneRows(rows) {
   const ok = []
   const drift = []
   const broken = []
   const manual = []
   const none = { legacy: [], prose: [], bare: [] }
-  for (const r of targets) {
+  for (const r of rows) {
     const ev = parseEvidenceBlob(r.fields.status)
     // 无凭证 / 凭证残缺（键都拆不开、或连 claim 都没有）→ 一律算「无凭证」，不猜
     if (!ev || ev.bad.length || !ev.fields.claim) {
@@ -1406,6 +1395,32 @@ function cmdReverify(argv) {
     else if (claimMatches(res.output, ev.fields.claim)) ok.push({ r, ev })
     else drift.push({ r, ev, res })
   }
+  return { ok, drift, broken, manual, none }
+}
+
+function cmdReverify(argv) {
+  const id = argv.find((a) => /^TD-\d+-\d+|^MD-\d+-\d+/.test(a))
+  const all = argv.includes('--all')
+  if (!id && !all)
+    fail('用法：node scripts/debt.mjs reverify <TD-ID> | --all（**只读**：不改任何状态）')
+  const pool = loadAll().filter((r) => r.fields.kind === 'TD' && r.src !== 'full')
+  const done = pool.filter((r) => DONE_WORDS.includes(statusWord(r.fields.status)))
+  let targets
+  if (all) targets = done
+  else {
+    const row = pool.find((r) => r.fields.id === id)
+    if (!row) fail(`主表 ∪ 归档 中均无 ${id}`)
+    if (!DONE_WORDS.includes(statusWord(row.fields.status))) {
+      console.log(
+        `✅ ${id} 未结账（[${statusWord(row.fields.status)}]）→ 无需复算（本命令只管已结的账）`,
+      )
+      return
+    }
+    targets = [row]
+  }
+  targets.sort((a, b) => idKey(a.fields.id) - idKey(b.fields.id))
+
+  const { ok, drift, broken, manual, none } = analyzeDoneRows(targets)
 
   const line = (icon, r, text) => console.log(`   ${icon} ${r.fields.id}${SRC_TAG(r)} ｜ ${text}`)
   const noneCount = none.legacy.length + none.prose.length + none.bare.length
@@ -1487,6 +1502,166 @@ function cmdReverify(argv) {
     `\n小结：可复用 ${ok.length} · 漂移 ${drift.length} · 跑不动 ${broken.length} · 无凭证 ${noneCount} · 人工担保 ${manual.length}`,
   )
   console.log('↳ 本命令只报不改：要不要据此降级 / 改账本由人决定（本命令不写盘）')
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+// reopen（撤销结账 · TD-09-38）—— `resolve` 的**严格反向**
+// ─────────────────────────────────────────────────────────────────────────────
+/**
+ * 【为什么需要它】`reverify` 判出 121 条已结账**无凭证**（39 旧台账迁移 + 80 有结论无命令 +
+ *   2 无结论无命令）。用户定案：无凭证的一律降级回 `待还`。而 `resolve` 的凭证闸是**无条件**的
+ *   —— 连 `--status 待还` 也要凭证，语义上错了：**降级不是结账，是撤销结账**，
+ *   它的凭证就是 `reverify` 的输出。
+ *
+ * 【四条纪律】
+ *   ① **单向**：只做 `已解决 / 已裁定 / 已裁定非债 / 已退役 / 不做` → `待还`。
+ *      反向（`待还` → `已解决`）走 `resolve`，且必须过凭证闸。
+ *   ② **不要求 `--evidence`，但必须有 `--why`**（单条模式必填；`--from-reverify` 按分组派生三档）——
+ *      撤销也得留理由，否则等于无声抹账。
+ *   ③ **状态格统一前缀** `[待还 <date> · 凭证缺失 · <why>]` ⇒ `debt search 凭证缺失` 一次拉全。
+ *   ④ **有凭证的债不许 reopen**：状态格里出现 `evidence:v1{…}` 就是可复算的真账，
+ *      降级它 = 把真账删掉。命中即整批拒改并列出 ID（不部分执行，不留半态）。
+ *
+ * 【不做什么】不搬行：`--from-reverify` 里有一部分在「归档」里，降级后它们仍是归档行，
+ *   `debt list` 默认看不到（搬回主表 = 另一个动作，本命令不替人决定）。
+ */
+const REOPEN_TO = '待还'
+const REOPEN_MARK = '凭证缺失'
+const EVIDENCE_ANY_RE = /evidence:v1\s*\{/
+/** 分组名与 `analyzeDoneRows().none` 的键一一对应（分组名同时进状态格，故是"真源"） */
+const REOPEN_GROUPS = [
+  ['旧台账迁移', 'legacy'],
+  ['有结论无命令', 'prose'],
+  ['无结论无命令', 'bare'],
+]
+const reopenWhy = (group) => `reverify: 无凭证（${group}）`
+
+function cmdReopen(argv) {
+  const id = argv.find((a) => /^TD-\d+-\d+|^MD-\d+-\d+/.test(a))
+  const fromReverify = argv.includes('--from-reverify')
+  const dry = argv.includes('--dry')
+  const why = argVal(argv, '--why').trim()
+  const date = argVal(argv, '--date') || today()
+  if (!id && !fromReverify)
+    fail(
+      '用法：reopen <TD-ID> --why "…" [--dry] ｜ reopen --from-reverify [--dry]（撤销结账：已结账 → 待还，**不要求凭证**）',
+    )
+
+  // 闸 ①：单条模式必须给理由（批量模式由分组派生，见下）
+  if (!fromReverify && !why) {
+    console.error(
+      '❌ reopen 被拒：**缺 `--why`**（降级不是结账，是**撤销结账**；撤销也得留理由，否则等于无声抹账）',
+    )
+    console.error('')
+    console.error('   把理由写清楚，原样进状态格：')
+    console.error(
+      '     node scripts/debt.mjs reopen TD-xx-1 --why "reverify: 无凭证（旧台账迁移）"',
+    )
+    console.error('')
+    console.error('   典型值（`--from-reverify` 会按分组自动派生这三档）：')
+    for (const [label] of REOPEN_GROUPS) console.error(`     ${reopenWhy(label)}`)
+    console.error('')
+    console.error(
+      '   ↳ 判定口径：`node scripts/debt.mjs reverify <ID>`（只读）；本命令只做 已结账 → 待还',
+    )
+    process.exit(1)
+  }
+  if (why && /[|｜\]{}]/.test(why)) {
+    fail('`--why` 含 `|` / `]` / `{` / `}` → 会撑破表格列 / 截断状态格；改用「」或删掉')
+  }
+
+  // 选行：单条 / 直接吃 reverify 的判定（同一份 analyzeDoneRows，防两处口径漂移）
+  const plans = []
+  if (fromReverify) {
+    const done = loadAll().filter(
+      (r) =>
+        r.fields.kind === 'TD' &&
+        r.src !== 'full' &&
+        DONE_WORDS.includes(statusWord(r.fields.status)),
+    )
+    const { none } = analyzeDoneRows(done)
+    for (const [label, key] of REOPEN_GROUPS)
+      for (const r of none[key]) plans.push({ r, why: reopenWhy(label), group: label })
+    if (!plans.length) {
+      console.log('✅ 无需降级：reverify 没判出「无凭证」的已结债（③ 清单为空）')
+      return
+    }
+  } else {
+    const hit = loadAll().filter((r) => r.fields.id === id && r.src !== 'full')
+    if (!hit.length) fail(`主表 ∪ 归档 中均无 ${id}`)
+    if (hit.length > 1) fail(`${id} 出现 ${hit.length} 次（重复 ID）→ 先处理重复`)
+    plans.push({ r: hit[0], why, group: '' })
+  }
+  plans.sort((a, b) => idKey(a.r.fields.id) - idKey(b.r.fields.id))
+
+  // 闸 ②③：有凭证不许降级；只能单向（已结账 → 待还）。**任一不过 = 整批不执行**
+  const problems = []
+  for (const { r } of plans) {
+    const status = String(r.fields.status)
+    const word = statusWord(status)
+    if (EVIDENCE_ANY_RE.test(status))
+      problems.push(
+        `${r.fields.id}：状态格里已有凭证 → **有凭证的债不许降级**（它可复算，降级等于把真账删掉）`,
+      )
+    else if (!DONE_WORDS.includes(word))
+      problems.push(
+        `${r.fields.id}：当前 [${word || '?'}] → reopen 只做 **已结账 → 待还**（反向请走 \`resolve\`，且必须过凭证闸）`,
+      )
+  }
+  if (problems.length) {
+    console.error(`❌ reopen 被拒（**账本未写入**）：${problems.length} 条不合格`)
+    for (const p of problems) console.error('   · ' + p)
+    console.error('   ↳ 不部分执行、不留半态：修掉上面这些再重跑。')
+    process.exit(1)
+  }
+
+  // 落笔（就地改状态格；不新增行、不搬行）
+  const files = [{ file: LEDGER, label: '主表', lines: loadLedger().lines }]
+  if (existsSync(ARCHIVE))
+    files.push({
+      file: ARCHIVE,
+      label: '归档',
+      lines: readFileSync(ARCHIVE, 'utf8').split(/\r?\n/),
+    })
+  const preview = []
+  const touched = new Set()
+  for (const p of plans) {
+    const r = p.r
+    if (r.mode === 'manual') fail(`${r.fields.id} 是「列错位需人工」行 → 先修列，再撤销结账`)
+    const f = files.find((x) => (r.src === 'main' ? x.file === LEDGER : x.file === ARCHIVE))
+    if (!f) fail(`${r.fields.id} 的来源 ${r.src} 无法定位（内部错误）`)
+    const C = MAP[r.kind]
+    const oldCell = String(f.lines[r.li].split('|')[1 + C.status] || '').trim()
+    const newCell = `[${REOPEN_TO} ${date} · ${REOPEN_MARK} · ${p.why}]`
+    const parts = f.lines[r.li].split('|')
+    parts[1 + C.status] = ` ${newCell} `
+    f.lines[r.li] = parts.join('|')
+    touched.add(f)
+    preview.push({ id: r.fields.id, tag: SRC_TAG(r), oldCell, newCell, group: p.group })
+  }
+
+  const archived = preview.filter((x) => x.tag).length
+  console.log(
+    `🔄 debt reopen（撤销结账：已结账 → ${REOPEN_TO}，**不要求凭证**）｜ 选中 ${preview.length} 条${dry ? ' ｜ --dry 预览（**不落盘**）' : ''}`,
+  )
+  const groups = fromReverify ? REOPEN_GROUPS.map(([label]) => label) : ['']
+  for (const g of groups) {
+    const rows = preview.filter((x) => x.group === g)
+    if (!rows.length) continue
+    if (g) console.log(`\n【${g}】${rows.length} 条`)
+    for (const x of rows) console.log(`   ${x.id}${x.tag} ｜ 改前 ${x.oldCell} → 改后 ${x.newCell}`)
+  }
+  if (dry) {
+    console.log(`\n（dry·未写盘）真降请去掉 --dry；共 ${preview.length} 条会被降级`)
+  } else {
+    for (const f of touched) writeFileSync(f.file, f.lines.join('\n'))
+    console.log(`\n✅ 已降级 ${preview.length} 条（就地改状态格，未新增行、未搬行）`)
+  }
+  if (archived)
+    console.log(
+      `⚠️ 其中 ${archived} 条在「归档」里：降级后仍是归档行，\`debt list\` 默认看不到（搬回主表 = 另一个动作，本命令不搬）`,
+    )
+  console.log('   ↳ 复核：`node scripts/debt.mjs search 凭证缺失 --all`')
 }
 
 // ─────────────────────────────────────────────────────────────────────────────
@@ -1806,6 +1981,9 @@ switch (cmd) {
   case 'reverify':
     cmdReverify(rest)
     break
+  case 'reopen':
+    cmdReopen(rest)
+    break
   case 'audit':
     cmdAudit(rest)
     break
@@ -1826,6 +2004,9 @@ switch (cmd) {
     console.log('  维护：archive [--dry] | audit [--liveness] | fix [--dry]（规范化历史列错位行）')
     console.log(
       '  复算：reverify <TD-ID> | --all（**只读**：真跑每条已结债的凭证命令，出「可复用 / 数字漂移 / 无凭证待补」）',
+    )
+    console.log(
+      '  撤销：reopen <TD-ID> --why "…" [--dry] | reopen --from-reverify [--dry]（已结账 → 待还；有凭证的不许降级）',
     )
     console.log('  统计：stats（形态/解法分布 —— 供"找债捷径"与"手法排行"，见两份 SOP）')
     process.exit(cmd ? 1 : 0)
