@@ -188,7 +188,7 @@ grep -rn "export .*<概念词>" src  # 有哪些导出叫这个名字
 | `src/cloud/` | <!-- stats:begin layers.cloud -->4 文件 / 952 行<!-- stats:end layers.cloud --> | 同步引擎与台账 |
 | `src/selection/` | <!-- stats:begin layers.selection -->2 文件 / 292 行<!-- stats:end layers.selection --> | 选区 / 当前文字快照 |
 
-**测试**：<!-- stats:begin tests -->**127 个文件、1137 处用例**（静态计数 `it()`/`test()`；非通过数）<!-- stats:end tests -->（`tests/{cep,cloud,commands,components,composables,data,domain,pages,selection,stores,utils}`）。
+**测试**：<!-- stats:begin tests -->**129 个文件、1151 处用例**（静态计数 `it()`/`test()`；非通过数）<!-- stats:end tests -->（`tests/{cep,cloud,commands,components,composables,data,domain,pages,selection,stores,utils}`）。
 
 ### 3. 一手证据已入库，别再问"路径在不在"
 
@@ -220,7 +220,7 @@ grep -rn "export .*<概念词>" src  # 有哪些导出叫这个名字
 | --- | --- | --- |
 | `npm run check` | **12 步**：style-guard → template-guard → assert-guard → dispatch:check → boundary:pages → **layer:boundary** → spec:check → ledger → stats:check → lint → format:check | ✅ **不含测试、不含类型检查** |
 | `npm run layer:boundary` | 层间方向守卫：store 只读 / 命令不自取选区 / 适配层不引文案层 / domain 不反向依赖 `@/cep` | ✅ 已进 `check`；判据见 `docs/架构/目标架构.md` §4.7 |
-| `npm test` | vitest run（`<!-- stats:begin tests -->**127 个文件、1137 处用例**（静态计数 `it()`/`test()`；非通过数）<!-- stats:end tests -->`） | ✅ 单独一条，`check` 不调它 |
+| `npm test` | vitest run（`<!-- stats:begin tests -->**129 个文件、1151 处用例**（静态计数 `it()`/`test()`；非通过数）<!-- stats:end tests -->`） | ✅ 单独一条，`check` 不调它 |
 | `npm run deploy` | check → typecheck → build → verify:dist | ✅ 跑全的入口；**不含测试**，测试是流程不是脚本 |
 | `npm run build` | `vite build`，**只此一步** | ✅ 不带任何检查；检查归 `check` / `typecheck` / `verify:dist` |
 | `npm run typecheck` | `vue-tsc --noEmit`（`src/**`）+ `vue-tsc --noEmit -p tsconfig.tests.json`（`tests/**`） | ✅ 独立一条，`check` 不调它，`deploy` 会调 |
@@ -232,7 +232,7 @@ grep -rn "export .*<概念词>" src  # 有哪些导出叫这个名字
 | `npm run render:check` | SSR 渲染 2 个页面（`fontManage` / `style`），查白屏 | ⚠️ 需要输出目录：设 `PSZ_EXT_DIR=/tmp/x`（没有 `%APPDATA%` 的环境）；**只覆盖 2 页，未接进任何门禁** |
 | `npm run list` | 按页面聚合 spec | ✅ 读 `docs/原版/02-组件文档`（已在库） |
 | `npm run interactions` | 从原版 render 提取交互点 | ⚠️ 数据源（webcrack 解包输出）不在仓库；缺时退出码 2 说明缺哪条路径 |
-| `node scripts/audit-page.mjs` | 从原版 AST 提组件树 | ✅ 读 `docs/原版/01-原版源码/panel/js/app.v4.js`（已在库） |
+| `npm run audit:page -- Action --cross` | 从原版 AST 提组件树（`--cross` 再与 `08-模板` 交叉核对） | ✅ 读 `docs/原版/01-原版源码/panel/js/app.v4.js` 与 `docs/原版/02-组件文档/08-模板`（均已在库） |
 
 **这门禁缺什么，写清楚**（不要以为绿的就没问题）：
 
