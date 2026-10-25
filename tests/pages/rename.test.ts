@@ -42,30 +42,30 @@ vi.mock('@/selection', () => ({
   selectionRef: { value: selection },
 }))
 vi.mock('@/cep/jsx', () => ({ jsx }))
-vi.mock('@/cep/data/rename', () => ({
-  renameRepo: {
-    read: async (): Promise<RepoRead<RenamePreset>> => {
-      if (repo.hold) await new Promise<void>((resolve) => (repo.release = resolve))
-      if (repo.fail) throw new Error('预设文件损坏')
-      return { ok: true, value: JSON.parse(JSON.stringify(repo.value)) as RenamePreset }
-    },
-    write: async (value: unknown) => {
-      repo.value = value
-      for (const listener of repo.listeners) listener(value)
-    },
-    update: async (mutator: (value: unknown) => unknown) => {
-      const copy = JSON.parse(JSON.stringify(repo.value)) as unknown
-      const result = mutator(copy)
-      repo.value = result ?? copy
-      for (const listener of repo.listeners) listener(repo.value)
-      return repo.value
-    },
-    onChange: (listener: (value: unknown) => void) => {
-      repo.listeners.add(listener)
-      return () => repo.listeners.delete(listener)
-    },
+const renameRepoMock = {
+  read: async (): Promise<RepoRead<RenamePreset>> => {
+    if (repo.hold) await new Promise<void>((resolve) => (repo.release = resolve))
+    if (repo.fail) throw new Error('预设文件损坏')
+    return { ok: true, value: JSON.parse(JSON.stringify(repo.value)) as RenamePreset }
   },
-}))
+  write: async (value: unknown) => {
+    repo.value = value
+    for (const listener of repo.listeners) listener(value)
+  },
+  update: async (mutator: (value: unknown) => unknown) => {
+    const copy = JSON.parse(JSON.stringify(repo.value)) as unknown
+    const result = mutator(copy)
+    repo.value = result ?? copy
+    for (const listener of repo.listeners) listener(repo.value)
+    return repo.value
+  },
+  onChange: (listener: (value: unknown) => void) => {
+    repo.listeners.add(listener)
+    return () => repo.listeners.delete(listener)
+  },
+}
+// store 拿只读视图（renameRepo），命令层拿写侧句柄（renameWriter）：同一个对象
+vi.mock('@/cep/data/rename', () => ({ renameRepo: renameRepoMock, renameWriter: renameRepoMock }))
 
 await import('@/commands')
 const RenamePage = (await import('@/pages/rename/index.vue')).default

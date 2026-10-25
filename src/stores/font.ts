@@ -1,7 +1,9 @@
 import { defineStore } from 'pinia'
 import { ref } from 'vue'
 import { familyLang } from '@/domain/font-lang'
-import { getFontList, getFontStars, getFontTags } from '@/cep/ps'
+import { msg } from '@/domain/messages'
+import { getFontList } from '@/cep/data/font-list'
+import { readFontStars, readFontTags } from '@/cep/data/font-meta'
 import { starsRepo, tagsRepo } from '@/cep/data'
 import { describeCepError } from '@/utils/error-text'
 import { log } from '@/utils/logger'
@@ -51,8 +53,6 @@ export const useFontStore = defineStore('font', () => {
    * "你还没收藏过"。列表本身不受影响——评分是装饰，不因为读不到就不显示字体。
    */
   const starsError = ref('')
-  /** 最近一次成功应用的家族，仅用于列表高亮（页面写，不算业务真相） */
-  const activeFamily = ref('')
   const previewMode = usePersistedRef<PreviewMode>('font.previewMode', 'small')
   /** 用户自定义的预览文案；空字符串表示用默认（按语言自动选） */
   const customPreviewText = usePersistedRef<string>('font.previewText', '')
@@ -60,7 +60,7 @@ export const useFontStore = defineStore('font', () => {
   /**
    * 字体列表读取入口。
    *
-   * 放 store 而不是让页面 import `cep/ps`：页面只有"读模型"和"命令"两条通道，
+   * 数据在 `cep/data/font-list.ts`，本 store 只做只读投影：页面只有"读模型"和"命令"两条通道，
    * 这样"页面不碰 cep"是结构事实，不靠 eslint 拦（上一轮就是页面在 ps.ts 上开了口子）。
    */
   async function fetchList(opts: { refresh?: boolean } = {}): Promise<FontItem[]> {
@@ -69,13 +69,13 @@ export const useFontStore = defineStore('font', () => {
 
   async function loadStars() {
     try {
-      const read = await getFontStars()
+      const read = await readFontStars()
       stars.value = read.stars
-      starsError.value = read.ok ? '' : `读取不到星级文件（${read.reason ?? '原因未知'}）`
+      starsError.value = read.ok ? '' : msg.data.fn.starsReadFailed(read.reason ?? '原因未知')
       if (!read.ok) log.warn('font', '星级读不到：界面显示"读不到"，不是"未收藏"', read.reason)
     } catch (e) {
       stars.value = {}
-      starsError.value = `读取不到星级文件（${describeCepError(e)}）`
+      starsError.value = msg.data.fn.starsReadFailed(describeCepError(e))
       log.warn('font', '星级读不到：界面显示"读不到"，不是"未收藏"', e)
     }
   }
@@ -85,7 +85,7 @@ export const useFontStore = defineStore('font', () => {
     if (!force && tags.value.length) return
     tagsError.value = ''
     try {
-      tags.value = await getFontTags()
+      tags.value = await readFontTags()
     } catch (e) {
       tagsError.value = describeCepError(e)
     }
@@ -101,7 +101,6 @@ export const useFontStore = defineStore('font', () => {
     tagsError,
     stars,
     starsError,
-    activeFamily,
     previewMode,
     customPreviewText,
     loadTags,

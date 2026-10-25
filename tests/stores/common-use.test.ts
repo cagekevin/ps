@@ -19,32 +19,42 @@ vi.mock('@/selection', () => ({
   selectionRef: { value: { hasSelection: false } },
 }))
 
-vi.mock('@/cep/fs', () => ({
+vi.mock('@/cep/node', () => ({
   hasNode: () => true,
+}))
+
+vi.mock('@/cep/paths', () => ({
   userDir: () => '/user',
+}))
+
+vi.mock('@/cep/fs-read', () => ({
   readTextSmart: async (path: string) => state.files.get(path) ?? null,
-  // T-105：写路径改用三态读；这个假 fs 没有"读不出"的场景，只会 ok / missing
-  readTextOutcome: async (path: string) => {
-    const text = state.files.get(path)
-    return text === undefined ? { status: 'notSeen' as const } : { status: 'ok' as const, text }
-  },
+  // T-105：写路径改用三态读；这个假 fs 没有"读不出"的场景，只会 ok / missing  readTextOutcome: async (path: string) => {
+      const text = state.files.get(path)
+      return text === undefined ? { status: 'notSeen' as const } : { status: 'ok' as const, text }
+    },
   readTextSync: (path: string) => {
-    const text = state.files.get(path)
-    return text === undefined ? { status: 'notSeen' as const } : { status: 'ok' as const, text }
-  },
+      const text = state.files.get(path)
+      return text === undefined ? { status: 'notSeen' as const } : { status: 'ok' as const, text }
+    },
   writeTextFile: (path: string, text: string) => {
-    state.files.set(path, text)
-  },
+      state.files.set(path, text)
+    },
   writeTextFileAtomic: (path: string, text: string) => {
-    state.files.set(path, text)
-    return true
-  },
-  // T-109：base64 读也走三态
-  readBase64Outcome: () => ({ status: 'notSeen' as const }),
+      state.files.set(path, text)
+      return true
+    },
+  // T-109：base64 读也走三态  readBase64Outcome: () => ({ status: 'notSeen' as const }),
   writeBase64File: () => ({ status: 'ok' as const }),
   removeFile: () => ({ ok: true as const }),
-  dirUsage: () => null,
   saveExportedText: () => {},
+}))
+
+vi.mock('@/cep/dir-usage', () => ({
+  dirUsage: () => null,
+}))
+
+vi.mock('@/cep/codec', () => ({
   b64ToUtf8: (value: string) => value,
   utf8ToB64: (value: string) => value,
 }))

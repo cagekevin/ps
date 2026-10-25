@@ -14,6 +14,7 @@ import {
   readRecentLimit,
 } from '@/cep/data/swatch-repo'
 import { APP_EVENT_SEBAN, onAppEvent } from '@/cep/events'
+import { msg } from '@/domain/messages'
 import { describeCepError } from '@/utils/error-text'
 import { log } from '@/utils/logger'
 
@@ -148,28 +149,22 @@ export const useSwatchStore = defineStore('swatch', () => {
         custom.value = result.items
         // 认不出的条目：数量如实写出来（用户"存了 16 条显示 15 条"就靠这句查）
         if (result.skipped) {
-          notes.push(
-            `自定义色有 ${result.skipped} 条认不出，已跳过（色板文件里有无法识别的颜色项）`,
-          )
+          notes.push(msg.data.fn.customColorSkipped(String(result.skipped)))
         }
       } else {
         custom.value = []
-        notes.push(
-          `自定义色读取失败（${describeCepError(customRead.reason)}），这一组颜色暂时显示不出来`,
-        )
+        notes.push(msg.data.fn.customColorReadFailed(describeCepError(customRead.reason)))
       }
 
       if (recentRead.ok) {
         const result = convert(recentRead.value)
         recent.value = result.items
         if (result.skipped) {
-          notes.push(`最近色有 ${result.skipped} 条认不出，已跳过（色板文件里有无法识别的颜色项）`)
+          notes.push(msg.data.fn.recentColorSkipped(String(result.skipped)))
         }
       } else {
         recent.value = []
-        notes.push(
-          `最近色读取失败（${describeCepError(recentRead.reason)}），这一组颜色暂时显示不出来`,
-        )
+        notes.push(msg.data.fn.recentColorReadFailed(describeCepError(recentRead.reason)))
       }
 
       if (limitRead.ok) recentLimit.value = limitRead.value

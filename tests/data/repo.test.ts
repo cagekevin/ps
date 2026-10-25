@@ -1,52 +1,33 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { isRecord } from '@/utils/guards'
+import { ERR_PREFIX } from '@/utils/errors'
 
 /**
  * 仓库层的四条硬约束（ADR-14 / ADR-15）：
  * 读失败带 degraded、写失败必须抛、同一文件串行、写前备份。
  */
-const state = vi.hoisted(() => ({
-  files: new Map<string, string>(),
-  failWrite: false,
-  failRead: false,
-  /** 只让 CAS 比对用的**同步**读失败（读入口仍 ok）—— TD-09-24 的构造条件 */
-  failCompare: false,
-}))
+import { installFakeFs } from '../helpers/fake-fs'
 
-vi.mock('@/cep/fs', () => ({
-  hasNode: () => true,
-  readTextSmart: async (path: string) => {
-    if (state.failRead) throw new Error('EBUSY')
-    return state.files.get(path) ?? null
-  },
-  // T-105：`failRead` 走 error 分支——真实读取原语从不抛，D-42 以前靠"假 fs 抛错"才生效
-  readTextOutcome: async (path: string) => {
-    if (state.failRead) return { status: 'error' as const, reason: 'EBUSY' }
-    const text = state.files.get(path)
-    return text === undefined ? { status: 'notSeen' as const } : { status: 'ok' as const, text }
-  },
-  // CAS 比对用的同步读（D-26）：必须读到同一份磁盘内容
-  readTextSync: (path: string) => {
-    // 读不到 ≠ 没有（TD-09-23/24）：failRead 现在是 error，不是 notSeen
-    if (state.failRead || state.failCompare) {
-      return { status: 'error' as const, reason: 'EACCES: 模拟读不到' }
-    }
-    const text = state.files.get(path)
-    return text === undefined ? { status: 'notSeen' as const } : { status: 'ok' as const, text }
-  },
-  writeTextFile: (path: string, text: string) => {
-    if (state.failWrite) throw new Error('NO_NODE')
-    state.files.set(path, text)
-  },
-  writeTextFileAtomic: (path: string, text: string) => {
-    if (state.failWrite) return { status: 'error' as const, reason: 'ENOSPC: 模拟写失败' }
-    state.files.set(path, text)
-    return true
-  },
-}))
+/**
+ * 仓库层的四条硬约束（ADR-14 / ADR-15）：
+ * 读失败带 degraded、写失败必须抛、同一文件串行、写前备份。
+ *
+ * **假的是操作系统**（`installFakeFs()` 装到 `window.require("fs")`），不是 `@/cep/fs` ——
+ * 写原语在 `src/cep/disk-write.ts`，mock `@/cep/fs` 拦不住它，还会逼生产代码把原语留在 fs.ts。
+ */
+const disk = installFakeFs()
 
+import { dataRepo } from '@/cep/data/data-repo'
 import { fileRepo } from '@/cep/data/file-repo'
-import { memoryRepo } from '@/cep/data/memory-repo'
 import { readValue } from '../support/repo-read'
+
+/** `memoryRepo` 已收进 `dataRepo` 且不再导出（唯一入口）：内存分支靠 `hasCep() === false` 走到 */
+const env = vi.hoisted(() => ({ cep: true }))
+vi.mock('@/cep/transport', () => ({
+  hasCep: () => env.cep,
+  // jsx 兜底的"文件不存在"哨兵：必须带 `ERR:` 前缀，否则会被当成读到的正文（T-105）
+  evalScriptRaw: async () => `${ERR_PREFIX}文件不存在: `,
+}))
 
 interface Row {
   name: string
@@ -56,16 +37,27 @@ interface Row {
 const PATH = '/user/sj_ztglStar.ini'
 
 beforeEach(() => {
-  state.files.clear()
-  state.failWrite = false
-  state.failRead = false
-  state.failCompare = false
+  disk.install()
+  disk.files.clear()
+  disk.failWrite = false
+  disk.failRead = false
+  disk.failReadAfter = 0
+  // 默认走文件实现；内存分支的用例自己把它关掉
+  env.cep = true
 })
+
+/** decode 必填（TD-03-5）：只认 `Row[]`，条目必须有字符串 name */
+function decodeRows(raw: unknown): { value: Row[] } | null {
+  if (!Array.isArray(raw)) return null
+  const rows = raw.filter((x): x is Row => isRecord(x) && typeof x.name === 'string')
+  return rows.length === raw.length ? { value: rows } : null
+}
 
 function createRepo() {
   return fileRepo<Row[]>(
     () => PATH,
     () => [],
+    decodeRows,
   )
 }
 
@@ -79,7 +71,7 @@ describe('fileRepo 读', () => {
   })
 
   it('内容损坏时报坏因、不交出 fallback（坏读没有 value）', async () => {
-    state.files.set(PATH, '{oops')
+    disk.files.set(PATH, '{oops')
     const read = await createRepo().read()
     const degraded = read.reason
     // 旧断言是 `value` 等于 fallback `[]`；4a96f63 的 src/cep/data/types.ts 把 `value`
@@ -89,7 +81,7 @@ describe('fileRepo 读', () => {
   })
 
   it('合法 JSON 原样返回', async () => {
-    state.files.set(PATH, JSON.stringify([{ name: 'MiSans', star: 3 }]))
+    disk.files.set(PATH, JSON.stringify([{ name: 'MiSans', star: 3 }]))
     const read = await createRepo().read()
     const value = readValue(read)
     const degraded = read.reason
@@ -100,7 +92,7 @@ describe('fileRepo 读', () => {
 
 describe('fileRepo 写', () => {
   it('写失败必须抛，不许吞掉', async () => {
-    state.failWrite = true
+    disk.failWrite = true
     await expect(createRepo().write([{ name: 'A' }])).rejects.toThrow()
   })
 
@@ -113,50 +105,50 @@ describe('fileRepo 写', () => {
    */
   it('CAS 比对读不到原文 → 不写、抛（不把"读不到"当"没改过"）', async () => {
     const original = JSON.stringify([{ name: 'A', star: 1 }])
-    state.files.set(PATH, original)
+    disk.files.set(PATH, original)
     // 读入口正常（读得到内容），但落盘前的**同步比对读**失败 —— 正是权限错时的真实组合
-    state.failCompare = true
+    disk.failReadAfter = 1
 
     await expect(
       createRepo().update((list) => {
         list.push({ name: 'B' })
       }),
     ).rejects.toThrow('比对读不到原文')
-    expect(state.files.get(PATH)).toBe(original)
+    expect(disk.files.get(PATH)).toBe(original)
   })
 
   it('写之前把原文备份成 .bak', async () => {
-    state.files.set(PATH, JSON.stringify([{ name: 'A', star: 1 }]))
+    disk.files.set(PATH, JSON.stringify([{ name: 'A', star: 1 }]))
     await createRepo().update((list) => {
       list.push({ name: 'B', star: 2 })
     })
-    expect(state.files.get(`${PATH}.bak`)).toBe(JSON.stringify([{ name: 'A', star: 1 }]))
+    expect(disk.files.get(`${PATH}.bak`)).toBe(JSON.stringify([{ name: 'A', star: 1 }]))
   })
 
   it('内容损坏时 update 拒绝写，原文件不动（D-42）', async () => {
-    state.files.set(PATH, '{oops')
+    disk.files.set(PATH, '{oops')
     await expect(
       createRepo().update((list) => {
         list.push({ name: 'B' })
       }),
     ).rejects.toThrow('拒绝覆盖写')
-    expect(state.files.get(PATH)).toBe('{oops')
+    expect(disk.files.get(PATH)).toBe('{oops')
   })
 
   it('读取失败时 update 拒绝写，不拿默认值覆盖（D-42）', async () => {
-    state.files.set(PATH, JSON.stringify([{ name: 'A' }]))
-    state.failRead = true
+    disk.files.set(PATH, JSON.stringify([{ name: 'A' }]))
+    disk.failRead = true
     await expect(
       createRepo().update((list) => {
         list.push({ name: 'B' })
       }),
     ).rejects.toThrow('拒绝覆盖写')
-    expect(state.files.get(PATH)).toBe(JSON.stringify([{ name: 'A' }]))
+    expect(disk.files.get(PATH)).toBe(JSON.stringify([{ name: 'A' }]))
   })
 
   it('首次写不生成 .bak（没有原文可备份）', async () => {
     await createRepo().write([{ name: 'A' }])
-    expect(state.files.has(`${PATH}.bak`)).toBe(false)
+    expect(disk.files.has(`${PATH}.bak`)).toBe(false)
   })
 })
 
@@ -177,10 +169,10 @@ describe('fileRepo 并发', () => {
 
   it('前一次写失败不影响后续（队列不中断）', async () => {
     const repo = createRepo()
-    state.failWrite = true
+    disk.failWrite = true
     await expect(repo.write([{ name: 'bad' }])).rejects.toThrow()
 
-    state.failWrite = false
+    disk.failWrite = false
     await repo.write([{ name: 'ok' }])
     const value = readValue(await repo.read())
     expect(value).toEqual([{ name: 'ok' }])
@@ -210,9 +202,17 @@ describe('fileRepo onChange', () => {
   })
 })
 
-describe('memoryRepo', () => {
+describe('memoryRepo（经唯一构造器 + 无 CEP）', () => {
+  beforeEach(() => {
+    env.cep = false
+  })
+
   it('update 串行且可读回', async () => {
-    const repo = memoryRepo<Row[]>(() => [])
+    const repo = dataRepo<Row[]>(
+      () => '/mem/rows.json',
+      () => [],
+      decodeRows,
+    )
     await Promise.all(
       Array.from({ length: 5 }, (_, index) =>
         repo.update((list) => {
@@ -225,7 +225,11 @@ describe('memoryRepo', () => {
   })
 
   it('写成功触发 onChange', async () => {
-    const repo = memoryRepo<Row[]>(() => [])
+    const repo = dataRepo<Row[]>(
+      () => '/mem/rows.json',
+      () => [],
+      decodeRows,
+    )
     const seen: Row[][] = []
     repo.onChange((value) => seen.push(value))
     await repo.write([{ name: 'A' }])

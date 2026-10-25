@@ -16,7 +16,7 @@ import { resolve } from 'node:path'
 
 const SCRIPT = resolve(__dirname, '../../scripts/audit-page.mjs')
 
-function run(args: string[]): { code: number; out: string } {
+function invoke(args: string[]): { code: number; out: string } {
   try {
     return {
       code: 0,
@@ -30,14 +30,14 @@ function run(args: string[]): { code: number; out: string } {
 
 describe('audit-page · 接线与缺数据行为', () => {
   it('数据在库时能跑：Action 页解析出 render 与组件树（退出码 0）', () => {
-    const result = run(['Action'])
+    const result = invoke(['Action'])
     expect(result.code).toBe(0)
     expect(result.out).toContain('# Action')
     expect(result.out).toContain('render=')
   })
 
   it('外部数据缺席时退出码 2 且说清缺什么（不是 ENOENT 堆栈）', () => {
-    const result = run(['Action', '--src=56d7'])
+    const result = invoke(['Action', '--src=56d7'])
     expect(result.code).toBe(2)
     expect(result.out).toContain('[缺数据]')
     expect(result.out).toContain('需要')

@@ -2,6 +2,7 @@
 // 替代了什么：此前只有 `.dzx` 的 `domain/action-dzx.ts`；四类样式库若各自判一次就是四份实现
 // 谁在用：`cep/data/style-library-repo.ts`（读磁盘库文件）；导入导出（台账 T-48 第 2 段）
 // 禁止：不要在这里读文件、不要在这里解码 base64（解码函数由调用方注入，见 `decode`）
+import { isArrayOf, isRecord } from '@/utils/guards'
 
 /**
  * 形态依据 `docs/生成/库文件格式契约.md` §0.1（实测，不是推断）：
@@ -13,15 +14,36 @@
  */
 export type KuShape = 'container' | 'flat' | 'groups'
 
-export function kuShapeOf(parsed: unknown): KuShape | null {
+/**
+ * 已证的库文件形状（**生产者给对**，消费侧不 `as`、不兜底）。
+ * `kuShapeOf` 返回它 —— 形状证明只做一次，在这里；消费侧只 switch 标签。
+ */
+export type ProvenKu =
+  | { shape: 'groups'; groups: Record<string, unknown>[] }
+  | { shape: 'flat'; head: Record<string, unknown> }
+  | { shape: 'container'; entries: Array<{ name: string; data?: unknown }> }
+
+export function kuShapeOf(parsed: unknown): ProvenKu | null {
   if (Array.isArray(parsed)) {
     const head: unknown = parsed[0]
     // flat 的元素才有 `data`；groups 的元素是组对象（`{name,show,list}`）
-    if (head && typeof head === 'object' && 'data' in head) return 'flat'
-    return 'groups'
+    // 判据即证明（`isRecord` + `'data' in head`）⇒ 不再 `as` 断言
+    if (isRecord(head) && 'data' in head) {
+      return { shape: 'flat', head }
+    }
+    // groups：**每个元素都得是对象**（`[42]` 不是"三个组"）
+    if (!isArrayOf(parsed, isRecord)) return null
+    return { shape: 'groups', groups: parsed }
   }
-  if (parsed && typeof parsed === 'object') {
-    if (Array.isArray((parsed as { arrFileData?: unknown }).arrFileData)) return 'container'
+  if (isRecord(parsed)) {
+    // container：`arrFileData` 是数组，且每个元素是带 `name: string` 的对象
+    const arrFileData = parsed.arrFileData
+    if (!Array.isArray(arrFileData)) return null
+    const entries = arrFileData.filter(
+      (entry): entry is { name: string; data?: unknown } =>
+        isRecord(entry) && typeof entry.name === 'string',
+    )
+    return { shape: 'container', entries }
   }
   return null
 }
@@ -60,18 +82,14 @@ export interface KuGroupsSource {
   note: string
 }
 
-/** 组对象的形状下限：非 null、非数组的对象（字段归 `domain/style-library.ts`） */
-function isGroupRecord(item: unknown): boolean {
-  return item !== null && typeof item === 'object' && !Array.isArray(item)
-}
-
 function parseArrayText(text: string | null, note: string): KuGroupsSource {
   if (text === null) return { groups: null, note }
   try {
     const parsed: unknown = JSON.parse(text)
     if (!Array.isArray(parsed)) return { groups: null, note: `${note}：内层不是数组` }
     // 同 `resolveKuGroups` 的 groups 分支：内层数组的每一项也必须是对象（TD-12-21）
-    if (!parsed.every(isGroupRecord)) {
+    // 「数组 + 逐条证明」只有一份实现：`guards.isArrayOf`（原来这里手写 `parsed.every(isGroupRecord)`）
+    if (!isArrayOf(parsed, isRecord)) {
       return { groups: null, note: `${note}：内层数组里有非对象项` }
     }
     return { groups: parsed, note: '' }
@@ -89,33 +107,24 @@ export function resolveKuGroups(
   parsed: unknown,
   decode: (base64: string) => string,
 ): KuGroupsSource {
-  const shape = kuShapeOf(parsed)
-  if (!shape) return { groups: null, note: '结构不认识（既不是数组也不是容器）' }
-  if (shape === 'groups') {
-    if (!Array.isArray(parsed)) return { groups: null, note: '组数据不是数组' }
-    // 组数组的**每个元素都得是对象**：以前直接 `parsed as unknown[]`，
-    // `[42]` 这种也被当成"三个组"，字段归一处再崩/静默（TD-12-21）
-    if (!parsed.every(isGroupRecord)) return { groups: null, note: '组数组里有非对象项' }
-    return { groups: parsed, note: '' }
-  }
+  const proven = kuShapeOf(parsed)
+  if (!proven) return { groups: null, note: '结构不认识（既不是数组也不是容器）' }
 
-  if (shape === 'flat') {
-    const entries = parsed as unknown[]
-    const head = entries[0] as { name?: unknown; data?: unknown } | undefined
-    if (!head || typeof head !== 'object') return { groups: null, note: '扁平清单是空的' }
-    const text = decodeKuData(head.data, decode)
-    return parseArrayText(text, `库文件读取失败（${String(head.name ?? '未知文件')}）`)
+  // 形状证明在 `kuShapeOf` 做完，这里只 switch 标签 —— 零 `as`、零兜底（消费侧不替生产者补课）
+  switch (proven.shape) {
+    case 'groups':
+      return { groups: proven.groups, note: '' }
+    case 'flat': {
+      const head = proven.head
+      if (!head) return { groups: null, note: '扁平清单是空的' }
+      const text = decodeKuData(head.data, decode)
+      return parseArrayText(text, `库文件读取失败（${String(head.name ?? '未知文件')}）`)
+    }
+    case 'container': {
+      const hit = proven.entries.find((entry) => isKuLibraryFileName(entry.name))
+      if (!hit) return { groups: null, note: '容器里没有样式库文件' }
+      const text = decodeKuData(hit.data, decode)
+      return parseArrayText(text, `库文件读取失败（${hit.name}）`)
+    }
   }
-
-  const entries = (parsed as { arrFileData: unknown[] }).arrFileData
-  const hit = entries.find(
-    (entry) =>
-      entry &&
-      typeof entry === 'object' &&
-      typeof (entry as { name?: unknown }).name === 'string' &&
-      isKuLibraryFileName((entry as { name: string }).name),
-  ) as { name: string; data?: unknown } | undefined
-  if (!hit) return { groups: null, note: '容器里没有样式库文件' }
-  const text = decodeKuData(hit.data, decode)
-  return parseArrayText(text, `库文件读取失败（${hit.name}）`)
 }

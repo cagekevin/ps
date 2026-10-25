@@ -5,6 +5,9 @@
 // 禁止：不许在这里实现表达式求值，求值交给 PS 的 `cmm_batchName`（见下方 UNVERIFIED）
 
 import { CepError } from '@/utils/errors'
+import { msg } from './messages'
+import { isRecord } from '@/utils/guards'
+import { decodeList, type Decoded } from '@/utils/decode'
 
 /** 一个重命名分组。第 0 组是固定组（最近使用），不可改名/删除 */
 export interface RenameGroup {
@@ -93,10 +96,10 @@ export function isGroupEditable(index: number, length: number): boolean {
 
 function requireEditableGroup(preset: RenamePreset, index: number): RenameGroup {
   if (!isGroupEditable(index, preset.length)) {
-    throw new CepError('PARSE', '第一个分组是固定组，不能修改或删除')
+    throw new CepError('PARSE', msg.validate.text.renameFixedGroup)
   }
   const group = preset[index]
-  if (!group) throw new CepError('PARSE', '分组不存在')
+  if (!group) throw new CepError('PARSE', msg.validate.text.renameGroupMissing)
   return group
 }
 
@@ -108,7 +111,7 @@ function clone(preset: RenamePreset): RenamePreset {
 export function toggleGroupAt(preset: RenamePreset, index: number): RenamePreset {
   const next = clone(preset)
   const group = next[index]
-  if (!group) throw new CepError('PARSE', '分组不存在')
+  if (!group) throw new CepError('PARSE', msg.validate.text.renameGroupMissing)
   group.show = !group.show
   return next
 }
@@ -116,7 +119,7 @@ export function toggleGroupAt(preset: RenamePreset, index: number): RenamePreset
 /** 新建分组：`afterIndex` 有效时插到它后面（原版 `addGroup(name, e)`，:56855-56866） */
 export function addGroupAt(preset: RenamePreset, name: string, afterIndex?: number): RenamePreset {
   const text = name.trim()
-  if (!text) throw new CepError('PARSE', '请输入组名')
+  if (!text) throw new CepError('PARSE', msg.validate.text.renameGroupNameRequired)
 
   const next = clone(preset)
   const group: RenameGroup = { name: text, show: true, list: [] }
@@ -131,7 +134,7 @@ export function addGroupAt(preset: RenamePreset, name: string, afterIndex?: numb
 /** 组改名（原版 `renameGroup`，:56876；非法下标返回 false，这里抛） */
 export function renameGroupAt(preset: RenamePreset, index: number, name: string): RenamePreset {
   const text = name.trim()
-  if (!text) throw new CepError('PARSE', '请输入新组名')
+  if (!text) throw new CepError('PARSE', msg.validate.text.renameNewGroupNameRequired)
   requireEditableGroup(preset, index)
   const next = clone(preset)
   next[index].name = text
@@ -155,7 +158,7 @@ export function deleteGroupAt(preset: RenamePreset, index: number): RenamePreset
  */
 export function addItemAt(preset: RenamePreset, groupIndex: number, text: string): RenamePreset {
   const value = text.trim()
-  if (!value) throw new CepError('PARSE', '请输入预设文本')
+  if (!value) throw new CepError('PARSE', msg.validate.text.renameItemTextRequired)
   requireEditableGroup(preset, groupIndex)
 
   const next = clone(preset)
@@ -171,10 +174,11 @@ export function changeItemAt(
   text: string,
 ): RenamePreset {
   const value = text.trim()
-  if (!value) throw new CepError('PARSE', '请输入图层名或表达式')
+  if (!value) throw new CepError('PARSE', msg.validate.text.renameLayerOrExprRequired)
   requireEditableGroup(preset, groupIndex)
   const next = clone(preset)
-  if (next[groupIndex].list[itemIndex] === undefined) throw new CepError('PARSE', '预设不存在')
+  if (next[groupIndex].list[itemIndex] === undefined)
+    throw new CepError('PARSE', msg.validate.text.renamePresetMissing)
   next[groupIndex].list[itemIndex] = value
   return next
 }
@@ -187,7 +191,8 @@ export function deleteItemAt(
 ): RenamePreset {
   requireEditableGroup(preset, groupIndex)
   const next = clone(preset)
-  if (next[groupIndex].list[itemIndex] === undefined) throw new CepError('PARSE', '预设不存在')
+  if (next[groupIndex].list[itemIndex] === undefined)
+    throw new CepError('PARSE', msg.validate.text.renamePresetMissing)
   next[groupIndex].list.splice(itemIndex, 1)
   return next
 }
@@ -200,7 +205,7 @@ export function deleteItemAt(
 export function pushHistory(preset: RenamePreset, expression: string): RenamePreset {
   const next = clone(preset)
   const history = next[0]
-  if (!history) throw new CepError('PARSE', '最近使用分组缺失')
+  if (!history) throw new CepError('PARSE', msg.validate.text.renameHistoryMissing)
   history.list = [expression, ...history.list.filter((item) => item !== expression)].slice(0, 8)
   return next
 }
@@ -253,10 +258,10 @@ export function parsePreset(text: string): RenamePreset {
     parsed = JSON.parse(text)
   } catch {
     const legacy = parseLegacyPreset(text)
-    if (!legacy.length) throw new CepError('PARSE', '导入失败')
+    if (!legacy.length) throw new CepError('PARSE', msg.validate.text.renameImportFailed)
     return legacy
   }
-  if (!isPreset(parsed)) throw new CepError('PARSE', '导入失败，文件格式不对')
+  if (!isPreset(parsed)) throw new CepError('PARSE', msg.validate.text.renameImportBadFormat)
   return parsed
 }
 
@@ -278,6 +283,16 @@ export function seedPreset(): RenamePreset {
     },
     { name: '序列', show: true, list: ['%n', '%%n', '%n###', '%%n###'] },
   ]
+}
+
+/** 条目形状：`{ name, show, list }`（原版 `.cmm` 存的就是它，:57022） */
+function isRenameGroup(x: unknown): x is RenameGroup {
+  return isRecord(x) && typeof x.name === 'string' && Array.isArray(x.list)
+}
+
+/** 读边界：重命名预设（必须是 `[{ name, show, list }]`；有条目坏 → 整份 `null`） */
+export function decodeRenamePreset(raw: unknown): Decoded<RenamePreset> | null {
+  return decodeList(raw, isRenameGroup)
 }
 
 /** 图层颜色标记个数（原版 colorData 7 个，:56905）；0 号位是「清除颜色」 */

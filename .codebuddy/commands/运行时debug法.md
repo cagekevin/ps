@@ -18,7 +18,7 @@
 | **日志** | `src/utils/logger.ts`（统一入口，禁散写 `console.log`） | 运行时轨迹；调试埋点默认安静、可开关 |
 | **白屏体检** | `npm run render:check`（需 `PSZ_EXT_DIR=/tmp/x`；**只覆盖 `fontManage` / `style` 两页**） | SSR 渲染是否崩、是否白屏 |
 | **单测 / 组件测** | `npm test`（vitest + jsdom + `@vue/test-utils`） | 逻辑 / 事件 / DOM 输出；**不启浏览器、不点 PS、不 fetch** |
-| **机器守卫** | `npm run lint` · `style:guard` · `template:guard` · `assert:guard` · `dispatch:check` · `boundary:pages` | 空 catch / 裸契约串 / 页面层越界 / 公共件分发 / 断言基线 |
+| **机器守卫** | `npm run lint` · `style:guard` · `template:guard` · `dispatch:check` | 空 catch / 裸契约串 / 页面层越界 / 公共件分发 / 断言禁令 |
 | **类型闸** | `npm run typecheck`（`src/**` 与 `tests/**` 两套 tsconfig） | 类型漂移、漏改引用 |
 | **原版结构** | `docs/生成/页面规格/0N-*.md`（结构树 + 全量 class + CSS 实测值） | 我方该长什么样 |
 | **原版事件** | `docs/生成/交互清单.md`（**只查"某元素有没有事件"，不能当页面清单**） | 某个 class 有没有绑事件 |
@@ -46,7 +46,7 @@
 [3] PS 出口装配
     src/cep/transport.ts（**唯一 evalScript 出口**）· src/cep/ps.ts（只读初始化）
     src/cep/env.ts（PS_ENV：注入给 jsx 的环境契约，**字段名不能改**）
-    【断】🔴 页面直连 `evalScript` / `__adobe_cep__` ⇒ `npm run boundary:pages` 红
+    【断】🔴 页面直连 `evalScript` / `__adobe_cep__` ⇒ `npm run lint` 红
         `src/cep/env.ts` 字段被改 ⇒ jsx 拿到错契约（不报错，静默走偏）
         ↓
 [4] 产物落位
@@ -63,14 +63,14 @@
 ```
 [1] 页面发起
     src/pages/** → src/components/command/useCommand.ts → 命令 id + payload
-    【断】🔴 页面 import `@/cep/**`（连 `import type` 也不行）⇒ `npm run boundary:pages` 红
+    【断】🔴 页面 import `@/cep/**`（连 `import type` 也不行）⇒ `npm run lint` 红
         页面 import `@/commands/**` 的**值** ⇒ 同上（只许 `import type` 拿 payload 类型）
         ↓
 [2] 命令注册与执行
     src/commands/registry.ts：defineCommand 注册；`execute` 是**唯一执行入口**
     payload 形状在 src/commands/payloads.ts（id 必须在表内）
     【断】🔴 有第二个执行入口（页面自己 new 了一个 service）⇒ 两条路 = 第二份真相
-        payload 与表里不一致 ⇒ 漏登记在 typecheck 期暴露不了，靠 `assert:guard`
+        payload 与表里不一致 ⇒ 漏登记在 typecheck 期暴露不了，靠 `npm run lint`
         ↓
 [3] PS 能力调用
     src/cep/jsx/<域>.ts（按域分文件）→ src/cep/transport.ts（队列 + 超时 + `ERR:` 协议）
@@ -145,13 +145,13 @@
 
 | 层 | 唯一职责 | 严禁 | 机器守卫 |
 | --- | --- | --- | --- |
-| `src/pages/**` | 视图 | import `@/cep/**`；值导入 `@/commands/**`；直调宿主 | `npm run boundary:pages` |
+| `src/pages/**` | 视图 | import `@/cep/**`；值导入 `@/commands/**`；直调宿主 | `npm run lint` |
 | `src/components/**` | 跨页 UI 基础件（`G` 前缀） | 塞业务规则；页面私有结构混进公共件 | `npm run dispatch:check` |
-| `src/stores/**` | **只读投影** + 少量 UI 状态 | 写状态；算业务规则 | 人工 + `assert:guard` |
+| `src/stores/**` | **只读投影** + 少量 UI 状态 | 写状态；算业务规则 | 人工 + `npm run lint` |
 | `src/composables/**` | 组合式 | 造第二套订阅总线 | 人工 |
-| `src/commands/**` | 命令注册与执行（`execute` 唯一入口） | 直接调宿主；页面绕过它 | `npm run boundary:pages` |
+| `src/commands/**` | 命令注册与执行（`execute` 唯一入口） | 直接调宿主；页面绕过它 | `npm run lint` |
 | `src/domain/**` | 纯函数与类型（零 IO、零 Vue） | `window` / `document` / `Date.now()` / `Math.random()` / `localStorage` | `npm run typecheck` + `npm run lint` |
-| `src/cep/**` | **唯一 PS 出口** | 解释业务语义 | `npm run boundary:pages` |
+| `src/cep/**` | **唯一 PS 出口** | 解释业务语义 | `npm run lint` |
 
 **断点**：把"能算出来的值"塞进 store；`src/pages` 里建新的全局单例；`src/cep` 里混进业务判断。
 
@@ -163,10 +163,10 @@
 | --- | --- | --- |
 | 白屏 | `npm run render:check`（`PSZ_EXT_DIR=/tmp/x`） | 启动链 [1]~[4] |
 | 逻辑 / 事件 / DOM | `npm test`（vitest + jsdom） | 命令链 / 事件链 |
-| 层间方向 | `npm run boundary:pages` | 页面层越权 |
+| 层间方向 | `npm run lint` | 页面层越权 |
 | 公共件分发 | `npm run dispatch:check` | 第二份实现 |
 | 样式基线 | `npm run style:guard` | 裸色值 / 裸字号 |
-| 断言基线 | `npm run assert:guard` | 断言缺失或过期 |
+| 断言禁令 | `npm run lint` | 断言缺失或过期 |
 | 引用面 | `grep -rn "<名>" src/ tests/ docs/ scripts/` + `npm run typecheck` | 改名 / 搬运后的引用漏改 |
 | 原版对照 | `docs/生成/页面规格/0N-*.md` · `docs/生成/交互清单.md` · `app.v4.js:17058` | 结构 / 事件 / jsx 签名 |
 | 判据 | `node scripts/adr.mjs search <关键词>` · `node scripts/adr.mjs refs --check` | 判据打架 / 断链 |

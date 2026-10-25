@@ -12,35 +12,24 @@ import { readValue } from '../support/repo-read'
  * 数据层用内存文件替身，不碰真机 `%APPDATA%`。
  */
 
-const state = vi.hoisted(() => ({ files: new Map<string, string>() }))
+import { installFakeFs } from '../helpers/fake-fs'
+import { ERR_PREFIX } from '@/utils/errors'
 
-vi.mock('@/cep/transport', () => ({ hasCep: () => true }))
+/** 假的是**操作系统**（不是 mock 写原语）—— 写原语在 `disk-write`，mock `@/cep/fs` 拦不住它 */
+const fakeDisk = installFakeFs()
 
-vi.mock('@/cep/fs', () => ({
+vi.mock('@/cep/transport', () => ({
+  hasCep: () => true,
+  evalScriptRaw: async () => `${ERR_PREFIX}文件不存在: `,
+}))
+
+// 只留**环境探测**（不是文件内容）：路径由用例指定
+vi.mock('@/cep/paths', () => ({
   userDir: () => '/tmp/psz-test',
-  readTextSmart: async (path: string) => state.files.get(path) ?? null,
-  writeTextSmart: async (path: string, text: string) => {
-    state.files.set(path, text)
-    return { ok: true }
-  },
-  writeTextFile: (path: string, text: string) => {
-    state.files.set(path, text)
-    return true
-  },
-  writeTextFileAtomic: (path: string, text: string) => {
-    state.files.set(path, text)
-    return true
-  },
+}))
+
+vi.mock('@/cep/node', () => ({
   hasNode: () => true,
-  // T-105：写路径改用三态读；这个假 fs 没有"读不出"的场景，只会 ok / missing
-  readTextOutcome: async (path: string) => {
-    const text = state.files.get(path)
-    return text === undefined ? { status: 'notSeen' as const } : { status: 'ok' as const, text }
-  },
-  readTextSync: (path: string) => {
-    const text = state.files.get(path)
-    return text === undefined ? { status: 'notSeen' as const } : { status: 'ok' as const, text }
-  },
 }))
 
 const { readCommonUseOptions, updateCommonUseOptions } = await import('@/cep/data/legacy-settings')
@@ -48,15 +37,16 @@ const { readCommonUseOptions, updateCommonUseOptions } = await import('@/cep/dat
 const SET_PATH = '/tmp/psz-test/sj_set.json'
 
 function seed(content: Record<string, unknown>) {
-  state.files.set(SET_PATH, JSON.stringify(content))
+  fakeDisk.files.set(SET_PATH, JSON.stringify(content))
 }
 
 function disk(): Record<string, unknown> {
-  return JSON.parse(state.files.get(SET_PATH) ?? '{}')
+  return JSON.parse(fakeDisk.files.get(SET_PATH) ?? '{}')
 }
 
 beforeEach(() => {
-  state.files.clear()
+  fakeDisk.install()
+  fakeDisk.files.clear()
 })
 
 describe('buildOptionPatch', () => {

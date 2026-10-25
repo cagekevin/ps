@@ -22,7 +22,7 @@ const cmds = vi.hoisted(() => ({
 
 vi.mock('@/components/command/useCommand', () => ({
   useCommand: (id: string) => ({
-    run:
+    invoke:
       id === 'commonUse.exportImages'
         ? cmds.exportImages
         : id === 'commonUse.openExportFolder'

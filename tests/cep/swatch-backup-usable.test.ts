@@ -11,25 +11,31 @@ const fsMock = vi.hoisted(() => ({
   files: new Map<string, string>(),
 }))
 
-vi.mock('@/cep/fs', () => ({
+vi.mock('@/cep/fs-read', () => ({
   USER_DIR: '/SheJiZhuLi',
-  userDir: () => '/user',
-  hasNode: () => true,
   readTextOutcome: async (p: string) => {
-    const text = fsMock.files.get(p)
-    return text === undefined ? { status: 'notSeen' as const } : { status: 'ok' as const, text }
-  },
+      const text = fsMock.files.get(p)
+      return text === undefined ? { status: 'notSeen' as const } : { status: 'ok' as const, text }
+    },
   readTextSync: (p: string) => {
-    const text = fsMock.files.get(p)
-    return text === undefined ? { status: 'notSeen' as const } : { status: 'ok' as const, text }
-  },
+      const text = fsMock.files.get(p)
+      return text === undefined ? { status: 'notSeen' as const } : { status: 'ok' as const, text }
+    },
   writeTextFile: (p: string, text: string) => {
-    fsMock.files.set(p, text)
-  },
+      fsMock.files.set(p, text)
+    },
   writeTextFileAtomic: (p: string, text: string) => {
-    fsMock.files.set(p, text)
-    return { status: 'ok' as const }
-  },
+      fsMock.files.set(p, text)
+      return { status: 'ok' as const }
+    },
+}))
+
+vi.mock('@/cep/paths', () => ({
+  userDir: () => '/user',
+}))
+
+vi.mock('@/cep/node', () => ({
+  hasNode: () => true,
 }))
 
 vi.mock('@/cep/events', () => ({

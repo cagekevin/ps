@@ -4,6 +4,7 @@ import CepModal from '@/components/CepModal.vue'
 import SelectBox from '@/components/SelectBox.vue'
 import CheckBox from '@/components/CheckBox.vue'
 import type { ActionGroup } from '@/domain/action'
+import { msg } from '@/domain/messages'
 
 /**
  * 原版 addContext（app.v4.js:55328-55577）：
@@ -81,10 +82,10 @@ function confirm() {
     :width="300"
     @ok="confirm"
   >
-    <div v-if="loading" class="action-add__hint">正在读取 Photoshop 动作…</div>
+    <div v-if="loading" class="action-add__hint">{{ '正在读取 Photoshop 动作…' }}</div>
     <div v-else-if="error" class="action-add__hint action-add__hint--error">{{ error }}</div>
     <div v-else-if="unparsed" class="action-add__hint">
-      Photoshop 返回了动作数据，但结构无法识别，已记录日志
+      {{ 'Photoshop 返回了动作数据，但结构无法识别，已记录日志' }}
     </div>
     <template v-else>
       <SelectBox
@@ -103,7 +104,7 @@ function confirm() {
         </CheckBox>
       </div>
 
-      <p v-if="!actions.length" class="action-add__hint">*该分组没有动作</p>
+      <p v-if="!actions.length" class="action-add__hint">{{ msg.page.text.noActionsInGroup }}</p>
       <div v-else class="action-add__list">
         <div v-for="item in actions" :key="key(item)" class="action-add__item">
           <CheckBox :model-value="selected.has(key(item))" @update:model-value="toggleItem(item)">

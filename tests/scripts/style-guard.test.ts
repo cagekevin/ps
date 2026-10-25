@@ -37,7 +37,7 @@ ${css}
 </template>
 `
 
-function run(root: string): { code: number; out: string } {
+function invoke(root: string): { code: number; out: string } {
   try {
     return {
       code: 0,
@@ -51,26 +51,28 @@ function run(root: string): { code: number; out: string } {
 
 describe('style-guard · 负 margin（长写与多值都要拦）', () => {
   it('长写 `margin-left: -8px` → 非 0，报 neg-margin', () => {
-    const result = run(makeRoot({ 'components/A.vue': vue('.x-box {\n  margin-left: -8px;\n}') }))
+    const result = invoke(
+      makeRoot({ 'components/A.vue': vue('.x-box {\n  margin-left: -8px;\n}') }),
+    )
     expect(result.code).not.toBe(0)
     expect(result.out).toContain('neg-margin')
   })
 
   it('多值 `margin: 4px -8px` → 非 0', () => {
-    const result = run(makeRoot({ 'components/A.vue': vue('.x-box {\n  margin: 4px -8px;\n}') }))
+    const result = invoke(makeRoot({ 'components/A.vue': vue('.x-box {\n  margin: 4px -8px;\n}') }))
     expect(result.code).not.toBe(0)
     expect(result.out).toContain('neg-margin')
   })
 
   it('正向 `margin-left: 8px` → 退出码 0（不误报）', () => {
-    const result = run(makeRoot({ 'components/A.vue': vue('.x-box {\n  margin-left: 8px;\n}') }))
+    const result = invoke(makeRoot({ 'components/A.vue': vue('.x-box {\n  margin-left: 8px;\n}') }))
     expect(result.code).toBe(0)
   })
 })
 
 describe('style-guard · 动效只用 token', () => {
   it('`transition: transform 0.12s` → 非 0，报 motion-raw', () => {
-    const result = run(
+    const result = invoke(
       makeRoot({ 'components/A.vue': vue('.x-box {\n  transition: transform 0.12s;\n}') }),
     )
     expect(result.code).not.toBe(0)
@@ -78,7 +80,7 @@ describe('style-guard · 动效只用 token', () => {
   })
 
   it('`transition: opacity var(--dur-fast) var(--ease)` → 退出码 0', () => {
-    const result = run(
+    const result = invoke(
       makeRoot({
         'components/A.vue': vue('.x-box {\n  transition: opacity var(--dur-fast) var(--ease);\n}'),
       }),
@@ -89,7 +91,7 @@ describe('style-guard · 动效只用 token', () => {
 
 describe('style-guard · 裸类名撞名', () => {
   it('`.content` 被两个文件定义 → 非 0，报 bare-collision', () => {
-    const result = run(
+    const result = invoke(
       makeRoot({
         'pages/a/A.vue': vue('.content {\n  padding: 0;\n}', 'content'),
         'pages/b/B.vue': vue('.content {\n  padding: 4px;\n}', 'content'),
@@ -100,7 +102,7 @@ describe('style-guard · 裸类名撞名', () => {
   })
 
   it('裸类名只出现在一个文件里 → 退出码 0（盘上 35 个裸类名不该被一刀切）', () => {
-    const result = run(
+    const result = invoke(
       makeRoot({
         'pages/a/A.vue': vue('.content {\n  padding: 0;\n}', 'content'),
         'pages/b/B.vue': vue('.item {\n  padding: 4px;\n}', 'item'),
@@ -127,7 +129,7 @@ const pageWith = (template: string, script = '') =>
 
 describe('style-guard · 静默失败（TD-17-16：只认可执行代码）', () => {
   it('模板里只有 `<!-- TODO: tagsError -->`（没真用）→ 非 0，文案点出「当成代码使用」', () => {
-    const result = run(
+    const result = invoke(
       makeRoot({
         'stores/silent.ts': storeFile('tagsError'),
         'pages/a/A.vue': pageWith('  <!-- TODO: tagsError 待接 -->\n  <p>空</p>'),
@@ -139,7 +141,7 @@ describe('style-guard · 静默失败（TD-17-16：只认可执行代码）', ()
   })
 
   it('只在脚本注释里提 `// TODO: tagsError` → 非 0（注释不算渲染）', () => {
-    const result = run(
+    const result = invoke(
       makeRoot({
         'stores/silent.ts': storeFile('tagsError'),
         'pages/a/A.vue': pageWith('  <p>空</p>', '// TODO: tagsError 待接'),
@@ -150,7 +152,7 @@ describe('style-guard · 静默失败（TD-17-16：只认可执行代码）', ()
   })
 
   it('只在字符串字面量里出现（`:title="\'tagsError\'"` 与模板纯文本）→ 非 0', () => {
-    const result = run(
+    const result = invoke(
       makeRoot({
         'stores/silent.ts': storeFile('tagsError'),
         'pages/a/A.vue': pageWith('  <p :title="\'tagsError\'">tagsError</p>'),
@@ -161,7 +163,7 @@ describe('style-guard · 静默失败（TD-17-16：只认可执行代码）', ()
   })
 
   it('模板表达式 `v-if="tagsError"` 真用上 → 退出码 0（正例，不误报）', () => {
-    const result = run(
+    const result = invoke(
       makeRoot({
         'stores/silent.ts': storeFile('tagsError'),
         'pages/a/A.vue': pageWith('  <p v-if="tagsError">{{ tagsError }}</p>'),
@@ -171,7 +173,7 @@ describe('style-guard · 静默失败（TD-17-16：只认可执行代码）', ()
   })
 
   it('脚本里 computed 中转（模板渲染的是 showErr）→ 退出码 0（合法写法不许判死）', () => {
-    const result = run(
+    const result = invoke(
       makeRoot({
         'stores/silent.ts': storeFile('tagsError'),
         'pages/a/A.vue': pageWith(

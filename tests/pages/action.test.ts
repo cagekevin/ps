@@ -21,7 +21,7 @@ vi.mock('@/cep/jsx', () => ({ jsx }))
 
 await import('@/commands')
 const ActionPage = (await import('@/pages/action/index.vue')).default
-const { actionLibraryRepo } = await import('@/cep/data/actions')
+const { actionLibraryWriter } = await import('@/cep/data/actions')
 const { bindActionData } = await import('@/stores/action')
 
 // 命令写库后要能刷新投影（生产里由 main.ts 装配）
@@ -54,8 +54,8 @@ beforeEach(async () => {
   setActivePinia(pinia)
 
   vi.clearAllMocks()
-  jsx.action.callAction.mockResolvedValue(null)
-  await actionLibraryRepo.write(JSON.parse(JSON.stringify(seed)))
+  jsx.action.callAction.mockResolvedValue({ ok: true, data: null })
+  await actionLibraryWriter.write(JSON.parse(JSON.stringify(seed)))
 })
 
 describe('动作页', () => {
@@ -110,13 +110,13 @@ describe('动作页', () => {
     }
     await flushPromises()
 
-    const value = readValue(await actionLibraryRepo.read())
+    const value = readValue(await actionLibraryWriter.read())
     expect(value[0].list.map((item) => item.name)).toEqual(['锐化', '磨皮'])
     wrapper.unmount()
   })
 
   it('空库显示空态', async () => {
-    await actionLibraryRepo.write([])
+    await actionLibraryWriter.write([])
     const wrapper = await mountPage()
 
     expect(wrapper.text()).toContain('还没有动作')

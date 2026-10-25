@@ -1,0 +1,306 @@
+{
+  "_what": "C 项（.vue 模板中文文本节点）里经人工核语义后算作「提示语」的清单。脚本只给关键词候选，语义判读由人做，结果钉在这里。",
+  "_judgedBy": "架构师，2026-10-25",
+  "_judgedDate": "2026-10-25",
+  "_criteria": "算 = 这句话回答「刚才发生了什么」（失败/降级/进度/要用户做什么/问用户确认）；不算 = 按钮标签、菜单项、勾选项标签、标题、表头、注释、示例页演示文字、内部默认值",
+  "_anchor": "锚定用 file + context（含标签/类名/语境的整行原文片段），不用写死行号——P3 改 .vue 增删行后行号会漂，content+context 才稳。copy-audit.mjs 拿 context 去文件里匹配当前所在行，行号现算不写死。",
+  "_totalCandidates": 38,
+  "_counted": 0,
+  "_notCounted": [
+    {
+      "file": "src/components/GAnchorGrid.vue",
+      "context": ":aria-label=\"`锚点 ${flatIndex(rows, rowIndex, cellIndex) + 1}`\"",
+      "category": "aria-label",
+      "reason": "按钮无障碍名（aria-label），界面长相，回答「这里是什么」"
+    },
+    {
+      "file": "src/components/Icon.vue",
+      "context": "if (!hasIcon(id.value)) console.warn(`[Icon] 图标不存在：${id.value}`)",
+      "category": "开发者串",
+      "reason": "console.warn 日志，开发者串，不是用户看到的话"
+    },
+    {
+      "file": "src/pages/_atoms/index.vue",
+      "context": "@run=\"(item) => toast(`点击 ${item.text}`)\"",
+      "category": "演示串",
+      "reason": "控件模板演示页 demo toast，示例页演示文字"
+    },
+    {
+      "file": "src/pages/fontManage/components/Rating.vue",
+      "context": ":aria-label=\"`${index} 星`\"",
+      "category": "aria-label",
+      "reason": "星级按钮无障碍名（aria-label），界面长相"
+    },
+    {
+      "file": "src/pages/fontManage/index.vue",
+      "context": ":aria-label=\"`应用字体 ${font.family}`\"",
+      "category": "aria-label",
+      "reason": "应用按钮无障碍名（aria-label），界面长相"
+    },
+    {
+      "file": "src/pages/fontSet/components/CreateButtonPanel.vue",
+      "context": "padding.value = `自动生成${value}`",
+      "category": "数据字段值",
+      "reason": "赋给 padding.value 的字段值（经 v-model 进输入框），非「刚才发生了什么」",
+      "unverified": "UNVERIFIED: padding.value 经 v-model 绑到输入框、用户可见，但它是字段值非「刚才发生了什么」，判不搬；是否算提示语依赖运行时 UI 观感，未实测，挂账待真机核。"
+    },
+    {
+      "file": "src/pages/fontSet/components/CreateButtonPanel.vue",
+      "context": ":title=\"`预设样式${value}`\"",
+      "category": "title",
+      "reason": "按钮 tooltip（title 属性），界面长相"
+    },
+    {
+      "file": "src/pages/style/index.vue",
+      "context": "if (kind === 'color' && item.swatch) return `色值 ${item.swatch.toUpperCase()}`",
+      "category": "数据标注",
+      "reason": "浮层 detail，报「这里是什么」（色值）"
+    },
+    {
+      "file": "src/pages/style/index.vue",
+      "context": "if (preview.count > 1) parts.push(`${preview.count} 个字体`)",
+      "category": "数据标注",
+      "reason": "浮层 detail 计数，报「这里是什么」"
+    },
+    {
+      "file": "src/pages/style/index.vue",
+      "context": "subtitle: `${group.name} · ${KU_TAB_LABELS[KU_KINDS.indexOf(target.kind)]}库`,",
+      "category": "数据标注",
+      "reason": "浮层 subtitle，报「这里是什么」（组名·库名）"
+    },
+    {
+      "file": "src/pages/style/index.vue",
+      "context": "placeholder: `请输入${ITEM_NAME_LABEL[kind]}名称`,",
+      "category": "placeholder",
+      "reason": "输入框占位符（placeholder 属性），字段名"
+    }
+  ],
+  "promptRows": [],
+  "_note_row7": "P2 第7行把 style/index.vue 的删除仓库确认句收进 msg.confirm.fn.deleteWarehouse 后，该行不再是页面内嵌提示语，从本清单移除（10→9）。P3 再把剩余 9 行全部收进 msg.*（见 _collected），promptRows 清空（9→0）。",
+  "_eventPromptCriteria": "桶A 真用户提示语（用户在界面看到的结果/状态/进度/降级）；不含日志/开发者串（桶B）与存疑项（桶C，标 UNVERIFIED）。锚定 file+context，不用写死行号。",
+  "eventPromptRows": [],
+  "_eventCounted": 0,
+  "_eventNote": "桶A 真提示语 31 行已 P2 收进 msg.*（见 _eventCollected）；1 行判非提示语（路径，见 _eventNotPrompt）；桶B 日志串、桶C 存疑见 messages.ts 4.2c/4.2d。",
+  "_eventCollected": [
+    {
+      "file": "src/stores/font.ts",
+      "context": "starsError.value = read.ok ? '' : `读取不到星级文件（${read.reason ?? '原因未知'}）`",
+      "movedTo": "msg.*（P2 收口）"
+    },
+    {
+      "file": "src/stores/font.ts",
+      "context": "starsError.value = `读取不到星级文件（${describeCepError(e)}）`",
+      "movedTo": "msg.*（P2 收口）"
+    },
+    {
+      "file": "src/stores/swatch.ts",
+      "context": "`自定义色有 ${result.skipped} 条认不出，已跳过（色板文件里有无法识别的颜色项）`,",
+      "movedTo": "msg.*（P2 收口）"
+    },
+    {
+      "file": "src/stores/swatch.ts",
+      "context": "`自定义色读取失败（${describeCepError(customRead.reason)}），这一组颜色暂时显示不出来`,",
+      "movedTo": "msg.*（P2 收口）"
+    },
+    {
+      "file": "src/stores/swatch.ts",
+      "context": "notes.push(`最近色有 ${result.skipped} 条认不出，已跳过（色板文件里有无法识别的颜色项）`)",
+      "movedTo": "msg.*（P2 收口）"
+    },
+    {
+      "file": "src/stores/swatch.ts",
+      "context": "`最近色读取失败（${describeCepError(recentRead.reason)}），这一组颜色暂时显示不出来`,",
+      "movedTo": "msg.*（P2 收口）"
+    },
+    {
+      "file": "src/stores/action.ts",
+      "context": "reasons.push(`动作库索引文件损坏（${index.reason}），当前显示的是默认仓库 ${indexFile}`)",
+      "movedTo": "msg.*（P2 收口）"
+    },
+    {
+      "file": "src/stores/action.ts",
+      "context": "if (!library.ok) reasons.push(`动作库文件损坏（${library.reason}）`)",
+      "movedTo": "msg.*（P2 收口）"
+    },
+    {
+      "file": "src/stores/font-set.ts",
+      "context": "if (!settingsRead.ok) reasons.push(`面板设置读取失败（${settingsRead.reason}），已按默认值显示`)",
+      "movedTo": "msg.*（P2 收口）"
+    },
+    {
+      "file": "src/stores/font-set.ts",
+      "context": "if (!quickRead.ok) reasons.push(`快捷字体读取失败（${quickRead.reason}），已按默认值显示`)",
+      "movedTo": "msg.*（P2 收口）"
+    },
+    {
+      "file": "src/stores/font-set.ts",
+      "context": "reasons.push(`层级预设读取失败（${hierarchyRead.reason}），已按默认值显示`)",
+      "movedTo": "msg.*（P2 收口）"
+    },
+    {
+      "file": "src/stores/font-set.ts",
+      "context": "if (!counterRead.ok) reasons.push(`翻译计数读取失败（${counterRead.reason}），已按默认值显示`)",
+      "movedTo": "msg.*（P2 收口）"
+    },
+    {
+      "file": "src/commands/commonUse.ts",
+      "context": "(i, total) => `正在优化文档：${i + 1}/${total}`,",
+      "movedTo": "msg.*（P2 收口）"
+    },
+    {
+      "file": "src/commands/commonUse.ts",
+      "context": "(i, total) => `正在导出：${i + 1}/${total}`,",
+      "movedTo": "msg.*（P2 收口）"
+    },
+    {
+      "file": "src/commands/commonUse.ts",
+      "context": "`常用页设置文件损坏（${read.reason}），${name} 未处理：请到设置页修复 sj_set.json 后重试`,",
+      "movedTo": "msg.*（P2 收口）"
+    },
+    {
+      "file": "src/commands/registry.ts",
+      "context": "return { ok: false, reason: `读取选区失败：${reason}`, code }",
+      "movedTo": "msg.*（P2 收口）"
+    },
+    {
+      "file": "src/commands/font.ts",
+      "context": "`设置字体失败：${font.family}`,",
+      "movedTo": "msg.*（P2 收口）"
+    },
+    {
+      "file": "src/cloud/engine.ts",
+      "context": "error: `云端返回读不懂（${reason}），已拒绝覆盖云端`,",
+      "movedTo": "msg.*（P2 收口）"
+    },
+    {
+      "file": "src/cloud/engine.ts",
+      "context": "error: `本地同步台账读不到（${reason}），已停止上传：没有它就无法判断云端和本地谁更新`,",
+      "movedTo": "msg.*（P2 收口）"
+    },
+    {
+      "file": "src/cloud/engine.ts",
+      "context": "error: `有 ${diff.conflicts.length} 个同步项会被覆盖，需要确认`,",
+      "movedTo": "msg.*（P2 收口）"
+    },
+    {
+      "file": "src/cloud/engine.ts",
+      "context": "error: `部分同步项写回失败：${failed.join('、')}`,",
+      "movedTo": "msg.*（P2 收口）"
+    },
+    {
+      "file": "src/cloud/engine.ts",
+      "context": "error: `未注册的同步项：${unknown.join('、')}`,",
+      "movedTo": "msg.*（P2 收口）"
+    },
+    {
+      "file": "src/cloud/engine.ts",
+      "context": "error: `云端有更新的版本（rev ${cloud?.rev ?? 0}），${conflicts.join('、')} 未推送`,",
+      "movedTo": "msg.*（P2 收口）"
+    },
+    {
+      "file": "src/cep/cloud/pending.ts",
+      "context": "`云同步未完成（${reason}${code ? ` · ${code}` : ''}）：${units.join('、')} 已记为待同步` +",
+      "movedTo": "msg.*（P2 收口）"
+    },
+    {
+      "file": "src/cep/data/style-library-io.ts",
+      "context": "onProgress?.(`已读取 ${done}/${list.length} 个仓库`)",
+      "movedTo": "msg.*（P2 收口）"
+    },
+    {
+      "file": "src/cep/data/style-library-io.ts",
+      "context": "onProgress?.(`已写入 ${written.length}/${remapped.arrFileData.length} 个文件`)",
+      "movedTo": "msg.*（P2 收口）"
+    },
+    {
+      "file": "src/cep/data/file-repo.ts",
+      "context": "read: { ok: false, reason: `读取失败：${outcome.reason}`, fallback: fallback() },",
+      "movedTo": "msg.*（P2 收口）"
+    },
+    {
+      "file": "src/cep/data/style-library-repo.ts",
+      "context": "return `${kindLabel(kind)}默认分组`",
+      "movedTo": "msg.*（P2 收口）"
+    },
+    {
+      "file": "src/composables/useFreePanelAdd.ts",
+      "context": "? `已加入自由面板「${items.value[0].text}」`",
+      "movedTo": "msg.*（P2 收口）"
+    },
+    {
+      "file": "src/composables/useFreePanelAdd.ts",
+      "context": ": `已加入 ${items.value.length} 个动作`,",
+      "movedTo": "msg.*（P2 收口）"
+    },
+    {
+      "file": "src/main.ts",
+      "context": "onSettingsWriteError((message) => useFeedbackStore().error(`偏好保存失败：${message}`))",
+      "movedTo": "msg.*（P2 收口）"
+    }
+  ],
+  "_eventNotPrompt": [
+    {
+      "file": "src/commands/system.ts",
+      "context": "writeScripts(`${dir}/快捷键脚本`, groups)",
+      "reason": "文件系统路径，非用户提示语，不进 msg.*"
+    }
+  ],
+  "_collected": [
+    {
+      "file": "src/components/ErrorBoundary.vue",
+      "context": "<p class=\"crash__title\">这个页面出错了</p>",
+      "note": "崩溃兜底页的标题句，报告「页面出错了」这件事",
+      "movedTo": "msg.*（P3 收口，页面/组件侧改引 msg.page / msg.confirm）"
+    },
+    {
+      "file": "src/pages/action/components/ActionAddContext.vue",
+      "context": "<div v-if=\"loading\" class=\"action-add__hint\">正在读取 Photoshop 动作…</div>",
+      "note": "加载进度提示",
+      "movedTo": "msg.*（P3 收口，页面/组件侧改引 msg.page / msg.confirm）"
+    },
+    {
+      "file": "src/pages/action/components/ActionAddContext.vue",
+      "context": "<p v-if=\"!actions.length\" class=\"action-add__hint\">*该分组没有动作</p>",
+      "note": "空态/降级提示",
+      "movedTo": "msg.*（P3 收口，页面/组件侧改引 msg.page / msg.confirm）"
+    },
+    {
+      "file": "src/pages/action/index.vue",
+      "context": "<p class=\"action-hint\">动作库还是空的，是否导入默认动作预设？</p>",
+      "note": "问用户要不要导入",
+      "movedTo": "msg.*（P3 收口，页面/组件侧改引 msg.page / msg.confirm）"
+    },
+    {
+      "file": "src/pages/fontManage/index.vue",
+      "context": "<div v-else-if=\"loading && !items.length\" class=\"state\">正在读取系统字体…</div>",
+      "note": "加载进度提示",
+      "movedTo": "msg.*（P3 收口，页面/组件侧改引 msg.page / msg.confirm）"
+    },
+    {
+      "file": "src/pages/rename/index.vue",
+      "context": "<p v-if=\"loading\" class=\"rename-hint\">加载中…</p>",
+      "note": "加载进度提示",
+      "movedTo": "msg.*（P3 收口，页面/组件侧改引 msg.page / msg.confirm）"
+    },
+    {
+      "file": "src/pages/set/components/ClearCacheDialog.vue",
+      "context": "<p class=\"cache__hint\">缓存上限档位与清理范围尚未取得原版依据，本版只读。</p>",
+      "note": "状态说明（本版只读=降级说明）",
+      "movedTo": "msg.*（P3 收口，页面/组件侧改引 msg.page / msg.confirm）"
+    },
+    {
+      "file": "src/pages/set/index.vue",
+      "context": "<EmptyState compact>当前版本未提供快捷键配置，暂无快捷键可设置。</EmptyState>",
+      "note": "空态提示",
+      "movedTo": "msg.*（P3 收口，页面/组件侧改引 msg.page / msg.confirm）"
+    },
+    {
+      "file": "src/pages/style/index.vue",
+      "context": "<p v-if=\"loading\" class=\"style-hint style-loading\">正在读取样式库…</p>",
+      "note": "加载进度提示",
+      "movedTo": "msg.*（P3 收口，页面/组件侧改引 msg.page / msg.confirm）"
+    }
+  ],
+  "_collectedNote": "P3 把 9 行 .vue 模板提示语全部收进 msg.*（crashTitle / loadingPsActions / noActionsInGroup / askImportDefaultActions / loadingSystemFonts / loadingRename / cacheReadOnly / noShortcutConfig / loadingStyleLib），页面侧改引 msg.page.*，故 promptRows 清空=收完；锚定行已不再存在，改存 _collected 留痕。",
+  "_notCountedNote": "P4：copy-audit 4.2 剩余的 11 行判不搬，逐条 file + context（该行 trim 后整行原文）+ category + reason。锚定照 promptRows 口径：context 定位、行号现算不写死。11 = §3.1 命令②的 4 行 + 命令②排除的 7 行（aria-label/title/placeholder）。脚本 copy-audit.mjs 不读本字段（只读 promptRows/eventPromptRows），改结构不影响脚本计数。"
+}

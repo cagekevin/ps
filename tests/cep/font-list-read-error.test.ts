@@ -7,25 +7,29 @@ import { describe, expect, it, vi } from 'vitest'
 
 const sys = vi.hoisted(() => ({ readSysFontFile: vi.fn() }))
 
-// ps.ts 的 doInit 会问两个初始化脚本：evalFile 要 'OK'，typeof 要 'function'
+// 取数入口在 `data/font-list.ts`，它经 `ps.ts` 的 `initJsx` 初始化：
+// doInit 会问两个初始化脚本——evalFile 要 'OK'，typeof 要 'function'
 vi.mock('@/cep/transport', () => ({
   hasCep: () => true,
   evalScriptRaw: async (script: string) =>
     script.includes('typeof ztgl_initSystemList') ? 'function' : 'OK',
 }))
-vi.mock('@/cep/fs', () => ({ extensionDir: () => '/ext' }))
+vi.mock('@/cep/paths', () => ({
+  extensionDir: () => '/ext',
+}))
 vi.mock('@/cep/data/sys-font', () => ({
   readSysFontFile: sys.readSysFontFile,
   mergeFontStars: async (list: unknown[]) => list,
 }))
 vi.mock('@/cep/jsx', () => ({
   jsx: {
-    font: { initSystemList: vi.fn(async () => 'ok') },
+    // 两臂：`'ok'` 是成功哨兵且**保留原值**（`font-list` 靠它判"去读 SysFont2.json"）
+    font: { initSystemList: vi.fn(async () => ({ ok: true, data: 'ok' as const })) },
     env: { setEnv: async () => undefined },
   },
 }))
 
-const { getFontList } = await import('@/cep/ps')
+const { getFontList } = await import('@/cep/data/font-list')
 
 describe('getFontList 遇到读不到', () => {
   it('SysFont2.json 读不到 → 抛 IO 且带上原因（页面据此显示"读不到"）', async () => {

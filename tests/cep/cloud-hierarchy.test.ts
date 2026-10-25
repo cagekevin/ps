@@ -1,6 +1,6 @@
 // 契约测试，非实机：仓库用内存实现，全程零网络（fetch 被 stub 成"一调用就失败"）
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { fontExtraDefaults, hierarchyRepo } from '@/cep/data/font-extra'
+import { fontExtraDefaults, hierarchyWriter } from '@/cep/data/font-extra'
 import { fontHierarchyEntry } from '@/cep/cloud/entries/font-hierarchy'
 import { cloudEntries } from '@/cep/cloud/entries'
 import { readValue } from '../support/repo-read'
@@ -18,7 +18,7 @@ function inlineData(payload: Awaited<ReturnType<typeof fontHierarchyEntry.read>>
 beforeEach(async () => {
   vi.stubGlobal('fetch', fetchGuard)
   fetchGuard.mockClear()
-  await hierarchyRepo.write({
+  await hierarchyWriter.write({
     index: 0,
     list: [{ name: '常规', data: [92, 48, 36, 24, 15, 12] }],
   })
@@ -65,7 +65,7 @@ describe('font.hierarchy 云同步项（T-55）', () => {
     const result = await fontHierarchyEntry.write({ ...payload, ...next })
 
     expect(result.ok).toBe(true)
-    const saved = await hierarchyRepo.read()
+    const saved = await hierarchyWriter.read()
     expect(readValue(saved)).toEqual({ index: 0, list: [{ name: '手机端', data: [72, 50, 28] }] })
   })
 
@@ -95,13 +95,13 @@ describe('font.hierarchy 云同步项（T-55）', () => {
       expect(result.ok).toBe(false)
     }
 
-    expect(readValue(await hierarchyRepo.read()).list).toEqual([
+    expect(readValue(await hierarchyWriter.read()).list).toEqual([
       { name: '常规', data: [92, 48, 36, 24, 15, 12] },
     ])
   })
 
   it('read 遇到降级（读不到真实数据）时明确失败，不上传假数据', async () => {
-    vi.spyOn(hierarchyRepo, 'read').mockResolvedValue({
+    vi.spyOn(hierarchyWriter, 'read').mockResolvedValue({
       ok: false,
       reason: '读取失败',
       // 坏读臂必带仓库自己的默认值（T-102）；本条断言的是"读坏必须抛、不上传假数据"

@@ -10,10 +10,10 @@ import type { FontItem } from '@/domain/font-item'
  * 病根在数据层把失败折成 `{}`——一折，页面上就只剩"评分 0"，跟用户自己的数据没区别。
  */
 
-const ps = vi.hoisted(() => ({
+const reads = vi.hoisted(() => ({
   getFontList: vi.fn(),
-  getFontTags: vi.fn(async () => []),
-  getFontStars: vi.fn(),
+  readFontTags: vi.fn(async () => []),
+  readFontStars: vi.fn(),
 }))
 
 const selection = vi.hoisted(() => ({ hasSelection: true, typeNumber: 2 }))
@@ -23,7 +23,11 @@ vi.mock('@/selection', () => ({
   current: () => selection,
   selectionRef: { value: selection },
 }))
-vi.mock('@/cep/ps', () => ps)
+vi.mock('@/cep/data/font-list', () => ({ getFontList: reads.getFontList }))
+vi.mock('@/cep/data/font-meta', () => ({
+  readFontTags: reads.readFontTags,
+  readFontStars: reads.readFontStars,
+}))
 vi.mock('@/cep/jsx', () => ({
   jsx: {
     action: { callAction: vi.fn(), getActionList: vi.fn() },
@@ -62,9 +66,9 @@ beforeEach(() => {
   pinia = createPinia()
   setActivePinia(pinia)
   vi.clearAllMocks()
-  ps.getFontTags.mockResolvedValue([])
-  ps.getFontStars.mockResolvedValue({ ok: true, stars: {} })
-  ps.getFontList.mockResolvedValue([font('MiSans')])
+  reads.readFontTags.mockResolvedValue([])
+  reads.readFontStars.mockResolvedValue({ ok: true, stars: {} })
+  reads.getFontList.mockResolvedValue([font('MiSans')])
   class NoopObserver {
     observe() {}
     unobserve() {}
@@ -75,7 +79,7 @@ beforeEach(() => {
 
 describe('字体管理页 · 星级读不到（TD-01-4）', () => {
   it('星级读不到时页面上出现「读取不到星级文件」，并且说明 0 不代表没收藏', async () => {
-    ps.getFontStars.mockResolvedValue({ ok: false, stars: {}, reason: 'EPERM: 拒绝访问' })
+    reads.readFontStars.mockResolvedValue({ ok: false, stars: {}, reason: 'EPERM: 拒绝访问' })
 
     const text = (await mountPage()).text()
 
@@ -84,7 +88,7 @@ describe('字体管理页 · 星级读不到（TD-01-4）', () => {
   })
 
   it('星级读得到时不出这句话（不许把正常状态也说成故障）', async () => {
-    ps.getFontStars.mockResolvedValue({ ok: true, stars: { MiSans: 3 } })
+    reads.readFontStars.mockResolvedValue({ ok: true, stars: { MiSans: 3 } })
 
     const text = (await mountPage()).text()
 

@@ -3,7 +3,7 @@
   "sourceLineCount": 73946,
   "dispatchTableLine": 17058,
   "dispatchCount": 36,
-  "callCount": 114,
+  "callCount": 115,
   "dispatch": [
     {
       "key": "cmm_useRename",
@@ -367,6 +367,11 @@
     }
   ],
   "calls": [
+    {
+      "name": "AppPreferences.typeUnits",
+      "channel": "jsxNoCheck",
+      "line": 42096
+    },
     {
       "name": "cmm_batchName",
       "channel": "jsxHistory",

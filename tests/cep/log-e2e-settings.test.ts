@@ -71,11 +71,8 @@ describe('真实失败的全链条 · 关掉重开还能查到', () => {
     // 1) 原语：读偏好文件 EACCES
     disk.readError = 'EACCES'
 
-    const logger = await import('@/utils/logger')
-    const { createLogFileSink } = await import('@/cep/log-file')
-    logger.attachLogSink(
-      createLogFileSink((reason) => logger.log.warn('logger', '日志落盘失败', reason)),
-    )
+    // 落盘口：logger 在自己模块顶层就装好了（import logger 即装，无需调用）
+    await import('@/cep/log-file')
 
     // 2) 语义层：真 settings（走 CEP 分支 → readTextSync 报 error → log.error）
     const settings = await import('@/cep/data/settings')
@@ -95,8 +92,7 @@ describe('真实失败的全链条 · 关掉重开还能查到', () => {
     // 4) 面板重开：新模块实例 + 新落盘口，出口仍是 `log.dump()`（DebugLog 就显示这个）
     vi.resetModules()
     const rebooted = await import('@/utils/logger')
-    const sink = (await import('@/cep/log-file')).createLogFileSink()
-    rebooted.attachLogSink(sink)
+    await import('@/cep/log-file')
 
     const dumped = rebooted.log.dump()
     expect(dumped).toContain('偏好写入失败')

@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { isRecord } from '@/utils/guards'
+import { isArrayOf, isRecord, isUnknownArray } from '@/utils/guards'
 import { readStyleWarehouseIndex } from '@/domain/style-library'
 
 /**
@@ -24,5 +24,29 @@ describe('isRecord', () => {
     // 数组不是索引：`list` 落到默认仓库，且 degraded 说明原因（不许静默当数据）
     expect(read.value.list).toHaveLength(1)
     expect(read.degraded).not.toBe('')
+  })
+})
+/**
+ * `Array.isArray(x: unknown)` 在 TS 里收窄成 `any[]` —— `any` 会从这儿流进类型世界。
+ * 这两个守卫把谓词写成 `unknown[]` / `T[]`，运行时判据与 `Array.isArray` 完全一致。
+ */
+describe('isUnknownArray', () => {
+  it('只判"是不是数组"，元素形状不管（这才是 Array.isArray 的原语义）', () => {
+    expect(isUnknownArray([])).toBe(true)
+    expect(isUnknownArray([1, null, 'x', {}])).toBe(true)
+    expect(isUnknownArray({ length: 0 })).toBe(false)
+    expect(isUnknownArray('[]')).toBe(false)
+    expect(isUnknownArray(null)).toBe(false)
+  })
+})
+
+describe('isArrayOf', () => {
+  it('逐元素证明：只要有一个元素不满足，整体就不算', () => {
+    expect(isArrayOf([{}, {}], isRecord)).toBe(true)
+    expect(isArrayOf([], isRecord)).toBe(true)
+    expect(isArrayOf([{}, 1], isRecord)).toBe(false)
+    expect(isArrayOf([null], isRecord)).toBe(false)
+    expect(isArrayOf([[]], isRecord)).toBe(false)
+    expect(isArrayOf({ 0: {} }, isRecord)).toBe(false)
   })
 })

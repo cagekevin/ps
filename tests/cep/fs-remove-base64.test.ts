@@ -52,7 +52,8 @@ function installNode() {
   }
 }
 
-const { dirUsage, readBase64Outcome, removeFile } = await import('@/cep/fs')
+const { dirUsage, readBase64Outcome } = await import('@/cep/fs')
+const { removeFile } = await import('@/cep/disk-write')
 
 beforeEach(() => {
   installNode()

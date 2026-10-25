@@ -28,53 +28,57 @@ const dialog = vi.hoisted(() => ({ open: null as string | null, save: null as st
 
 const selection = vi.hoisted(() => ({ hasSelection: true, typeNumber: 2 }))
 
-vi.mock('@/cep/fs', () => ({
+vi.mock('@/cep/node', () => ({
   hasNode: () => true,
+}))
+
+vi.mock('@/cep/paths', () => ({
   userDir: () => 'ROAM/SheJiZhuLi',
+}))
+
+vi.mock('@/cep/fs-read', () => ({
   readTextSmart: async (path: string) => fsMock.files.get(path) ?? null,
-  // T-107：唯一读入口（三态）
-  readTextOutcome: async (path: string) => {
-    // T-112：文件在、但读不到（EPERM / EBUSY）——这是"读不到"，不是"没有"
-    if (fsMock.readErrorPath && path === fsMock.readErrorPath) {
-      return { status: 'error' as const, reason: 'EPERM: operation not permitted' }
-    }
-    const text = fsMock.files.get(path)
-    return text === undefined ? { status: 'notSeen' as const } : { status: 'ok' as const, text }
-  },
+  // T-107：唯一读入口（三态）  readTextOutcome: async (path: string) => {
+      // T-112：文件在、但读不到（EPERM / EBUSY）——这是"读不到"，不是"没有"    if (fsMock.readErrorPath && path === fsMock.readErrorPath) {
+        return { status: 'error' as const, reason: 'EPERM: operation not permitted' }
+      }
+      const text = fsMock.files.get(path)
+      return text === undefined ? { status: 'notSeen' as const } : { status: 'ok' as const, text }
+    },
   readTextSync: (path: string) => {
-    const text = fsMock.files.get(path)
-    return text === undefined ? { status: 'notSeen' as const } : { status: 'ok' as const, text }
-  },
+      const text = fsMock.files.get(path)
+      return text === undefined ? { status: 'notSeen' as const } : { status: 'ok' as const, text }
+    },
   writeTextFile: (path: string, text: string) => {
-    if (fsMock.failWrite) throw new Error('disk full')
-    fsMock.files.set(path, text)
-  },
+      if (fsMock.failWrite) throw new Error('disk full')
+      fsMock.files.set(path, text)
+    },
   writeTextFileAtomic: (path: string, text: string) => {
-    if (fsMock.failWrite) return { status: 'error' as const, reason: 'ENOSPC: disk full' }
-    fsMock.files.set(path, text)
-    return { status: 'ok' as const }
-  },
-  // T-109：base64 读也走三态（只认 ENOENT 是 notSeen）
-  readBase64Outcome: (path: string) => {
-    const text = fsMock.files.get(path)
-    return text === undefined
-      ? { status: 'notSeen' as const }
-      : { status: 'ok' as const, base64: Buffer.from(text, 'utf8').toString('base64') }
-  },
+      if (fsMock.failWrite) return { status: 'error' as const, reason: 'ENOSPC: disk full' }
+      fsMock.files.set(path, text)
+      return { status: 'ok' as const }
+    },
+  // T-109：base64 读也走三态（只认 ENOENT 是 notSeen）  readBase64Outcome: (path: string) => {
+      const text = fsMock.files.get(path)
+      return text === undefined
+        ? { status: 'notSeen' as const }
+        : { status: 'ok' as const, base64: Buffer.from(text, 'utf8').toString('base64') }
+    },
   writeBase64File: (path: string, base64: string) => {
-    if (fsMock.failWrite) return { status: 'error' as const, reason: 'ENOSPC: disk full' }
-    // TD-09-22：`.bak` 这一个路径被占用（目录占位 → EISDIR），只让备份写失败
-    if (fsMock.failBak && path.endsWith('.bak')) {
-      return { status: 'error' as const, reason: 'EISDIR: illegal operation on a directory' }
-    }
-    fsMock.files.set(path, Buffer.from(base64, 'base64').toString('utf8'))
-    return { status: 'ok' as const }
-  },
-  // T-109：`removeFile` 现在返回 `{ ok } | { ok:false, reason }`，不再是 boolean
-  removeFile: (path: string) => {
-    fsMock.files.delete(path)
-    return { ok: true as const }
-  },
+      if (fsMock.failWrite) return { status: 'error' as const, reason: 'ENOSPC: disk full' }
+      // TD-09-22：`.bak` 这一个路径被占用（目录占位 → EISDIR），只让备份写失败    if (fsMock.failBak && path.endsWith('.bak')) {
+        return { status: 'error' as const, reason: 'EISDIR: illegal operation on a directory' }
+      }
+      fsMock.files.set(path, Buffer.from(base64, 'base64').toString('utf8'))
+      return { status: 'ok' as const }
+    },
+  // T-109：`removeFile` 现在返回 `{ ok } | { ok:false, reason }`，不再是 boolean  removeFile: (path: string) => {
+      fsMock.files.delete(path)
+      return { ok: true as const }
+    },
+}))
+
+vi.mock('@/cep/codec', () => ({
   b64ToUtf8: (base64: string) => Buffer.from(base64, 'base64').toString('utf8'),
   utf8ToB64: (text: string) => Buffer.from(text, 'utf8').toString('base64'),
 }))
@@ -103,7 +107,7 @@ vi.mock('@/cep/jsx', () => ({
 
 await import('@/commands')
 const { execute } = await import('@/commands/registry')
-const { styleIndexRepo } = await import('@/cep/data/style-library-repo')
+const { styleIndexWriter } = await import('@/cep/data/style-library-repo')
 
 const USER = 'ROAM/SheJiZhuLi'
 const INDEX = `${USER}/sj_kuStoreInfo.ini`
@@ -192,7 +196,7 @@ beforeEach(async () => {
   dialog.open = null
   dialog.save = null
 
-  await styleIndexRepo.write({ index: 0, list: [warehouse('默认仓库')] })
+  await styleIndexWriter.write({ index: 0, list: [warehouse('默认仓库')] })
   fsMock.files.set(INDEX, JSON.stringify({ index: 0, list: [warehouse('默认仓库')] }))
   seedLibs()
 })
@@ -223,7 +227,7 @@ describe('导出（契约 §0.1 / §2.4 / §2.6）', () => {
   })
 
   it('导出当前仓库：只留当前项，store.index 归 0', async () => {
-    await styleIndexRepo.write({
+    await styleIndexWriter.write({
       index: 1,
       list: [warehouse('仓库A'), warehouse('仓库B')],
     })
@@ -268,7 +272,7 @@ describe('导入 .kux（契约 §2.4 / §5.2）', () => {
     const result = await execute('style.importKuReplace')
     expect(result.ok).toBe(true)
 
-    const index = readValue(await styleIndexRepo.read())
+    const index = readValue(await styleIndexWriter.read())
     expect(index.list.map((item) => item.name)).toEqual(['导入仓库'])
     // 内层文件名换新：不再指向导入文件里的名字
     expect(index.list[0].color).not.toBe('sj_kuColB2014808B3687D156.ini')
@@ -313,7 +317,7 @@ describe('导入 .kux（契约 §2.4 / §5.2）', () => {
     const result = await execute('style.importKuAppend')
     expect(result.ok).toBe(true)
 
-    const index = readValue(await styleIndexRepo.read())
+    const index = readValue(await styleIndexWriter.read())
     expect(index.list.map((item) => item.name)).toEqual(['默认仓库', '导入仓库'])
     expect(index.index).toBe(1)
     expect(fsMock.files.has(LIB.color)).toBe(true)
@@ -327,7 +331,7 @@ describe('导入 .kux（契约 §2.4 / §5.2）', () => {
     const result = await execute('style.importKuReplace')
     expect(result.ok).toBe(true)
 
-    const index = readValue(await styleIndexRepo.read())
+    const index = readValue(await styleIndexWriter.read())
     const color = String(index.list[0].color)
     expect(fsMock.files.has(`${USER}/${color}`)).toBe(false)
   })
@@ -350,7 +354,7 @@ describe('导入 .kux（契约 §2.4 / §5.2）', () => {
     // 所以现在的失败点是「备份原文件失败」，比旧版「写本体失败」更靠前、原件未受损
     expect(result.ok === false && result.reason).toMatch(/备份原文件失败|写入文件失败/)
 
-    const index = readValue(await styleIndexRepo.read())
+    const index = readValue(await styleIndexWriter.read())
     expect(index.list.map((item) => item.name)).toEqual(['默认仓库'])
     expect(fsMock.files.has(LIB.color)).toBe(true)
   })

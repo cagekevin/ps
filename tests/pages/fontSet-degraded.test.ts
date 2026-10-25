@@ -44,7 +44,7 @@ function installBridges() {
   }
 }
 
-// `pick()` 在模块加载时按 `hasCep()` 定死实现，桥必须先进
+// `dataRepo()` 在模块加载时按 `hasCep()` 定死实现，桥必须先进
 installBridges()
 
 // 与本次无关的重依赖：字体列表 + 选区快照。页面只为它们提供 props，不参与本判据

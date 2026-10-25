@@ -43,10 +43,10 @@ function runTransform() {
     anchorIndex.value,
   ]
   if (params[0] > 5) {
-    void loading.run('正在处理...', () => transformCmd.run({ params }))
+    void loading.invoke('正在处理...', () => transformCmd.invoke({ params }))
     return
   }
-  void transformCmd.run({ params })
+  void transformCmd.invoke({ params })
 }
 
 function resetParams() {

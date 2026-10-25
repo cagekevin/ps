@@ -1,5 +1,6 @@
 ﻿import { getFontList } from '@/cep/mock'
 import { log } from '@/utils/logger'
+import type { JsxOutcome as _JsxOutcome } from '@/utils/jsx-result'
 import type { JsxPort } from './types'
 
 // 是什么：jsx 在浏览器里的假实现
@@ -8,7 +9,8 @@ import type { JsxPort } from './types'
 // 谁在用：createJsxPort(false)（dev / 测试）
 // 禁止：只有这里能返回假数据；命令层不要判断环境
 
-const ok = () => Promise.resolve(null)
+/** 写函数（fire-and-forget）的 mock：`Promise<void>` —— 消费侧看不到 `JsxOutcome`（深模块） */
+const okVoid = (): Promise<void> => Promise.resolve()
 
 /** 与 `V.a.info` 的字体属性默认值同形（app.v4.js:42253-42281） */
 const FONT_INFO = {
@@ -30,18 +32,18 @@ export function createMockJsx(): JsxPort {
   return {
     font: {
       // 返回已归一化的 FontItem[]，调用方的 normalizeFont 是幂等的
-      initSystemList: () => getFontList(),
+      initSystemList: async () => ({ ok: true, data: await getFontList() }),
 
       setFont: async (postScriptName, name, weight) => {
         log.info('mock', `设置字体 ${name} / ${weight}（${postScriptName}）`)
-        return null
+        return
       },
 
-      getTypeUnits: () => Promise.resolve('TypeUnits.POINTS'),
-      getFontSimpleInfo: () => Promise.resolve({ err: 0, data: { ...FONT_INFO } }),
+      getTypeUnits: () => Promise.resolve({ ok: true, data: 'TypeUnits.POINTS' }),
+      getFontSimpleInfo: () => Promise.resolve({ ok: true, data: { ...FONT_INFO } }),
       getCurrentFontInfo: () =>
         Promise.resolve({
-          err: 0,
+          ok: true,
           data: {
             family: '思源黑体 CN',
             name: 'Source Han Sans CN Regular',
@@ -49,10 +51,10 @@ export function createMockJsx(): JsxPort {
           },
         }),
       getCurrentText: () =>
-        Promise.resolve({ err: 0, data: [{ text: '设计助理' }, { text: 'Design Assistant' }] }),
+        Promise.resolve({ ok: true, data: [{ text: '设计助理' }, { text: 'Design Assistant' }] }),
       getFontInfo: () =>
         Promise.resolve({
-          err: 0,
+          ok: true,
           data: {
             fonts: [
               {
@@ -67,64 +69,66 @@ export function createMockJsx(): JsxPort {
           },
         }),
 
-      setNumberSize: ok,
-      setHierarchySize: ok,
-      setLeading: ok,
-      setTracking: ok,
-      setColor: () => Promise.resolve({ err: 0, data: { rgb: { r: 110, g: 120, b: 255 } } }),
+      setNumberSize: okVoid,
+      setHierarchySize: okVoid,
+      setLeading: okVoid,
+      setTracking: okVoid,
+      setColor: () => Promise.resolve({ ok: true, data: { rgb: { r: 110, g: 120, b: 255 } } }),
       setFontName: async (postScriptName, name) => {
         log.info('mock', `字体面板换字体 ${name}（${postScriptName}）`)
-        return null
       },
-      setAllCaps: ok,
-      setFontVision: ok,
-      setFauxItalic: ok,
-      setFauxBold: ok,
-      setJustified: ok,
-      setTextAlignment: ok,
-      setHorizontalCenters: ok,
-      setVerticalCenter: ok,
-      setTextUpDownAlign: ok,
-      setBackgroundAlign: ok,
-      alignHorizontal: ok,
-      distributeByPitch: ok,
+      setAllCaps: okVoid,
+      setFontVision: okVoid,
+      setFauxItalic: okVoid,
+      setFauxBold: okVoid,
+      setJustified: okVoid,
+      setTextAlignment: okVoid,
+      setHorizontalCenters: okVoid,
+      setVerticalCenter: okVoid,
+      setTextUpDownAlign: okVoid,
+      setBackgroundAlign: okVoid,
+      alignHorizontal: okVoid,
+      distributeByPitch: okVoid,
 
-      changeTextBranchMerge: ok,
-      textBranchMerge: ok,
-      createButton: ok,
-      checkUseFont: () => Promise.resolve({ err: 0 }),
-      useFont: ok,
-      switchFontDirection: ok,
-      setTranslateText: ok,
+      changeTextBranchMerge: okVoid,
+      textBranchMerge: okVoid,
+      createButton: okVoid,
+      checkUseFont: okVoid,
+      useFont: okVoid,
+      switchFontDirection: okVoid,
+      setTranslateText: okVoid,
     },
 
     layer: {
-      isSelectLayer: () => Promise.resolve(true),
-      getTypeNumber: () => Promise.resolve(2),
+      isSelectLayer: () => Promise.resolve({ ok: true, data: true }),
+      getTypeNumber: () => Promise.resolve({ ok: true, data: 2 }),
     },
 
     env: {
-      setEnv: () => Promise.resolve(),
+      setEnv: okVoid,
     },
 
     action: {
       // 与真实 dz_getActionList 同形：{ name, children:[{ name }] }
       getActionList: () =>
-        Promise.resolve([
-          { name: '修图', children: [{ name: '一键磨皮' }] },
-          { name: '新建文档', children: [{ name: '800x800' }] },
-        ]),
+        Promise.resolve({
+          ok: true,
+          data: [
+            { name: '修图', children: [{ name: '一键磨皮' }] },
+            { name: '新建文档', children: [{ name: '800x800' }] },
+          ],
+        }),
 
       callAction: async (item) => {
         log.info('mock', `执行动作 ${item.group} / ${item.name}`)
-        return null
+        return
       },
     },
 
     legacy: {
       call: async (key, args) => {
         log.info('mock', `执行旧自由面板 key ${key}`, args)
-        return null
+        return
       },
     },
 
@@ -132,53 +136,53 @@ export function createMockJsx(): JsxPort {
     rename: {
       batchName: async (expression, filterChildren) => {
         log.info('mock', `批量重命名 ${expression}（过滤子图层=${filterChildren}）`)
-        return null
+        return
       },
       setLayerColor: async (colorIndex) => {
         log.info('mock', `图层颜色标记 ${colorIndex}`)
-        return null
+        return
       },
     },
     // 样式域：返回结构未实测，mock 只保证"调用不炸、能看出走到哪一步"
     style: {
       useShapeFill: async (color) => {
         log.info('mock', 'ys_useShapeFill', color)
-        return null
+        return
       },
       setBorderColor: async (color) => {
         log.info('mock', 'ys_setBorderColor', color)
-        return null
+        return
       },
       changeStyleColor: async (color) => {
         log.info('mock', 'cy_changeStyleColor', color)
-        return null
       },
       useStyleColor: async (color) => {
         log.info('mock', 'ys_useStyleColor', color)
-        return null
+        return
       },
       useGradient: async (gradient) => {
         log.info('mock', 'ys_useGradient', gradient)
-        return null
+        return
       },
       useStyle: async (item, groupId) => {
         log.info('mock', 'ps_ysBtnUseStyle', { item, groupId })
-        return null
+        return
       },
       getForegroundColor: () =>
-        Promise.resolve({ name: '未命名', color: { hex: 'FF0000', c: 0, m: 100, y: 100, k: 0 } }),
+        Promise.resolve({
+          ok: true,
+          data: { name: '未命名', color: { hex: 'FF0000', c: 0, m: 100, y: 100, k: 0 } },
+        }),
       setForegroundColor: async (color) => {
         log.info('mock', 'ys_setForegroundColor', color)
-        return null
       },
-      getGradientInfo: () => Promise.resolve({ err: 0, data: null }),
+      getGradientInfo: () => Promise.resolve({ ok: true, data: null }),
       setTool: async (tool) => {
         log.info('mock', 'Tool_set', tool)
-        return null
+        return
       },
       addStyle: async (payload) => {
         log.info('mock', 'ys_AddStyle', payload)
-        return { err: 0, data: null }
       },
     },
 
@@ -186,92 +190,92 @@ export function createMockJsx(): JsxPort {
     commonUse: {
       zoom: async (scale) => {
         log.info('mock', 'cy_zoom', scale)
-        return null
+        return
       },
       flip: async (direction) => {
         log.info('mock', 'cy_transformPosition', direction)
-        return null
+        return
       },
       embedImage: async (options) => {
         log.info('mock', 'cy_insertionImage', options)
-        return null
+        return
       },
       embedMultipleImages: async () => {
         log.info('mock', 'cy_embedMultipleImage', null)
-        return null
+        return
       },
       relinkToFile: async (path) => {
         log.info('mock', 'Layer_placedLayerRelinkToFile', path)
-        return null
+        return
       },
       smartToLinkSmartObject: async () => {
         log.info('mock', 'cy_smartToLinkSmartObject', null)
-        return null
+        return
       },
       linkSmartObjectToSmartObject: async () => {
         log.info('mock', 'cy_linkSmartObjectToSmartObject', null)
-        return null
+        return
       },
       importMultipleImages: async (options) => {
         log.info('mock', 'cy_importMultipleImage', options)
-        return null
+        return
       },
       getImagePath: async () => {
         log.info('mock', 'cy_getImagePath', null)
-        return -1
+        return { ok: true, data: -1 }
       },
       optimizeOnce: async (options) => {
         log.info('mock', 'cy_optimizeDoc', options)
-        return null
+        return
       },
       optimizeFolder: async (options, file) => {
         log.info('mock', 'cy_batchOptimizeDoc', { options, file })
-        return null
+        return
       },
       transform: async (params) => {
         log.info('mock', 'cy_customBuildTransform', params)
-        return null
+        return
       },
       referenceGuide: async (options) => {
         log.info('mock', 'cy_createSafeAreaGuide', options ?? null)
-        return null
+        return
       },
       // 四个无参 jsx：**多传参数就抛**——jsdom 里否则永远是绿的（A1 判据）
       correctBlur: async (...args) => {
         if (args.length) throw new Error('cy_correctRectangleBlur 不接受参数')
         log.info('mock', 'cy_correctRectangleBlur', null)
-        return null
+        return
       },
       layerReplace: async (...args) => {
         if (args.length) throw new Error('cy_LayerReplace 不接受参数')
         log.info('mock', 'cy_LayerReplace', null)
-        return null
+        return
       },
       locationTrade: async (...args) => {
         if (args.length) throw new Error('cy_locationTrade 不接受参数')
         log.info('mock', 'cy_locationTrade', null)
-        return null
+        return
       },
       exchangeLayerColor: async (...args) => {
         if (args.length) throw new Error('cy_exchangeLayerColor 不接受参数')
         log.info('mock', 'cy_exchangeLayerColor', null)
-        return null
+        return
       },
       referenceSlice: async (options) => {
         log.info('mock', 'cy_guideFunction', options ?? null)
-        return null
+        return
       },
       distribute: async (options) => {
         log.info('mock', 'cy_distributedByPitch', options)
-        return null
+        return
       },
       exportPsdImage: async (file, options) => {
         log.info('mock', 'cy_BacthExportPsdToImage', { file, options })
-        return null
+        return
       },
       getPsdList: async () => {
         log.info('mock', 'cy_getPsdForFolder', null)
-        return []
+        return { ok: true, data: [] }
       },
     },
   }

@@ -5,10 +5,11 @@ import {
 } from '@/cep/data/action-archive'
 import { addWarehouse, deleteWarehouse, renameWarehouse, selectWarehouse } from '@/cep/data/actions'
 import { setPref } from '@/cep/data/settings'
-import { extensionDir } from '@/cep/fs'
+import { extensionDir } from '@/cep/paths'
 import { openFile, saveFile } from '@/cep/dialog'
 import { applyItemDrop, applyListDrop } from '@/domain/reorder'
 import { CepError } from '@/utils/errors'
+import { msg } from '@/domain/messages'
 import { defineCommand } from './registry'
 import type { Command } from './types'
 
@@ -35,7 +36,7 @@ export const actionCommands: Command<unknown>[] = [
     // 动作可能跑几十秒（批处理），必须走长任务：HUD 转圈 + 防重复点击
     // PS 侧没有进度回传，所以不传 progress（HUD 会显示不确定进度）
     kind: 'long',
-    async run(ctx, { group, name, alias }) {
+    async invoke(ctx, { group, name, alias }) {
       // 原版传整个 item；alias 只影响显示，执行仍靠 group + name
       await ctx.jsx.action.callAction({ group, name, alias })
     },
@@ -47,12 +48,12 @@ export const actionCommands: Command<unknown>[] = [
     group: 'action',
     requires: 'none',
     kind: 'instant',
-    async run(ctx, { index }) {
+    async invoke(ctx, { index }) {
       // `show` 的语义是推断的：原版 checkError 只保证字段存在（app.v4.js:55873）。
       // 用它做折叠状态，切页/重开面板都能保持，比页面本地 ref 更合理。
       await ctx.data.actionLibrary.update((list) => {
         const target = list[index]
-        if (!target) throw new CepError('PARSE', '分组不存在')
+        if (!target) throw new CepError('PARSE', msg.command.text.actionGroupMissing)
         target.show = !target.show
       })
     },
@@ -64,9 +65,9 @@ export const actionCommands: Command<unknown>[] = [
     group: 'action',
     requires: 'none',
     kind: 'instant',
-    async run(ctx, { name, afterIndex }) {
+    async invoke(ctx, { name, afterIndex }) {
       const groupName = name.trim()
-      if (!groupName) throw new CepError('PARSE', '分组名不能为空')
+      if (!groupName) throw new CepError('PARSE', msg.command.text.actionGroupNameRequired)
 
       await ctx.data.actionLibrary.update((list) => {
         const next = { groupName, show: true, list: [] }
@@ -86,13 +87,13 @@ export const actionCommands: Command<unknown>[] = [
     group: 'action',
     requires: 'none',
     kind: 'instant',
-    async run(ctx, { index, name }) {
+    async invoke(ctx, { index, name }) {
       const groupName = name.trim()
-      if (!groupName) throw new CepError('PARSE', '分组名不能为空')
+      if (!groupName) throw new CepError('PARSE', msg.command.text.actionGroupNameRequired)
 
       await ctx.data.actionLibrary.update((list) => {
         const target = list[index]
-        if (!target) throw new CepError('PARSE', '分组不存在')
+        if (!target) throw new CepError('PARSE', msg.command.text.actionGroupMissing)
         // 原版 renameGroup 不查重，直接改名
         target.groupName = groupName
       })
@@ -105,9 +106,9 @@ export const actionCommands: Command<unknown>[] = [
     group: 'action',
     requires: 'none',
     kind: 'instant',
-    async run(ctx, { index }) {
+    async invoke(ctx, { index }) {
       await ctx.data.actionLibrary.update((list) => {
-        if (!list[index]) throw new CepError('PARSE', '分组不存在')
+        if (!list[index]) throw new CepError('PARSE', msg.command.text.actionGroupMissing)
         list.splice(index, 1)
         // 原版 deleteGroup：删空后补一个“默认分组”
         if (list.length === 0) list.push({ groupName: '默认分组', show: true, list: [] })
@@ -121,10 +122,11 @@ export const actionCommands: Command<unknown>[] = [
     group: 'action',
     requires: 'none',
     kind: 'instant',
-    async run(ctx, { groupIndex, itemIndex }) {
+    async invoke(ctx, { groupIndex, itemIndex }) {
       await ctx.data.actionLibrary.update((list) => {
         const target = list[groupIndex]
-        if (!target || !target.list[itemIndex]) throw new CepError('PARSE', '动作不存在')
+        if (!target || !target.list[itemIndex])
+          throw new CepError('PARSE', msg.command.text.actionMissing)
         target.list.splice(itemIndex, 1)
       })
     },
@@ -136,13 +138,13 @@ export const actionCommands: Command<unknown>[] = [
     group: 'action',
     requires: 'none',
     kind: 'instant',
-    async run(ctx, { groupIndex, itemIndex, alias }) {
+    async invoke(ctx, { groupIndex, itemIndex, alias }) {
       const text = alias.trim()
-      if (!text) throw new CepError('PARSE', '别名不能为空')
+      if (!text) throw new CepError('PARSE', msg.command.text.actionAliasRequired)
 
       await ctx.data.actionLibrary.update((list) => {
         const target = list[groupIndex]?.list[itemIndex]
-        if (!target) throw new CepError('PARSE', '动作不存在')
+        if (!target) throw new CepError('PARSE', msg.command.text.actionMissing)
         // 保留 group + name（执行时仍需要），只加 alias
         target.alias = text
       })
@@ -155,10 +157,10 @@ export const actionCommands: Command<unknown>[] = [
     group: 'action',
     requires: 'none',
     kind: 'instant',
-    async run(ctx, { groupIndex, itemIndex }) {
+    async invoke(ctx, { groupIndex, itemIndex }) {
       await ctx.data.actionLibrary.update((list) => {
         const target = list[groupIndex]?.list[itemIndex]
-        if (!target) throw new CepError('PARSE', '动作不存在')
+        if (!target) throw new CepError('PARSE', msg.command.text.actionMissing)
         delete target.alias
       })
     },
@@ -170,7 +172,7 @@ export const actionCommands: Command<unknown>[] = [
     group: 'action',
     requires: 'none',
     kind: 'instant',
-    async run(_ctx, { index }) {
+    async invoke(_ctx, { index }) {
       await selectWarehouse(index)
     },
   }),
@@ -181,9 +183,9 @@ export const actionCommands: Command<unknown>[] = [
     group: 'action',
     requires: 'none',
     kind: 'instant',
-    async run(_ctx, { name }) {
+    async invoke(_ctx, { name }) {
       const text = (name ?? '未命名分组').trim()
-      if (!text) throw new CepError('PARSE', '仓库名不能为空')
+      if (!text) throw new CepError('PARSE', msg.command.text.actionWarehouseNameRequired)
       await addWarehouse(text)
     },
   }),
@@ -194,9 +196,9 @@ export const actionCommands: Command<unknown>[] = [
     group: 'action',
     requires: 'none',
     kind: 'instant',
-    async run(_ctx, { index, name }) {
+    async invoke(_ctx, { index, name }) {
       const text = name.trim()
-      if (!text) throw new CepError('PARSE', '仓库名不能为空')
+      if (!text) throw new CepError('PARSE', msg.command.text.actionWarehouseNameRequired)
       await renameWarehouse(index, text)
     },
   }),
@@ -207,7 +209,7 @@ export const actionCommands: Command<unknown>[] = [
     group: 'action',
     requires: 'none',
     kind: 'instant',
-    async run(_ctx, { index }) {
+    async invoke(_ctx, { index }) {
       await deleteWarehouse(index)
     },
   }),
@@ -218,7 +220,7 @@ export const actionCommands: Command<unknown>[] = [
     group: 'action',
     requires: 'none',
     kind: 'instant',
-    async run(ctx, { from, to, position }) {
+    async invoke(ctx, { from, to, position }) {
       await ctx.data.actionLibrary.update((list) => {
         // 四分支落点只在 `domain/reorder.ts` 一份；越界抛，不静默吞
         const moved = applyListDrop(list, from, to, position)
@@ -236,7 +238,7 @@ export const actionCommands: Command<unknown>[] = [
     group: 'action',
     requires: 'none',
     kind: 'instant',
-    async run(ctx, { fromGroup, fromIndex, toGroup, toIndex, position }) {
+    async invoke(ctx, { fromGroup, fromIndex, toGroup, toIndex, position }) {
       await ctx.data.actionLibrary.update((list) => {
         applyItemDrop(
           list.map((group) => group.list),
@@ -256,9 +258,9 @@ export const actionCommands: Command<unknown>[] = [
     group: 'action',
     requires: 'none',
     kind: 'instant',
-    async run(_ctx, { columns }) {
+    async invoke(_ctx, { columns }) {
       if (columns !== 1 && columns !== 2 && columns !== 3) {
-        throw new CepError('PARSE', '列数只能是 1 / 2 / 3')
+        throw new CepError('PARSE', msg.command.text.actionColCountInvalid)
       }
       // 原版 dzShowListType 用 0/1/2；命令对 UI 用 1/2/3
       setPref('dzShowListType', columns - 1)
@@ -271,10 +273,10 @@ export const actionCommands: Command<unknown>[] = [
     group: 'action',
     requires: 'none',
     kind: 'instant',
-    async run(_ctx, { current }) {
+    async invoke(_ctx, { current }) {
       const defaultName = await archiveDefaultName(current)
       const path = saveFile('导出预设', ['dzx'], defaultName)
-      if (!path) throw new CepError('PARSE', '取消操作')
+      if (!path) throw new CepError('PARSE', msg.command.text.actionCancelled)
 
       await exportActionArchive(current, path)
     },
@@ -286,9 +288,9 @@ export const actionCommands: Command<unknown>[] = [
     group: 'action',
     requires: 'none',
     kind: 'instant',
-    async run(_ctx, { append }) {
+    async invoke(_ctx, { append }) {
       const path = openFile('导入动作仓库', ['dzx'])
-      if (!path) throw new CepError('PARSE', '取消操作')
+      if (!path) throw new CepError('PARSE', msg.command.text.actionCancelled)
 
       await importActionArchive(append, path)
     },
@@ -300,7 +302,7 @@ export const actionCommands: Command<unknown>[] = [
     group: 'action',
     requires: 'none',
     kind: 'instant',
-    async run() {
+    async invoke() {
       const path = `${extensionDir()}/preset/动作库-设计助理预设.dzx`
       await importActionArchive(false, path)
     },
@@ -312,12 +314,12 @@ export const actionCommands: Command<unknown>[] = [
     group: 'action',
     requires: 'none',
     kind: 'instant',
-    async run(ctx, { groupIndex, items }) {
-      if (!items.length) throw new CepError('PARSE', '没有选中任何动作')
+    async invoke(ctx, { groupIndex, items }) {
+      if (!items.length) throw new CepError('PARSE', msg.command.text.actionNoneSelected)
 
       await ctx.data.actionLibrary.update((list) => {
         const target = list[groupIndex]
-        if (!target) throw new CepError('PARSE', '目标分组不存在')
+        if (!target) throw new CepError('PARSE', msg.command.text.actionTargetGroupMissing)
 
         // 原版 addList 直接 push，不去重
         for (const item of items) target.list.push({ group: item.group, name: item.name })

@@ -5,100 +5,119 @@
  * 注意：这里只放**已接通的函数**。68 个函数里其余 60 多个返回结构未知，
  * 等对应页面开工时按域补，不要预先臆造签名。
  */
+
+import type { JsxOutcome } from '@/utils/jsx-result'
+import type { JsxName } from './names'
+/** `zt_getCurrentFontInfo` 的 data：当前图层字体。消费侧只用 `family`，其余字段原样带出 */
+export interface CurrentFontInfo {
+  family?: string
+  name?: string
+  scriptName?: string
+}
+
+/**
+ * `zt_getCurrentText` 的 data 条目：`text` 读（可缺省），`dst` 是**面板回填**的译文
+ * （原版 `app.v4.js:35374` `c.dst = Xv(p)`）。`dst` 不在宿主返回里，是面板写进去的。
+ */
+export interface TranslateItem {
+  text?: string
+  dst?: string
+}
+
 export interface FontJsx {
   /** 读取系统字体；返回原始结构（有两套键名），归一化在调用方 */
-  initSystemList(): Promise<unknown>
+  initSystemList(): Promise<JsxOutcome<unknown[] | 'ok' | 'OK'>>
   /** 字体管理页用：ztgl_setFont(hjm, mz, zz)，返回 { err, msg } */
-  setFont(postScriptName: string, name: string, weight: string): Promise<unknown>
+  setFont(postScriptName: string, name: string, weight: string): Promise<void>
 
   // ---------- 字体面板：读 ----------
   /** AppPreferences.typeUnits：TypeUnits.PIXELS / POINTS / MM */
-  getTypeUnits(): Promise<unknown>
+  getTypeUnits(): Promise<JsxOutcome<unknown>>
   /** zt_getFontSimpleInfo：当前文字属性（字号/行距/字距/颜色/对齐…） */
-  getFontSimpleInfo(): Promise<unknown>
-  /** zt_getCurrentFontInfo：当前图层字体，用于"添加当前图层字体" */
-  getCurrentFontInfo(): Promise<unknown>
-  /** zt_getCurrentText：选中的文字内容（原版返回可能已混淆） */
-  getCurrentText(): Promise<unknown>
-  /** ys_getFontInfo：复制文字属性，返回 { err, data } */
-  getFontInfo(): Promise<unknown>
+  getFontSimpleInfo(): Promise<JsxOutcome<unknown>>
+  /** zt_getCurrentFontInfo：当前图层字体，用于"添加当前图层字体"；消费侧只用 `family` */
+  getCurrentFontInfo(): Promise<JsxOutcome<CurrentFontInfo>>
+  /** zt_getCurrentText：选中的文字内容（原版返回可能已混淆）；data 是数组，条目 `text` 读、`dst` 由面板回填译文 */
+  getCurrentText(): Promise<JsxOutcome<TranslateItem[]>>
+  /** ys_getFontInfo：复制文字属性；data 是 `{ fonts: 数组 }` */
+  getFontInfo(): Promise<JsxOutcome<{ fonts: unknown[] }>>
 
   // ---------- 字体面板：写 ----------
   /** layer_font_setFontSize：字号（数字） */
-  setNumberSize(size: number): Promise<unknown>
+  setNumberSize(size: number): Promise<void>
   /** zt_setFontSize：层级字号，点某一级时设置 */
-  setHierarchySize(size: number): Promise<unknown>
+  setHierarchySize(size: number): Promise<void>
   /** layer_font_setLeading：行距（绝对值） */
-  setLeading(leading: number): Promise<unknown>
+  setLeading(leading: number): Promise<void>
   /** zt_setFontWordSpacing：字距 */
-  setTracking(tracking: number): Promise<unknown>
+  setTracking(tracking: number): Promise<void>
   /** zt_setFontColor：打开取色，返回 { err, data } */
-  setColor(): Promise<unknown>
-  /** zt_setFontName：字体面板换字体（hjm, mz, zz） */
-  setFontName(postScriptName: string, name: string, weight: string): Promise<unknown>
-  setAllCaps(value: boolean): Promise<unknown>
+  setColor(): Promise<JsxOutcome<{ rgb: { r: number; g: number; b: number } }>>
+  /** zt_setFontName：字体面板换字体（hjm, mz, zz）；失败时 `CepError.hostCode === 1` = 字体缺失 */
+  setFontName(postScriptName: string, name: string, weight: string): Promise<void>
+  setAllCaps(value: boolean): Promise<void>
   /** zt_setFontVision：manual / opticalKern */
-  setFontVision(mode: string): Promise<unknown>
-  setFauxItalic(value: boolean): Promise<unknown>
-  setFauxBold(value: boolean): Promise<unknown>
+  setFontVision(mode: string): Promise<void>
+  setFauxItalic(value: boolean): Promise<void>
+  setFauxBold(value: boolean): Promise<void>
   /** zt_setFontJustified：段落文本对齐 */
-  setJustified(index: number): Promise<unknown>
+  setJustified(index: number): Promise<void>
   /**
    * zt_setTextAlignment：水平对齐。
    * 原版两种调用形态：底部对齐只传 `[index]`（app.v4.js:38080），
    * 字体属性面板传 `[index, shiftKey]`（:42458）。第二参数不传时不能补 `false`。
    */
-  setTextAlignment(index: number, shift?: boolean): Promise<unknown>
+  setTextAlignment(index: number, shift?: boolean): Promise<void>
   /** zt_setHorizontalCenters([4])：水平居中分布 */
-  setHorizontalCenters(): Promise<unknown>
+  setHorizontalCenters(): Promise<void>
   /** zt_verticalCenter([5])：垂直平均分布 */
-  setVerticalCenter(): Promise<unknown>
+  setVerticalCenter(): Promise<void>
   /** zt_setUpDownAlign：顶/中/底对齐 */
-  setTextUpDownAlign(index: number): Promise<unknown>
+  setTextUpDownAlign(index: number): Promise<void>
   /** zt_setBackrgoudAlign：与背景对齐（原版拼写就是 Backrgoud） */
-  setBackgroundAlign(value: number): Promise<unknown>
+  setBackgroundAlign(value: number): Promise<void>
   /** zt_alignHorizontal：水平垂直居中对齐（只有快捷键/常用页入口） */
-  alignHorizontal(): Promise<unknown>
+  alignHorizontal(): Promise<void>
   /** cy_distributedByPitch：按间距分布 */
-  distributeByPitch(axis: number, value: string, filter: boolean): Promise<unknown>
+  distributeByPitch(axis: number, value: string, filter: boolean): Promise<void>
 
   // ---------- 文本 ----------
   /** zt_changeTextBranchMerge：分行/分为单个/合并/合并为段落（1-4） */
-  changeTextBranchMerge(mode: number): Promise<unknown>
+  changeTextBranchMerge(mode: number): Promise<void>
   /** zt_textBranchMerge：上一步确认后的实际执行 */
-  textBranchMerge(mode: number): Promise<unknown>
+  textBranchMerge(mode: number): Promise<void>
   /** zt_createButton：生成按钮，参数是形如 { type, isLine, padding } */
-  createButton(config: { type: number; isLine: boolean; padding: string }): Promise<unknown>
+  createButton(config: { type: number; isLine: boolean; padding: string }): Promise<void>
   /** ys_checkUseFont：应用字体属性前检查缺字体 */
-  checkUseFont(payload: string): Promise<unknown>
+  checkUseFont(payload: string): Promise<void>
   /** ys_useFont：应用字体属性 */
-  useFont(payload: string): Promise<unknown>
+  useFont(payload: string): Promise<void>
   /** zt_switchFontDirection：切换文本方向 */
-  switchFontDirection(): Promise<unknown>
+  switchFontDirection(): Promise<void>
   /** zt_setTranslateText：把翻译结果写回文档 */
-  setTranslateText(data: unknown, replace: boolean): Promise<unknown>
+  setTranslateText(data: unknown, replace: boolean): Promise<void>
 }
 
 export interface LayerJsx {
-  isSelectLayer(): Promise<unknown>
-  getTypeNumber(): Promise<unknown>
+  isSelectLayer(): Promise<JsxOutcome<unknown>>
+  getTypeNumber(): Promise<JsxOutcome<unknown>>
 }
 
 export interface EnvJsx {
   /** jsx 内部按这些 key 拼路径与开关，见 cep/env.ts 的 PS_ENV */
-  setEnv(json: string): Promise<unknown>
+  setEnv(json: string): Promise<void>
 }
 
 export interface ActionJsx {
   /** 读取 PS 当前动作面板的全部动作（结构同本地库，无 alias） */
-  getActionList(): Promise<unknown>
+  getActionList(): Promise<JsxOutcome<unknown>>
   /** 按 group + name 在 PS 里找到并播放；传整个 item，与原版一致 */
-  callAction(item: { group: string; name: string; alias?: string }): Promise<unknown>
+  callAction(item: { group: string; name: string; alias?: string }): Promise<void>
 }
 
 export interface LegacyJsx {
   /** 旧自由面板 key 的直通调用；只允许白名单 key */
-  call(key: string, args: unknown[], label?: string): Promise<unknown>
+  call(key: JsxName, args: unknown[], label?: string): Promise<void>
 }
 
 /**
@@ -109,9 +128,9 @@ export interface LegacyJsx {
  */
 export interface RenameJsx {
   /** cmm_batchName([表达式, 是否过滤子图层], "重命名")（app.v4.js:57234） */
-  batchName(expression: string, filterChildren: boolean): Promise<unknown>
+  batchName(expression: string, filterChildren: boolean): Promise<void>
   /** cmm_setLayerColor([颜色序号])，0 = 清除（app.v4.js:57220） */
-  setLayerColor(colorIndex: number): Promise<unknown>
+  setLayerColor(colorIndex: number): Promise<void>
 }
 
 /**
@@ -127,27 +146,29 @@ export interface RenameJsx {
  */
 export interface StyleJsx {
   /** ys_useShapeFill([颜色项], "智能填充形状颜色")（:50133）；ctrl+点击 */
-  useShapeFill(color: unknown): Promise<unknown>
+  useShapeFill(color: unknown): Promise<void>
   /** ys_setBorderColor([颜色项], "智能填充边框颜色")（:50141）；shift+点击 */
-  setBorderColor(color: unknown): Promise<unknown>
+  setBorderColor(color: unknown): Promise<void>
   /** cy_changeStyleColor([颜色项], "更改颜色")（:50150）；alt+点击 */
-  changeStyleColor(color: unknown): Promise<unknown>
+  changeStyleColor(color: unknown): Promise<void>
   /** ys_useStyleColor([颜色项], "智能填充颜色")（:50163）；无修饰键 */
-  useStyleColor(color: unknown): Promise<unknown>
+  useStyleColor(color: unknown): Promise<void>
   /** ys_useGradient([渐变项], "填充渐变色")（:50791） */
-  useGradient(gradient: unknown): Promise<unknown>
+  useGradient(gradient: unknown): Promise<void>
   /** ps_ysBtnUseStyle([项+groupId], "应用样式")（:51511） */
-  useStyle(item: unknown, groupId: string): Promise<unknown>
-  /** ys_getForegroundColor()（:50193）：读当前前景色，null = 失败 */
-  getForegroundColor(): Promise<unknown>
+  useStyle(item: unknown, groupId: string): Promise<void>
+  /** ys_getForegroundColor()（:50193）：读当前前景色，null = 失败；返回本体就是颜色项（无信封） */
+  getForegroundColor(): Promise<
+    JsxOutcome<{ name: string; color: { hex: string; c: number; m: number; y: number; k: number } }>
+  >
   /** ys_setForegroundColor([颜色项])（:17899）：智能填色**关**时，色板点击只设前景色 */
-  setForegroundColor(color: unknown): Promise<unknown>
+  setForegroundColor(color: unknown): Promise<void>
   /** ys_getGradientInfo()（:50752）：读当前渐变，false / { err, msg?, data } */
-  getGradientInfo(): Promise<unknown>
+  getGradientInfo(): Promise<JsxOutcome<unknown>>
   /** ys_AddStyle([{delArr, groupId, envDir}])（:51538）：保存图层样式 */
-  addStyle(payload: { delArr: unknown; groupId: string; envDir: string }): Promise<unknown>
+  addStyle(payload: { delArr: unknown; groupId: string; envDir: string }): Promise<void>
   /** Tool_set(["eyedropperTool"])：切到吸色工具（T-66 快速吸色到组）；返回结构未实测 */
-  setTool(tool: string): Promise<unknown>
+  setTool(tool: string): Promise<void>
 }
 
 /**
@@ -168,56 +189,56 @@ export interface StyleJsx {
  */
 export interface CommonUseJsx {
   /** cy_zoom([倍数])：放大 / 缩小（`:38144`） */
-  zoom(scale: number): Promise<unknown>
+  zoom(scale: number): Promise<void>
   /** cy_transformPosition([方向文本])：翻转 6 向（`:38122`，文本映射 `:37803-37812`） */
-  flip(direction: string): Promise<unknown>
+  flip(direction: string): Promise<void>
   /** cy_insertionImage([{path,bLink2,bDelete}])：嵌入图片（`:37756` / 形状 `:38070-38074`） */
-  embedImage(options: { path: string; bLink2: unknown; bDelete: unknown }): Promise<unknown>
+  embedImage(options: { path: string; bLink2: unknown; bDelete: unknown }): Promise<void>
   /** cy_embedMultipleImage([])：嵌入多图片，无参（`:37902`） */
-  embedMultipleImages(): Promise<unknown>
+  embedMultipleImages(): Promise<void>
   /** 置入后重链到源文件（官方 Layer_placedLayerRelinkToFile，:37760） */
-  relinkToFile(path: string): Promise<unknown>
+  relinkToFile(path: string): Promise<void>
   /** 转链接智能对象（官方 cy_smartToLinkSmartObject，:35891，无参） */
-  smartToLinkSmartObject(): Promise<unknown>
+  smartToLinkSmartObject(): Promise<void>
   /** 转智能对象（官方 cy_linkSmartObjectToSmartObject，:35871，无参） */
-  linkSmartObjectToSmartObject(): Promise<unknown>
+  linkSmartObjectToSmartObject(): Promise<void>
   /** cy_importMultipleImage([{path,toLinkObject}])：导入多图片（`:38106`） */
-  importMultipleImages(options: { path: unknown; toLinkObject: unknown }): Promise<unknown>
+  importMultipleImages(options: { path: unknown; toLinkObject: unknown }): Promise<void>
   /** cy_getImagePath()：取导入路径；取消返回 -1（`:38099`），返回形状未实测 */
-  getImagePath(): Promise<unknown>
+  getImagePath(): Promise<JsxOutcome<unknown>>
   /** cy_optimizeDoc([配置])：单文档优化（`:38057`） */
-  optimizeOnce(options: unknown): Promise<unknown>
+  optimizeOnce(options: unknown): Promise<void>
   /** cy_batchOptimizeDoc([配置, 单个文件])：文件夹批量优化，循环在命令层（`:36040`） */
-  optimizeFolder(options: unknown, file: string): Promise<unknown>
+  optimizeFolder(options: unknown, file: string): Promise<void>
   /** cy_customBuildTransform(7 个平铺参数)：自定义变换（`:17165` 顺序同 `05-常用.md:57`） */
-  transform(params: [number, number, string, string, number, number, number]): Promise<unknown>
+  transform(params: [number, number, string, string, number, number, number]): Promise<void>
   /** cy_createSafeAreaGuide([选项])：参考线工具（派发表 key `cy_useGride`，`:17168`） */
-  referenceGuide(options?: unknown): Promise<unknown>
+  referenceGuide(options?: unknown): Promise<void>
   /** cy_guideFunction([选项])：清除参考线 / 基于参考线切片（key `cy_clearCutGuide`，`:17171`） */
-  referenceSlice(options?: unknown): Promise<unknown>
+  referenceSlice(options?: unknown): Promise<void>
   /** cy_distributedByPitch([option])：按间距分布（`:17173`） */
   /**
    * cy_correctRectangleBlur([])：修正边缘模糊。**派发表 key 叫 `cy_coorectBlur`（官方拼错），
    * jsx 名是 `cy_correctRectangleBlur`**（`:17096` case 34 / 调用点 `:37965`），实参 `[]`。
    */
-  correctBlur(): Promise<unknown>
+  correctBlur(): Promise<void>
   /** cy_LayerReplace([])：元素替换。派发表 key `cy_layerReplace`，**jsx 名大写 L**（`:17178` / `:37959`） */
-  layerReplace(): Promise<unknown>
+  layerReplace(): Promise<void>
   /** cy_locationTrade([])：位置对换（`:17181` / `:37953`） */
-  locationTrade(): Promise<unknown>
+  locationTrade(): Promise<void>
   /** cy_exchangeLayerColor([])：图层颜色互换（`:17184` / `:37956`） */
-  exchangeLayerColor(): Promise<unknown>
-  distribute(options: unknown): Promise<unknown>
+  exchangeLayerColor(): Promise<void>
+  distribute(options: unknown): Promise<void>
   /**
    * cy_getPsdForFolder()：**无参**，文件夹由 jsx 自己弹选（官方 `jsxNoCheck("cy_getPsdForFolder")`，
    * `:17119` 与 `:36025`）。返回列表（B/A 档"有数据"，具体形状未实测）。
    */
-  getPsdList(): Promise<unknown>
+  getPsdList(): Promise<JsxOutcome<unknown>>
   /**
    * cy_BacthExportPsdToImage([file, option])：单个 PSD 导图（`jsxHistoryNoCheck`，`:17139`）。
    * **官方名字里 `Bacth` 是拼错的**（不是 Batch），照抄不改——改了就调不到。
    */
-  exportPsdImage(file: string, options: unknown): Promise<unknown>
+  exportPsdImage(file: string, options: unknown): Promise<void>
 }
 
 export interface JsxPort {

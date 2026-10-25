@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { msg } from '@/domain/messages'
 import { nextTick, onMounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import BaseGroup from '@/components/BaseGroup.vue'
@@ -83,7 +84,7 @@ async function runBatch(expression: string) {
     feedback.error(message)
     return
   }
-  await batchNameCmd.run({ expression, filterChildren: filterChildren.value })
+  await batchNameCmd.invoke({ expression, filterChildren: filterChildren.value })
 }
 
 function runRename() {
@@ -108,7 +109,7 @@ function applyPreset(expression: string) {
 }
 
 function pickColor(colorIndex: number) {
-  void setLayerColorCmd.run({ colorIndex })
+  void setLayerColorCmd.invoke({ colorIndex })
 }
 
 // ---------- 表达式菜单（点输入框弹出，原版 showTips :57073） ----------
@@ -209,7 +210,7 @@ const modal = ref({
   groupIndex: 0,
   itemIndex: -1,
 })
-const confirmState = ref({ visible: false, text: '', run: async () => {} })
+const confirmState = ref({ visible: false, text: '', invoke: async () => {} })
 
 function openModal(mode: ModalMode, options: { groupIndex?: number; itemIndex?: number } = {}) {
   menu.value.visible = false
@@ -233,10 +234,10 @@ function openModal(mode: ModalMode, options: { groupIndex?: number; itemIndex?: 
 async function submitModal() {
   const { mode, groupIndex, itemIndex, value } = modal.value
   if (mode === 'createGroup') {
-    await addGroupCmd.run({ name: value, afterIndex: groupIndex >= 0 ? groupIndex : undefined })
-  } else if (mode === 'renameGroup') await renameGroupCmd.run({ index: groupIndex, name: value })
-  else if (mode === 'createItem') await addItemCmd.run({ groupIndex, text: value })
-  else await changeItemCmd.run({ groupIndex, itemIndex, text: value })
+    await addGroupCmd.invoke({ name: value, afterIndex: groupIndex >= 0 ? groupIndex : undefined })
+  } else if (mode === 'renameGroup') await renameGroupCmd.invoke({ index: groupIndex, name: value })
+  else if (mode === 'createItem') await addItemCmd.invoke({ groupIndex, text: value })
+  else await changeItemCmd.invoke({ groupIndex, itemIndex, text: value })
 }
 
 function requestDelete(what: 'group' | 'item') {
@@ -246,24 +247,24 @@ function requestDelete(what: 'group' | 'item') {
   if (what === 'group') {
     confirmState.value = {
       visible: true,
-      text: `删除分组「${group?.name ?? ''}」？组内预设会一起删除。`,
-      run: async () => {
-        await deleteGroupCmd.run({ index: groupIndex })
+      text: msg.confirm.fn.renameDeleteGroup(group?.name ?? ''),
+      invoke: async () => {
+        await deleteGroupCmd.invoke({ index: groupIndex })
       },
     }
     return
   }
   confirmState.value = {
     visible: true,
-    text: `删除预设「${group?.list[itemIndex] ?? ''}」？`,
-    run: async () => {
-      await deleteItemCmd.run({ groupIndex, itemIndex })
+    text: msg.confirm.fn.renameDeleteItem(group?.list[itemIndex] ?? ''),
+    invoke: async () => {
+      await deleteItemCmd.invoke({ groupIndex, itemIndex })
     },
   }
 }
 
 async function onConfirmDelete() {
-  await confirmState.value.run()
+  await confirmState.value.invoke()
 }
 
 // ---------- 拖拽排序（`am()` 机制，见 `composables/useLongPressDrag`）----------
@@ -385,7 +386,7 @@ async function endGroupDrag(result: LongPressDragResult) {
   if (source.kind !== 'group' || target.kind !== 'group') return
   if (source.groupIndex === target.groupIndex) return
 
-  await reorderGroupCmd.run({
+  await reorderGroupCmd.invoke({
     from: source.groupIndex,
     to: target.groupIndex,
     position: result.position,
@@ -403,7 +404,7 @@ async function endItemDrag(result: LongPressDragResult) {
   if (target.groupIndex === 0) return
   if (source.groupIndex === target.groupIndex && source.itemIndex === target.itemIndex) return
 
-  await reorderItemCmd.run({
+  await reorderItemCmd.invoke({
     fromGroup: source.groupIndex,
     fromIndex: source.itemIndex,
     toGroup: target.groupIndex,
@@ -413,15 +414,15 @@ async function endItemDrag(result: LongPressDragResult) {
 }
 
 function toggleGroup(index: number) {
-  void toggleGroupCmd.run({ index })
+  void toggleGroupCmd.invoke({ index })
 }
 
 async function exportPreset() {
-  await exportPresetCmd.run(undefined, '导出成功')
+  await exportPresetCmd.invoke(undefined, msg.success.text.exportOk)
 }
 
 async function importPreset() {
-  await importPresetCmd.run(undefined, '导入成功')
+  await importPresetCmd.invoke(undefined, msg.success.text.importOk)
 }
 
 onMounted(() => {
@@ -479,7 +480,7 @@ onMounted(() => {
         <GInput v-model="newtext" placeholder="新文字" @enter="runReplace" />
       </div>
 
-      <p v-if="loading" class="rename-hint">加载中…</p>
+      <p v-if="loading" class="rename-hint">{{ '加载中…' }}</p>
 
       <div v-else-if="error" class="rename-error">
         <p class="rename-error__text">{{ error }}</p>
@@ -490,11 +491,11 @@ onMounted(() => {
         v-else-if="!preset.length"
         compact
         class="rename-hint"
-        text="还没有重命名预设，点下方 ＋ 新建分组。"
+        :text="'还没有重命名预设，点下方 ＋ 新建分组。'"
       />
 
       <template v-else>
-        <p v-if="degraded" class="rename-hint">{{ degraded }}，预设可能不完整</p>
+        <p v-if="degraded" class="rename-hint">{{ `${degraded}，预设可能不完整` }}</p>
 
         <section
           v-for="(group, groupIndex) in preset"
@@ -639,7 +640,11 @@ onMounted(() => {
       <GInput v-model="modal.value" :placeholder="modal.placeholder" @enter="submitModal" />
     </CepModal>
 
-    <CepModal v-model:visible="confirmState.visible" title="确认删除" @ok="onConfirmDelete">
+    <CepModal
+      v-model:visible="confirmState.visible"
+      :title="msg.confirm.text.deleteConfirmTitle"
+      @ok="onConfirmDelete"
+    >
       <p>{{ confirmState.text }}</p>
     </CepModal>
   </PageShell>

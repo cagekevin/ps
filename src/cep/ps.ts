@@ -1,12 +1,11 @@
 import { CepError, ERR_PREFIX } from '@/utils/errors'
-import { normalizeFontList } from '@/domain/font-normalize'
+import { msg } from '@/domain/messages'
+import { isJsxOkSentinel } from '@/utils/jsx-result'
 import { evalScriptRaw, hasCep } from './transport'
 import { PS_ENV } from './env'
-import { extensionDir } from './fs'
-import { mergeFontStars, readSysFontFile } from './data/sys-font'
+import { extensionDir } from './paths'
 import { jsx } from './jsx'
 import type { LayerState } from './types'
-import type { FontItem } from '@/domain/font-item'
 
 let initPromise: Promise<void> | null = null
 
@@ -28,7 +27,7 @@ async function doInit(): Promise<void> {
   if (!hasCep()) return
 
   const dir = extensionDir()
-  if (!dir) throw new CepError('INIT', '拿不到扩展目录（getSystemPath("extension") 失败）')
+  if (!dir) throw new CepError('INIT', msg.ps.text.extDirUnavailable)
 
   const jsxPath = `${dir}/lib/all.decrypted.js`
 
@@ -38,8 +37,8 @@ async function doInit(): Promise<void> {
     `try { $.evalFile("${jsxPath}"); "OK" } catch (e) { "${ERR_PREFIX}" + e.message }`,
     30000,
   )
-  if (loadRes !== 'OK') {
-    throw new CepError('INIT', `加载 jsx 失败：${loadRes.replace(ERR_PREFIX, '')}`)
+  if (!isJsxOkSentinel(loadRes)) {
+    throw new CepError('INIT', msg.ps.fn.loadJsxFailed(loadRes.replace(ERR_PREFIX, '')))
   }
 
   const typeRes = await evalScriptRaw('typeof ztgl_initSystemList')
@@ -49,10 +48,7 @@ async function doInit(): Promise<void> {
         `return [f.exists ? 'exists' : 'missing', typeof Sys_setSystemEnvInfo, typeof app].join('|');})()`,
       10000,
     ).catch(() => '诊断脚本也失败了')
-    throw new CepError(
-      'INIT',
-      `jsx 已加载，但 ztgl_initSystemList 不可用（typeof = ${typeRes}；${diag}）`,
-    )
+    throw new CepError('INIT', msg.ps.fn.initSystemListUnavailable(typeRes, diag))
   }
 
   // 不注入环境变量，jsx 内部拼路径时会报「undefined 不是对象」
@@ -60,67 +56,14 @@ async function doInit(): Promise<void> {
 }
 
 /**
- * 读字体列表。
+ * 本文件只留两件事：**初始化**（`initJsx`）与**选区状态**（`getLayerState`，`selection/` 在用）。
  *
- * ztgl_initSystemList() 实测直接返回字体数组（family/weights/names/postScriptNames）。
- * 有些版本会返回状态字符串 "ok"、数据写到 SysFont2.json，所以两种都兜住。
- */
-export async function getFontList(opts: { refresh?: boolean } = {}): Promise<FontItem[]> {
-  await initJsx()
-
-  if (!opts.refresh) {
-    const cached = await readSysFontFile()
-    // 只有"读到了且非空"才算命中缓存；读不到继续往下走，让 PS 重建一次
-    if (cached.status === 'ok' && cached.list.length) return cached.list
-  }
-
-  const res = await jsx.font.initSystemList()
-
-  if (res === 'ok') {
-    const fromFile = await readSysFontFile()
-    if (fromFile.status === 'error') {
-      // TD-09-3：把**为什么**读不到带出去，别让页面只写"读不到系统字体"却查不到原因
-      throw new CepError('IO', `读不到系统字体：${fromFile.reason}（SysFont2.json）`)
-    }
-    if (fromFile.status === 'none' || !fromFile.list.length) {
-      throw new CepError('PARSE', 'ztgl_initSystemList 返回 ok，但 SysFont2.json 里没有字体')
-    }
-    return fromFile.list
-  }
-
-  // 空数组 = PS 那边确实一个系统字体都没有（这是"没有"，不是"读不懂"）
-  if (Array.isArray(res) && res.length === 0) return []
-
-  const list = normalizeFontList(res)
-  if (!list.length) {
-    throw new CepError(
-      'PARSE',
-      `ztgl_initSystemList 返回了无法识别的数据：${String(res).slice(0, 120)}`,
-    )
-  }
-  return await mergeFontStars(list)
-}
-
-/** 标签/星级读取已迁到 data/font-meta；这里保留旧入口，store 不需要知道迁移 */
-export { readFontTags as getFontTags, readFontStars as getFontStars } from './data/font-meta'
-
-/**
- * 写 PS 文档的能力**不在这里**（`font.apply` 命令直接调 `ctx.jsx.font`）。
- *
- * 这样页面即使 import 了 `ps.ts`，也拿不到任何"写"入口——
+ * 读能力同样不在这里：字体列表在 `data/font-list.ts`、标签/星级在 `data/font-meta.ts`、
+ * 动作原始返回在 `data/actions.ts`。所以 `stores/**` 物理上不需要 import 本文件——
  * 结构上没有，比再多一条 eslint 规则可靠（见 plan 4.7）。
- */
-
-/**
- * 读 PS 当前动作面板的**原始**返回。
  *
- * 只做"取回来"，不解析：结构未真机验证，解析放 `domain/action` 的 `readActionList`，
- * 模型化放 `stores/action` 的 `loadPsActions`。这样页面不需要 import 这里。
+ * 写 PS 文档的能力也**不在这里**（`font.apply` 命令直接调 `ctx.jsx.font`）。
  */
-export async function getRawActionList(): Promise<unknown> {
-  await initJsx()
-  return jsx.action.getActionList()
-}
 
 /**
  * 当前选中图层状态。
@@ -134,20 +77,27 @@ export async function getRawActionList(): Promise<unknown> {
 export async function getLayerState(): Promise<LayerState> {
   await initJsx()
 
-  const selected = await jsx.layer.isSelectLayer()
+  const selectedOutcome = await jsx.layer.isSelectLayer()
+  if (!selectedOutcome.ok) {
+    throw new CepError(selectedOutcome.code, selectedOutcome.reason || 'Layer_isSelectLayer 失败')
+  }
+  const selected = selectedOutcome.data
   if (selected !== true && selected !== false && selected !== 'true' && selected !== 'false') {
-    throw new CepError(
-      'PARSE',
-      `Layer_isSelectLayer 返回了无法识别的值（${previewValue(selected)}）：无法判断有没有选中图层`,
-    )
+    throw new CepError('PARSE', msg.ps.fn.isSelectLayerUnrecognized(previewValue(selected)))
   }
 
-  const typeNumber = await jsx.layer.getTypeNumber()
-  const parsed = parseTypeNumber(typeNumber)
+  const typeNumberOutcome = await jsx.layer.getTypeNumber()
+  if (!typeNumberOutcome.ok) {
+    throw new CepError(
+      typeNumberOutcome.code,
+      typeNumberOutcome.reason || 'Layer_getTypeNumber 失败',
+    )
+  }
+  const parsed = parseTypeNumber(typeNumberOutcome.data)
   if (parsed === null) {
     throw new CepError(
       'PARSE',
-      `Layer_getTypeNumber 返回了无法识别的值（${previewValue(typeNumber)}）：无法判断图层类型`,
+      msg.ps.fn.getTypeNumberUnrecognized(previewValue(typeNumberOutcome.data)),
     )
   }
 

@@ -20,7 +20,7 @@ const repo = vi.hoisted(() => ({
   onChange: vi.fn(),
 }))
 
-vi.mock('@/cep/data/free-panel', () => ({ freePanelRepo: repo }))
+vi.mock('@/cep/data/free-panel', () => ({ freePanelRepo: repo, freePanelWriter: repo }))
 
 const { useFreePanelStore } = await import('@/stores/free-panel')
 

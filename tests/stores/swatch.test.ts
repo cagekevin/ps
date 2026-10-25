@@ -12,38 +12,47 @@ import { createPinia, setActivePinia } from 'pinia'
  */
 const fsMock = vi.hoisted(() => ({ files: new Map<string, string>() }))
 
-vi.mock('@/cep/fs', () => ({
+vi.mock('@/cep/node', () => ({
   hasNode: () => true,
+}))
+
+vi.mock('@/cep/paths', () => ({
   userDir: () => 'ROAM/SheJiZhuLi',
+}))
+
+vi.mock('@/cep/fs-read', () => ({
   readTextOutcome: async (path: string) => {
-    const text = fsMock.files.get(path)
-    return text === undefined ? { status: 'notSeen' as const } : { status: 'ok' as const, text }
-  },
+      const text = fsMock.files.get(path)
+      return text === undefined ? { status: 'notSeen' as const } : { status: 'ok' as const, text }
+    },
   readTextSync: (path: string) => {
-    const text = fsMock.files.get(path)
-    return text === undefined ? { status: 'notSeen' as const } : { status: 'ok' as const, text }
-  },
+      const text = fsMock.files.get(path)
+      return text === undefined ? { status: 'notSeen' as const } : { status: 'ok' as const, text }
+    },
   writeTextFileAtomic: (path: string, text: string) => {
-    fsMock.files.set(path, text)
-    return true
-  },
+      fsMock.files.set(path, text)
+      return true
+    },
   writeTextFile: (path: string, text: string) => {
-    fsMock.files.set(path, text)
-  },
+      fsMock.files.set(path, text)
+    },
   readBase64Outcome: (path: string) => {
-    const text = fsMock.files.get(path)
-    return text === undefined
-      ? { status: 'notSeen' as const }
-      : { status: 'ok' as const, base64: Buffer.from(text).toString('base64') }
-  },
+      const text = fsMock.files.get(path)
+      return text === undefined
+        ? { status: 'notSeen' as const }
+        : { status: 'ok' as const, base64: Buffer.from(text).toString('base64') }
+    },
   writeBase64File: (path: string, base64: string) => {
-    fsMock.files.set(path, Buffer.from(base64, 'base64').toString('utf8'))
-    return true
-  },
+      fsMock.files.set(path, Buffer.from(base64, 'base64').toString('utf8'))
+      return true
+    },
   removeFile: (path: string) => {
-    fsMock.files.delete(path)
-    return { ok: true as const }
-  },
+      fsMock.files.delete(path)
+      return { ok: true as const }
+    },
+}))
+
+vi.mock('@/cep/codec', () => ({
   b64ToUtf8: (b64: string) => Buffer.from(b64, 'base64').toString('utf8'),
   utf8ToB64: (text: string) => Buffer.from(text, 'utf8').toString('base64'),
 }))

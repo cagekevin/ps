@@ -19,10 +19,10 @@ vi.mock('@/selection', () => ({
   selectionRef: { value: selection },
 }))
 
-vi.mock('@/cep/ps', () => ({
-  getFontList: async () => [],
-  getFontTags: async () => [],
-  getFontStars: async () => ({ ok: true, stars: {} }),
+vi.mock('@/cep/data/font-list', () => ({ getFontList: async () => [] }))
+vi.mock('@/cep/data/font-meta', () => ({
+  readFontTags: async () => [],
+  readFontStars: async () => ({ ok: true, stars: {} }),
 }))
 
 vi.mock('@/cep/jsx', () => ({

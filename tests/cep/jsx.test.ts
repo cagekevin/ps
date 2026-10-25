@@ -59,27 +59,29 @@ describe('真实实现：错误', () => {
     await expect(createFontJsx().setFont('a', 'b', 'c')).rejects.toBeInstanceOf(CepError)
   })
 
-  it('返回值原样给调用方（err 判定留给 ps.ts）', async () => {
+  it('宿主返回 err → 生产者层直接抛（不是返回失败臂让消费侧判）', async () => {
     setBridge(() => JSON.stringify({ err: 1, msg: '字体不存在' }))
-    const res = (await createFontJsx().setFont('a', 'b', 'c')) as { err?: number }
-    expect(res.err).toBe(1)
+    // `write` 在生产者层抛（R2-3 修法）：消费侧只管 `await`，不可能忘判 ok
+    await expect(createFontJsx().setFont('a', 'b', 'c')).rejects.toThrow('字体不存在')
   })
 })
 
 describe('mock 实现', () => {
   it('initSystemList 返回非空数组（已归一化，normalizeFont 幂等）', async () => {
-    const list = (await createMockJsx().font.initSystemList()) as Array<{ family: string }>
+    const outcome = await createMockJsx().font.initSystemList()
+    expect(outcome.ok).toBe(true)
+    const list = outcome.ok ? outcome.data : []
     expect(Array.isArray(list)).toBe(true)
     expect(list.length).toBeGreaterThan(0)
-    expect(typeof list[0].family).toBe('string')
+    expect(typeof (list[0] as { family?: unknown }).family).toBe('string')
   })
 
   it('setFont / env / 图层查询都不抛', async () => {
     const port = createMockJsx()
-    await expect(port.font.setFont('a', 'b', 'c')).resolves.toBeNull()
+    await expect(port.font.setFont('a', 'b', 'c')).resolves.toBeUndefined()
     await expect(port.env.setEnv('{}')).resolves.toBeUndefined()
-    await expect(port.layer.isSelectLayer()).resolves.toBe(true)
-    await expect(port.layer.getTypeNumber()).resolves.toBe(2)
+    await expect(port.layer.isSelectLayer()).resolves.toEqual({ ok: true, data: true })
+    await expect(port.layer.getTypeNumber()).resolves.toEqual({ ok: true, data: 2 })
   })
 })
 

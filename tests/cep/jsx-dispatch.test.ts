@@ -1,4 +1,4 @@
-﻿import { readdirSync, readFileSync } from 'node:fs'
+import { readdirSync, readFileSync } from 'node:fs'
 import { join, resolve } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
@@ -44,13 +44,27 @@ const official = new Set<string>([
   ...snapshot.calls.map((c) => c.name),
 ])
 
-/** 现读我方用到的 jsx 名字（文件 → 名字），不手抄 */
+/**
+ * jsx 名字的字符集：除字母数字下划线，还有**带点**的（`AppPreferences.typeUnits`）。
+ * 只认 `[A-Za-z0-9_]` 会把它整条漏掉 —— 名字其实是对的，只是含点，于是假阴性。
+ */
+const NAME = '[A-Za-z0-9_.]+'
+
+/**
+ * 现读我方用到的 jsx 名字（文件 → 名字），不手抄
+ *
+ * 为什么三种写法都要认：只认 `jsxCall('名'` 直调时，`src/cep/jsx/font.ts:11/15`、
+ * `style.ts:11/15` 的 `read()` / `write()` 包装会把名字全藏起来（里面就是
+ * `jsxCall(fn, args, {label, timeout})`）—— 实测 41 个名字里 40 个静默漏网。
+ * 包一层就绕过，这道闸等于没有。
+ */
 function collectOurNames(): Map<string, string> {
   const found = new Map<string, string>()
+  const jsxRe = new RegExp(`(?:jsxCall|read|write)\\('(${NAME})'`, 'g')
   for (const file of readdirSync(join(ROOT, 'src/cep/jsx'))) {
     if (!file.endsWith('.ts')) continue
     const text = readFileSync(join(ROOT, 'src/cep/jsx', file), 'utf8')
-    for (const m of text.matchAll(/jsxCall\('([A-Za-z0-9_]+)'/g)) {
+    for (const m of text.matchAll(jsxRe)) {
       if (!found.has(m[1])) found.set(m[1], `src/cep/jsx/${file}`)
     }
   }

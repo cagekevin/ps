@@ -52,11 +52,38 @@ export interface RepoReadBad<T> {
  */
 export type RepoRead<T> = RepoReadOk<T> | RepoReadBad<T>
 
+/**
+ * **store 唯一能拿到的仓库形状**：只有读侧。
+ *
+ * 为什么是类型而不是一道闸（目标架构 §4.7「写用户资产」）：store 里写 repo.write(...) 时
+ * 这个类型上**根本没有那个方法** —— vue-tsc 报 TS2339，不需要任何扫描脚本
+ * （原 layer-boundary.mjs 规则 L1 已删）。写侧叫 <域>Writer（同一对象，类型是全量 Repo<T>），
+ * 只给 commands / cloud 用；eslint 禁 store 导入那个名字。
+ */
+export type RepoView<T> = Pick<Repo<T>, 'read' | 'onChange'>
+
 export interface Repo<T> {
   /** 读；文件不存在时返回 fallback，且**不算**失败（首次使用是正常状态） */
   read(): Promise<RepoRead<T>>
   /** 覆写；失败抛 */
   write(value: T): Promise<void>
+  /**
+   * **整份覆盖 + 保留原文做备份/隔离**；失败抛。与另两个写的区别：
+   * - `write` 不看原文（`previous` 恒 `null`）⇒ 拿不到原文就没有 `.bak`；
+   * - `update` 在原文坏时**拒绝写**（D-42），而"整份替换"要的正是**读坏也写**、
+   *   但把坏原文隔离到 `.corrupt-<ts>`（TD-09-21，不让坏内容顶 `.bak`）。
+   * 不带 CAS（整份覆盖：调用方已决定完整内容，没有"读→改→写"的丢更新窗口）。
+   *
+   * 消费者：`swatch-repo.writeSwatchItems`（已迁）。
+   * 待迁（下一步）：`cloud/entries/action-library.ts:109` 云下载把原文落盘 —— 它现在直写
+   * `writeTextFileAtomic`，无 `.bak`、不 emit（债 11-24）。**不要把这条读成"已迁"**。
+   */
+  overwrite(value: T): Promise<void>
+  /**
+   * 与 `overwrite` 相同，但**不排队**：调用方必须已持有 `data/write-queue` 的锁。
+   * `swatch-repo.writeSwatchItems` 的 6 个调用方全在 `runQueued` 任务体里，用这个。
+   */
+  overwriteInLock(value: T): Promise<void>
   /**
    * 与 `write` 相同，但**不排队**：调用方必须已持有 `data/write-queue` 的锁。
    * 用在"写 N 个库文件 + 写索引"这类要独占一段的事务里——已在锁内再排一次队会自锁。

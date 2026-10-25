@@ -1,6 +1,6 @@
 // 契约测试，非实机：文件读写全部 mock，全程零网络
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import type { WriteOutcome } from '@/cep/fs'
+import { type WriteOutcome } from '@/cep/disk-write'
 
 /**
  * 云同步台账（T-114）。
@@ -18,22 +18,22 @@ const fsMock = vi.hoisted(() => ({
   })),
 }))
 
-vi.mock('@/cep/fs', async (importOriginal) => {
+vi.mock('@/cep/fs-read', () => ({
   const actual = await importOriginal<typeof import('@/cep/fs')>()
-  return {
-    ...actual,
-    userDir: () => '/user',
-    readTextOutcome: async () => {
-      if (fsMock.read.status === 'error') {
-        return { status: 'error' as const, reason: fsMock.read.reason }
-      }
-      if (fsMock.read.status === 'notSeen') return { status: 'notSeen' as const }
-      return { status: 'ok' as const, text: fsMock.read.text }
+    return {
+      ...actual,
+      userDir: () => '/user',
+      readTextOutcome: async () => {
+        if (fsMock.read.status === 'error') {
+          return { status: 'error' as const, reason: fsMock.read.reason }
+        }
+        if (fsMock.read.status === 'notSeen') return { status: 'notSeen' as const }
+        return { status: 'ok' as const, text: fsMock.read.text }
+      },
+      writeTextFile: fsMock.writeTextFile,
+      writeTextFileAtomic: fsMock.writeTextFileAtomic,
     },
-    writeTextFile: fsMock.writeTextFile,
-    writeTextFileAtomic: fsMock.writeTextFileAtomic,
-  }
-})
+}))
 
 const fetchGuard = vi.fn(() => {
   throw new Error('契约测试，非实机：禁止真实网络请求')

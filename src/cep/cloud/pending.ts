@@ -5,6 +5,7 @@
 // 禁止：这里不发请求、不弹提示（提示归 UI 层）；也不要用 console 顶替记录
 
 import { getPref, setPref } from '@/cep/data/settings'
+import { msg } from '@/domain/messages'
 import type { PendingChange, PendingReason } from '@/cloud/types'
 import { log } from '@/utils/logger'
 
@@ -55,7 +56,7 @@ export function recordPendingChanges(units: string[], reason: PendingReason, cod
     warned = true
     log.warn(
       'cloud',
-      `云同步未完成（${reason}${code ? ` · ${code}` : ''}）：${units.join('、')} 已记为待同步` +
+      msg.cloud.fn.syncIncomplete(reason, code ? ` · ${code}` : '', units.join('、')) +
         `${CODE_HINT[code ?? ''] ?? ''}`,
     )
   }

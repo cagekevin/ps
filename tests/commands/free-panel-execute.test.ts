@@ -36,7 +36,7 @@ vi.mock('@/cep/jsx', () => ({ jsx }))
 
 await import('@/commands')
 const { execute, get, register } = await import('@/commands/registry')
-const { freePanelRepo } = await import('@/cep/data/free-panel')
+const { freePanelWriter } = await import('@/cep/data/free-panel')
 const { createEmptyFreePanel } = await import('@/domain/free-panel')
 const { useCommand } = await import('@/components/command/useCommand')
 const { useFeedbackStore } = await import('@/stores/feedback')
@@ -49,7 +49,7 @@ beforeEach(async () => {
   setActivePinia(pinia)
   selection.refresh.mockClear()
   vi.clearAllMocks()
-  await freePanelRepo.write(createEmptyFreePanel())
+  await freePanelWriter.write(createEmptyFreePanel())
 })
 
 /** 往 block 1 里放一条旧自由面板项（key 走 `domain/free-panel-legacy` 的映射表） */
@@ -67,7 +67,7 @@ async function putItem(key: string, option: unknown = null, btnId = 1) {
     top: '',
     position: false,
   })
-  await freePanelRepo.write(file)
+  await freePanelWriter.write(file)
 }
 
 /** 临时把某条命令换成"必抛某 code"的假实现，跑完还原 */
@@ -81,7 +81,7 @@ async function withFailingCommand(
   if (!original) throw new Error(`命令不存在：${id}`)
   register({
     ...original,
-    async run() {
+    async invoke() {
       throw new CepError(code as never, reason)
     },
   })
@@ -150,7 +150,7 @@ describe('freePanel.execute 嵌套执行（D-33）', () => {
     feedback.clear()
 
     await withFailingCommand('action.call', 'FONT_MISSING', '字体缺失', async () => {
-      const ok = await useCommand('freePanel.execute').run({ blockId: 1, btnId: 1 })
+      const ok = await useCommand('freePanel.execute').invoke({ blockId: 1, btnId: 1 })
       expect(ok).toBe(false)
       expect(feedback.toasts).toHaveLength(0)
     })
@@ -161,7 +161,7 @@ describe('freePanel.execute 嵌套执行（D-33）', () => {
     feedback.clear()
 
     // 区域不存在 → PARSE，没有 FONT_MISSING 语义
-    const ok = await useCommand('freePanel.execute').run({ blockId: 999, btnId: 1 })
+    const ok = await useCommand('freePanel.execute').invoke({ blockId: 999, btnId: 1 })
 
     expect(ok).toBe(false)
     expect(feedback.toasts.map((toast) => toast.type)).toEqual(['error'])
@@ -174,12 +174,12 @@ describe('区域 id 分配（D-38 / D-39）', () => {
     await execute('freePanel.addBlock', { type: 'norow' })
 
     // 数字立刻取出来：测试环境走 memoryRepo，读出来的是同一份对象引用，clear 会把它的 uid 改掉
-    const beforeUid = readValue(await freePanelRepo.read()).uid
+    const beforeUid = readValue(await freePanelWriter.read()).uid
     expect(beforeUid).toBe(3)
 
     await execute('freePanel.clear', {})
 
-    const after = readValue(await freePanelRepo.read())
+    const after = readValue(await freePanelWriter.read())
     expect(after.obj.list).toHaveLength(1)
     expect(after.uid).toBeGreaterThan(beforeUid)
     expect(after.obj.list[0].id).toBeGreaterThan(beforeUid)
@@ -189,11 +189,11 @@ describe('区域 id 分配（D-38 / D-39）', () => {
     const file = createEmptyFreePanel()
     file.uid = 1 // 故意落后：旧文件 / 别的面板写过的文件都可能这样
     file.obj.list.push({ ...file.obj.list[0], id: 7, data: [] })
-    await freePanelRepo.write(file)
+    await freePanelWriter.write(file)
 
     await execute('freePanel.addBlock', { type: 'norow' })
 
-    const next = readValue(await freePanelRepo.read())
+    const next = readValue(await freePanelWriter.read())
     expect(next.obj.list.map((block) => block.id)).toEqual([1, 7, 8])
     expect(next.uid).toBe(8)
   })
@@ -202,11 +202,11 @@ describe('区域 id 分配（D-38 / D-39）', () => {
     const file = createEmptyFreePanel()
     file.uid = 5
     file.obj.list[0].id = 5
-    await freePanelRepo.write(file)
+    await freePanelWriter.write(file)
 
     await execute('freePanel.removeBlock', { blockId: 5 })
 
-    const next = readValue(await freePanelRepo.read())
+    const next = readValue(await freePanelWriter.read())
     expect(next.obj.list).toHaveLength(1)
     expect(next.obj.list[0].id).toBe(6)
     expect(next.uid).toBe(6)
@@ -217,7 +217,7 @@ describe('区域 id 分配（D-38 / D-39）', () => {
     await execute('freePanel.removeBlock', { blockId: 2 })
     await execute('freePanel.addBlock', { type: 'norow' }) // 3
 
-    const next = readValue(await freePanelRepo.read())
+    const next = readValue(await freePanelWriter.read())
     expect(next.obj.list.map((block) => block.id)).toEqual([1, 3])
   })
 })

@@ -18,7 +18,7 @@ export function useCommonUseOptions() {
   const setOptionCmd = useCommand('commonUse.setOption')
 
   async function set(path: string, value: unknown) {
-    await setOptionCmd.run({ path, value })
+    await setOptionCmd.invoke({ path, value })
     // 命令只写文件；读回来由投影负责（写成功后重读一次，失败时保留旧值、页面显示 toast）
     await store.loadOptions()
   }

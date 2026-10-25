@@ -12,6 +12,7 @@ import {
   type SyncUnitAdapter,
   type WriteOutcome,
 } from '@/domain/cloud'
+import { msg } from '@/domain/messages'
 import type {
   CloudDeps,
   CloudPendingPort,
@@ -46,7 +47,7 @@ export interface CloudEngine {
  */
 function cloudUnreadable(reason: string): { error: string; errorCode: 'CLOUD_BAD_RESPONSE' } {
   return {
-    error: `云端返回读不懂（${reason}），已拒绝覆盖云端`,
+    error: msg.cloud.fn.cloudUnreadableRefuseOverwrite(reason),
     errorCode: 'CLOUD_BAD_RESPONSE',
   }
 }
@@ -72,7 +73,7 @@ async function collectUnits(entries: SyncUnitAdapter[]): Promise<Record<string, 
     } catch (error) {
       throw new CloudError(
         'CLOUD_COLLECT_FAILED',
-        `${entry.id} 读取失败：${error instanceof Error ? error.message : '未知错误'}`,
+        msg.cloud.fn.entryReadFailed(entry.id, error instanceof Error ? error.message : '未知错误'),
       )
     }
   }
@@ -140,7 +141,7 @@ function ledgerBrokenResult(reason: string): {
   return {
     ok: false,
     count: 0,
-    error: `本地同步台账读不到（${reason}），已停止上传：没有它就无法判断云端和本地谁更新`,
+    error: msg.cloud.fn.ledgerUnreadableStopUpload(reason),
     errorCode: 'CLOUD_LEDGER_BROKEN',
   }
 }
@@ -174,7 +175,12 @@ export function createCloudEngine(deps: CloudDeps): CloudEngine {
 
   async function upload(options: UploadOptions = {}): Promise<UploadResult> {
     if (!deps.config.isConfigured()) {
-      return { ok: false, count: 0, error: '未配置同步地址', errorCode: 'CLOUD_NOT_CONFIGURED' }
+      return {
+        ok: false,
+        count: 0,
+        error: msg.cloud.text.notConfigured,
+        errorCode: 'CLOUD_NOT_CONFIGURED',
+      }
     }
 
     let localUnits: Record<string, SyncUnit>
@@ -261,7 +267,7 @@ export function createCloudEngine(deps: CloudDeps): CloudEngine {
         ok: false,
         count: 0,
         hasCloud: false,
-        error: '未配置同步地址',
+        error: msg.cloud.text.notConfigured,
         errorCode: 'CLOUD_NOT_CONFIGURED',
       }
     }
@@ -295,7 +301,7 @@ export function createCloudEngine(deps: CloudDeps): CloudEngine {
           count: 0,
           hasCloud: true,
           cancelled: true,
-          error: `有 ${diff.conflicts.length} 个同步项会被覆盖，需要确认`,
+          error: msg.cloud.fn.conflictsNeedConfirm(String(diff.conflicts.length)),
           errorCode: 'CLOUD_CANCELLED',
         }
       }
@@ -327,7 +333,7 @@ export function createCloudEngine(deps: CloudDeps): CloudEngine {
         count: written,
         hasCloud: true,
         partial: { failed },
-        error: `部分同步项写回失败：${failed.join('、')}`,
+        error: msg.cloud.fn.partialWriteBackFailed(failed.join('、')),
         errorCode: 'CLOUD_WRITE_FAILED',
       }
     }
@@ -373,7 +379,7 @@ export function createCloudEngine(deps: CloudDeps): CloudEngine {
         count: 0,
         pushed: [],
         pending: wanted,
-        error: '未配置同步地址',
+        error: msg.cloud.text.notConfigured,
         errorCode: 'CLOUD_NOT_CONFIGURED',
       }
     }
@@ -385,7 +391,7 @@ export function createCloudEngine(deps: CloudDeps): CloudEngine {
         ok: false,
         count: 0,
         pushed: [],
-        error: `未注册的同步项：${unknown.join('、')}`,
+        error: msg.cloud.fn.unregisteredUnits(unknown.join('、')),
         errorCode: 'CLOUD_COLLECT_FAILED',
       }
     }
@@ -513,7 +519,7 @@ export function createCloudEngine(deps: CloudDeps): CloudEngine {
           pushed: [],
           pending: conflicts,
           cancelled: true,
-          error: `云端有更新的版本（rev ${cloud?.rev ?? 0}），${conflicts.join('、')} 未推送`,
+          error: msg.cloud.fn.cloudNewerRev(String(cloud?.rev ?? 0), conflicts.join('、')),
           errorCode: 'CLOUD_REV_CONFLICT',
         }
       }

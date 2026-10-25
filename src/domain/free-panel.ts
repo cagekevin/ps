@@ -8,6 +8,8 @@
  *
  * 注意：不是 `{ list: Item[] }`。`data` 挂在 block 上，block 可以嵌套 children。
  */
+import { type Decoded } from '@/utils/decode'
+
 export interface FreePanelItem {
   icon: string
   type: string
@@ -174,6 +176,12 @@ export function normalizeFreePanel(raw: unknown): FreePanelFile {
  */
 export function readFreePanelFile(raw: unknown): FreePanelFile | null {
   return hasPanelList(raw) ? normalizeFreePanel(raw) : null
+}
+
+/** 读边界：`readFreePanelFile` 已是 `T | null` 的形状判据，这里只补 `Decoded` 的壳 */
+export function decodeFreePanelFile(raw: unknown): Decoded<FreePanelFile> | null {
+  const file = readFreePanelFile(raw)
+  return file === null ? null : { value: file }
 }
 
 /** 深度优先遍历 block；回调返回 true 可提前停止 */

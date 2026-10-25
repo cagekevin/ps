@@ -23,7 +23,7 @@ export const useLoadingStore = defineStore('loading', () => {
     if (!count.value) message.value = ''
   }
 
-  async function run<T>(text: string, task: () => Promise<T>): Promise<T> {
+  async function invoke<T>(text: string, task: () => Promise<T>): Promise<T> {
     show(text)
     try {
       return await task()
@@ -32,5 +32,5 @@ export const useLoadingStore = defineStore('loading', () => {
     }
   }
 
-  return { count, message, active, show, hide, run }
+  return { count, message, active, show, hide, invoke }
 })

@@ -1,6 +1,7 @@
 import { ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import { useCommand } from '@/components/command/useCommand'
+import { msg } from '@/domain/messages'
 import type { FreePanelItemInput } from '@/commands/payloads'
 import { useFreePanelStore } from '@/stores/free-panel'
 
@@ -29,11 +30,11 @@ export function useFreePanelAdd() {
 
   async function confirm(blockId: number): Promise<boolean> {
     if (!items.value.length) return false
-    const ok = await addCmd.run(
+    const ok = await addCmd.invoke(
       { blockId, items: items.value },
       items.value.length === 1
-        ? `已加入自由面板「${items.value[0].text}」`
-        : `已加入 ${items.value.length} 个动作`,
+        ? msg.command.fn.addedToFreePanel(items.value[0].text)
+        : msg.command.fn.addedNActions(String(items.value.length)),
     )
     if (ok) visible.value = false
     return ok

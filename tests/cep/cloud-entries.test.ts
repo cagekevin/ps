@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { legacySettingsRepo } from '@/cep/data/legacy-settings'
-import { starsRepo, tagsRepo } from '@/cep/data'
+import { legacySettingsWriter } from '@/cep/data/legacy-settings'
+import { starsWriter, tagsWriter } from '@/cep/data'
 import { fontSettingsEntry } from '@/cep/cloud/entries/font-settings'
 import { fontStarsEntry } from '@/cep/cloud/entries/font-stars'
 import { fontTagsEntry } from '@/cep/cloud/entries/font-tags'
@@ -10,20 +10,20 @@ const fsMock = vi.hoisted(() => ({
   readTextOutcome: vi.fn(),
 }))
 
-vi.mock('@/cep/fs', async (importOriginal) => {
+vi.mock('@/cep/fs-read', () => ({
   const actual = await importOriginal<typeof import('@/cep/fs')>()
-  return {
-    ...actual,
-    userDir: () => '/user',
-    readTextOutcome: fsMock.readTextOutcome,
-  }
-})
+    return {
+      ...actual,
+      userDir: () => '/user',
+      readTextOutcome: fsMock.readTextOutcome,
+    },
+}))
 
 beforeEach(async () => {
   vi.clearAllMocks()
-  await legacySettingsRepo.write({})
-  await starsRepo.write([])
-  await tagsRepo.write([])
+  await legacySettingsWriter.write({})
+  await starsWriter.write([])
+  await tagsWriter.write([])
   fsMock.readTextOutcome.mockResolvedValue({ status: 'ok', text: '{}' })
 })
 
@@ -33,7 +33,7 @@ describe('cloud entries', () => {
       keepMe: 7,
       ztPasteFont: { scriptFamily: true, color: true },
     }
-    await legacySettingsRepo.write(raw)
+    await legacySettingsWriter.write(raw)
     fsMock.readTextOutcome.mockResolvedValue({ status: 'ok', text: JSON.stringify(raw) })
 
     const read = await fontSettingsEntry.read()
@@ -57,7 +57,7 @@ describe('cloud entries', () => {
     })
 
     expect(result.ok).toBe(true)
-    const saved = readValue(await legacySettingsRepo.read())
+    const saved = readValue(await legacySettingsWriter.read())
     expect(saved.keepMe).toBe(7)
     expect((saved as Record<string, unknown>).ztExpandMultiple).toBe(false)
   })
@@ -84,6 +84,6 @@ describe('cloud entries', () => {
       ],
     })
     expect(starWrite.ok).toBe(true)
-    expect(readValue(await starsRepo.read())).toEqual([{ name: 'MiSans', star: 3 }])
+    expect(readValue(await starsWriter.read())).toEqual([{ name: 'MiSans', star: 3 }])
   })
 })

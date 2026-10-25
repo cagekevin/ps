@@ -3,13 +3,14 @@ import type { CommandId, CommandPayloads } from '@/commands/payloads'
 import { execute, get, isEnabled } from '@/commands/registry'
 import type { Command } from '@/commands/types'
 import { selectionRef } from '@/selection'
+import { CODE_REGISTRY } from '@/utils/code-registry'
 import { useFeedbackStore } from '@/stores/feedback'
 
-export interface UseCommandResult<P> {
+export interface UseCommandOutcome<P> {
   command: Command<unknown> | undefined
   disabled: ComputedRef<boolean>
   running: Ref<boolean>
-  run(payload?: P, successText?: string): Promise<boolean>
+  invoke(payload?: P, successText?: string): Promise<boolean>
 }
 
 /**
@@ -20,16 +21,16 @@ export interface UseCommandResult<P> {
  *
  * 失败自动 toast，调用方只拿 boolean——"拿到失败文案但不处理"写不出来。
  */
-export function useCommand<K extends CommandId>(id: K): UseCommandResult<CommandPayloads[K]>
-export function useCommand(id: string): UseCommandResult<unknown>
-export function useCommand(id: string): UseCommandResult<unknown> {
+export function useCommand<K extends CommandId>(id: K): UseCommandOutcome<CommandPayloads[K]>
+export function useCommand(id: string): UseCommandOutcome<unknown>
+export function useCommand(id: string): UseCommandOutcome<unknown> {
   const feedback = useFeedbackStore()
   const command = get(id)
   const running = ref(false)
   // 依赖 selectionRef：命令执行前 refresh 会更新它，禁用态自动跟着变
   const disabled = computed(() => !command || !isEnabled(id, selectionRef.value))
 
-  async function run(payload?: unknown, successText?: string): Promise<boolean> {
+  async function invoke(payload?: unknown, successText?: string): Promise<boolean> {
     if (running.value) return false
     running.value = true
     try {
@@ -40,8 +41,9 @@ export function useCommand(id: string): UseCommandResult<unknown> {
       }
       // 用户自己取消：什么都不弹（弹"失败"就是把他自己的选择报成故障）
       if (result.ok === 'cancelled') return false
-      // FONT_MISSING 交给页面弹窗；其余失败必须提示
-      if (result.ok === false && result.code !== 'FONT_MISSING') {
+      // 是否 toast 由 `CODE_REGISTRY` 一张表决定（FONT_MISSING=false 交给页面弹窗）——
+      // 不再 `code !== 'FONT_MISSING'` 硬编码（新增码漏在这里就会误弹/漏弹）
+      if (result.ok === false && CODE_REGISTRY[result.code].toast) {
         feedback.error(result.reason)
       }
       return false
@@ -50,5 +52,5 @@ export function useCommand(id: string): UseCommandResult<unknown> {
     }
   }
 
-  return { command, disabled, running, run }
+  return { command, disabled, running, invoke }
 }

@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { WriteOutcome } from '@/cep/fs'
-import { actionIndexRepo } from '@/cep/data/actions'
+import { type WriteOutcome } from '@/cep/disk-write'
+import { actionIndexWriter } from '@/cep/data/actions'
 import { actionLibraryEntry } from '@/cep/cloud/entries/action-library'
 
 const fsMock = vi.hoisted(() => ({
@@ -9,18 +9,18 @@ const fsMock = vi.hoisted(() => ({
   writeTextFile: vi.fn(),
 }))
 
-vi.mock('@/cep/fs', async (importOriginal) => {
+vi.mock('@/cep/fs-read', () => ({
   const actual = await importOriginal<typeof import('@/cep/fs')>()
-  return {
-    ...actual,
-    userDir: () => '/user',
-    ...fsMock,
-  }
-})
+    return {
+      ...actual,
+      userDir: () => '/user',
+      ...fsMock,
+    },
+}))
 
 beforeEach(async () => {
   vi.clearAllMocks()
-  await actionIndexRepo.write({
+  await actionIndexWriter.write({
     index: 0,
     list: [{ name: '默认仓库', fileName: 'sj_dz_test.json' }],
   })

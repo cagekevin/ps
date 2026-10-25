@@ -5,6 +5,7 @@
 // 禁止：这里不写业务参数、不写签名、不弹提示；失败只抛 CepError
 
 import { CepError } from '@/utils/errors'
+import { msg } from '@/domain/messages'
 import { log } from '@/utils/logger'
 
 /**
@@ -31,7 +32,7 @@ export async function postText(
   opts: { timeoutMs?: number; contentType?: string } = {},
 ): Promise<HttpTextResponse> {
   if (typeof fetch !== 'function') {
-    throw new CepError('NETWORK', '当前环境不支持网络请求')
+    throw new CepError('NETWORK', msg.ps.text.networkUnsupported)
   }
 
   const timeoutMs = opts.timeoutMs ?? DEFAULT_TIMEOUT
@@ -49,7 +50,7 @@ export async function postText(
     return { status: response.status, text: await response.text() }
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') {
-      throw new CepError('TIMEOUT', `请求超时（${Math.round(timeoutMs / 1000)}s）`)
+      throw new CepError('TIMEOUT', msg.ps.fn.requestTimeout(String(Math.round(timeoutMs / 1000))))
     }
     throw new CepError('NETWORK', error instanceof Error ? error.message : '网络请求失败')
   } finally {
@@ -60,7 +61,8 @@ export async function postText(
 const DEFAULT_TIMEOUT = 15000
 let sequence = 0
 
-type CallbackWindow = Window & Record<string, unknown>
+/** JSONP 回调名：前缀是 `src/env.d.ts` 里 `Window` 的模板字面量索引签名放开的唯一前缀 */
+type JsonpCallbackName = `__pszJsonp${string}`
 
 /**
  * JSONP 请求。
@@ -78,10 +80,10 @@ export function jsonp(
   opts: { timeout?: number } = {},
 ): Promise<unknown> {
   if (typeof document === 'undefined') {
-    return Promise.reject(new CepError('NETWORK', '当前环境不支持网络请求'))
+    return Promise.reject(new CepError('NETWORK', msg.ps.text.networkUnsupported))
   }
 
-  const callbackName = `__pszJsonp${Date.now().toString(36)}${sequence++}`
+  const callbackName: JsonpCallbackName = `__pszJsonp${Date.now().toString(36)}${sequence++}`
   const query = new URLSearchParams()
   for (const [key, value] of Object.entries(params)) query.set(key, String(value))
   query.set('callback', callbackName)
@@ -91,10 +93,9 @@ export function jsonp(
   script.async = true
   script.src = `${url}?${query.toString()}`
 
-  // JSONP 的回调名是运行时拼的（`__pszJsonp…`），`window[回调名]` 要类型化，只能给全局
-  // `Window` 加字符串索引签名——那会让全仓 `window.xxx` 的拼写检查一起失效，比这一处转型更坏。
-  // 断言理由：这是 20(a) 第 2 步留的第三方边界口子，.d.ts 补不了，故保留转型并登记在此
-  const win = window as unknown as CallbackWindow
+  // 回调名带 `__pszJsonp` 前缀，`Window` 的模板字面量索引签名（`src/env.d.ts`）已放行这一类属性，
+  // 所以这里**不需要转型**：`window` 本身就是可写的类型，不需要 `as unknown as` 过桥（硬规则 20(a)）。
+  const win = window
   const head = document.head || document.getElementsByTagName('head')[0]
 
   return new Promise((resolve, reject) => {
@@ -112,7 +113,7 @@ export function jsonp(
     const timer = setTimeout(() => {
       log.warn('http', `JSONP 超时：${url}`)
       cleanup()
-      reject(new CepError('TIMEOUT', '连接服务器超时'))
+      reject(new CepError('TIMEOUT', msg.ps.text.connectServerTimeout))
     }, opts.timeout ?? DEFAULT_TIMEOUT)
 
     win[callbackName] = (payload: unknown) => {
@@ -123,7 +124,7 @@ export function jsonp(
     script.onerror = () => {
       log.warn('http', `JSONP 加载失败：${url}`)
       cleanup()
-      reject(new CepError('NETWORK', '连接服务器失败'))
+      reject(new CepError('NETWORK', msg.ps.text.connectServerFailed))
     }
 
     head.appendChild(script)

@@ -40,7 +40,8 @@ function installRequire() {
   w.require = (id: string) => (id === 'fs' ? fakeFs : realRequire(id))
 }
 
-const { saveExportedText, writeTextFileAtomic } = await import('@/cep/fs')
+// 导出文件的写已收进唯一落盘入口 `writeDisk`（`saveExportedText` 已删）
+const { writeDisk } = await import('@/cep/disk-write')
 
 beforeEach(() => {
   installRequire()
@@ -54,21 +55,21 @@ afterAll(() => {
   delete (window as unknown as { require?: unknown }).require
 })
 
-describe('writeTextFileAtomic', () => {
-  it('落盘内容正确，且不在目录里留下 tmp', () => {
+describe('writeDisk（原子写：tmp 名唯一 / 不留 tmp / 失败必抛）', () => {
+  it('落盘内容正确，且不在目录里留下 tmp', async () => {
     const target = path.join(dir, 'sj_appFreePanel.json')
 
-    expect(writeTextFileAtomic(target, '{"a":1}')).toEqual({ status: 'ok' })
+    await writeDisk(target, '{"a":1}', { previous: null })
 
     expect(fs.readFileSync(target, 'utf8')).toBe('{"a":1}')
     expect(fs.readdirSync(dir)).toEqual(['sj_appFreePanel.json'])
   })
 
-  it('每次调用的 tmp 名都不同，且不再是固定的 `<目标>.tmp`', () => {
+  it('每次调用的 tmp 名都不同，且不再是固定的 <目标>.tmp', async () => {
     const target = path.join(dir, 'sj_appFreePanel.json')
 
-    writeTextFileAtomic(target, '{"a":2}')
-    writeTextFileAtomic(target, '{"a":3}')
+    await writeDisk(target, '{"a":2}', { previous: null })
+    await writeDisk(target, '{"a":3}', { previous: null })
 
     const tmps = writes.filter((p) => p !== target)
     expect(tmps).toHaveLength(2)
@@ -81,54 +82,49 @@ describe('writeTextFileAtomic', () => {
     }
   })
 
-  it('别的进程正在写的 `<目标>.tmp` 不会被我们 rename 走', () => {
+  it('别的进程正在写的 <目标>.tmp 不会被我们 rename 走', async () => {
     const target = path.join(dir, 'sj_appFreePanel.json')
     const otherProcessTmp = `${target}.tmp`
     fs.writeFileSync(otherProcessTmp, '对方进程写到一半的内容', 'utf8')
 
-    expect(writeTextFileAtomic(target, '{"a":4}')).toEqual({ status: 'ok' })
+    await writeDisk(target, '{"a":4}', { previous: null })
 
-    // 旧实现会把自己的内容写进这个同名文件再 rename，对方那半截就丢了
     expect(fs.readFileSync(otherProcessTmp, 'utf8')).toBe('对方进程写到一半的内容')
     expect(fs.readFileSync(target, 'utf8')).toBe('{"a":4}')
   })
 
-  it('rename 失败时返回 false，并清掉自己的 tmp', () => {
+  it('rename 失败时抛（带原因），并清掉自己的 tmp', async () => {
     const target = path.join(dir, 'sj_appFreePanel.json')
     behavior.failRename = true
 
-    // 失败必须带原因（`boolean` 说不出为什么，调用方只能猜着退回普通写，TD-09-27）
-    expect(writeTextFileAtomic(target, '{"a":5}')).toEqual({
-      status: 'error',
-      reason: expect.stringContaining('EACCES'),
-    })
+    // 失败必须**抛**（boolean 说不出为什么，调用方只能猜着退回普通写，TD-09-27）
+    await expect(writeDisk(target, '{"a":5}', { previous: null })).rejects.toThrow('EACCES')
     expect(fs.readdirSync(dir)).toEqual([])
   })
 
-  it('无 node（未装 window.require）时返回 false，不抛', () => {
+  it('无 node（未装 window.require）时抛，不静默', async () => {
     delete (window as unknown as { require?: unknown }).require
-    expect(writeTextFileAtomic(path.join(dir, 'x.json'), '{}')).toEqual({
-      status: 'error',
-      reason: expect.stringContaining('Node 不可用'),
-    })
+    await expect(writeDisk(path.join(dir, 'x.json'), '{}', { previous: null })).rejects.toThrow(
+      'Node 不可用',
+    )
   })
 })
 
-describe('saveExportedText', () => {
-  it('写入用户选的路径，同样不留 tmp', () => {
+describe('writeDisk（导出到用户选的路径）', () => {
+  it('写入用户选的路径，同样不留 tmp', async () => {
     const out = path.join(dir, '导出', '字体.json')
 
-    saveExportedText(out, '{}')
+    await writeDisk(out, '{}', { previous: null })
 
     expect(fs.readFileSync(out, 'utf8')).toBe('{}')
     expect(fs.readdirSync(path.dirname(out))).toEqual(['字体.json'])
   })
 
-  it('失败时抛错（不许假装写成功），临时文件不留', () => {
+  it('失败时抛错（不许假装写成功），临时文件不留', async () => {
     const out = path.join(dir, '导出.json')
     behavior.failRename = true
 
-    expect(() => saveExportedText(out, '[]')).toThrow()
+    await expect(writeDisk(out, '[]', { previous: null })).rejects.toThrow()
     expect(fs.readdirSync(dir)).toEqual([])
   })
 })

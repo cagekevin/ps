@@ -22,65 +22,69 @@ const fsMock = vi.hoisted(() => ({
   readErrorPath: '',
 }))
 
-vi.mock('@/cep/fs', () => ({
+vi.mock('@/cep/node', () => ({
   hasNode: () => true,
+}))
+
+vi.mock('@/cep/paths', () => ({
   userDir: () => 'ROAM/SheJiZhuLi',
+}))
+
+vi.mock('@/cep/fs-read', () => ({
   readTextSmart: async (path: string) => fsMock.files.get(path) ?? null,
-  // T-107：唯一读入口（三态）+ 同步例外（CAS / 结构上同步的调用方）
-  readTextOutcome: async (path: string) => {
-    // T-112：文件在、但读不到（EPERM / EBUSY）——这是"读不到"，不是"没有"
-    if (fsMock.readErrorPath && path === fsMock.readErrorPath) {
-      return { status: 'error' as const, reason: 'EPERM: operation not permitted' }
-    }
-    const text = fsMock.files.get(path)
-    return text === undefined ? { status: 'notSeen' as const } : { status: 'ok' as const, text }
-  },
+  // T-107：唯一读入口（三态）+ 同步例外（CAS / 结构上同步的调用方）  readTextOutcome: async (path: string) => {
+      // T-112：文件在、但读不到（EPERM / EBUSY）——这是"读不到"，不是"没有"    if (fsMock.readErrorPath && path === fsMock.readErrorPath) {
+        return { status: 'error' as const, reason: 'EPERM: operation not permitted' }
+      }
+      const text = fsMock.files.get(path)
+      return text === undefined ? { status: 'notSeen' as const } : { status: 'ok' as const, text }
+    },
   readTextSync: (path: string) => {
-    const text = fsMock.files.get(path)
-    return text === undefined ? { status: 'notSeen' as const } : { status: 'ok' as const, text }
-  },
+      const text = fsMock.files.get(path)
+      return text === undefined ? { status: 'notSeen' as const } : { status: 'ok' as const, text }
+    },
   writeTextFileAtomic: (path: string, text: string) => {
-    if (fsMock.failAtomic) return { status: 'error' as const, reason: 'EPERM: 模拟原子写失败' }
-    fsMock.atomicWrites.push(path)
-    fsMock.files.set(path, text)
-    return { status: 'ok' as const }
-  },
+      if (fsMock.failAtomic) return { status: 'error' as const, reason: 'EPERM: 模拟原子写失败' }
+      fsMock.atomicWrites.push(path)
+      fsMock.files.set(path, text)
+      return { status: 'ok' as const }
+    },
   writeTextFile: (path: string, text: string) => {
-    fsMock.files.set(path, text)
-  },
-  // 删除仓库把文件移进回收目录：base64 只是"原样搬运"的载体，这里用同一个 Map 存文本即可
-  // T-109：base64 读也走三态（只认 ENOENT 是 notSeen）
-  readBase64Outcome: (path: string) => {
-    const text = fsMock.files.get(path)
-    return text === undefined
-      ? { status: 'notSeen' as const }
-      : { status: 'ok' as const, base64: Buffer.from(text).toString('base64') }
-  },
+      fsMock.files.set(path, text)
+    },
+  // 删除仓库把文件移进回收目录：base64 只是"原样搬运"的载体，这里用同一个 Map 存文本即可  // T-109：base64 读也走三态（只认 ENOENT 是 notSeen）  readBase64Outcome: (path: string) => {
+      const text = fsMock.files.get(path)
+      return text === undefined
+        ? { status: 'notSeen' as const }
+        : { status: 'ok' as const, base64: Buffer.from(text).toString('base64') }
+    },
   writeBase64File: (path: string, base64: string) => {
-    if (fsMock.failAtomic) return { status: 'error' as const, reason: 'EPERM: 模拟写失败' }
-    fsMock.files.set(path, Buffer.from(base64, 'base64').toString('utf8'))
-    return { status: 'ok' as const }
-  },
-  // T-109：`removeFile` 现在返回 `{ ok } | { ok:false, reason }`，不再是 boolean
-  removeFile: (path: string) => {
-    fsMock.files.delete(path)
-    return { ok: true as const }
-  },
+      if (fsMock.failAtomic) return { status: 'error' as const, reason: 'EPERM: 模拟写失败' }
+      fsMock.files.set(path, Buffer.from(base64, 'base64').toString('utf8'))
+      return { status: 'ok' as const }
+    },
+  // T-109：`removeFile` 现在返回 `{ ok } | { ok:false, reason }`，不再是 boolean  removeFile: (path: string) => {
+      fsMock.files.delete(path)
+      return { ok: true as const }
+    },
+  isUsableJsonText: (text: string) => {
+      try {
+        JSON.parse(text)
+        return true
+      } catch {
+        return false
+      }
+    },
+  saveExportedText: (path: string, text: string) => {
+      fsMock.files.set(path, text)
+      return { status: 'ok' as const }
+    },
+  readTextFile: (path: string) => fsMock.files.get(path) ?? null,
+}))
+
+vi.mock('@/cep/codec', () => ({
   b64ToUtf8: (b64: string) => Buffer.from(b64, 'base64').toString('utf8'),
   utf8ToB64: (text: string) => Buffer.from(text, 'utf8').toString('base64'),
-  isUsableJsonText: (text: string) => {
-    try {
-      JSON.parse(text)
-      return true
-    } catch {
-      return false
-    }
-  },
-  saveExportedText: (path: string, text: string) => {
-    fsMock.files.set(path, text)
-    return { status: 'ok' as const }
-  },
-  readTextFile: (path: string) => fsMock.files.get(path) ?? null,
 }))
 
 const { importKuArchive } = await import('@/cep/data/style-library-io')

@@ -30,7 +30,7 @@ vi.mock('@/cep/jsx', () => ({ jsx }))
 await import('@/commands')
 const FreePanel = (await import('@/pages/freePanel/components/FreePanel.vue')).default
 const { execute } = await import('@/commands/registry')
-const { freePanelRepo } = await import('@/cep/data/free-panel')
+const { freePanelWriter } = await import('@/cep/data/free-panel')
 const { createEmptyFreePanel, findBlock, normalizeFreePanel } = await import('@/domain/free-panel')
 const { bindFreePanelData } = await import('@/stores/free-panel')
 
@@ -51,7 +51,7 @@ beforeEach(async () => {
   setActivePinia(pinia)
   vi.clearAllMocks()
 
-  await freePanelRepo.write(createEmptyFreePanel())
+  await freePanelWriter.write(createEmptyFreePanel())
   // block 1：A、B；block 2：X
   await execute('freePanel.addBlock', { type: 'norow' })
   await execute('freePanel.add', {
@@ -85,7 +85,7 @@ describe('自由面板 · 拖拽', () => {
     }
     await flushPromises()
 
-    const file = readValue(await freePanelRepo.read())
+    const file = readValue(await freePanelWriter.read())
     expect(findBlock(file.obj.list, 1)?.data.map((item) => item.text)).toEqual(['B'])
     expect(findBlock(file.obj.list, 2)?.data.map((item) => item.text)).toEqual(['X', 'A'])
     wrapper.unmount()
@@ -99,7 +99,7 @@ describe('自由面板 · 拖拽', () => {
 describe('自由面板 · 显示设置勾选态（D-32 全局口径）', () => {
   /** 造出"两个区域不一致"的原版式数据：列数 3 vs 4、图标 开 vs 关 */
   async function makeMixed() {
-    await freePanelRepo.update((file) => {
+    await freePanelWriter.update((file) => {
       const next = normalizeFreePanel(file)
       next.obj.list[0].showNumber = 3
       next.obj.list[1].showNumber = 4
@@ -174,7 +174,7 @@ describe('自由面板 · 显示设置勾选态（D-32 全局口径）', () => {
     await four.trigger('click')
     await flushPromises()
 
-    const after = readValue(await freePanelRepo.read())
+    const after = readValue(await freePanelWriter.read())
     expect(after.obj.list.map((block) => block.showNumber)).toEqual([4, 4])
 
     // 重新打开菜单：现在只有「四列」打勾

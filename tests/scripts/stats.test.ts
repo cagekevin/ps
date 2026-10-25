@@ -32,10 +32,10 @@ function fixture(): string {
     root,
     'src/commands/alpha.ts',
     [
-      "export const a = defineCommand({ id: 'alpha.one', run() {} })",
-      "export const b = defineCommand({ id: 'alpha.two', run() {} })",
-      "export const c = defineCommand({ id: 'legacy.keep', run() {} })",
-      'export const d = defineCommand({ id: `${kind}.dyn`, run() {} })',
+      "export const a = defineCommand({ id: 'alpha.one', invoke() {} })",
+      "export const b = defineCommand({ id: 'alpha.two', invoke() {} })",
+      "export const c = defineCommand({ id: 'legacy.keep', invoke() {} })",
+      'export const d = defineCommand({ id: `${kind}.dyn`, invoke() {} })',
       '',
     ].join('\n'),
   )

@@ -31,16 +31,16 @@ const linkToSmartCmd = useCommand('commonUse.linkSmartObjectToSmartObject')
 
 /**
  * 执行中全屏遮罩 + 官方文案（官方 `toLinkSmart` `:35889` / `linkToSmart` `:35869` 各自
- * `$load.show(...)` … `$load.hide()`）。`loading.run` 内部是 try/finally，失败也一定撤遮罩。
+ * `$load.show(...)` … `$load.hide()`）。`loading.invoke` 内部是 try/finally，失败也一定撤遮罩。
  */
 const loading = useLoadingStore()
 
 function toLinkSmart() {
-  void loading.run('正在转链接智能对象...', () => toLinkSmartCmd.run())
+  void loading.invoke('正在转链接智能对象...', () => toLinkSmartCmd.invoke())
 }
 
 function linkToSmart() {
-  void loading.run('正在转回普通智能对象...', () => linkToSmartCmd.run())
+  void loading.invoke('正在转回普通智能对象...', () => linkToSmartCmd.invoke())
 }
 </script>
 

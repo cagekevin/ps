@@ -15,27 +15,39 @@ const fsMock = vi.hoisted(() => ({
   scriptsDir: 'PS/Presets/Scripts' as string | null,
 }))
 
-vi.mock('@/cep/fs', () => ({
+vi.mock('@/cep/node', () => ({
   hasNode: () => fsMock.hasNode,
+}))
+
+vi.mock('@/cep/paths', () => ({
   userDir: () => 'ROAM/SheJiZhuLi',
-  writeTextFile: (path: string, text: string) => {
-    if (!fsMock.hasNode) throw new Error('Node 不可用')
-    if (fsMock.failWrite) throw new Error('EACCES')
-    fsMock.files.set(path, text)
-  },
   psScriptsDir: async () => fsMock.scriptsDir,
-  b64ToUtf8: (b: string) => Buffer.from(b, 'base64').toString('utf8'),
-  utf8ToB64: (t: string) => Buffer.from(t, 'utf8').toString('base64'),
+  extensionDir: () => '',
+}))
+
+vi.mock('@/cep/fs-read', () => ({
+  writeTextFile: (path: string, text: string) => {
+      if (!fsMock.hasNode) throw new Error('Node 不可用')
+      if (fsMock.failWrite) throw new Error('EACCES')
+      fsMock.files.set(path, text)
+    },
   readTextSync: () => ({ status: 'notSeen' as const }),
-  // T-107：唯一读入口（三态）；这些用例不读文件，一律"查不到"
-  readTextOutcome: async () => ({ status: 'notSeen' as const }),
-  readTextSmart: async () => null,
-  writeTextFileAtomic: () => ({ status: 'ok' as const }),
-  // T-109：base64 读也走三态
-  readBase64Outcome: () => ({ status: 'notSeen' as const }),
+  // T-107：唯一读入口（三态）；这些用例不读文件，一律"查不到"  readTextOutcome: async () => ({ status: 'notSeen' as const }),
+  readTextSmart: async () => ({ ok: true, data: null }),
+  // 落盘走 `@/cep/disk-write` 的 `writeDiskSync` → 最终调 `writeTextFileAtomic`（原子写）  writeTextFileAtomic: (path: string, text: string) => {
+      if (!fsMock.hasNode) throw new Error('Node 不可用')
+      if (fsMock.failWrite) throw new Error('EACCES')
+      fsMock.files.set(path, text)
+      return { status: 'ok' as const }
+    },
+  // T-109：base64 读也走三态  readBase64Outcome: () => ({ status: 'notSeen' as const }),
   writeBase64File: () => ({ status: 'ok' as const }),
   removeFile: () => ({ ok: true as const }),
-  extensionDir: () => '',
+}))
+
+vi.mock('@/cep/codec', () => ({
+  b64ToUtf8: (b: string) => Buffer.from(b, 'base64').toString('utf8'),
+  utf8ToB64: (t: string) => Buffer.from(t, 'utf8').toString('base64'),
 }))
 
 vi.mock('@/selection', () => {

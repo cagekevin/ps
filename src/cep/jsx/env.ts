@@ -1,4 +1,4 @@
-import { jsxCall } from '@/cep/transport'
+import { jsxWrite } from '@/cep/transport'
 import { WRITE } from './timeouts'
 import type { EnvJsx } from './types'
 
@@ -6,7 +6,7 @@ import type { EnvJsx } from './types'
 export function createEnvJsx(): EnvJsx {
   return {
     setEnv: (json) =>
-      jsxCall('Sys_setSystemEnvInfo', [json], {
+      jsxWrite('Sys_setSystemEnvInfo', [json], {
         label: '注入环境变量',
         timeout: WRITE,
       }),

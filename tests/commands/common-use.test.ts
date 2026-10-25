@@ -7,23 +7,23 @@ vi.mock('@/selection', () => ({
 }))
 
 const commonUse = vi.hoisted(() => ({
-  zoom: vi.fn(async () => null),
-  flip: vi.fn(async () => null),
-  embedImage: vi.fn(async () => null),
-  embedMultipleImages: vi.fn(async () => null),
-  importMultipleImages: vi.fn(async () => null),
+  zoom: vi.fn(async () => ({ ok: true, data: null })),
+  flip: vi.fn(async () => ({ ok: true, data: null })),
+  embedImage: vi.fn(async () => ({ ok: true, data: null })),
+  embedMultipleImages: vi.fn(async () => ({ ok: true, data: null })),
+  importMultipleImages: vi.fn(async () => ({ ok: true, data: null })),
   getImagePath: vi.fn(async () => -1 as unknown),
-  optimizeOnce: vi.fn(async () => null),
-  optimizeFolder: vi.fn(async () => null),
-  transform: vi.fn(async () => null),
-  referenceGuide: vi.fn(async () => null),
-  referenceSlice: vi.fn(async () => null),
-  distribute: vi.fn(async () => null),
+  optimizeOnce: vi.fn(async () => ({ ok: true, data: null })),
+  optimizeFolder: vi.fn(async () => ({ ok: true, data: null })),
+  transform: vi.fn(async () => ({ ok: true, data: null })),
+  referenceGuide: vi.fn(async () => ({ ok: true, data: null })),
+  referenceSlice: vi.fn(async () => ({ ok: true, data: null })),
+  distribute: vi.fn(async () => ({ ok: true, data: null })),
   getPsdList: vi.fn(async () => [] as unknown),
-  exportPsdImage: vi.fn(async () => null),
+  exportPsdImage: vi.fn(async () => ({ ok: true, data: null })),
 }))
 
-const legacy = vi.hoisted(() => ({ call: vi.fn(async () => null) }))
+const legacy = vi.hoisted(() => ({ call: vi.fn(async () => ({ ok: true, data: null })) }))
 
 vi.mock('@/cep/jsx', () => ({ jsx: { commonUse, legacy } }))
 
@@ -32,8 +32,8 @@ const { execute } = await import('@/commands/registry')
 
 beforeEach(() => {
   for (const fn of Object.values(commonUse)) fn.mockClear()
-  commonUse.getImagePath.mockResolvedValue(-1)
-  commonUse.getPsdList.mockResolvedValue([])
+  commonUse.getImagePath.mockResolvedValue({ ok: true, data: -1 })
+  commonUse.getPsdList.mockResolvedValue({ ok: true, data: [] })
   legacy.call.mockClear()
 })
 
@@ -85,7 +85,7 @@ describe('常用页命令', () => {
   })
 
   it('importMultipleImages 把取到的 path 原样透传（数组与单张都行）', async () => {
-    commonUse.getImagePath.mockResolvedValueOnce(['a.png', 'b.png'])
+    commonUse.getImagePath.mockResolvedValueOnce({ ok: true, data: ['a.png', 'b.png'] })
     await execute('commonUse.importMultipleImages', { toLinkObject: false })
     expect(commonUse.importMultipleImages).toHaveBeenCalledWith({
       path: ['a.png', 'b.png'],
@@ -118,7 +118,7 @@ describe('常用页命令', () => {
   })
 
   it('optimizeFolder：列表由 cy_getPsdForFolder 取，逐张调、全成才 ok', async () => {
-    commonUse.getPsdList.mockResolvedValueOnce(['a.psd', 'b.psd'])
+    commonUse.getPsdList.mockResolvedValueOnce({ ok: true, data: ['a.psd', 'b.psd'] })
 
     const result = await execute('commonUse.optimizeFolder', { options: { optimizeAll: true } })
 
@@ -129,7 +129,7 @@ describe('常用页命令', () => {
   })
 
   it('optimizeFolder 全败：一个 ok:true 都不给，文案带比例', async () => {
-    commonUse.getPsdList.mockResolvedValueOnce(['a.psd', 'b.psd'])
+    commonUse.getPsdList.mockResolvedValueOnce({ ok: true, data: ['a.psd', 'b.psd'] })
     commonUse.optimizeFolder.mockRejectedValue(new Error('锁文件'))
 
     const result = await execute('commonUse.optimizeFolder', { options: {} })
@@ -142,11 +142,11 @@ describe('常用页命令', () => {
   })
 
   it('optimizeFolder 一半成功：抛错并写清成功 2/3、失败 1 张', async () => {
-    commonUse.getPsdList.mockResolvedValueOnce(['a.psd', 'b.psd', 'c.psd'])
+    commonUse.getPsdList.mockResolvedValueOnce({ ok: true, data: ['a.psd', 'b.psd', 'c.psd'] })
     commonUse.optimizeFolder
-      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ ok: true, data: null })
       .mockRejectedValueOnce(new Error('文件损坏'))
-      .mockResolvedValueOnce(null)
+      .mockResolvedValueOnce({ ok: true, data: null })
 
     const result = await execute('commonUse.optimizeFolder', { options: {} })
 
@@ -158,7 +158,7 @@ describe('常用页命令', () => {
   })
 
   it('optimizeFolder 列表为空时直接报「文件夹内没有PSD文件」', async () => {
-    commonUse.getPsdList.mockResolvedValueOnce([])
+    commonUse.getPsdList.mockResolvedValueOnce({ ok: true, data: [] })
 
     const result = await execute('commonUse.optimizeFolder', { options: {} })
 
@@ -169,7 +169,7 @@ describe('常用页命令', () => {
 
   it('exportPsdFolder：>30 张未确认时抛，确认后逐张导出', async () => {
     const files = Array.from({ length: 31 }, (_, i) => `f${i}.psd`)
-    commonUse.getPsdList.mockResolvedValue(files)
+    commonUse.getPsdList.mockResolvedValue({ ok: true, data: files })
 
     const blocked = await execute('commonUse.exportPsdFolder', { options: { a: 1 } })
     expect(blocked).toMatchObject({ ok: false })
@@ -186,8 +186,10 @@ describe('常用页命令', () => {
   })
 
   it('exportPsdFolder 部分成功同样不许吞', async () => {
-    commonUse.getPsdList.mockResolvedValueOnce(['a.psd', 'b.psd'])
-    commonUse.exportPsdImage.mockResolvedValueOnce(null).mockRejectedValueOnce(new Error('炸了'))
+    commonUse.getPsdList.mockResolvedValueOnce({ ok: true, data: ['a.psd', 'b.psd'] })
+    commonUse.exportPsdImage
+      .mockResolvedValueOnce({ ok: true, data: null })
+      .mockRejectedValueOnce(new Error('炸了'))
 
     const result = await execute('commonUse.exportPsdFolder', { options: {} })
 

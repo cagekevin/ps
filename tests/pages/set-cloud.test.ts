@@ -51,7 +51,7 @@ vi.mock('@/components/command/useCommand', async () => {
       command: undefined,
       disabled: vue.computed(() => false),
       running: vue.ref(false),
-      run: async (payload?: unknown) => {
+      invoke: async (payload?: unknown) => {
         calls.push({ id, payload })
         return true
       },

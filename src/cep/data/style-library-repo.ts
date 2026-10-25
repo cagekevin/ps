@@ -6,17 +6,11 @@
 // 禁止：页面/组件不许 import 这里（走 store / 命令）
 
 import { DATA_FILES } from '@/cep/env'
-import {
-  b64ToUtf8,
-  hasNode,
-  readBase64Outcome,
-  readTextOutcome,
-  removeFile,
-  userDir,
-  writeBase64File,
-  writeTextFile,
-  writeTextFileAtomic,
-} from '@/cep/fs'
+import { b64ToUtf8 } from '@/cep/codec'
+import { hasNode } from '@/cep/node'
+import { readBase64Outcome, readOwnFileText } from '@/cep/fs-read'
+import { userDir } from '@/cep/paths'
+import { removeFile, writeBase64File } from '@/cep/disk-write'
 import { applyItemDrop, applyListDrop, type DropMove, type DropPosition } from '@/domain/reorder'
 import {
   defaultStyleIndex,
@@ -30,12 +24,15 @@ import {
   type StyleWarehouseIndex,
 } from '@/domain/style-library'
 import { CepError } from '@/utils/errors'
+import { msg } from '@/domain/messages'
 import { log } from '@/utils/logger'
-import { pick } from './pick'
+import { decodeStyleWarehouseIndex } from '@/domain/style-library'
+import { dataRepo } from './data-repo'
+import { repoAt } from './repo-at'
 // 写队列与色板文件原语都在 `swatch-repo`（依赖方向只能是 `style-library-repo → swatch-repo`）
 import { readSwatchItems, swatchFilePath, writeSwatchItems } from './swatch-repo'
 import { runQueued } from './write-queue'
-import type { Repo } from './types'
+import type { Repo, RepoView } from './types'
 import { isRecord } from '@/utils/guards'
 import { fileNameOf } from '@/domain/style-library'
 
@@ -43,10 +40,16 @@ import { fileNameOf } from '@/domain/style-library'
  * 索引仓库。读走 `fileRepo`（失败带 `degraded`，不抛）。
  * 写只有一个触发点：当前仓库缺某个库文件名时，由 `updateKuGroups` 在库文件**写成功之后**补登记。
  */
-export const styleIndexRepo: Repo<StyleWarehouseIndex> = pick(
+const styleIndexImpl: Repo<StyleWarehouseIndex> = dataRepo(
   () => `${userDir()}/${DATA_FILES.styleLibrary}`,
   () => defaultStyleIndex(),
+  decodeStyleWarehouseIndex,
 )
+
+/** 只读视图（store 唯一能拿到的形状）：没有 write / update —— 调用不到 */
+export const styleIndexRepo: RepoView<StyleWarehouseIndex> = styleIndexImpl
+/** 写侧句柄：只给 `style-library-io.ts`（库文件写成功之后补登记索引）用 */
+export const styleIndexWriter: Repo<StyleWarehouseIndex> = styleIndexImpl
 
 export interface KuLibraryRead {
   groups: KuGroup[]
@@ -64,7 +67,7 @@ export interface KuLibraryRead {
 export async function readKuLibrary(kind: KuKind, fileName: string): Promise<KuLibraryRead> {
   if (!fileName) return { groups: [], note: '' }
 
-  const read = await readTextOutcome(`${userDir()}/${fileName}`)
+  const read = readOwnFileText(`${userDir()}/${fileName}`)
   // T-116：`notSeen`（首次使用，本来就没有库文件）返回空库、`note` 留空；
   // `error`（文件在、读不到）必须把原因放进 `note`——它经 `readKuLib` 汇进 `degraded`
   // 由样式页渲染出来。否则用户看到的是"空库"，与"这个库本来就没有组"分不开
@@ -97,7 +100,7 @@ export async function readIndexState(): Promise<{
 }> {
   // 锁内的读：本函数会在 `runQueued` 任务体里被调用（`updateKuGroups`/仓库事务），
   // 再走排队的 `read()` 会把队列排在自己后面 → 自锁（write-queue.ts:6）。读不排队是安全的（原子写）。
-  const stored = await styleIndexRepo.readInLock()
+  const stored = await styleIndexImpl.readInLock()
   // 坏索引没有 value：用仓库自己的 fallback 继续归一，坏因拼进 degraded
   const parsed = readStyleWarehouseIndex(stored.ok ? stored.value : defaultStyleIndex())
   return {
@@ -135,19 +138,19 @@ export async function readStyleLibrary(): Promise<StyleLibrarySnapshot> {
 /** 当前仓库某个库的绝对路径；**读**用它（索引里没登记文件名就等于没这个库，不许猜路径） */
 async function currentLibPath(kind: KuKind): Promise<string> {
   // 锁内读（在 send* 的 runQueued 任务体里被调用）：走 readInLock 避免自锁
-  const stored = await styleIndexRepo.readInLock()
+  const stored = await styleIndexImpl.readInLock()
   // 「索引文件坏了」≠「这个仓库没登记库文件名」：不分开说，用户会以为是自己没建过库（T-101-1）
   if (!stored.ok) {
-    throw new CepError('IO', `仓库索引文件损坏（${stored.reason}），已中止：不猜库文件路径`)
+    throw new CepError('IO', msg.data.fn.warehouseIndexCorruptAbort(stored.reason))
   }
   const parsed = readStyleWarehouseIndex(stored.value)
   if (parsed.degraded) {
-    throw new CepError('IO', `仓库索引不可用（${parsed.degraded}），已中止：不猜库文件路径`)
+    throw new CepError('IO', msg.data.fn.warehouseIndexUnusableAbort(parsed.degraded))
   }
   const warehouse = parsed.value.list[parsed.value.index]
   const fileName = fileNameOf(warehouse, kind)
   if (!fileName) {
-    throw new CepError('IO', `索引里没有当前仓库的${kind}库文件名`)
+    throw new CepError('IO', msg.data.fn.indexNoKindFileName(kind))
   }
   return `${userDir()}/${fileName}`
 }
@@ -155,8 +158,8 @@ async function currentLibPath(kind: KuKind): Promise<string> {
 /** 读任意一个库文件的原文（导出用：`.kux` 要按索引里的文件名逐个读，不只是当前仓库） */
 export async function readKuFileText(fileName: string): Promise<string | null> {
   if (!fileName) return null
-  if (/[\\/]/.test(fileName)) throw new CepError('PARSE', `库文件名不合法：${fileName}`)
-  const read = await readTextOutcome(`${userDir()}/${fileName}`)
+  if (/[\\/]/.test(fileName)) throw new CepError('PARSE', msg.data.fn.libFileNameInvalid(fileName))
+  const read = readOwnFileText(`${userDir()}/${fileName}`)
   // T-107：调用方（导出旁路图）对两种不 ok 的处理相同——跳过这个库，只会少带图片。
   // 合并是**调用方的语义**，所以留在这里；日志把原因留住，不让它无声消失
   if (read.status === 'error') log.warn('style', `导出：${fileName} 读不到，跳过`, read.reason)
@@ -166,19 +169,19 @@ export async function readKuFileText(fileName: string): Promise<string | null> {
 /** 读库文件里的原始组数组；读不到一律抛（不猜、不补默认） */
 async function readRawGroups(kind: KuKind): Promise<{ path: string; groups: KuRawGroup[] }> {
   const path = await currentLibPath(kind)
-  const read = await readTextOutcome(path)
+  const read = readOwnFileText(path)
   // T-107：两种不 ok 这里同果（都抛）。文案本来就写的是"读不到"，对两种都成立，不改
-  if (read.status !== 'ok') throw new CepError('IO', `${kind} 库文件读不到：${path}`)
+  if (read.status !== 'ok') throw new CepError('IO', msg.data.fn.libFileReadFailed(kind, path))
   const text = read.text
 
   let groups: unknown
   try {
     groups = JSON.parse(text)
   } catch (e) {
-    log.error('style', `${kind} 库文件不是合法 JSON`, e)
-    throw new CepError('PARSE', `${kind} 库文件不是合法 JSON`)
+    log.error('style', msg.data.fn.libFileNotJson(kind), e)
+    throw new CepError('PARSE', msg.data.fn.libFileNotJson(kind))
   }
-  if (!Array.isArray(groups)) throw new CepError('PARSE', `${kind} 库文件顶层不是数组`)
+  if (!Array.isArray(groups)) throw new CepError('PARSE', msg.data.fn.libFileRootNotArray(kind))
   return { path, groups: groups as KuRawGroup[] }
 }
 
@@ -208,7 +211,8 @@ export async function readKuItem(
 export async function readKuGroupId(kind: KuKind, groupIndex: number): Promise<string> {
   const { groups } = await readRawGroups(kind)
   const id = groupAt(groups, groupIndex).id
-  if (typeof id !== 'string' || !id) throw new CepError('PARSE', `分组 ${groupIndex} 没有 id`)
+  if (typeof id !== 'string' || !id)
+    throw new CepError('PARSE', msg.data.fn.groupNoId(String(groupIndex)))
   return id
 }
 
@@ -216,6 +220,15 @@ export async function readKuGroupId(kind: KuKind, groupIndex: number): Promise<s
 
 /** 库文件里的组，保留全部未知键（样式项的 PS 效果载荷等，契约 §6.1 #1a） */
 type KuRawGroup = Record<string, unknown>
+
+/**
+ * 库文件数组的 decode：顶层必须是数组，元素必须是对象（`[1,2,3]` 不算"三个组"）。
+ * 元素用 `isRecord` 证，不用 `as`（guards.ts 明禁）。
+ */
+function decodeKuGroups(raw: unknown): { value: KuRawGroup[] } | null {
+  if (!Array.isArray(raw)) return null
+  return { value: raw.filter(isRecord) }
+}
 
 /** 库文件名前缀，照抄原版 `P_()`（`app.v4.js:53284-53293`） */
 const KU_FILE_PREFIX: Record<KuKind, string> = {
@@ -259,27 +272,27 @@ function createKuGroup(kind: KuKind, name: string): KuRawGroup {
 
 /** 删空后补的组名：原版 `deleteGroup` 里 `addGroup(this.text + "默认分组")`（`app.v4.js:52453`） */
 function defaultKuGroupName(kind: KuKind): string {
-  return `${kindLabel(kind)}默认分组`
+  return msg.data.fn.defaultGroupLabel(kindLabel(kind))
 }
 
 function groupAt(groups: KuRawGroup[], groupIndex: number): KuRawGroup {
   const group = groups[groupIndex]
   if (!group || typeof group !== 'object' || Array.isArray(group)) {
-    throw new CepError('PARSE', `分组 ${groupIndex} 不存在`)
+    throw new CepError('PARSE', msg.data.fn.groupMissing(String(groupIndex)))
   }
   return group
 }
 
 function itemList(group: KuRawGroup, groupIndex: number): unknown[] {
   const list = group.list
-  if (!Array.isArray(list)) throw new CepError('PARSE', `分组 ${groupIndex} 没有 list`)
+  if (!Array.isArray(list)) throw new CepError('PARSE', msg.data.fn.groupNoList(String(groupIndex)))
   return list
 }
 
 function itemAt(groups: KuRawGroup[], groupIndex: number, itemIndex: number): KuRawGroup {
   const item = itemList(groupAt(groups, groupIndex), groupIndex)[itemIndex]
   if (!item || typeof item !== 'object' || Array.isArray(item)) {
-    throw new CepError('PARSE', `第 ${itemIndex} 项不存在`)
+    throw new CepError('PARSE', msg.data.fn.itemMissing(String(itemIndex)))
   }
   return item as KuRawGroup
 }
@@ -293,7 +306,8 @@ function itemAt(groups: KuRawGroup[], groupIndex: number, itemIndex: number): Ku
  */
 async function usableIndex(): Promise<StyleWarehouseIndex> {
   const state = await readIndexState()
-  if (state.degraded) throw new CepError('PARSE', `仓库索引不可用，已中止写入：${state.degraded}`)
+  if (state.degraded)
+    throw new CepError('PARSE', msg.data.fn.warehouseIndexUnusableAbortWrite(state.degraded))
   return state.value
 }
 
@@ -315,7 +329,7 @@ async function resolveKuFile(kind: KuKind): Promise<KuFileTarget> {
   const index = await usableIndex()
 
   const warehouse = index.list[index.index]
-  if (!warehouse) throw new CepError('PARSE', '仓库索引里没有当前仓库')
+  if (!warehouse) throw new CepError('PARSE', msg.data.text.warehouseIndexNoCurrent)
 
   const existing = fileNameOf(warehouse, kind)
   if (existing) return { fileName: existing, path: `${userDir()}/${existing}`, isNew: false }
@@ -340,54 +354,40 @@ async function resolveKuFile(kind: KuKind): Promise<KuFileTarget> {
  */
 async function updateKuGroups(kind: KuKind, mutate: (groups: KuRawGroup[]) => void): Promise<void> {
   const target = await resolveKuFile(kind)
-  const read = await readTextOutcome(target.path)
+
+  // 走 `repoAt`（唯一「按路径取 Repo」入口）：解码 / `.bak` / 原子写 / **onChange** 都归 Repo。
+  // 以前这里手写了「读原文 → `.bak` → 原子写」，是 `Repo` 的第二份实现，且**没有 onChange**
+  // ⇒ store 收不到"库变了" ⇒ 页面只能每次命令后手工 `load()`。
+  const repo = repoAt<KuRawGroup[]>(target.path, () => [], decodeKuGroups)
+
+  const read = await repo.read()
   // T-112：**读不到 ≠ 首次使用**。读不到时既不知道旧内容、也写不出 `.bak`，继续写回等于
   // 把一份读不到的库文件换成空数组。`notSeen`（文件本来不存在）才是"首次使用按空处理"。
-  if (read.status === 'error') {
+  if (!read.ok) {
     throw new CepError(
       'IO',
-      `${kind} 库文件读不到，已中止写入：${target.fileName}（${read.reason}）`,
+      msg.data.fn.libFileReadFailedAbortWrite(kind, target.fileName, read.reason),
     )
   }
-  const previous = read.status === 'ok' ? read.text : null
 
-  let groups: KuRawGroup[] = []
-  if (previous !== null && previous !== '') {
-    let parsed: unknown
-    try {
-      parsed = JSON.parse(previous)
-    } catch (e) {
-      log.error('style', `${kind} 库文件不是合法 JSON`, e)
-      throw new CepError('PARSE', `${kind} 库文件不是合法 JSON，已中止写入：${target.fileName}`)
-    }
-    if (!Array.isArray(parsed)) {
-      throw new CepError('PARSE', `${kind} 库文件顶层不是数组，已中止写入：${target.fileName}`)
-    }
-    groups = parsed as KuRawGroup[]
-  }
-
+  const groups = read.value
+  const before = JSON.stringify(groups)
   mutate(groups)
-  const text = JSON.stringify(groups)
 
-  // 内容没变就不落盘：原版 `updata()` 只在真的改过时调（`drag` 的 `Callback` 外面那层
-  // `if (t != moveEndIndex[0] || e != moveEndIndex[1])`，`app.v4.js:50053`；组同构在 `:50095`）。
+  // 内容没变就不落盘：原版 `updata()` 只在真的改过时调（`app.v4.js:50053` / `:50095`）。
   // 拖到自己身上这类空操作不该刷掉一份 `.bak`。
-  if (text === previous) return
+  if (JSON.stringify(groups) === before) return
 
-  // 备份先落盘：备份失败就抛（写文件会抛 NO_NODE），绝不在没有退路的情况下覆盖原件
-  if (previous) writeTextFile(`${target.path}.bak`, previous)
-  const written = writeTextFileAtomic(target.path, text)
-  if (written.status === 'error') {
-    throw new CepError('IO', `${kind} 库文件写入失败：${target.fileName}（${written.reason}）`)
-  }
+  // `.overwrite` = 读原文做 `.bak` → 原子写 → **emit(新值)**：三个语义都在 Repo 里
+  await repo.overwrite(groups)
 
   if (target.isNew) {
     // 库文件已经落盘才登记索引：反过来会让索引指向一个不存在的文件
     // 锁内写（updateKuGroups 的调用方都已 runQueued）：用 updateInLock 保留 CAS，又不自排自
-    await styleIndexRepo.updateInLock((value) => {
+    await styleIndexImpl.updateInLock((value) => {
       const current = readStyleWarehouseIndex(value).value
       const warehouse = current.list[current.index]
-      if (!warehouse) throw new CepError('PARSE', '仓库索引里没有当前仓库')
+      if (!warehouse) throw new CepError('PARSE', msg.data.text.warehouseIndexNoCurrent)
       warehouse[kind] = target.fileName
       return { index: current.index, list: current.list }
     })
@@ -424,7 +424,7 @@ function createWarehouse(name: string): StyleWarehouse {
 export async function selectWarehouse(index: number): Promise<void> {
   await usableIndex()
   // `styleIndexRepo.update` 自己已排队 + 原子 + CAS；外面再套 runQueued = 自己排自己 → 自锁（TD-09-30）
-  await styleIndexRepo.update((value) => {
+  await styleIndexImpl.update((value) => {
     const current = readStyleWarehouseIndex(value).value
     const valid = Number.isInteger(index) && index >= 0 && index < current.list.length
     return { ...value, index: valid ? index : 0, list: current.list }
@@ -435,7 +435,7 @@ export async function selectWarehouse(index: number): Promise<void> {
 export async function addWarehouse(): Promise<void> {
   await usableIndex()
   // 同 selectWarehouse：`update` 自己已排队，别再套
-  await styleIndexRepo.update((value) => {
+  await styleIndexImpl.update((value) => {
     const current = readStyleWarehouseIndex(value).value
     const list = [...current.list, createWarehouse('未命名分组')]
     return { ...value, index: current.index, list }
@@ -450,14 +450,14 @@ export async function addWarehouse(): Promise<void> {
  */
 export async function renameWarehouse(index: number, name: string): Promise<void> {
   const warehouseName = name.trim()
-  if (!warehouseName) throw new CepError('PARSE', '仓库名不能为空')
+  if (!warehouseName) throw new CepError('PARSE', msg.data.text.warehouseNameRequired)
 
   await usableIndex()
   // 同 selectWarehouse：`update` 自己已排队，别再套
-  await styleIndexRepo.update((value) => {
+  await styleIndexImpl.update((value) => {
     const current = readStyleWarehouseIndex(value).value
     const warehouse = current.list[index]
-    if (!warehouse) throw new CepError('PARSE', `仓库 ${index} 不存在`)
+    if (!warehouse) throw new CepError('PARSE', msg.data.fn.warehouseMissing(String(index)))
     warehouse.name = warehouseName
     return { ...value, index: current.index, list: current.list }
   })
@@ -479,7 +479,7 @@ export interface WarehouseDeleteResult {
  */
 async function groupsOfFile(fileName: string | undefined): Promise<Record<string, unknown>[]> {
   if (!fileName) return []
-  const read = await readTextOutcome(`${userDir()}/${fileName}`)
+  const read = readOwnFileText(`${userDir()}/${fileName}`)
   // 这里的合并是**有意的**（上面注释：删仓库不该被一个读不动的库文件卡住），不是欠账。
   // 代价只可能是留下孤儿文件，不会丢数据；原因仍进日志
   if (read.status === 'error') {
@@ -556,7 +556,7 @@ async function copyToRecycle(relative: string, recycleDir: string): Promise<bool
   if (read.status === 'notSeen') return false
   const copied = writeBase64File(`${recycleDir}/${relative}`, read.base64)
   if (copied.status === 'error') {
-    throw new CepError('IO', `复制到回收目录失败：${recycleDir}/${relative}（${copied.reason}）`)
+    throw new CepError('IO', msg.data.fn.recycleCopyFailed(recycleDir, relative, copied.reason))
   }
   return true
 }
@@ -572,17 +572,17 @@ async function copyToRecycle(relative: string, recycleDir: string): Promise<bool
  */
 export async function deleteWarehouse(index: number): Promise<WarehouseDeleteResult> {
   // 没有 Node 就移不了文件（索引写本身也会抛 NO_NODE），先拦在门口，别只删索引不搬文件
-  if (!hasNode()) throw new CepError('NO_NODE', 'Node 不可用，无法把仓库文件移到回收目录')
+  if (!hasNode()) throw new CepError('NO_NODE', msg.data.text.nodeUnavailableRecycle)
 
   // 整段（复制旧文件 → 改索引 → 删原件）独占一条写链：导入/编辑不能插进中间，
   // 否则会出现"索引已删、旧文件还在"或反向的半态。锁内索引读写走 *InLock（不自排自，TD-09-30）
   return runQueued(async () => {
     const current = await usableIndex()
     const warehouse = current.list[index]
-    if (!warehouse) throw new CepError('PARSE', `仓库 ${index} 不存在`)
+    if (!warehouse) throw new CepError('PARSE', msg.data.fn.warehouseMissing(String(index)))
     // 原版只在页面层拦「最少保留一个分组哦」（`f_delete`，`:53978-53987`），这里再拦一道：
     // 索引里一个仓库都不剩，整个页面读到的就是空列表
-    if (current.list.length === 1) throw new CepError('PARSE', '最少保留一个分组哦')
+    if (current.list.length === 1) throw new CepError('PARSE', msg.data.text.keepOneGroupMin)
 
     const recycleDir = `${userDir()}/.deleted-${Date.now()}`
     const moved: string[] = []
@@ -590,7 +590,7 @@ export async function deleteWarehouse(index: number): Promise<WarehouseDeleteRes
       if (await copyToRecycle(relative, recycleDir)) moved.push(relative)
     }
 
-    await styleIndexRepo.updateInLock((value) => {
+    await styleIndexImpl.updateInLock((value) => {
       const next = readStyleWarehouseIndex(value).value
       next.list.splice(index, 1)
       if (index < next.index) next.index -= 1
@@ -623,7 +623,7 @@ export async function deleteWarehouse(index: number): Promise<WarehouseDeleteRes
  */
 export async function addKuGroup(kind: KuKind, name: string, afterIndex?: number): Promise<void> {
   const groupName = name.trim()
-  if (!groupName) throw new CepError('PARSE', '分组名不能为空')
+  if (!groupName) throw new CepError('PARSE', msg.data.text.groupNameRequired)
 
   return runQueued(() =>
     updateKuGroups(kind, (groups) => {
@@ -655,7 +655,7 @@ export async function appendKuGroup(kind: KuKind, group: unknown): Promise<void>
   // `async` 不是装饰：参数校验必须变成 **rejected promise**，不能同步 throw ——
   // 调用方（`executeInherited` / `style.appendGroup`）只会 `.catch`，同步抛会漏出调用链。
   if (!group || typeof group !== 'object' || Array.isArray(group)) {
-    throw new CepError('PARSE', '组必须是非空对象')
+    throw new CepError('PARSE', msg.data.text.groupMustBeObject)
   }
 
   return runQueued(() =>
@@ -668,7 +668,7 @@ export async function appendKuGroup(kind: KuKind, group: unknown): Promise<void>
 /** 重命名分组。原版 `renameGroup(name, index)`（`:52456-52459`）：不查重，直接改名 */
 export async function renameKuGroup(kind: KuKind, groupIndex: number, name: string): Promise<void> {
   const groupName = name.trim()
-  if (!groupName) throw new CepError('PARSE', '分组名不能为空')
+  if (!groupName) throw new CepError('PARSE', msg.data.text.groupNameRequired)
 
   return runQueued(() =>
     updateKuGroups(kind, (groups) => {
@@ -727,7 +727,7 @@ export function setKuGroupShow(kind: KuKind, groupIndex: number, showOnly: boole
  */
 export async function addKuItem(kind: KuKind, groupIndex: number, item: unknown): Promise<void> {
   if (!item || typeof item !== 'object' || Array.isArray(item)) {
-    throw new CepError('PARSE', '项必须是非空对象')
+    throw new CepError('PARSE', msg.data.text.itemMustBeObject)
   }
 
   return runQueued(() =>
@@ -745,7 +745,7 @@ export async function renameKuItem(
   name: string,
 ): Promise<void> {
   const itemName = name.trim()
-  if (!itemName) throw new CepError('PARSE', '名称不能为空')
+  if (!itemName) throw new CepError('PARSE', msg.data.text.nameRequired)
 
   return runQueued(() =>
     updateKuGroups(kind, (groups) => {
@@ -779,13 +779,13 @@ export async function replaceKuItem(
   item: unknown,
 ): Promise<void> {
   if (!item || typeof item !== 'object' || Array.isArray(item)) {
-    throw new CepError('PARSE', 'cy_changeStyleColor 返回值不是对象，未回写')
+    throw new CepError('PARSE', msg.data.text.changeColorNotObject)
   }
 
   return runQueued(() =>
     updateKuGroups(kind, (groups) => {
       const list = itemList(groupAt(groups, groupIndex), groupIndex)
-      if (!list[itemIndex]) throw new CepError('PARSE', `第 ${itemIndex} 项不存在`)
+      if (!list[itemIndex]) throw new CepError('PARSE', msg.data.fn.itemMissing(String(itemIndex)))
       list[itemIndex] = item
     }),
   )

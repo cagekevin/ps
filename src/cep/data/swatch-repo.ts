@@ -7,11 +7,16 @@
 // 禁止：页面/组件不许 import；读不到不许当"没有"；不许新增同步读（ADR-26 ④）
 
 import { USER_DIR } from '@/cep/env'
-import { readTextOutcome, userDir, writeTextFile, writeTextFileAtomic } from '@/cep/fs'
+import { readOwnFileText } from '@/cep/fs-read'
+import { userDir } from '@/cep/paths'
 import { CepError } from '@/utils/errors'
-import { isUsableJsonText } from '@/utils/json'
+import { msg } from '@/domain/messages'
+import { isUnknownArray } from '@/utils/guards'
 import { log } from '@/utils/logger'
+import { repoAt } from './repo-at'
+import { readRepoFile } from './repo-read'
 import { writeProtectedTextNow } from './protected-text'
+import type { Repo } from './types'
 import { runQueued } from './write-queue'
 
 /** 写队列搬到了 `data/write-queue.ts`（TD-09-18：数据层只留一条链） */
@@ -40,7 +45,7 @@ export const SWATCH_FILES = {
 function dataRoot(): string {
   const dir = userDir()
   if (!dir.endsWith(USER_DIR)) {
-    throw new CepError('IO', `用户数据目录不以 ${USER_DIR} 结尾，色板路径算不出来：${dir}`)
+    throw new CepError('IO', msg.data.fn.swatchUserDirMismatch(USER_DIR, dir))
   }
   return dir.slice(0, -USER_DIR.length)
 }
@@ -67,53 +72,63 @@ export function recentLimitPath(): string {
  * 用户的色板会被一次追加抹平。这里坏文件直接抛，宁可这次操作失败。
  */
 export async function readSwatchItems(path: string): Promise<unknown[]> {
-  const read = await readTextOutcome(path)
+  const outcome = readRepoFile(path, decodeSwatchArray)
+  if (outcome.kind === 'ok') return outcome.value
+  if (outcome.kind === 'absent') return []
+  // 空文件 = 空数组（原版 `readToArray` 同语义）。它进 `notJson`（空串 parse 失败），
+  // 但零字节不是坏文件，所以单独放行。
+  if (outcome.text === '') return []
   // T-112：读不到时**不许**返回 `[]`——调用方会把追加后的内容整份写回，等于把一份读不到的
-  // 色板抹平。`notSeen`（还没有色板文件）才是"空数组"。
-  if (read.status === 'error') {
-    throw new CepError('IO', `色板文件读不到：${path}（${read.reason}）`)
+  // 色板抹平。只有 `absent`（还没有色板文件）才是"空数组"。
+  if (outcome.why === 'readError') {
+    throw new CepError('IO', msg.data.fn.swatchReadFailed(path, outcome.reason))
   }
-  if (read.status === 'notSeen' || read.text === '') return []
-
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(read.text)
-  } catch (e) {
-    log.error('swatch', '色板文件不是合法 JSON', e)
-    throw new CepError('PARSE', `色板文件不是合法 JSON：${path}`)
-  }
-  if (!Array.isArray(parsed)) throw new CepError('PARSE', `色板文件顶层不是数组：${path}`)
-  return parsed
+  if (outcome.why === 'notJson') throw new CepError('PARSE', msg.data.fn.swatchNotJson(path))
+  throw new CepError('PARSE', msg.data.fn.swatchRootNotArray(path))
 }
 
 /**
  * 写色板全文：旧内容先进 `.bak`，再原子写；写不进去抛（不让用户以为发送成功）。
  * 落盘成功后通知订阅者（`stores/swatch.ts` 靠它刷新投影）。
  */
+/**
+ * 色板数组文件的 decode：顶层必须是数组（条目是开放形状，由各消费侧自己判）。
+ */
+function decodeSwatchArray(raw: unknown): { value: unknown[] } | null {
+  return isUnknownArray(raw) ? { value: raw } : null
+}
+
+/**
+ * 色板文件的仓库实例（**按路径缓存**：同一文件的队列 / 监听表不能因多次构造而分裂）。
+ *
+ * 落盘序列（读原文 → `.bak` / `.corrupt-*` → 原子写）只有一份，在 `file-repo.persist`；
+ * 这里不再手写 `readTextOutcome` + `backupOrQuarantine` + `writeTextFileAtomic`。
+ *
+ * **具名例外：用 `fileRepo` 而不是 `dataRepo`**（`file-repo.ts` 头上登记的那条）。
+ * 色板是**用户资产**，`dataRepo` 的内存兜底会让"读不到"变成"空色板 + 写入落内存"（静默丢，
+ * 比抛错更糟）。这里宁可在无 Node 时抛 `NO_NODE`（**响的**）。
+ */
+const swatchSubscribed = new Set<string>()
+function swatchRepo(path: string): Repo<unknown[]> {
+  // 「按路径取 Repo」只有一份实现：`./repo-at`（本文件不再自己维护 `Map<path, Repo>`）
+  const repo = repoAt<unknown[]>(path, () => [], decodeSwatchArray)
+  if (!swatchSubscribed.has(path)) {
+    swatchSubscribed.add(path)
+    // 仓库的"写成功"通知转发到色板自己的变更通道（`stores/swatch.ts` 订的是这个）
+    repo.onChange(() => emitChange())
+  }
+  return repo
+}
+
+/**
+ * 写色板全文：旧内容进 `.bak`（原文坏了改存 `.corrupt-*`）、原子写、写不进去抛、成功后 emit。
+ *
+ * `overwriteInLock`（不排队）：本函数的 6 个调用方全在 `runQueued` 任务体里
+ * （`appendCustomItem` / `setRecentLimit` / `style-library-repo` 的四个"发到色板"），
+ * 再排一次队会自锁。T-112（读不到不许写）与 TD-09-21（坏原文隔离）由 `file-repo.rawOverwrite` 保证。
+ */
 export async function writeSwatchItems(path: string, items: unknown[]): Promise<void> {
-  const read = await readTextOutcome(path)
-  // T-112：读不到时**不许写**——`.bak` 写不出来（没有旧原文），整份覆盖就等于旧色板没有第二份。
-  // `notSeen`（还没有色板文件）照旧：没有旧内容，不需要 `.bak`。
-  if (read.status === 'error') {
-    throw new CepError('IO', `色板文件读不到，已中止写入：${path}（${read.reason}）`)
-  }
-  if (read.status === 'ok' && read.text) {
-    // TD-09-21：`.bak` 必须是**可读的上一版**。原文自己坏了（半截 JSON / 乱码）时，
-    // 把坏内容存成 `.bak` 只会让人以为有退路 —— 改存 `.corrupt-*`，坏字节一个不丢，
-    // 但绝不让"坏内容"顶着 `.bak` 这个名字。
-    if (isUsableJsonText(read.text)) {
-      writeTextFile(`${path}.bak`, read.text)
-    } else {
-      const quarantine = `${path}.corrupt-${Date.now()}`
-      writeTextFile(quarantine, read.text)
-      log.warn('swatch', `色板原文不是可用的 JSON，已另存为 ${quarantine}（不写 .bak）`)
-    }
-  }
-  const written = writeTextFileAtomic(path, JSON.stringify(items))
-  if (written.status === 'error') {
-    throw new CepError('IO', `色板文件写入失败：${path}（${written.reason}）`)
-  }
-  emitChange()
+  await swatchRepo(path).overwriteInLock(items)
 }
 
 // ---------- 变更通知（本地写成功后重读投影） ----------
@@ -162,7 +177,8 @@ export function readRecentItems(): Promise<unknown[]> {
  * "保留几条"），不该让整个面板读不出来。数据文件（色板本身）的读失败仍然抛。
  */
 export async function readRecentLimit(): Promise<number> {
-  const read = await readTextOutcome(recentLimitPath())
+  // 这个文件是 `.txt`（纯文本整数，不是 JSON）⇒ 走纯文本档；数据文件才走 `readRepoFile`
+  const read = readOwnFileText(recentLimitPath())
   if (read.status === 'error') {
     log.warn('swatch', '最近色数量读不到，按默认值处理', read.reason)
     return DEFAULT_RECENT_LIMIT
@@ -194,7 +210,7 @@ export function appendCustomItem(item: unknown): Promise<{ added: boolean }> {
   return runQueued(async () => {
     const hex = itemHex(item)
     // 官方在这里会对 `undefined.color` 直接抛 TypeError；我们抛带原因的错误
-    if (!hex) throw new CepError('PARSE', '不是颜色项（缺少 color.hex），未添加')
+    if (!hex) throw new CepError('PARSE', msg.data.text.swatchNotColorItem)
 
     const path = swatchFilePath()
     const items = await readSwatchItems(path)

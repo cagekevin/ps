@@ -18,7 +18,7 @@ function makeCommand(partial: Partial<Command<void>> = {}): Command<void> {
     group: 'system',
     requires: 'none',
     kind: 'instant',
-    run: async () => {},
+    invoke: async () => {},
     ...partial,
   }
 }
@@ -39,25 +39,25 @@ describe('注册与查询', () => {
     expect(list({ group: 'font' }).map((c) => c.id)).toEqual(['font.x'])
   })
 
-  it('list 返回的元数据不含 run（页面不能绕过 execute）', () => {
+  it('list 返回的元数据不含 invoke（页面不能绕过 execute）', () => {
     register(makeCommand())
-    expect('run' in list()[0]).toBe(false)
+    expect('invoke' in list()[0]).toBe(false)
   })
 })
 
 describe('execute', () => {
   it('成功返回 ok:true', async () => {
-    const run = vi.fn(async () => {})
-    register(makeCommand({ run }))
+    const invoke = vi.fn(async () => {})
+    register(makeCommand({ invoke }))
 
     await expect(execute('test.ok')).resolves.toEqual({ ok: true })
-    expect(run).toHaveBeenCalledTimes(1)
+    expect(invoke).toHaveBeenCalledTimes(1)
   })
 
   it('命令抛 CepError → ok:false 并带 code，不向外抛', async () => {
     register(
       makeCommand({
-        run: async () => {
+        invoke: async () => {
           throw new CepError('NO_SELECTION', '请先选择一个文字图层')
         },
       }),
@@ -71,25 +71,29 @@ describe('execute', () => {
     })
   })
 
-  it('requires 不满足时不执行 run', async () => {
+  it('requires 不满足时不执行 invoke', async () => {
     selection.hasSelection = false
-    const run = vi.fn(async () => {})
-    register(makeCommand({ id: 'need.layer', requires: 'layer', run }))
+    const invoke = vi.fn(async () => {})
+    register(makeCommand({ id: 'need.layer', requires: 'layer', invoke }))
 
     const result = await execute('need.layer')
-    expect(result).toEqual({ ok: false, reason: '请先选择一个图层' })
-    expect(run).not.toHaveBeenCalled()
+    expect(result).toEqual({ ok: false, reason: '请先选择一个图层', code: 'NO_SELECTION' })
+    expect(invoke).not.toHaveBeenCalled()
   })
 
   it('textLayer 要求类型为 2', async () => {
     selection.typeNumber = 1
-    register(makeCommand({ id: 'need.text', requires: 'textLayer', run: async () => {} }))
+    register(makeCommand({ id: 'need.text', requires: 'textLayer', invoke: async () => {} }))
 
     await expect(execute('need.text')).resolves.toMatchObject({ ok: false })
   })
 
   it('命令不存在时返回失败而不是抛', async () => {
-    await expect(execute('nope')).resolves.toEqual({ ok: false, reason: '命令不存在：nope' })
+    await expect(execute('nope')).resolves.toEqual({
+      ok: false,
+      reason: '命令不存在：nope',
+      code: 'INTERNAL',
+    })
   })
 })
 

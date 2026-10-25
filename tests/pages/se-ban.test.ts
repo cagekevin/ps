@@ -27,15 +27,15 @@ vi.mock('@/stores/swatch', () => ({
 
 /** 命令层：只关心"点了哪条命令、带什么载荷"，执行细节在 `tests/commands/swatch.test.ts` */
 const commands = vi.hoisted(() => ({
-  addForegroundColor: { run: vi.fn(), disabled: { value: false }, running: { value: false } },
-  setRecentLimit: { run: vi.fn(), disabled: { value: false }, running: { value: false } },
-  sendColor: { run: vi.fn(), disabled: { value: false }, running: { value: false } },
-  sendWireframeColor: { run: vi.fn(), disabled: { value: false }, running: { value: false } },
+  addForegroundColor: { invoke: vi.fn(), disabled: { value: false }, running: { value: false } },
+  setRecentLimit: { invoke: vi.fn(), disabled: { value: false }, running: { value: false } },
+  sendColor: { invoke: vi.fn(), disabled: { value: false }, running: { value: false } },
+  sendWireframeColor: { invoke: vi.fn(), disabled: { value: false }, running: { value: false } },
 }))
 const byId = vi.hoisted(() => new Map<string, unknown>())
 
 vi.mock('@/components/command/useCommand', () => ({
-  useCommand: (id: string) => byId.get(id) ?? { run: vi.fn(), disabled: { value: true } },
+  useCommand: (id: string) => byId.get(id) ?? { invoke: vi.fn(), disabled: { value: true } },
 }))
 
 const { default: SeBanPage } = await import('@/pages/seBan/index.vue')
@@ -49,10 +49,10 @@ beforeEach(() => {
   byId.set('seban.setRecentLimit', commands.setRecentLimit)
   byId.set('seban.sendColor', commands.sendColor)
   byId.set('seban.sendWireframeColor', commands.sendWireframeColor)
-  commands.sendColor.run.mockResolvedValue(true)
-  commands.sendWireframeColor.run.mockResolvedValue(true)
-  commands.addForegroundColor.run.mockResolvedValue(true)
-  commands.setRecentLimit.run.mockResolvedValue(true)
+  commands.sendColor.invoke.mockResolvedValue(true)
+  commands.sendWireframeColor.invoke.mockResolvedValue(true)
+  commands.addForegroundColor.invoke.mockResolvedValue(true)
+  commands.setRecentLimit.invoke.mockResolvedValue(true)
 })
 
 describe('色板面板：一整排（最近颜色 │ 常用颜色 │ 按钮）', () => {
@@ -75,7 +75,7 @@ describe('色板面板：一整排（最近颜色 │ 常用颜色 │ 按钮）
 
     await wrapper.findAllComponents(SwatchDot)[0].trigger('click')
 
-    expect(commands.sendColor.run).toHaveBeenCalledWith({
+    expect(commands.sendColor.invoke).toHaveBeenCalledWith({
       item: { name: '未命名', color: { hex: 'FF0000', c: 0, m: 100, y: 100, k: 0 } },
     })
   })
@@ -86,10 +86,10 @@ describe('色板面板：一整排（最近颜色 │ 常用颜色 │ 按钮）
 
     await wrapper.findAllComponents(SwatchDot)[2].trigger('contextmenu')
 
-    expect(commands.sendWireframeColor.run).toHaveBeenCalledWith({
+    expect(commands.sendWireframeColor.invoke).toHaveBeenCalledWith({
       item: { name: '未命名', color: { hex: '0000FF', c: 100, m: 100, y: 0, k: 0 } },
     })
-    expect(commands.sendColor.run).not.toHaveBeenCalled()
+    expect(commands.sendColor.invoke).not.toHaveBeenCalled()
   })
 
   it('读取失败时显示原因与重试，不把失败画成空色板', async () => {
@@ -128,7 +128,7 @@ describe('设置：最近颜色数量', () => {
     ok?.click()
     await nextTick()
 
-    expect(commands.setRecentLimit.run).toHaveBeenCalledWith({ limit: 5 })
+    expect(commands.setRecentLimit.invoke).toHaveBeenCalledWith({ limit: 5 })
     wrapper.unmount()
   })
 })

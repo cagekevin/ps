@@ -5,17 +5,22 @@
 // 禁止：CEP 里不许退回内存兜底（ADR-14）；读失败要带 degraded
 
 import { DATA_FILES } from '@/cep/env'
-import { userDir } from '@/cep/fs'
-import { seedPreset, type RenamePreset } from '@/domain/rename'
-import { pick } from './pick'
-import type { Repo } from './types'
+import { userDir } from '@/cep/paths'
+import { decodeRenamePreset, seedPreset, type RenamePreset } from '@/domain/rename'
+import { dataRepo } from './data-repo'
+import type { Repo, RepoView } from './types'
 
 /**
  * 原版文件名叫 `.ini`，内容是 JSON 数组（导出 `.cmm` 也是同一份 `JSON.stringify`，:57022）。
  * 首次打开没有文件时用种子数据（:56807-56816）。
  */
-export const renameRepo: Repo<RenamePreset> = pick(
+const renameImpl: Repo<RenamePreset> = dataRepo(
   () => `${userDir()}/${DATA_FILES.cmmRename}`,
   seedPreset,
-  seedPreset,
+  decodeRenamePreset,
 )
+
+/** 只读视图（store 唯一能拿到的形状）：没有 write / update —— 调用不到 */
+export const renameRepo: RepoView<RenamePreset> = renameImpl
+/** 写侧句柄：只给 commands/rename.ts 用 */
+export const renameWriter: Repo<RenamePreset> = renameImpl

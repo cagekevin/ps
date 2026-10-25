@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { msg } from '@/domain/messages'
 import { computed, onBeforeUnmount, onMounted, reactive, ref } from 'vue'
 import CepModal from '@/components/CepModal.vue'
 import { useCommand } from '@/components/command/useCommand'
@@ -12,7 +13,7 @@ import { FONT_DOWNLOAD_URL } from '@/domain/font-missing'
 import { storeToRefs } from 'pinia'
 import { useFontMissingStore } from '@/stores/font-missing'
 import { FONT_SET_DEFAULTS, type FontSetSettings } from '@/domain/font-set-config'
-import { openUrl } from '@/cep/open-url'
+import { openUrl } from '@/cep/readonly'
 import { log } from '@/utils/logger'
 import { deepClone } from '@/utils/clone'
 import type { FontItem } from '@/domain/font-item'
@@ -178,7 +179,7 @@ onBeforeUnmount(() => {
 
 function persist(patch: Partial<FontSetSettings>) {
   Object.assign(settings, patch)
-  void saveSettings.run({ patch })
+  void saveSettings.invoke({ patch })
 }
 
 function togglePanel(value: string) {
@@ -188,7 +189,7 @@ function togglePanel(value: string) {
 function topClickOne(index: number, event?: MouseEvent) {
   if (event?.ctrlKey) return
   if (index === 0) {
-    void translate.run(
+    void translate.invoke(
       {
         from: settings.ztTranslate.from,
         to: settings.ztTranslate.to,
@@ -202,27 +203,27 @@ function topClickOne(index: number, event?: MouseEvent) {
     togglePanel('one1')
     return
   }
-  void createButton.run({ config: settings.ztCreateButton }, '生成按钮完成')
+  void createButton.invoke({ config: settings.ztCreateButton }, msg.success.text.buttonGenerated)
 }
 
 function topClickTwo(index: number, event?: MouseEvent) {
   if (event?.ctrlKey) return
   if (index === 0) {
-    void copyFont.run(undefined, '复制成功')
+    void copyFont.invoke(undefined, msg.success.text.copyOk)
     return
   }
   if (index === 1) {
     // 原版：$load.show("正在应用字体设置...") → hide()，没有成功 toast
-    void useLoadingStore().run('正在应用字体设置...', () =>
-      pasteFont.run({ keeps: settings.ztPasteFont }),
+    void useLoadingStore().invoke('正在应用字体设置...', () =>
+      pasteFont.invoke({ keeps: settings.ztPasteFont }),
     )
     return
   }
-  void switchDirection.run(undefined, '切换成功')
+  void switchDirection.invoke(undefined, msg.success.text.switchOk)
 }
 
 function runAlign(axis: 'h' | 'v' | 'bg-h' | 'bg-v', index: number) {
-  void alignCommand.run({ axis, index })
+  void alignCommand.invoke({ axis, index })
 }
 
 function bottomClickOne(index: number) {
@@ -251,7 +252,7 @@ function bottomClickFour(index: number) {
 
 function onDistribute(value: string) {
   const axis = distribution.value === 1 ? 1 : 2
-  void distribute.run({ axis, value })
+  void distribute.invoke({ axis, value })
 }
 
 function onSwapLanguages() {
@@ -268,18 +269,18 @@ function onSelectPreset(index: number) {
   const preset = store.hierarchy.list[index]
   if (!preset) return
   persist({ ztHierarych: [...preset.data] })
-  void hierarchyPreset.run({ action: 'select', index }, '切换成功')
+  void hierarchyPreset.invoke({ action: 'select', index }, msg.success.text.switchOk)
 }
 
 function onQuickSelect(index: number) {
-  void quickFont.run({ action: 'select', index }, '切换成功')
+  void quickFont.invoke({ action: 'select', index }, msg.success.text.switchOk)
   void refreshTextInfo()
 }
 
 function onQuickApply(weightIndex: number) {
   const font = currentQuickFont.value
   if (!font) return
-  void quickFont.run({ action: 'apply', font, weightIndex })
+  void quickFont.invoke({ action: 'apply', font, weightIndex })
 }
 
 function onTranslateUpdate(side: 'from' | 'to', code: string) {
@@ -288,16 +289,16 @@ function onTranslateUpdate(side: 'from' | 'to', code: string) {
 
 function onSavePreset(levels: number[]) {
   persist({ ztHierarych: levels })
-  void hierarchyPreset.run({ action: 'save', levels }, '更新成功')
+  void hierarchyPreset.invoke({ action: 'save', levels }, msg.success.text.presetUpdated)
 }
 
 function onCreatePreset(name: string, levels: number[]) {
   persist({ ztHierarych: levels })
-  void hierarchyPreset.run({ action: 'create', name, levels }, '添加成功')
+  void hierarchyPreset.invoke({ action: 'create', name, levels }, msg.success.text.presetCreated)
 }
 
 function onRenamePreset(index: number, name: string) {
-  void hierarchyPreset.run({ action: 'rename', index, name }, '重命名成功')
+  void hierarchyPreset.invoke({ action: 'rename', index, name }, msg.success.text.presetRenamed)
 }
 </script>
 
@@ -314,8 +315,10 @@ function onRenamePreset(index: number, name: string) {
         :index="store.quickFonts.index"
         @select="onQuickSelect"
         @apply="onQuickApply"
-        @add="quickFont.run({ action: 'add' }, '添加字体成功')"
-        @remove="quickFont.run({ action: 'delete', index: $event }, '删除成功')"
+        @add="quickFont.invoke({ action: 'add' }, msg.success.text.fontAdded)"
+        @remove="
+          quickFont.invoke({ action: 'delete', index: $event }, msg.success.text.itemDeleted)
+        "
       />
 
       <hr class="fontset__line" />
@@ -335,13 +338,13 @@ function onRenamePreset(index: number, name: string) {
         :stars="fontStore.stars"
         :preview-size="settings.ztPreview"
         @preview="persist({ ztPreview: $event })"
-        @font-name="fontName.run($event)"
-        @size="fontSize.run({ value: $event })"
-        @leading="leading.run({ value: $event })"
-        @tracking="tracking.run({ value: $event })"
-        @color="colorCommand.run()"
-        @style="styleToggle.run($event)"
-        @align="textAlign.run($event)"
+        @font-name="fontName.invoke($event)"
+        @size="fontSize.invoke({ value: $event })"
+        @leading="leading.invoke({ value: $event })"
+        @tracking="tracking.invoke({ value: $event })"
+        @color="colorCommand.invoke()"
+        @style="styleToggle.invoke($event)"
+        @align="textAlign.invoke($event)"
       />
 
       <div class="fontset__icons">
@@ -384,12 +387,12 @@ function onRenamePreset(index: number, name: string) {
           @swap="onSwapLanguages"
           @replace="persist({ ztTranslate: { ...settings.ztTranslate, delete: $event } })"
         />
-        <SplitPanel v-show="panel === 'one1'" @split="split.run({ mode: $event })" />
+        <SplitPanel v-show="panel === 'one1'" @split="split.invoke({ mode: $event })" />
         <CreateButtonPanel
           v-show="panel === 'one2'"
           :config="settings.ztCreateButton"
           @change="persist({ ztCreateButton: { ...settings.ztCreateButton, ...$event } })"
-          @apply="createButton.run({ config: settings.ztCreateButton })"
+          @apply="createButton.invoke({ config: settings.ztCreateButton })"
         />
         <PasteFontPanel
           v-show="panel === 'two1'"
@@ -456,13 +459,15 @@ function onRenamePreset(index: number, name: string) {
         :levels="settings.ztHierarych"
         :presets="store.hierarchy.list"
         :preset-index="store.hierarchy.index"
-        @apply-level="hierarchySize.run({ value: $event })"
+        @apply-level="hierarchySize.invoke({ value: $event })"
         @update-levels="persist({ ztHierarych: $event })"
         @select-preset="onSelectPreset"
         @save-preset="onSavePreset"
         @create-preset="onCreatePreset"
         @rename-preset="onRenamePreset"
-        @delete-preset="hierarchyPreset.run({ action: 'delete', index: $event }, '删除成功')"
+        @delete-preset="
+          hierarchyPreset.invoke({ action: 'delete', index: $event }, msg.success.text.itemDeleted)
+        "
       />
 
       <DistributedDialog

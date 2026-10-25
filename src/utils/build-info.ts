@@ -25,10 +25,6 @@ export function installStartupCheck(): BuildInfo {
 
   log.info('build', `版本 ${BUILD_INFO.version} · ${BUILD_INFO.time}`)
 
-  if (!document.querySelector('#app')) {
-    log.warn('build', '启动自检失败：#app 不存在，Vue 可能挂载失败')
-  }
-
   const cep = window.__adobe_cep__
   if (!cep) {
     log.warn('build', '启动自检：当前不是 CEP 环境（浏览器调试）')

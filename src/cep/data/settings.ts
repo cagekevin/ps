@@ -1,7 +1,13 @@
 import { hasCep } from '@/cep/transport'
-import { readTextSync, userDir, writeTextFileAtomic } from '@/cep/fs'
+import { userDir } from '@/cep/paths'
+import { DATA_FILES } from '@/cep/env'
+import { writeDiskSync } from '@/cep/disk-write'
+import { foldAbsent, readRepoFile } from './repo-read'
 import { CepError } from '@/utils/errors'
+import { msg } from '@/domain/messages'
+import { isRecord } from '@/utils/guards'
 import { log } from '@/utils/logger'
+import type { Decoder } from '@/utils/decode'
 
 /**
  * 面板自己的界面偏好，独立一个文件，不动原面板的 sj_set.json。
@@ -13,7 +19,16 @@ import { log } from '@/utils/logger'
  *
  * 浏览器（无 CEP）退回 localStorage，仅 dev 使用。
  */
-const FILE = 'sj_v5_ui.json'
+const FILE = DATA_FILES.uiPrefs
+
+/**
+ * 偏好文件的 `decode`（**必填**，见 `./repo-read`）：顶层必须是对象。
+ *
+ * 不在这里补默认键：缺哪个键由 `getPref(key, fallback)` 的调用方决定，
+ * 这一层只回答"这份文件能不能当 `Record<string, unknown>` 用"。
+ */
+const decodePrefs: Decoder<Record<string, unknown>> = (raw) =>
+  isRecord(raw) ? { value: raw } : null
 const LS_KEY = 'psz:v5:ui'
 const FLUSH_DELAY = 300
 /** 偏好文件结构版本；以后字段迁移靠它，不靠猜 */
@@ -55,7 +70,10 @@ function loadAll(): Record<string, unknown> {
 
   if (!hasCep()) {
     try {
-      cache = JSON.parse(localStorage.getItem(LS_KEY) ?? '{}') as Record<string, unknown>
+      // 不许 `as Record<string, unknown>`：先 parse 成 unknown，再由通用判据收窄
+      const parsed: unknown = JSON.parse(localStorage.getItem(LS_KEY) ?? '{}')
+      if (!isRecord(parsed)) throw new Error('顶层不是对象')
+      cache = parsed
     } catch (e) {
       log.warn('settings', '本地偏好解析失败，使用默认值', e)
       cache = {}
@@ -64,20 +82,15 @@ function loadAll(): Record<string, unknown> {
     return cache
   }
 
-  try {
-    // 同步读是 ADR-26 ④ 的具名例外之三：`getPref` 全链路同步。
-    // 三态在此分流：`notSeen`（新装机）→ 默认值且允许写回；`error`（读不到）→ 默认值但**禁止写回**。
-    const read = readTextSync(filePath())
-    if (read.status === 'error') {
-      // 读不到 ≠ 没有（ADR-0014）：`cache = {}` 只是给 UI 的默认值，`readFailure` 挡住写回。
-      // 具体提示文案与交互归 1c，这里只保证"不会拿默认值覆盖用户文件"。
-      readFailure = read.reason
-      cache = {}
-    } else {
-      cache = read.status === 'ok' ? (JSON.parse(read.text) as Record<string, unknown>) : {}
-    }
-  } catch (e) {
-    log.warn('settings', '读取偏好失败，使用默认值', e)
+  // 偏好文件就是**我们的 JSON 数据文件**，所以走档 1 的唯一结论入口（`decode` 必填），
+  // 不再在这里自己写一遍「三态分流 + parse + 判对象」—— 那是 `file-repo` 的第二份判据。
+  const read = foldAbsent(readRepoFile(filePath(), decodePrefs), () => ({}))
+  if (read.ok) {
+    cache = read.value
+  } else {
+    // 读不到 / 坏文件 ⇒ 给 UI 默认值，但**本次会话禁止写回**（TD-09-23）：
+    // 拿默认值写回去 = 用户原有偏好没了。
+    readFailure = read.reason
     cache = {}
   }
   normalizeVersion(cache)
@@ -100,9 +113,7 @@ function refuseIfReadFailed(): boolean {
   if (!readFailure) return false
   if (!readFailureReported) {
     readFailureReported = true
-    notifyError(
-      new CepError('IO', `偏好文件读不到，本次不保存偏好（避免默认值覆盖原文件）：${readFailure}`),
-    )
+    notifyError(new CepError('IO', msg.data.fn.prefReadFailedSkipSave(readFailure)))
   } else {
     log.warn('settings', '偏好读不到，本次仍不保存', readFailure)
   }
@@ -120,8 +131,15 @@ function persistSync(all: Record<string, unknown>) {
     }
     const target = filePath()
     // 原子写失败就报错：旧实现退回普通写，等于把 rename 保护摘掉（TD-09-27）
-    const written = writeTextFileAtomic(target, text)
-    if (written.status === 'error') throw new CepError('IO', `偏好写入失败：${written.reason}`)
+    // 偏好文件是覆盖写、无 `.bak` 概念（`previous: null`）
+    try {
+      writeDiskSync(target, text, { previous: null })
+    } catch (error) {
+      throw new CepError(
+        'IO',
+        msg.data.fn.prefWriteFailed(error instanceof Error ? error.message : String(error)),
+      )
+    }
   } catch (e) {
     notifyError(e)
   }
@@ -137,8 +155,14 @@ function persist(all: Record<string, unknown>) {
         return
       }
       const target = filePath()
-      const written = writeTextFileAtomic(target, text)
-      if (written.status === 'error') throw new CepError('IO', `偏好写入失败：${written.reason}`)
+      try {
+        writeDiskSync(target, text, { previous: null })
+      } catch (error) {
+        throw new CepError(
+          'IO',
+          msg.data.fn.prefWriteFailed(error instanceof Error ? error.message : String(error)),
+        )
+      }
     } catch (e) {
       notifyError(e)
     }

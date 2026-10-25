@@ -41,7 +41,7 @@ function installNode() {
     if (id === 'os') return { homedir: () => '/home/u' }
     throw new Error(`用例没准备 ${id}`)
   }
-  // `pick()` 用 `hasCep()` 选实现：不给它一个 CEP 桥，会走 memoryRepo（永不失败）。
+  // `dataRepo()` 用 `hasCep()` 选实现：不给它一个 CEP 桥，会走 memoryRepo（永不失败）。
   // `evalScript` **必须回调**，否则 `readTextOutcome` 的 jsx 兜底会一直等到超时。
   // 回什么要跟 `disk.code` 对齐：`combineReads` 的规则是"任一条说 error 就报 error"，
   // 所以只有两条路**都说不存在**时才是 `notSeen`——这正是判据 C 想钉的语义
@@ -54,7 +54,7 @@ function installNode() {
   }
 }
 
-// `pick()` 在**模块加载时**就按 `hasCep()` 定死实现（memoryRepo 永不失败），
+// `dataRepo()` 在**模块加载时**就按 `hasCep()` 定死实现（memoryRepo 永不失败），
 // 所以桥必须在 import 之前装好，否则整个文件测的是内存仓库、三条断言全是假绿
 installNode()
 

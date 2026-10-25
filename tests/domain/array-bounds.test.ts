@@ -27,10 +27,14 @@ describe('ku-format：扁平清单为空 / 容器里没有库文件', () => {
   })
 
   it('组数组里有非对象项 → 报"读不到"，不是把 42 当组交下去', () => {
-    expect(resolveKuGroups([42], decode)).toEqual({ groups: null, note: '组数组里有非对象项' })
+    // 现在 `kuShapeOf` 把非对象项判成"不认识"（生产者证形状，不再让消费侧兜底）⇒ note 是通用那句
+    expect(resolveKuGroups([42], decode)).toEqual({
+      groups: null,
+      note: '结构不认识（既不是数组也不是容器）',
+    })
     expect(resolveKuGroups([{ name: 'a', list: [] }, null], decode)).toEqual({
       groups: null,
-      note: '组数组里有非对象项',
+      note: '结构不认识（既不是数组也不是容器）',
     })
   })
 

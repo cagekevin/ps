@@ -1,6 +1,6 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { CepError, ERR_PREFIX } from '@/utils/errors'
-import { evalScriptRaw, hasCep, jsxCall } from '@/cep/transport'
+import { evalScriptRaw, hasCep, jsxRead } from '@/cep/transport'
 
 type Bridge = { evalScript: (script: string, cb: (res: string) => void) => void }
 const holder = window as unknown as { __adobe_cep__?: Bridge }
@@ -135,14 +135,14 @@ describe('evalScriptRaw', () => {
   })
 })
 
-describe('jsxCall', () => {
+describe('jsxRead', () => {
   it('字符串参数转义单引号和反斜杠，数字布尔裸传', async () => {
     let captured = ''
     setBridge((script, cb) => {
       captured = script
       cb('null')
     })
-    await jsxCall('ztgl_set', ["a'b\\c", 3, true, { x: 1 }])
+    await jsxRead('cy_zoom', ["a'b\\c", 3, true, { x: 1 }])
 
     expect(captured).toContain(`'a\\'b\\\\c'`)
     expect(captured).toContain(', 3, true, ')
@@ -151,7 +151,7 @@ describe('jsxCall', () => {
 
   it(`${ERR_PREFIX} 前缀抛 CepError，并带上 label`, async () => {
     setBridge((_script, cb) => cb(`${ERR_PREFIX}没有选中图层`))
-    await expect(jsxCall('ztgl_x', [], { label: '设置字体' })).rejects.toThrow(
+    await expect(jsxRead('cy_zoom', [], { label: '设置字体' })).rejects.toThrow(
       '设置字体：没有选中图层',
     )
   })
@@ -160,28 +160,28 @@ describe('jsxCall', () => {
     // JSON.stringify(undefined) 返回 undefined 而不是字符串，toJsxArg 里 .replace 会抛
     // 「Cannot read properties of undefined」—— 报错完全指不到调用点。
     setBridge((_script, cb) => cb('null'))
-    await expect(jsxCall('cy_distribute', [1, undefined], { label: '分布' })).rejects.toThrow(
-      '分布：第 2 个参数是 undefined',
-    )
+    await expect(
+      jsxRead('cy_distributedByPitch', [1, undefined], { label: '分布' }),
+    ).rejects.toThrow('分布：第 2 个参数是 undefined')
   })
 
   it('空串与 undefined 返回 undefined', async () => {
     setBridge((_script, cb) => cb(''))
-    await expect(jsxCall('x')).resolves.toBeUndefined()
+    await expect(jsxRead('cy_zoom')).resolves.toEqual({ ok: true, data: undefined })
     setBridge((_script, cb) => cb('undefined'))
-    await expect(jsxCall('x')).resolves.toBeUndefined()
+    await expect(jsxRead('cy_zoom')).resolves.toEqual({ ok: true, data: undefined })
   })
 
   it('合法 JSON 解析', async () => {
     setBridge((_script, cb) => cb('{"ok":true}'))
-    await expect(jsxCall('x')).resolves.toEqual({ ok: true })
+    await expect(jsxRead('cy_zoom')).resolves.toEqual({ ok: true, data: { ok: true } })
   })
 
   it('jsxbin 的成功哨兵 ok / OK 原样返回（不是"读不懂"）', async () => {
     setBridge((_script, cb) => cb('ok'))
-    await expect(jsxCall('x')).resolves.toBe('ok')
+    await expect(jsxRead('cy_zoom')).resolves.toEqual({ ok: true, data: 'ok' })
     setBridge((_script, cb) => cb('OK'))
-    await expect(jsxCall('x')).resolves.toBe('OK')
+    await expect(jsxRead('cy_zoom')).resolves.toEqual({ ok: true, data: 'OK' })
   })
 
   /**
@@ -192,7 +192,7 @@ describe('jsxCall', () => {
   it('非 JSON 且非哨兵 → 抛 PARSE，带 label 与原值片段（不再原样返回）', async () => {
     setBridge((_script, cb) => cb('纯文本'))
 
-    const error = await jsxCall('x', [], { label: '读取字体' }).catch((e: unknown) => e)
+    const error = await jsxRead('cy_zoom', [], { label: '读取字体' }).catch((e: unknown) => e)
     expect(error).toMatchObject({ code: 'PARSE' })
     expect((error as Error).message).toContain('读取字体')
     expect((error as Error).message).toContain('纯文本')
@@ -201,6 +201,6 @@ describe('jsxCall', () => {
 
   it('错误码是 CepError.JSX，不是普通 Error', async () => {
     setBridge((_script, cb) => cb(`${ERR_PREFIX}boom`))
-    await expect(jsxCall('x')).rejects.toBeInstanceOf(CepError)
+    await expect(jsxRead('cy_zoom')).rejects.toBeInstanceOf(CepError)
   })
 })

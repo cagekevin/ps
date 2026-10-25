@@ -67,7 +67,7 @@ function installRequire() {
   w.require = (id: string) => (id === 'fs' ? fs : realRequire(id))
 }
 
-const { readTextSync, dirUsage, writeTextFileAtomic } = await import('@/cep/fs')
+const { readTextSync, dirUsage } = await import('@/cep/fs')
 
 beforeEach(() => {
   installRequire()
@@ -107,19 +107,7 @@ describe('readTextSync · 三态（不是 string | null）', () => {
   })
 })
 
-describe('写原语 · 失败必须带原因（TD-09-27）', () => {
-  it('写成功 → ok', () => {
-    const written = writeTextFileAtomic('/u/a.json', '{}')
-    expect(written).toEqual({ status: 'ok' })
-  })
-
-  it('无 Node → error，且调用方能拿到"为什么"（旧版只给 false，只能猜着退回普通写）', () => {
-    delete (window as unknown as { require?: unknown }).require
-    const written = writeTextFileAtomic('/u/a.json', '{}')
-    expect(written.status).toBe('error')
-    expect(written.status === 'error' && written.reason).toContain('Node 不可用')
-  })
-})
+// 「写原语失败必须带原因」的覆盖已随写原语搬到 `tests/cep/fs-atomic.test.ts`（那里测 `writeDisk`）。
 
 describe('dirUsage · 少算的文件要数出来（TD-06-5）', () => {
   it('有文件 stat 失败 → skipped 计数、bytes 只是下限', () => {

@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { CepError } from '@/utils/errors'
 import type { FontItem } from '@/domain/font-item'
 
 /**
@@ -19,7 +20,7 @@ vi.mock('@/selection', () => ({
   current: () => selection,
   selectionRef: { value: selection },
 }))
-vi.mock('@/cep/data', () => ({ starsRepo: {}, tagsRepo: {} }))
+vi.mock('@/cep/data', () => ({ starsRepo: {}, starsWriter: {}, tagsRepo: {}, tagsWriter: {} }))
 vi.mock('@/cep/data/settings', () => ({ settingsSnapshot: () => ({}) }))
 
 await import('@/commands')
@@ -34,7 +35,7 @@ const font: FontItem = {
 
 beforeEach(() => {
   vi.clearAllMocks()
-  jsx.font.setFont.mockResolvedValue(null)
+  jsx.font.setFont.mockResolvedValue({ ok: true, data: null })
 })
 
 describe('font.apply', () => {
@@ -44,7 +45,8 @@ describe('font.apply', () => {
   })
 
   it('jsx 返回 err:1 时必须失败（否则界面会显示成功）', async () => {
-    jsx.font.setFont.mockResolvedValue({ err: 1, msg: '字体未安装' })
+    // 写操作：`jsxWrite` 在生产者层抛（不是返回失败臂）⇒ mock 也该模拟 reject
+    jsx.font.setFont.mockRejectedValue(new CepError('JSX', '字体未安装'))
 
     const result = await execute('font.apply', { font, variantIndex: 0 })
 

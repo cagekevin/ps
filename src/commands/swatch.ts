@@ -4,14 +4,15 @@
 // 谁在用：`pages/seBan/*`（刀3）；`bindSeBanReceiver()` 由 `main.ts` 在主面板调用
 // 禁止：页面不许 import 本文件的值；不许在这里做 UI（prompt / alert 归页面）
 
-import { CepError, type CepErrorCode } from '@/utils/errors'
+import { CepError } from '@/utils/errors'
+import { msg } from '@/domain/messages'
 import { openUrlInDefaultBrowser } from '@/cep/open-url'
 import { appendCustomItem, readCustomItems, setRecentLimit } from '@/cep/data/swatch-repo'
 import { APP_EVENT_SEBAN, onAppEvent, sendAppEvent } from '@/cep/events'
 import { readCommonUseOptions } from '@/cep/data/legacy-settings'
 import { log } from '@/utils/logger'
 import { execute, executeInherited, defineCommand } from './registry'
-import type { Command, CommandResult } from './types'
+import type { Command, CommandOutcome } from './types'
 
 /**
  * 官方「打开作者站酷」的目标地址。title 写的是"作者站酷"，URL 却是 pszhuli.com
@@ -31,26 +32,23 @@ const AUTHOR_SITE = 'http://pszhuli.com'
  * 点了必须报错并说清原因（可见失败）。谁把 `main.jsx` 接上，就把下面两处换成真调用。
  */
 function requireSebanJsx(fn: string): never {
-  throw new CepError(
-    'JSX',
-    `${fn} 不在本扩展的 jsx 里：它属于色板面板自带的 jsx/main.jsx（需随面板分发并 evalFile），` +
-      `详见 docs/页面/11-色板面板.md §六`,
-  )
+  throw new CepError('JSX', msg.command.fn.swatchSebanJsxMissing(fn))
 }
 
 /**
  * 把 `executeInherited` 的结果还原成抛错（与 `commands/freePanel.ts:316-317` 同一口径）：
  * 子命令自己的 `code` 原样抛回去，否则 `useCommand` 的 `FONT_MISSING` 一类分支会失效。
- * `CommandResult.code` 是 `string`，`CepError` 收 `CepErrorCode`——注册表只在枚举内产出。
+ * `CommandOutcome.code` 是 `CepErrorCode`（R3 起必填）——直接传给 `CepError`，不需要转换。
  */
-function assertInherited(result: CommandResult): void {
-  if (!result.ok) throw new CepError((result.code ?? 'JSX') as CepErrorCode, result.reason)
+function assertInherited(result: CommandOutcome): void {
+  // `code` 已是必填的 `CepErrorCode`（R3）⇒ 不再需要 `?? 'JSX'` + `as`
+  if (!result.ok) throw new CepError(result.code, result.reason)
 }
 
 /** 色板项的形状（`main.jsx:287-298` 产出）：`{ name, color: { hex, c, m, y, k, isFill? } }` */
 function assertSwatchItem(item: unknown): Record<string, unknown> {
   if (!item || typeof item !== 'object' || !('color' in (item as Record<string, unknown>))) {
-    throw new CepError('PARSE', '色板项缺少 color 字段，不能上色')
+    throw new CepError('PARSE', msg.command.text.swatchItemNoColor)
   }
   return item as Record<string, unknown>
 }
@@ -61,7 +59,7 @@ function sendSwatchEvent(
   item: Record<string, unknown>,
 ): void {
   if (!sendAppEvent(APP_EVENT_SEBAN, { type, data: item })) {
-    throw new CepError('INIT', 'app event 通道不可用（不在 CEP 里）')
+    throw new CepError('INIT', msg.command.text.swatchAppEventUnavailable)
   }
   // 发出去不代表有人收：主面板没开这条事件是空转，官方同样不报错。
   // 所以这里不判"主面板在不在"，只在面板上把失败原因显示出来（刀3 的 toast）。
@@ -76,19 +74,26 @@ export const swatchCommands: Command<unknown>[] = [
     group: 'seban',
     requires: 'none',
     kind: 'instant',
-    async run(ctx) {
+    async invoke(ctx) {
       // 官方 `TianJia`（`sf.js:377-382`）→ `sb_GetColorObject()` = `sb_ZhuanHuanYanSeDuiXiang(app.foregroundColor)`
       // （`main.jsx:99-102` / `:287-298`）→ `{name:"未命名", color:{hex,c,m,y,k}}`。
       // 主面板里等价的那条是 `ys_getForegroundColor()`（`app.v4.js:50193`，样式页"添加颜色"同一条），
       // 名字在原版派发表里能命中，所以走它而不是 `sb_*`。
       // UNVERIFIED：两条 jsx 的字段是否逐字一致未实测；本命令只要求"是个带 color.hex 的对象"。
-      const raw = await ctx.jsx.style.getForegroundColor()
-      if (raw === null || raw === undefined) throw new CepError('JSX', '读取前景色失败')
+      const fgOutcome = await ctx.jsx.style.getForegroundColor()
+      if (!fgOutcome.ok) {
+        throw new CepError(
+          fgOutcome.code,
+          fgOutcome.reason || msg.command.text.styleReadForegroundFailed,
+        )
+      }
+      if (fgOutcome.data === null || fgOutcome.data === undefined)
+        throw new CepError('JSX', msg.command.text.styleReadForegroundFailed)
 
-      const { added } = await appendCustomItem(raw)
+      const { added } = await appendCustomItem(fgOutcome.data)
       // 官方命中 hex 时**静默不加**，只把已有色块闪三下（`sf.js:346-364`）。
       // 闪色块是 UI（刀3），命令层不能静默 → 抛带原因的错误，由 useCommand 弹出来。
-      if (!added) throw new CepError('PARSE', '色板里已经有这个颜色了，未重复添加')
+      if (!added) throw new CepError('PARSE', msg.command.text.swatchColorAlreadyIn)
     },
   }),
 
@@ -100,7 +105,7 @@ export const swatchCommands: Command<unknown>[] = [
     group: 'seban',
     requires: 'none',
     kind: 'instant',
-    async run() {
+    async invoke() {
       openUrlInDefaultBrowser(AUTHOR_SITE)
     },
   }),
@@ -113,11 +118,12 @@ export const swatchCommands: Command<unknown>[] = [
     group: 'seban',
     requires: 'none',
     kind: 'instant',
-    async run(_ctx, { limit }) {
+    async invoke(_ctx, { limit }) {
       // 官方三条文案照抄（`sf.js:404-410`）；收数从 `prompt` 挪到页面（刀3），校验留在命令层
-      if (!Number.isInteger(limit)) throw new CepError('PARSE', '请输入数字')
+      if (!Number.isInteger(limit))
+        throw new CepError('PARSE', msg.command.text.swatchNumberRequired)
       if (limit < 0 || limit > 15) {
-        throw new CepError('PARSE', '最近使用记录不允许少于0或者多于15个颜色')
+        throw new CepError('PARSE', msg.command.text.swatchRecentCountInvalid)
       }
       await setRecentLimit(limit)
     },
@@ -131,7 +137,7 @@ export const swatchCommands: Command<unknown>[] = [
     group: 'seban',
     requires: 'none',
     kind: 'instant',
-    async run() {
+    async invoke() {
       // 官方 `TianJiaZT`（`sf.js:387-392`）→ `sb_cy_HuoQuYanSe()`（`main.jsx:216-282`）：
       // 文本图层取 `textItem.color`，形状图层读 `AGMStrokeStyleInfo` 的填充 / 线框色。
       // 主面板没有等价 jsx（`ys_getForegroundColor` 只读前景色），所以本命令暂时只能可见失败。
@@ -147,9 +153,9 @@ export const swatchCommands: Command<unknown>[] = [
     group: 'seban',
     requires: 'none',
     kind: 'instant',
-    async run(ctx, { name, kind }) {
+    async invoke(ctx, { name, kind }) {
       const groupName = name.trim()
-      if (!groupName) throw new CepError('PARSE', '组名不能为空')
+      if (!groupName) throw new CepError('PARSE', msg.command.text.swatchGroupNameRequired)
 
       // 官方 `faSongDaoZhuLi`（`sf.js:426-460`）：`{ name: zuMing, show: true, list: GetColorArray() }`
       // → 交给主面板 `addGroupItem`。**不碰盘**（官方那段写文件的代码是注释掉的，`:446-457`）。
@@ -173,7 +179,7 @@ export const swatchCommands: Command<unknown>[] = [
     group: 'seban',
     requires: 'layer',
     kind: 'instant',
-    async run() {
+    async invoke() {
       // 官方 `SheZhiXingZhuang`（`sf.js:466-472`）→ `sb_SheZhiXingZhuang('1'|'0')`（`main.jsx:448-485`）：
       // 逐个选区改 `AGMStrokeStyleInfo` 的 `fillEnabled` / `strokeEnabled`。
       requireSebanJsx('sb_SheZhiXingZhuang')
@@ -188,7 +194,7 @@ export const swatchCommands: Command<unknown>[] = [
     group: 'seban',
     requires: 'layer',
     kind: 'instant',
-    async run(ctx) {
+    async invoke(ctx) {
       // 官方 `DiaoHuanXingZhuangZhuanTai`（`sf.js:478-480`）发 `QieHuanXianKuang`，
       // 由主面板执行 `cy_swapWireframeFill`（`app.v4.js:17906-17908`）。
       // 我方**直接执行同一条 jsx**、不发事件：官方主面板也监听那个频道，两边都做会交换两次 = 互相抵消。
@@ -211,7 +217,7 @@ export const swatchCommands: Command<unknown>[] = [
     group: 'seban',
     requires: 'layer',
     kind: 'instant',
-    async run(_ctx, { item }) {
+    async invoke(_ctx, { item }) {
       sendSwatchEvent('setColor', assertSwatchItem(item))
     },
   }),
@@ -222,7 +228,7 @@ export const swatchCommands: Command<unknown>[] = [
     group: 'seban',
     requires: 'layer',
     kind: 'instant',
-    async run(_ctx, { item }) {
+    async invoke(_ctx, { item }) {
       sendSwatchEvent('setWireframeColor', assertSwatchItem(item))
     },
   }),
@@ -235,7 +241,7 @@ export const swatchCommands: Command<unknown>[] = [
     group: 'seban',
     requires: 'layer',
     kind: 'instant',
-    async run(ctx, { item }) {
+    async invoke(ctx, { item }) {
       const color = assertSwatchItem(item)
       // 官方 `:17894-17901`：智能填色**开** → 补 `isFill = true`（`:17896`）再 `ys_useStyleColor`（`:17897`）；
       // **关** → 只把颜色设为前景色，不动图层。
@@ -253,7 +259,7 @@ export const swatchCommands: Command<unknown>[] = [
     group: 'seban',
     requires: 'layer',
     kind: 'instant',
-    async run(ctx, { item }) {
+    async invoke(ctx, { item }) {
       // 官方 `:17902-17906`：`ys_setBorderColor([项])`，**不补 isFill**
       await ctx.jsx.style.setBorderColor(assertSwatchItem(item))
     },

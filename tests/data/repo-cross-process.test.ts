@@ -2,6 +2,7 @@ import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
+import { isRecord } from '@/utils/guards'
 
 /**
  * D-26 / D-42 的验证：**双进程场景在单测里怎么模拟**（可复用，后面遇到同类问题照这个来）
@@ -34,44 +35,44 @@ const disk = vi.hoisted(() => ({
   failRead: false,
 }))
 
-vi.mock('@/cep/fs', () => ({
+vi.mock('@/cep/node', () => ({
   hasNode: () => true,
-  // 同步读：CAS 比对走这条（async 读会多一个 microtask 边界，正好是上一次丢更新的位置）
-  readTextSync: (p: string) =>
-    fs.existsSync(p)
-      ? { status: 'ok' as const, text: fs.readFileSync(p, 'utf8') }
-      : { status: 'notSeen' as const },
+}))
+
+vi.mock('@/cep/fs-read', () => ({
+  // 同步读：CAS 比对走这条（async 读会多一个 microtask 边界，正好是上一次丢更新的位置）  readTextSync: (p: string) =>
+      fs.existsSync(p)
+        ? { status: 'ok' as const, text: fs.readFileSync(p, 'utf8') }
+        : { status: 'notSeen' as const },
   readTextSmart: async (p: string) => {
-    if (disk.failRead) throw new Error('EBUSY')
-    const text = fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : null
-    disk.onRead?.()
-    if (disk.yieldEveryRead) await Promise.resolve()
-    return text
-  },
-  // T-105：写路径走三态读。`onRead` 钩子与微任务让步照旧接在这里，跨进程竞态用例才拦得住
-  readTextOutcome: async (p: string) => {
-    if (disk.failRead) return { status: 'error' as const, reason: 'EBUSY' }
-    if (!fs.existsSync(p)) return { status: 'notSeen' as const }
-    const text = fs.readFileSync(p, 'utf8')
-    disk.onRead?.()
-    if (disk.yieldEveryRead) await Promise.resolve()
-    return { status: 'ok' as const, text }
-  },
+      if (disk.failRead) throw new Error('EBUSY')
+      const text = fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : null
+      disk.onRead?.()
+      if (disk.yieldEveryRead) await Promise.resolve()
+      return text
+    },
+  // T-105：写路径走三态读。`onRead` 钩子与微任务让步照旧接在这里，跨进程竞态用例才拦得住  readTextOutcome: async (p: string) => {
+      if (disk.failRead) return { status: 'error' as const, reason: 'EBUSY' }
+      if (!fs.existsSync(p)) return { status: 'notSeen' as const }
+      const text = fs.readFileSync(p, 'utf8')
+      disk.onRead?.()
+      if (disk.yieldEveryRead) await Promise.resolve()
+      return { status: 'ok' as const, text }
+    },
   writeTextFile: (p: string, text: string) => {
-    fs.mkdirSync(path.dirname(p), { recursive: true })
-    fs.writeFileSync(p, text, 'utf8')
-  },
-  // 和真实 writeTextFileAtomic 同语义：写本进程专属 tmp 再 rename（D-42）
-  writeTextFileAtomic: (p: string, text: string) => {
-    const tmp = `${p}.${process.pid}-${Math.random().toString(36).slice(2)}.tmp`
-    try {
-      fs.writeFileSync(tmp, text, 'utf8')
-      fs.renameSync(tmp, p)
-      return true
-    } catch {
-      return false
-    }
-  },
+      fs.mkdirSync(path.dirname(p), { recursive: true })
+      fs.writeFileSync(p, text, 'utf8')
+    },
+  // 和真实 writeTextFileAtomic 同语义：写本进程专属 tmp 再 rename（D-42）  writeTextFileAtomic: (p: string, text: string) => {
+      const tmp = `${p}.${process.pid}-${Math.random().toString(36).slice(2)}.tmp`
+      try {
+        fs.writeFileSync(tmp, text, 'utf8')
+        fs.renameSync(tmp, p)
+        return true
+      } catch {
+        return false
+      }
+    },
 }))
 
 const { fileRepo } = await import('@/cep/data/file-repo')
@@ -91,10 +92,18 @@ function writeFromOtherProcess(value: Doc): void {
   fs.writeFileSync(FILE(), JSON.stringify(value), 'utf8')
 }
 
+/** decode 必填（TD-03-5）：只认 `{ list: string[] }` */
+function decodeDoc(raw: unknown): { value: Doc } | null {
+  if (!isRecord(raw) || !Array.isArray(raw.list)) return null
+  const list = raw.list.filter((x): x is string => typeof x === 'string')
+  return list.length === raw.list.length ? { value: { list } } : null
+}
+
 function createRepo(opts: { retries?: number } = {}) {
   return fileRepo<Doc>(
     () => FILE(),
     () => ({ list: [] }),
+    decodeDoc,
     opts,
   )
 }

@@ -13,38 +13,47 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
  */
 const fsMock = vi.hoisted(() => ({ files: new Map<string, string>() }))
 
-vi.mock('@/cep/fs', () => ({
+vi.mock('@/cep/node', () => ({
   hasNode: () => true,
+}))
+
+vi.mock('@/cep/paths', () => ({
   userDir: () => 'ROAM/SheJiZhuLi',
+}))
+
+vi.mock('@/cep/fs-read', () => ({
   readTextOutcome: async (path: string) => {
-    const text = fsMock.files.get(path)
-    return text === undefined ? { status: 'notSeen' as const } : { status: 'ok' as const, text }
-  },
+      const text = fsMock.files.get(path)
+      return text === undefined ? { status: 'notSeen' as const } : { status: 'ok' as const, text }
+    },
   readTextSync: (path: string) => {
-    const text = fsMock.files.get(path)
-    return text === undefined ? { status: 'notSeen' as const } : { status: 'ok' as const, text }
-  },
+      const text = fsMock.files.get(path)
+      return text === undefined ? { status: 'notSeen' as const } : { status: 'ok' as const, text }
+    },
   writeTextFileAtomic: (path: string, text: string) => {
-    fsMock.files.set(path, text)
-    return true
-  },
+      fsMock.files.set(path, text)
+      return true
+    },
   writeTextFile: (path: string, text: string) => {
-    fsMock.files.set(path, text)
-  },
+      fsMock.files.set(path, text)
+    },
   readBase64Outcome: (path: string) => {
-    const text = fsMock.files.get(path)
-    return text === undefined
-      ? { status: 'notSeen' as const }
-      : { status: 'ok' as const, base64: Buffer.from(text).toString('base64') }
-  },
+      const text = fsMock.files.get(path)
+      return text === undefined
+        ? { status: 'notSeen' as const }
+        : { status: 'ok' as const, base64: Buffer.from(text).toString('base64') }
+    },
   writeBase64File: (path: string, base64: string) => {
-    fsMock.files.set(path, Buffer.from(base64, 'base64').toString('utf8'))
-    return true
-  },
+      fsMock.files.set(path, Buffer.from(base64, 'base64').toString('utf8'))
+      return true
+    },
   removeFile: (path: string) => {
-    fsMock.files.delete(path)
-    return { ok: true as const }
-  },
+      fsMock.files.delete(path)
+      return { ok: true as const }
+    },
+}))
+
+vi.mock('@/cep/codec', () => ({
   b64ToUtf8: (b64: string) => Buffer.from(b64, 'base64').toString('utf8'),
   utf8ToB64: (text: string) => Buffer.from(text, 'utf8').toString('base64'),
 }))
@@ -92,7 +101,7 @@ vi.mock('@/cep/open-url', () => openUrl)
 
 await import('@/commands')
 const { execute } = await import('@/commands/registry')
-const { styleIndexRepo } = await import('@/cep/data/style-library-repo')
+const { styleIndexWriter } = await import('@/cep/data/style-library-repo')
 
 const USER = 'ROAM/SheJiZhuLi'
 const COLOR_LIB = `${USER}/sj_kuColA.ini`
@@ -112,24 +121,24 @@ beforeEach(async () => {
   vi.clearAllMocks()
   fsMock.files.clear()
 
-  await styleIndexRepo.write({
+  await styleIndexWriter.write({
     index: 0,
     list: [{ name: '默认仓库', color: 'sj_kuColA.ini' }],
   })
   fsMock.files.set(COLOR_LIB, JSON.stringify([{ name: '灰白', show: true, list: [] }]))
 
-  jsx.style.getForegroundColor.mockResolvedValue(RED)
-  jsx.style.useStyleColor.mockResolvedValue(null)
-  jsx.style.setForegroundColor.mockResolvedValue(null)
-  jsx.style.setBorderColor.mockResolvedValue(null)
-  jsx.legacy.call.mockResolvedValue(null)
+  jsx.style.getForegroundColor.mockResolvedValue({ ok: true, data: RED })
+  jsx.style.useStyleColor.mockResolvedValue({ ok: true, data: null })
+  jsx.style.setForegroundColor.mockResolvedValue({ ok: true, data: null })
+  jsx.style.setBorderColor.mockResolvedValue({ ok: true, data: null })
+  jsx.legacy.call.mockResolvedValue({ ok: true, data: null })
 
   appEvents.sent.length = 0
   appEvents.handlers.clear()
 
   // 智能填色开关落在 sj_set.json：每条用例都从"缺键 = 官方默认开"开始，防用例间互串
-  const { legacySettingsRepo } = await import('@/cep/data/legacy-settings')
-  await legacySettingsRepo.write({})
+  const { legacySettingsWriter } = await import('@/cep/data/legacy-settings')
+  await legacySettingsWriter.write({})
 })
 
 describe('按钮 1：seban.addForegroundColor（原版 TianJia，sf.js:377-382）', () => {
@@ -152,7 +161,7 @@ describe('按钮 1：seban.addForegroundColor（原版 TianJia，sf.js:377-382�
   })
 
   it('jsx 读不到前景色（null）→ ok:false，色板不动', async () => {
-    jsx.style.getForegroundColor.mockResolvedValue(null)
+    jsx.style.getForegroundColor.mockResolvedValue({ ok: true, data: null })
 
     await expect(execute('seban.addForegroundColor')).resolves.toMatchObject({ ok: false })
     expect(fsMock.files.has(CUSTOM)).toBe(false)
@@ -325,9 +334,9 @@ describe('联动 2：主面板侧执行（开关在 /commonUse，不在色板）
   })
 
   it('智能填色**关**（sj_set.json 显式 false）→ 只设前景色，不动图层', async () => {
-    // 走仓库写入而不是直写文件：`pick()` 决定实现（内存 / 磁盘），直写文件在测试里读不到
-    const { legacySettingsRepo } = await import('@/cep/data/legacy-settings')
-    await legacySettingsRepo.write({ cyAutoFillColor: false })
+    // 走仓库写入而不是直写文件：`dataRepo()` 决定实现（内存 / 磁盘），直写文件在测试里读不到
+    const { legacySettingsWriter } = await import('@/cep/data/legacy-settings')
+    await legacySettingsWriter.write({ cyAutoFillColor: false })
 
     await expect(execute('seban.applyColor', { item: RED })).resolves.toEqual({ ok: true })
 

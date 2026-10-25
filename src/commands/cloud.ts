@@ -44,7 +44,7 @@ export const cloudCommands: Command<unknown>[] = [
     group: 'system',
     requires: 'none',
     kind: 'instant',
-    async run(_ctx, { url }) {
+    async invoke(_ctx, { url }) {
       setCloudUrl(url)
     },
   }),
@@ -55,7 +55,7 @@ export const cloudCommands: Command<unknown>[] = [
     group: 'system',
     requires: 'none',
     kind: 'instant',
-    async run(_ctx, { enabled }) {
+    async invoke(_ctx, { enabled }) {
       setAutoSyncEnabled(enabled)
     },
   }),
@@ -66,7 +66,7 @@ export const cloudCommands: Command<unknown>[] = [
     group: 'system',
     requires: 'none',
     kind: 'long',
-    async run(_ctx, { force, onConfirm }) {
+    async invoke(_ctx, { force, onConfirm }) {
       const result = await cloudEngine.upload({ force, onConfirm })
       throwIfFailed(result)
     },
@@ -78,7 +78,7 @@ export const cloudCommands: Command<unknown>[] = [
     group: 'system',
     requires: 'none',
     kind: 'long',
-    async run(_ctx, { onConfirm }) {
+    async invoke(_ctx, { onConfirm }) {
       const result = await cloudEngine.download({ onConfirm })
       throwIfFailed(result)
     },

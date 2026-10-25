@@ -15,8 +15,11 @@ import { createPinia, setActivePinia } from 'pinia'
 const files = vi.hoisted(() => ({ map: new Map<string, string>() }))
 
 const jsx = vi.hoisted(() => ({
-  font: { distributeByPitch: vi.fn(async () => 'ok') },
-  action: { callAction: vi.fn(async () => null), getActionList: vi.fn() },
+  font: { distributeByPitch: vi.fn(async () => ({ ok: true, data: 'ok' })) },
+  action: {
+    callAction: vi.fn(async () => ({ ok: true, data: { ok: true, data: null } })),
+    getActionList: vi.fn(),
+  },
   layer: { isSelectLayer: vi.fn(), getTypeNumber: vi.fn() },
   env: { setEnv: vi.fn() },
 }))
@@ -52,7 +55,7 @@ vi.mock('@/cep/fs', () => ({
   removeFile: () => ({ ok: true as const }),
   dirUsage: () => null,
   saveExportedText: () => {},
-  psScriptsDir: async () => null,
+  psScriptsDir: async () => ({ ok: true, data: { ok: true, data: null } }),
   b64ToUtf8: (value: string) => value,
   utf8ToB64: (value: string) => value,
 }))
@@ -84,7 +87,7 @@ beforeEach(() => {
   files.map.clear()
   __resetSettingsForTest()
   vi.clearAllMocks()
-  vi.mocked(jsx.font.distributeByPitch).mockResolvedValue('ok')
+  vi.mocked(jsx.font.distributeByPitch).mockResolvedValue({ ok: true, data: 'ok' })
   installCommonUseSource({
     read: () => commonUseRepo.read(),
     onChange: (listener) => commonUseRepo.onChange(listener),

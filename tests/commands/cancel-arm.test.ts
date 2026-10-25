@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 
 /**
- * TD-12-22：`CommandResult.ok === 'cancelled'` 这条臂必须**真的有产出、也真的有消费**。
+ * TD-12-22：`CommandOutcome.ok === 'cancelled'` 这条臂必须**真的有产出、也真的有消费**。
  *
  * 以前它是死码：全仓没有一处产出，于是"用户点了取消"被写成 PARSE（吸色）/ NETWORK（云同步），
  * `useCommand` 拿它当失败弹出来——用户自己按的「取消」，界面回他一句故障。
@@ -43,7 +43,7 @@ const { CepError } = await import('@/utils/errors')
 const { execute, register } = await import('@/commands/registry')
 const { useCommand } = await import('@/components/command/useCommand')
 const { useFeedbackStore } = await import('@/stores/feedback')
-const { log, __resetLoggerForTest } = await import('@/utils/logger')
+const { log } = await import('@/utils/logger')
 
 /**
  * 不清空注册表：`@/commands` 在文件顶部已经把真命令注册好了（`cloud.download` 要用），
@@ -55,14 +55,15 @@ register({
   group: 'system',
   requires: 'none',
   kind: 'instant',
-  async run() {
+  async invoke() {
     throw new CepError('CANCELLED', '用户取消了')
   },
 })
 
 beforeEach(() => {
   setActivePinia(createPinia())
-  __resetLoggerForTest()
+  // logger 的清场用「模块重载」做（`vi.resetModules()` 放在文件顶部，见下），
+  // 所以这里不再有专门的清场函数 —— logger 的导出面只有 `log` 一个东西。
   vi.clearAllMocks()
 })
 
@@ -90,7 +91,9 @@ describe('取消臂：产出点', () => {
       error: '取消操作',
     })
 
-    const result = await execute('cloud.download', { onConfirm: async () => true })
+    const result = await execute('cloud.download', {
+      onConfirm: async () => ({ ok: true, data: true }),
+    })
 
     expect(result).toEqual({ ok: 'cancelled' })
   })
@@ -102,7 +105,7 @@ describe('取消臂：消费点', () => {
     feedback.clear()
     const cmd = useCommand('test.cancel')
 
-    const ok = await cmd.run()
+    const ok = await cmd.invoke()
 
     expect(ok).toBe(false)
     expect(feedback.toasts).toHaveLength(0)
@@ -115,14 +118,14 @@ describe('取消臂：消费点', () => {
       group: 'system',
       requires: 'none',
       kind: 'instant',
-      async run() {
+      async invoke() {
         throw new CepError('JSX', '脚本炸了')
       },
     })
     const feedback = useFeedbackStore()
     feedback.clear()
 
-    await useCommand('test.fail').run()
+    await useCommand('test.fail').invoke()
 
     expect(feedback.toasts).toHaveLength(1)
   })

@@ -1,25 +1,38 @@
-import { readTextOutcome, readTextSync, writeTextFile, writeTextFileAtomic } from '@/cep/fs'
+// 是什么：单文件 JSON 仓库的实现（串行队列 + 原子写 + .bak + CAS 比对 + 必填 decode 通道）
+// 唯一入口：**不是这里** —— 应用层唯一构造器是 `./data-repo` 的 `dataRepo`（它管环境选择与内存分支）。
+//   本文件仍导出 `fileRepo`，只给实现级用例；直接调用绕过的是「环境选择」而**不是**「形状通道」，
+//   在无 Node 的浏览器里会抛 `NO_NODE`（**响的**），不会静默写坏数据。
+//   ⇒ 这条我判「放弃强声明」：`fileRepo` 是**唯一实现**，不是唯一入口（TS 没有 package-private）。
+// **怎么用**：应用层（store / command / 页面）**不要直接调用**，一律 `import { dataRepo } from './data-repo'`。
+// **别这么写**：在 store / command / 页面里 `fileRepo(...)` —— 你跳过了环境选择，浏览器 dev 直接炸。
+// 替代了什么：`pick.ts` 的可选 `normalize` 参数（TD-03-5 / T-99-2）
+// 谁在用（**两具名例外 + 实现级用例**）：
+//   ① `data-repo.ts` —— 唯一构造器，环境选择在它那里；
+//   ② `swatch-repo.ts` —— **具名例外**：色板是**用户资产**，`dataRepo` 的内存兜底会把"读不到"
+//      变成"空色板 + 写入落内存"（静默丢）。这里宁可在无 Node 时抛 `NO_NODE`（响的）；
+//   ③ 实现级用例三处：`tests/cep/file-repo.test.ts`（动态 import）、`tests/data/repo.test.ts`（import）、
+//      `tests/scripts/data-repo-realfs.test.ts`（夹具字符串，不真 import）。
 import { CepError } from '@/utils/errors'
+import { msg } from '@/domain/messages'
 import { runQueued } from './write-queue'
+import { foldAbsent, readRepoFile } from './repo-read'
+import { writeDisk } from '@/cep/disk-write'
 import { log } from '@/utils/logger'
+import type { Decoder } from '@/utils/decode'
 import type { Repo, RepoRead } from './types'
 
-export interface FileRepoOptions<T = unknown> {
+// 备份（`.bak` / `.corrupt-*`）与 CAS 比对已抽到 `./disk-write`（唯一落盘入口）——
+// 本文件不再自己实现，也不再自己调 `writeTextFileAtomic`。
+// `backupOrQuarantine` / `compareSync` 是 `disk-write` 的**内部实现**，不再从这里穿出去 ——
+// 上层要落盘只调 `writeDisk` / `writeDiskSync`。
+
+export interface FileRepoOptions {
   /** 写之前把原文备份成 .bak，默认开（ADR-12） */
   backup?: boolean
   /** 文件不存在时 update 直接报错，禁止用 fallback 覆盖写 */
   requireExisting?: boolean
   /** 写前发现文件被别的面板改过时的重试次数，默认 5（D-26） */
   retries?: number
-  /**
-   * 读边界归一：把 `JSON.parse` 出来的 `unknown` 变成 `T`。
-   *
-   * **形状不认识必须返回 `null`**——`readRaw` 会把它转成 `ok: false` + `reason`，用户能在界面上看到。
-   * 归一器里不许补默认值：那等于把坏文件变成"看起来能用"（硬规则 20(b) 的静默回退）。
-   *
-   * 不传 = 仍把解析结果直接当 `T`（未接归一的仓库，剩余清单见台账 T-99-2）。
-   */
-  normalize?: (raw: unknown) => T | null
 }
 
 /**
@@ -35,113 +48,66 @@ export interface FileRepoOptions<T = unknown> {
 export function fileRepo<T>(
   resolvePath: () => string,
   fallback: () => T,
-  opts: FileRepoOptions<T> = {},
+  decode: Decoder<T>,
+  opts: FileRepoOptions = {},
 ): Repo<T> {
   const backup = opts.backup !== false
   const retries = opts.retries ?? 5
-  const normalize = opts.normalize
   const listeners = new Set<(value: T) => void>()
 
   function emit(value: T) {
     for (const listener of listeners) listener(value)
   }
 
-  async function readRaw(): Promise<{ read: RepoRead<T>; text: string | null }> {
-    const target = resolvePath()
-    const outcome = await readTextOutcome(target)
-
-    // 查不到 ≠ 读不到。读失败必须是 `ok: false`：压成 `ok: true` 时 `update` 会拿
-    // `fallback()` 派生的值覆盖用户文件，而且因为"原文为空"连 `.bak` 都不留（D-42 / T-105）
-    if (outcome.status === 'error') {
-      log.error('repo', `${target} 读取失败，使用默认值`, outcome.reason)
-      return {
-        read: { ok: false, reason: `读取失败：${outcome.reason}`, fallback: fallback() },
-        text: null,
-      }
-    }
-
-    // 查不到 = 首次使用的正常状态，不算读失败（数据层在这里下的结论，原语只报观测：ADR-26 ②）
-    if (outcome.status === 'notSeen') {
-      return { read: { ok: true, value: fallback() }, text: null }
-    }
-
-    const text = outcome.text
-    let parsed: unknown
-    try {
-      parsed = JSON.parse(text)
-    } catch (e) {
-      // 坏文件是错误不是警告：与 `style-library-repo.ts:136` 同一档（用户能在「打开日志」里查到）
-      log.error('repo', `${target} 不是合法 JSON，使用默认值`, e)
-      return { read: { ok: false, reason: '内容不是合法 JSON', fallback: fallback() }, text }
-    }
-
-    // 没接归一的仓库：解析结果直接当 T。这是"形状"的第二份真相，逐仓库接归一后消失（T-99-2）
-    if (!normalize) return { read: { ok: true, value: parsed as T }, text }
-
-    const value = normalize(parsed)
-    if (value === null) {
-      // 结构不认识 ≠ 文件不存在：两者必须能分辨，否则坏文件在页面上就是"空面板"
-      log.error('repo', `${target} 内容结构不认识，使用默认值`)
-      return { read: { ok: false, reason: '内容结构不认识', fallback: fallback() }, text }
-    }
-    return { read: { ok: true, value }, text }
-  }
-
   /**
-   * 落盘前的 CAS 比对（D-26）。返回 `'same' | 'diff' | 'unknown'`。
-   *
-   * 必须用**同步**读：`readTextOutcome` 是 async，即使 Node 读本身是同步的，`await` 也会让出
-   * 一个 microtask 边界——另一个实例（跨进程的等价前提）正好能在这个边界里完成一次完整写入，
-   * 于是"比对通过 → rename"之间被插一脚，照样丢更新。实测过：换成同步读之前，
-   * 两个实例各写 20 次只活下来 20 条（`tests/data/repo-cross-process.test.ts`）。
-   *
-   * 比对放在 `persist` 里、`.bak` 之后、原子写之前，所以"比对 → rename"之间只剩
-   * 「写 tmp + rename」两个同步系统调用。这一段**不是零**：两个进程仍可能都通过比对、
-   * 后写的赢（窗口 µs 级）。要彻底消除得靠跨进程锁，见台账 D-26 的取舍。
-   *
-   * `unknown` = 无 Node（读不到原文），无从比对；那种情况下写本身会走 NO_NODE 抛错路径。
+   * 读一次盘。**判据不在这里** —— 三态 → JSON → `decode` → `RepoRead` 全在 `./repo-read`
+   * （档 1 的唯一结论入口）。本文件只负责两件它自己才有的事：
+   * ① 把 `resolvePath()` 的结果喂进去；② 把原文 `text` 留给 CAS 比对（D-26）。
    */
-  function compareSync(target: string, expected: string | null): 'same' | 'diff' | 'unknown' {
-    const read = readTextSync(target)
-    // 读不到 ≠ 没人改过（TD-09-24）：旧实现读不到给 null，`expected` 也是 null 时
-    // `null === null` 判 'same'，于是权限错时并发守卫恒真、别的面板刚建的文件被覆盖。
-    if (read.status === 'error') return 'unknown'
-    const actual = read.status === 'ok' ? read.text : null
-    return actual === expected ? 'same' : 'diff'
+  function readRaw(): { read: RepoRead<T>; text: string | null } {
+    const outcome = readRepoFile(resolvePath(), decode)
+    // 折叠只在 `foldAbsent` 里发生一次；本文件只把原文 `text` 留给 CAS（D-26）
+    return { read: foldAbsent(outcome, fallback), text: outcome.text }
   }
 
   /**
    * 落盘。写失败必须抛：这里不做任何兜底（ADR-14）。
    *
-   * 返回 `false` = 传了 `expected` 且磁盘原文已经不是它（别的面板改过）。比对故意放在
-   * `.bak` 之后、原子写之前：中间只剩「写 tmp + rename」，能压多短压多短。
+   * 返回 `false` = 传了 `expected` 且磁盘原文已经不是它（别的面板改过）。
+   * 具体顺序（备份 → CAS → 原子写）在 `./disk-write` 的 `writeDisk` 里，本文件不再重写一遍。
    */
   async function persist(
     value: T,
     previous: string | null,
     expected?: string | null,
+    quarantine = false,
   ): Promise<boolean> {
-    const target = resolvePath()
-    const text = JSON.stringify(value)
+    const result = await writeDisk(resolvePath(), JSON.stringify(value), {
+      // `backup` 关掉时不写 `.bak`：显式传 `null` 表示"没有原文"
+      previous: backup ? previous : null,
+      quarantineOnCorrupt: quarantine,
+      expected,
+    })
+    return result === 'written'
+  }
 
-    if (backup && previous) writeTextFile(`${target}.bak`, previous)
-    if (expected !== undefined) {
-      const compared = compareSync(target, expected)
-      // 别人改过 → 放弃这次写（原语义：返回 false 让上层丢更新而不是覆盖）
-      if (compared === 'diff') return false
-      // 比不了（读不到原文 / 无 Node）→ **不写**：拿不到原文就没有"没被改过"的证据，
-      // 写下去就是覆盖别人的更新（TD-09-24）
-      if (compared === 'unknown') {
-        throw new CepError('IO', `落盘前比对读不到原文，已中止写入：${target}`)
-      }
-    }
-
-    // 原子写失败必须抛：旧实现在这里退回普通写，等于主动摘掉 rename 保护（TD-09-27）
-    const written = writeTextFileAtomic(target, text)
-    if (written.status === 'error') {
-      throw new CepError('IO', `写入失败：${target}（${written.reason}）`)
-    }
-    return true
+  /**
+   * 整份覆盖 + 保留原文做备份/隔离（`overwrite` / `overwriteInLock` 共用这一份）。
+   *
+   * 与 `rawUpdate` 的区别：`rawUpdate` 在原文坏时**拒绝写**（D-42）；这里**照写**，
+   * 但把坏原文隔离到 `.corrupt-<ts>`（TD-09-21）。与 `write` 的区别：`write` 不读原文，
+   * `.bak` 无从谈起。T-112：读不到原文时**不许写** —— 整份覆盖会把旧内容抹平且没有第二份。
+   */
+  async function rawOverwrite(value: T): Promise<void> {
+    // 读原文交给 `writeDisk`（`requireReadable` ⇒ 读不到就抛，T-112）；
+    // 本文件**不再自己读**，所以 `readTextSync` 的消费者只剩 `disk-write` 一个。
+    // `backup` 关掉时显式传 `null`（"没有原文"）⇒ 不写 `.bak`，也就没有"读不到原文"这一步可判。
+    await writeDisk(resolvePath(), JSON.stringify(value), {
+      previous: backup ? undefined : null,
+      quarantineOnCorrupt: true,
+      requireReadable: true,
+    })
+    emit(value)
   }
 
   /** 不排队的读：给锁内调用方用（`readInLock`）。写是原子 rename，读不会看到半截 */
@@ -160,9 +126,10 @@ export function fileRepo<T>(
 
       // D-42：读到的不是真实数据（损坏 / 读不到）时**禁止写**。以前这里会拿 fallback
       // 继续 update，一次点击就把用户文件覆盖成默认值——原文只剩 .bak 里那一份。
-      if (!read.ok) throw new CepError('IO', `${target} ${read.reason}，拒绝覆盖写`)
+      if (!read.ok)
+        throw new CepError('IO', msg.data.fn.fileReadReasonRefuseOverwrite(target, read.reason))
       if (opts.requireExisting && text === null) {
-        throw new CepError('IO', `${target} 不存在，拒绝写入`)
+        throw new CepError('IO', msg.data.fn.fileNotExistsRefuseWrite(target))
       }
 
       const result = mutator(read.value)
@@ -174,7 +141,7 @@ export function fileRepo<T>(
       if (!written) {
         attempts += 1
         if (attempts > retries) {
-          throw new CepError('IO', `${target} 正被其他面板修改，写入已放弃（重试 ${retries} 次）`)
+          throw new CepError('IO', msg.data.fn.fileLockedByOtherPanel(target, String(retries)))
         }
         log.warn('repo', `${target} 被其他面板改过，重试 ${attempts}/${retries}`)
         // 退避 + 抖动：两个面板同时连点时，不加抖动会一直撞在同一个时间片里
@@ -206,6 +173,10 @@ export function fileRepo<T>(
     },
 
     readInLock: () => rawRead(),
+
+    overwrite: (value) => runQueued(() => rawOverwrite(value)),
+
+    overwriteInLock: (value) => rawOverwrite(value),
 
     update: (mutator) => runQueued(() => rawUpdate(mutator)),
 

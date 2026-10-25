@@ -65,23 +65,31 @@ vi.mock('@/cep/data/style-library-repo', () => ({
   deleteWarehouse: repo.deleteWarehouse,
   moveKuItemTo: repo.moveItemTo,
   moveKuGroupTo: repo.moveGroupTo,
-  styleIndexRepo: repo.indexRepo,
+  styleIndexWriter: repo.indexRepo,
 }))
 
 // 图片型渐变的 src 要拼 <userDir>/Gradient/<fileName>；jsdom 里没有 Node，userDir() 会抛 NO_NODE
 const fsMock = vi.hoisted(() => ({ userDir: vi.fn(() => 'C:/Users/u/AppData/Roaming/SheJiZhuLi') }))
 // 命令模块会加载 `cep/data/style-library-io`（导入导出），它要 base64 编解码；
 // 本文件不跑导入导出，给足符号即可，不模拟磁盘。
-vi.mock('@/cep/fs', () => ({
+vi.mock('@/cep/paths', () => ({
   userDir: fsMock.userDir,
+}))
+
+vi.mock('@/cep/node', () => ({
   hasNode: () => true,
-  readTextSmart: async () => null,
+}))
+
+vi.mock('@/cep/fs-read', () => ({
+  readTextSmart: async () => ({ ok: true, data: null }),
   writeTextFile: () => undefined,
   writeTextFileAtomic: () => ({ status: 'ok' as const }),
-  // T-109：base64 读也走三态
-  readBase64Outcome: () => ({ status: 'notSeen' as const }),
+  // T-109：base64 读也走三态  readBase64Outcome: () => ({ status: 'notSeen' as const }),
   writeBase64File: () => ({ status: 'ok' as const }),
   removeFile: () => ({ ok: true as const }),
+}))
+
+vi.mock('@/cep/codec', () => ({
   b64ToUtf8: (b64: string) => Buffer.from(b64, 'base64').toString('utf8'),
   utf8ToB64: (text: string) => Buffer.from(text, 'utf8').toString('base64'),
 }))
@@ -316,12 +324,12 @@ describe('样式页第 2 段：应用 / 添加经 useCommand 接线', () => {
   }
 
   beforeEach(() => {
-    jsx.style.useShapeFill.mockResolvedValue(null)
-    jsx.style.useStyleColor.mockResolvedValue(null)
-    jsx.style.changeStyleColor.mockResolvedValue(null)
+    jsx.style.useShapeFill.mockResolvedValue({ ok: true, data: null })
+    jsx.style.useStyleColor.mockResolvedValue({ ok: true, data: null })
+    jsx.style.changeStyleColor.mockResolvedValue({ ok: true, data: null })
     jsx.style.getForegroundColor.mockResolvedValue({
-      name: '未命名',
-      color: { hex: 'FF0000', c: 0, m: 100, y: 100, k: 0 },
+      ok: true,
+      data: { name: '未命名', color: { hex: 'FF0000', c: 0, m: 100, y: 100, k: 0 } },
     })
   })
 
@@ -433,8 +441,8 @@ describe('四库分派：点字体项 / 点字体组"+" 不能落到样式库', 
   }
 
   beforeEach(() => {
-    jsx.font.checkUseFont.mockResolvedValue(null)
-    jsx.font.useFont.mockResolvedValue(null)
+    jsx.font.checkUseFont.mockResolvedValue({ ok: true, data: null })
+    jsx.font.useFont.mockResolvedValue({ ok: true, data: null })
   })
 
   it('点字体项 → style.applyFont，**不是** style.applyStyle（落错库会污染用户文件）', async () => {
@@ -456,7 +464,7 @@ describe('四库分派：点字体项 / 点字体组"+" 不能落到样式库', 
   it('点字体组"+"→ style.addFont（ys_getFontInfo 的 data 入库），**不是** style.addStyle', async () => {
     seedFont()
     jsx.font.getFontInfo.mockResolvedValue({
-      err: 0,
+      ok: true,
       data: { name: '未命名', fonts: [{ family: '等线' }] },
     })
 
@@ -1417,10 +1425,10 @@ describe('样式页右键菜单（清单 #31-51：四库各不一样）', () => 
 
   it('快速吸色到组（T-66）可点：切吸色工具 → 吸色完成 → 加到该组', async () => {
     seedColorGroup()
-    jsx.style.setTool.mockResolvedValue(null)
+    jsx.style.setTool.mockResolvedValue({ ok: true, data: null })
     jsx.style.getForegroundColor.mockResolvedValue({
-      name: '未命名',
-      color: { hex: 'FF0000', c: 0, m: 100, y: 100, k: 0 },
+      ok: true,
+      data: { name: '未命名', color: { hex: 'FF0000', c: 0, m: 100, y: 100, k: 0 } },
     })
 
     const page = mountPageWithConfirm()

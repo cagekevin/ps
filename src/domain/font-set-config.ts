@@ -3,6 +3,8 @@
 // 替代了什么：原版 `V.a.info` 里字体面板字段的隐式形状（app.v4.js:65835-65866）
 // 谁在用：pages/fontSet/**、commands/fontSet.ts、cep/data/legacy-settings.ts
 // 禁止：这里不发请求、不读文件；写路径只在 data 层
+import { isRecord } from '@/utils/guards'
+import { decodeIndexed, type Decoded } from '@/utils/decode'
 
 export interface PasteFontConfig {
   scriptFamily: boolean
@@ -107,6 +109,38 @@ export interface TranslateCounter {
   max: number
   /** 原版 `getTime()`：日 + 年 + 月拼接，如 21202610 */
   time: string
+}
+
+/** 条目级只证"是对象"：磁盘上的真实形状未经真机验证，过严会把正常文件判成坏文件 */
+function isQuickFont(x: unknown): x is QuickFont {
+  return isRecord(x)
+}
+
+/** 读边界：快捷字体文件（容器坏 / 有条目不是对象 → 整份 `null`） */
+export function decodeQuickFontFile(raw: unknown): Decoded<QuickFontFile> | null {
+  return decodeIndexed(raw, isQuickFont)
+}
+
+function isHierarchyPreset(x: unknown): x is HierarchyPreset {
+  return isRecord(x) && typeof x.name === 'string' && Array.isArray(x.data)
+}
+
+/** 读边界：层级预设文件（条目要 `name` + `data[]`） */
+export function decodeHierarchyFile(raw: unknown): Decoded<HierarchyFile> | null {
+  return decodeIndexed(raw, isHierarchyPreset)
+}
+
+/**
+ * 读边界：翻译计数。三个字段都是原版 `Jv.getTime()` 的产物，缺一个就无法判断"今天" ⇒ 整份 `null`。
+ *
+ * ⚠️ **UNVERIFIED**：真机文件形状未经实测（禁 e2e）。若真实文件缺字段，用户会看到
+ * 「内容结构不认识」且写被 D-42 拒绝 —— 已记进 R1 轮次文件的未处置清单。
+ */
+export function decodeTranslateCounter(raw: unknown): Decoded<TranslateCounter> | null {
+  if (!isRecord(raw)) return null
+  const { num, max, time } = raw
+  if (typeof num !== 'number' || typeof max !== 'number' || typeof time !== 'string') return null
+  return { value: { num, max, time } }
 }
 
 /** 原版每日 380 次（app.v4.js:42900），不是 1000（1000 是文本长度上限） */

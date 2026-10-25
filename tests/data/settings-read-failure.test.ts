@@ -11,65 +11,45 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
  * 写盘函数有没有被调用。
  */
 
-const fsMock = vi.hoisted(() => ({
-  /** 非空 = 同步读返回 error（模拟 EACCES）。空 = 文件不存在（notSeen） */
-  readError: '',
-  /** 原子写是否失败 */
-  writeError: '',
+import { installFakeFs } from '../helpers/fake-fs'
+import { ERR_PREFIX } from '@/utils/errors'
+
+/** 假的是操作系统（不是 mock `@/cep/fs`）—— 写原语在 `disk-write`，mock fs 拦不住它 */
+const disk = installFakeFs()
+vi.mock('@/cep/transport', () => ({
+  hasCep: () => true,
+  // jsx 兜底的"文件不存在"哨兵（带 `ERR:` 前缀才算哨兵，否则被当成正文）
+  evalScriptRaw: async () => `${ERR_PREFIX}文件不存在: `,
 }))
 
-const atomic = vi.hoisted(() => vi.fn())
-const plain = vi.hoisted(() => vi.fn())
+/** 写失败监听器收到的提示（断言"拒绝写回要喊出来"） */
 const errors: string[] = []
-
-vi.mock('@/cep/transport', () => ({ hasCep: () => true }))
-vi.mock('@/cep/fs', () => ({
-  hasNode: () => true,
-  userDir: () => '/user',
-  readTextSync: () =>
-    fsMock.readError
-      ? { status: 'error' as const, reason: fsMock.readError }
-      : { status: 'notSeen' as const },
-  writeTextFileAtomic: atomic,
-  writeTextFile: plain,
-  b64ToUtf8: (v: string) => v,
-  utf8ToB64: (v: string) => v,
-  dirUsage: () => null,
-  readTextOutcome: async () => ({ status: 'notSeen' as const }),
-  readBase64Outcome: () => ({ status: 'notSeen' as const }),
-  writeBase64File: () => ({ status: 'ok' as const }),
-  removeFile: () => ({ ok: true as const }),
-  saveExportedText: () => {},
-  psScriptsDir: async () => null,
-}))
 
 const settings = await import('@/cep/data/settings')
 
 beforeEach(() => {
   settings.__resetSettingsForTest()
-  fsMock.readError = ''
-  fsMock.writeError = ''
-  atomic.mockReset().mockReturnValue({ status: 'ok' as const })
-  plain.mockReset()
+  disk.install()
+  disk.failRead = false
+  disk.failWrite = false
   errors.length = 0
   settings.onSettingsWriteError((message) => errors.push(message))
 })
 
 describe('偏好读不到 → 拒绝写回（TD-09-23）', () => {
   it('读返回 error 时：getPref 仍给默认值，但一个字节都不写盘', () => {
-    fsMock.readError = 'EACCES: permission denied'
+    disk.failRead = true
 
     expect(settings.getPref('nav.hidden', 'default')).toBe('default')
     settings.setPref('nav.hidden', 'changed')
     settings.flushPrefs()
 
     // 关键断言：默认值没有变成"用户偏好"写回文件
-    expect(atomic).not.toHaveBeenCalled()
-    expect(plain).not.toHaveBeenCalled()
+    expect(disk.writes).toHaveLength(0)
   })
 
   it('拒绝写回要喊出来（写失败监听器收到一条带原因的提示）', () => {
-    fsMock.readError = 'EACCES: permission denied'
+    disk.failRead = true
     settings.getPref('nav.hidden', 'default')
     settings.setPref('nav.hidden', 'changed')
     settings.flushPrefs()
@@ -82,18 +62,19 @@ describe('偏好读不到 → 拒绝写回（TD-09-23）', () => {
     settings.setPref('nav.hidden', 'changed')
     settings.flushPrefs()
 
-    expect(atomic).toHaveBeenCalledTimes(1)
+    expect(disk.writes).toHaveLength(1)
   })
 
   it('原子写失败 → 报错，且**不再退回普通写**（TD-09-27）', () => {
-    atomic.mockReturnValue({ status: 'error' as const, reason: 'ENOSPC: disk full' })
+    disk.failWrite = 'ENOSPC: disk full'
 
     settings.getPref('nav.hidden', 'default')
     settings.setPref('nav.hidden', 'changed')
     settings.flushPrefs()
 
     expect(errors.join('\n')).toContain('偏好写入失败')
+    // 原子写失败 ⇒ **目标文件一个字节都没被写**（`.bak` 可能已经落地，那是备份，不算本体）
     // 旧实现在这里是 `if (!atomic) writeTextFile(...)`：原子保证被摘掉，而且失败原因丢失
-    expect(plain).not.toHaveBeenCalled()
+    expect(disk.writes.filter((w) => !w.path.endsWith('.bak'))).toHaveLength(0)
   })
 })

@@ -1,10 +1,25 @@
+// 是什么：动作库数据层——仓库索引 / 库文件读写，以及 PS 动作面板的原始读取
+// 替代了什么：`src/cep/ps.ts` 的 `getRawActionList`（ps.ts 不再被 stores 需要）
+// 谁在用：`stores/action.ts`（只读投影）、`commands/action.ts`（写仓库）
+// 禁止：页面 import 本文件（走 store 投影）；解析归 `domain/action`，这里只"取回来"
+
 import { DATA_FILES } from '@/cep/env'
-import { hasNode, removeFile, userDir } from '@/cep/fs'
-import type { ActionLibrary, ActionWarehouseIndex } from '@/domain/action'
-import { pick } from './pick'
-import type { Repo } from './types'
+import { hasNode } from '@/cep/node'
+import { userDir } from '@/cep/paths'
+import { removeFile } from '@/cep/disk-write'
+import { initJsx } from '@/cep/ps'
+import { jsx } from '@/cep/jsx'
+import {
+  decodeActionLibrary,
+  decodeActionWarehouseIndex,
+  type ActionLibrary,
+  type ActionWarehouseIndex,
+} from '@/domain/action'
+import { dataRepo } from './data-repo'
+import type { Repo, RepoView } from './types'
 import { deepClone } from '@/utils/clone'
 import { CepError } from '@/utils/errors'
+import { msg } from '@/domain/messages'
 
 /**
  * 动作库仓库。结构与原版源码一致（`app.v4.js:6552-6659`），不是猜的：
@@ -66,17 +81,26 @@ export function defaultActionIndex(): ActionWarehouseIndex {
   return clone(DEFAULT_INDEX)
 }
 
-export const actionIndexRepo: Repo<ActionWarehouseIndex> = pick(
+const actionIndexImpl: Repo<ActionWarehouseIndex> = dataRepo(
   () => `${userDir()}/${DATA_FILES.actionLibrary}`,
   defaultActionIndex,
-  defaultActionIndex,
+  decodeActionWarehouseIndex,
 )
 
-export const actionLibraryRepo: Repo<ActionLibrary> = pick(
+const actionLibraryImpl: Repo<ActionLibrary> = dataRepo(
   () => `${userDir()}/${currentFile}`,
   () => [],
-  () => clone(SEED),
+  decodeActionLibrary,
+  { seed: () => clone(SEED) },
 )
+
+/** 只读视图（store 唯一能拿到的形状）：没有 write / update —— 调用不到 */
+export const actionIndexRepo: RepoView<ActionWarehouseIndex> = actionIndexImpl
+export const actionLibraryRepo: RepoView<ActionLibrary> = actionLibraryImpl
+
+/** 写侧句柄：只给 commands/registry 的 ctx.data / action-archive / cloud 同步用 */
+export const actionIndexWriter: Repo<ActionWarehouseIndex> = actionIndexImpl
+export const actionLibraryWriter: Repo<ActionLibrary> = actionLibraryImpl
 
 /** 从索引取当前仓库文件名；索引异常时回退默认（ADR-14：读可降级） */
 export function currentWarehouseFile(index: ActionWarehouseIndex): string {
@@ -92,7 +116,7 @@ function newWarehouseFile(): string {
 /** 新建仓库：只加索引，仓库文件等首次写入时创建（原版 wh.add 6598-6603） */
 export async function addWarehouse(name = '未命名分组'): Promise<number> {
   let index = -1
-  await actionIndexRepo.update((value) => {
+  await actionIndexImpl.update((value) => {
     value.list.push({ name, fileName: newWarehouseFile() })
     index = value.list.length - 1
   })
@@ -101,7 +125,7 @@ export async function addWarehouse(name = '未命名分组'): Promise<number> {
 
 /** 重命名仓库：只改 name，不动 fileName（原版 wh.rename 6576-6579） */
 export async function renameWarehouse(index: number, name: string): Promise<void> {
-  await actionIndexRepo.update((value) => {
+  await actionIndexImpl.update((value) => {
     const target = value.list[index]
     if (!target) throw new Error('仓库不存在')
     target.name = name
@@ -114,20 +138,20 @@ export async function deleteWarehouse(index: number): Promise<void> {
   // 坏索引没有 value（判别联合）：不先判这一行，下面两句会分别说成「至少保留一个仓库」
   // 和「仓库不存在」——把"文件坏了"说成"你没有仓库"（T-101-1 / T-101-2）
   if (!read.ok) {
-    throw new CepError('IO', `动作库索引文件损坏（${read.reason}），删除已中止`)
+    throw new CepError('IO', msg.data.fn.actionIndexCorruptDeleteAbort(read.reason))
   }
   if (read.value.list.length <= 1) throw new Error('至少保留一个仓库')
   const target = read.value.list[index]
   if (!target) throw new Error('仓库不存在')
 
   if (hasNode()) {
-    // 删不掉要说出来：旧实现丢返回值，磁盘上旧 sj_dz*.json 还在而用户以为仓库已删（TD-06-6）
+    // 删不掉要说出来：旧实现丢返回值，磁盘上旧 sj_dz*.json 还在而用户以为仓库已删（TD-09-26）
     const removed = removeFile(`${userDir()}/${target.fileName}`)
     if (!removed.ok)
-      throw new CepError('IO', `仓库文件删除失败：${target.fileName}（${removed.reason}）`)
+      throw new CepError('IO', msg.data.fn.warehouseDeleteFailed(target.fileName, removed.reason))
   }
 
-  await actionIndexRepo.update((value) => {
+  await actionIndexImpl.update((value) => {
     value.list.splice(index, 1)
     if (index < value.index) value.index -= 1
     else if (index === value.index) value.index = 0
@@ -137,9 +161,26 @@ export async function deleteWarehouse(index: number): Promise<void> {
 
 /** 切换仓库：改索引并切当前文件（原版 wh.select 6605-6612） */
 export async function selectWarehouse(index: number): Promise<void> {
-  await actionIndexRepo.update((value) => {
+  await actionIndexImpl.update((value) => {
     if (!value.list[index]) throw new Error('仓库不存在')
     value.index = index
     selectActionFile(currentWarehouseFile(value))
   })
+}
+
+// ── PS 动作面板的原始读取 ─────────────────────────────────────────────
+
+/**
+ * 读 PS 当前动作面板的**原始**返回。
+ *
+ * 只做"取回来"，不解析：结构未真机验证，解析放 `domain/action` 的 `readActionList`，
+ * 模型化放 `stores/action` 的 `loadPsActions`。这样 store 不需要 import `cep/ps`。
+ */
+export async function getRawActionList(): Promise<unknown> {
+  await initJsx()
+  const outcome = await jsx.action.getActionList()
+  if (!outcome.ok) {
+    throw new CepError(outcome.code, outcome.reason || '读取 Photoshop 动作列表失败')
+  }
+  return outcome.data
 }

@@ -1,8 +1,10 @@
 import tagsSeed from '@/mocks/font-tags.json'
 import { DATA_FILES } from '@/cep/env'
-import { userDir } from '@/cep/fs'
-import { pick } from './pick'
-import type { Repo } from './types'
+import { userDir } from '@/cep/paths'
+import { isRecord } from '@/utils/guards'
+import { decodeList } from '@/utils/decode'
+import { dataRepo } from './data-repo'
+import type { Repo, RepoView } from './types'
 import { deepClone } from '@/utils/clone'
 
 /** 标签文件的原始形状（原面板字段名不改，见 ADR-05） */
@@ -27,17 +29,36 @@ const starsSeed: RawStar[] = [
   { name: 'Didot', star: 2 },
 ]
 
-export const tagsRepo: Repo<RawTag[]> = pick(
+/**
+ * 标签 / 星级：条目字段全可选（原面板字段名不改，ADR-05）⇒ 条目级只证"是对象"。
+ *
+ * **导出**是因为云同步入口（`cloud/entries/font-tags|font-stars`）也要用它把
+ * `JSON.parse` 的 `unknown[]` 收窄成 `RawTag[]` / `RawStar[]`——同一份证明只留这一处。
+ */
+export const isRawTag = (x: unknown): x is RawTag => isRecord(x)
+export const isRawStar = (x: unknown): x is RawStar => isRecord(x)
+
+const tagsImpl: Repo<RawTag[]> = dataRepo(
   () => `${userDir()}/${DATA_FILES.ztglTags}`,
   () => [],
-  () => clone<RawTag[]>(tagsSeed),
+  (raw) => decodeList(raw, isRawTag),
+  { seed: () => clone<RawTag[]>(tagsSeed) },
 )
 
-export const starsRepo: Repo<RawStar[]> = pick(
+const starsImpl: Repo<RawStar[]> = dataRepo(
   () => `${userDir()}/${DATA_FILES.ztglStar}`,
   () => [],
-  () => clone<RawStar[]>(starsSeed),
+  (raw) => decodeList(raw, isRawStar),
+  { seed: () => clone<RawStar[]>(starsSeed) },
 )
 
-export { pick } from './pick'
-export type { Repo, RepoRead } from './types'
+/** 只读视图（store 唯一能拿到的形状）：没有 write / update —— 调用不到 */
+export const tagsRepo: RepoView<RawTag[]> = tagsImpl
+export const starsRepo: RepoView<RawStar[]> = starsImpl
+
+/** 写侧句柄：只给 commands/registry 的 ctx.data 与 cloud 同步用；store 里出现即违规（eslint） */
+export const tagsWriter: Repo<RawTag[]> = tagsImpl
+export const starsWriter: Repo<RawStar[]> = starsImpl
+
+export { dataRepo } from './data-repo'
+export type { Repo, RepoRead, RepoView } from './types'

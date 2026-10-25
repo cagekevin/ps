@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { CepError } from '@/utils/errors'
 import { createPinia, setActivePinia } from 'pinia'
 import { readValue } from '../support/repo-read'
 
@@ -40,7 +41,7 @@ const font = vi.hoisted(() => ({
 const selection = vi.hoisted(() => ({ hasSelection: true, typeNumber: 2 }))
 
 vi.mock('@/cep/jsx', () => ({ jsx: { font } }))
-vi.mock('@/cep/ps', () => ({ getFontList: vi.fn() }))
+vi.mock('@/cep/data/font-list', () => ({ getFontList: vi.fn() }))
 vi.mock('@/cep/http', () => ({ jsonp: vi.fn() }))
 vi.mock('@/selection', () => ({
   refresh: async () => selection,
@@ -58,13 +59,13 @@ vi.mock('@/selection/current-text', () => ({
 await import('@/commands')
 const { execute } = await import('@/commands/registry')
 const { jsonp } = await import('@/cep/http')
-const { getFontList } = await import('@/cep/ps')
-const { translateCounterRepo } = await import('@/cep/data/font-extra')
+const { getFontList } = await import('@/cep/data/font-list')
+const { translateCounterWriter } = await import('@/cep/data/font-extra')
 const { __resetFontClipboardForTest } = await import('@/domain/font-set-clipboard')
 const { decodeText } = await import('@/domain/translate')
 const { useFontMissingStore } = await import('@/stores/font-missing')
 const { setMissingFontPort, resetMissingFontPort } = await import('@/commands/runtime')
-const { fontHistoryRepo } = await import('@/cep/data/font-extra')
+const { fontHistoryWriter } = await import('@/cep/data/font-extra')
 
 const keeps = {
   scriptFamily: true,
@@ -83,7 +84,7 @@ beforeEach(() => {
   resetMissingFontPort()
   setMissingFontPort({ signal: (name) => useFontMissingStore().signal(name) })
   useFontMissingStore().clear()
-  for (const fn of Object.values(font)) fn.mockResolvedValue(null)
+  for (const fn of Object.values(font)) fn.mockResolvedValue({ ok: true, data: null })
   vi.mocked(getFontList).mockResolvedValue([])
 })
 
@@ -175,8 +176,8 @@ describe('fontSet.quickFont：平行数组不等长不许落盘（TD-12-27）', 
    * 现在：`update` 的 mutator 里抛 PARSE ⇒ 仓库存盘在 mutator 之后 ⇒ **压根没写**。
    */
   it('加不进去（PARSE 点名家族名），且快选文件一个字节都没动', async () => {
-    const { quickFontRepo } = await import('@/cep/data/font-extra')
-    const before = JSON.stringify(readValue(await quickFontRepo.read()))
+    const { quickFontWriter } = await import('@/cep/data/font-extra')
+    const before = JSON.stringify(readValue(await quickFontWriter.read()))
 
     vi.mocked(getFontList).mockResolvedValue([
       {
@@ -187,7 +188,7 @@ describe('fontSet.quickFont：平行数组不等长不许落盘（TD-12-27）', 
         star: 0,
       },
     ])
-    font.getCurrentFontInfo.mockResolvedValue({ family: '坏字体' })
+    font.getCurrentFontInfo.mockResolvedValue({ ok: true, data: { family: '坏字体' } })
 
     const result = await execute('fontSet.quickFont', { action: 'add' })
 
@@ -196,15 +197,15 @@ describe('fontSet.quickFont：平行数组不等长不许落盘（TD-12-27）', 
       expect(result.reason).toContain('坏字体')
       expect(result.reason).toContain('已拒绝写入快选')
     }
-    const after = JSON.stringify(readValue(await quickFontRepo.read()))
+    const after = JSON.stringify(readValue(await quickFontWriter.read()))
     expect(after).toBe(before)
   })
 })
 
 describe('fontSet.fontName 最近使用', () => {
   it('家族应用成功后写入最近列表，重复项提前', async () => {
-    await fontHistoryRepo.write(['旧字体', 'MiSans'])
-    font.setFontName.mockResolvedValue(null)
+    await fontHistoryWriter.write(['旧字体', 'MiSans'])
+    font.setFontName.mockResolvedValue(undefined)
 
     await execute('fontSet.fontName', {
       kind: 'family',
@@ -214,13 +215,14 @@ describe('fontSet.fontName 最近使用', () => {
       family: 'MiSans',
     })
 
-    expect(readValue(await fontHistoryRepo.read()).slice(0, 2)).toEqual(['MiSans', '旧字体'])
+    expect(readValue(await fontHistoryWriter.read()).slice(0, 2)).toEqual(['MiSans', '旧字体'])
   })
 })
 
 describe('fontSet.fontName 字体缺失', () => {
   it('code=1 时置位下载提示，不按普通失败 toast', async () => {
-    font.setFontName.mockResolvedValue({ err: 1, code: 1, msg: '字体缺失' })
+    // `write` 契约：`jsxWrite` 在生产者层抛 `CepError`（带 `hostCode`）⇒ mock 也该 reject
+    font.setFontName.mockRejectedValue(new CepError('JSX', '字体缺失', 1))
 
     const result = await execute('fontSet.fontName', {
       kind: 'family',
@@ -236,7 +238,7 @@ describe('fontSet.fontName 字体缺失', () => {
 
 describe('fontSet.split', () => {
   it('第一次探测失败时不执行第二次 jsx', async () => {
-    font.changeTextBranchMerge.mockResolvedValue({ err: 1, msg: '请选择文本' })
+    font.changeTextBranchMerge.mockRejectedValue(new CepError('JSX', '请选择文本'))
 
     const result = await execute('fontSet.split', { mode: 1 })
 
@@ -262,7 +264,7 @@ describe('复制 / 粘贴文字属性', () => {
 
   it('勾掉的字段被写成 null，且不改剪贴板原件', async () => {
     font.getFontInfo.mockResolvedValue({
-      err: 0,
+      ok: true,
       data: { fonts: [{ color: { r: 1, g: 2, b: 3 }, size: 12 }] },
     })
     await execute('fontSet.copyFont')
@@ -281,7 +283,7 @@ describe('复制 / 粘贴文字属性', () => {
 
 describe('fontSet.translate', () => {
   it('成功后写回 dst 并把每日计数 +1', async () => {
-    font.getCurrentText.mockResolvedValue({ err: 0, data: [{ text: '设计' }] })
+    font.getCurrentText.mockResolvedValue({ ok: true, data: [{ text: '设计' }] })
     vi.mocked(jsonp).mockResolvedValue({ trans_result: [{ dst: 'design' }] })
 
     const result = await execute('fontSet.translate', { from: 'zh', to: 'en', replace: true })
@@ -291,13 +293,13 @@ describe('fontSet.translate', () => {
     expect(decodeText(list[0].dst)).toBe('design')
     expect(font.setTranslateText).toHaveBeenCalledWith(expect.any(Array), true)
 
-    const counter = await translateCounterRepo.read()
+    const counter = await translateCounterWriter.read()
     expect(readValue(counter).num).toBe(1)
   })
 
   it('超过 1000 字不发起请求', async () => {
     font.getCurrentText.mockResolvedValue({
-      err: 0,
+      ok: true,
       data: [{ text: 'x'.repeat(1001) }],
     })
 

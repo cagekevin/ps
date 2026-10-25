@@ -7,6 +7,9 @@
  * - 索引 `sj_dzStoreInfo.json`：`{ index, list: [{ name, fileName }] }`（`app.v4.js:6552-6559`）
  * - 仓库文件：`[{ groupName, show, list: [{ group, name, alias? }] }]`
  */
+import { isRecord } from '@/utils/guards'
+import { decodeIndexed, type Decoded } from '@/utils/decode'
+
 export interface ActionItem {
   /** PS 动作组名 */
   group: string
@@ -84,41 +87,62 @@ export function normalizeActionList(raw: unknown): ActionGroup[] {
   return readActionList(raw).groups
 }
 
+/** 条目形状有出处：`app.v4.js:6552-6559` = `{ index, list: [{ name, fileName }] }` */
+function isActionWarehouse(x: unknown): x is ActionWarehouse {
+  return isRecord(x) && typeof x.name === 'string' && typeof x.fileName === 'string'
+}
+
+/** 读边界：动作仓库索引（容器坏 / 有条目不是对象 → 整份 `null`，不丢条目） */
+export function decodeActionWarehouseIndex(raw: unknown): Decoded<ActionWarehouseIndex> | null {
+  return decodeIndexed(raw, isActionWarehouse)
+}
+
+/**
+ * 读边界：动作库。形状判据在 `readActionList`（它认裸数组与 `{ info: [...] }` 两种包装）。
+ *
+ * ⚠️ `null` 必须在这里拒掉：`readActionList` 把 `null` 归成 `'array'`（那是**消费侧**
+ * "PS 没返回就当中没有"的口径）。读边界上，文件内容是 `null` 就是坏文件 ——
+ * 放过去等于"坏文件当空库"，`update` 会把 `[]` 写回磁盘（丢数据）。
+ */
+export function decodeActionLibrary(raw: unknown): Decoded<ActionLibrary> | null {
+  if (raw === null || raw === undefined) return null
+  const read = readActionList(raw)
+  return read.shape === 'unknown' ? null : { value: read.groups }
+}
+
 function normalizeGroups(list: unknown[]): ActionGroup[] {
   const groups: ActionGroup[] = []
 
   for (const entry of list) {
-    if (!entry || typeof entry !== 'object') continue
+    // 形状证明用守卫，不用 `as Record<string, unknown>`（guards.ts:6 明禁）
+    if (!isRecord(entry)) continue
 
-    const group = entry as Record<string, unknown>
-    const groupName = group.groupName ?? group.name
+    const groupName = entry.groupName ?? entry.name
     if (typeof groupName !== 'string') continue
 
     // 原版 dz_getActionList：{ name, children:[{ name }] }
     // 本地库：{ groupName, list:[{ group, name }] }
-    const children = Array.isArray(group.children) ? group.children : []
-    const localItems = Array.isArray(group.list) ? group.list : []
+    const children = Array.isArray(entry.children) ? entry.children : []
+    const localItems = Array.isArray(entry.list) ? entry.list : []
     const items: ActionItem[] = []
 
     if (children.length > 0) {
       for (const item of children) {
-        if (!item || typeof item !== 'object') continue
-        const action = item as Record<string, unknown>
-        if (typeof action.name !== 'string') continue
-        items.push({ group: groupName, name: action.name })
+        if (!isRecord(item) || typeof item.name !== 'string') continue
+        items.push({ group: groupName, name: item.name })
       }
     } else {
       for (const item of localItems) {
-        if (!item || typeof item !== 'object') continue
-        const action = item as Record<string, unknown>
-        if (typeof action.group !== 'string' || typeof action.name !== 'string') continue
-        items.push({ group: action.group, name: action.name })
+        if (!isRecord(item) || typeof item.group !== 'string' || typeof item.name !== 'string') {
+          continue
+        }
+        items.push({ group: item.group, name: item.name })
       }
     }
 
     groups.push({
       groupName,
-      show: group.show !== false,
+      show: entry.show !== false,
       list: items,
     })
   }

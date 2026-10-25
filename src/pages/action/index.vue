@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { msg } from '@/domain/messages'
 import { computed, nextTick, onMounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import CepModal from '@/components/CepModal.vue'
@@ -32,7 +33,7 @@ const {
   confirm: confirmFreePanel,
 } = useFreePanelAdd()
 const feedback = useFeedbackStore()
-const { warehouses, activeIndex, groups, listType, degraded } = storeToRefs(store)
+const { groups, listType, degraded } = storeToRefs(store)
 const { psGroups, psLoading, psUnparsed, psError } = storeToRefs(store)
 
 const callCmd = useCommand('action.call')
@@ -60,14 +61,14 @@ const guideDone = usePersistedRef('action.guideDone', false)
 const firstUseVisible = ref(false)
 
 async function importDefaultActions() {
-  const ok = await importDefaultCmd.run(undefined, '已导入默认动作预设')
+  const ok = await importDefaultCmd.invoke(undefined, msg.success.text.importedDefaultPresets)
   if (ok) guideDone.value = true
 }
 
-const warehouseData = computed(() => ({ index: activeIndex.value, list: warehouses.value }))
+// 仓库视图模型由 store 给（深模块），页面不再自己拼 `{ index, list }`
 
 function toggleGroup(index: number) {
-  void toggleGroupCmd.run({ index })
+  void toggleGroupCmd.invoke({ index })
 }
 
 // ---------- 拖拽排序（`am()` 机制，见 `composables/useLongPressDrag`）----------
@@ -186,7 +187,7 @@ async function endItemDrag(result: LongPressDragResult) {
   if (source.kind !== 'item' || target.kind !== 'item') return
   if (source.groupIndex === target.groupIndex && source.itemIndex === target.itemIndex) return
 
-  await reorderItemCmd.run({
+  await reorderItemCmd.invoke({
     fromGroup: source.groupIndex,
     fromIndex: source.itemIndex,
     toGroup: target.groupIndex,
@@ -206,7 +207,7 @@ async function endGroupDrag(result: LongPressDragResult) {
   if (source.kind !== 'group' || target.kind !== 'group') return
   if (source.groupIndex === target.groupIndex) return
 
-  await reorderGroupCmd.run({
+  await reorderGroupCmd.invoke({
     from: source.groupIndex,
     to: target.groupIndex,
     position: result.position,
@@ -289,33 +290,30 @@ function openGroupRename() {
 
 async function submitGroup() {
   const { mode, index, afterIndex, value } = groupModal.value
-  if (mode === 'create') await addGroupCmd.run({ name: value, afterIndex })
-  else await renameGroupCmd.run({ index, name: value })
+  if (mode === 'create') await addGroupCmd.invoke({ name: value, afterIndex })
+  else await renameGroupCmd.invoke({ index, name: value })
 }
 
 // ---------- 仓库 ----------
 async function onWarehouseAdd() {
-  await addWarehouseCmd.run({})
-  await store.load()
+  await addWarehouseCmd.invoke({})
 }
 
 async function onWarehouseRename(payload: { index: number; val: string }) {
-  await renameWarehouseCmd.run({ index: payload.index, name: payload.val })
-  await store.load()
+  await renameWarehouseCmd.invoke({ index: payload.index, name: payload.val })
 }
 
 function onWarehouseDelete(index: number) {
-  const name = warehouses.value[index]?.name ?? ''
-  askConfirm(`删除仓库「${name}」？仓库文件也会删除。`, async () => {
-    await deleteWarehouseCmd.run({ index })
-    await store.load()
+  const name = store.warehouseName(index)
+  askConfirm(msg.confirm.fn.actionDeleteWarehouse(name), async () => {
+    await deleteWarehouseCmd.invoke({ index })
   })
 }
 
 async function onWarehouseSelect(index: number) {
-  if (index === activeIndex.value) return
-  const ok = await selectWarehouseCmd.run({ index })
-  if (ok) await store.load()
+  if (store.isActiveWarehouse(index)) return
+  // 写成功后 `actionIndexRepo.onChange` 会推新投影（`applyIndex`），不用手工重读
+  await selectWarehouseCmd.invoke({ index })
 }
 
 // ---------- 别名弹层 ----------
@@ -332,29 +330,29 @@ function openAlias() {
 async function submitAlias() {
   const { groupIndex, itemIndex, value } = aliasModal.value
   if (!value.trim()) {
-    await deleteAliasCmd.run({ groupIndex, itemIndex }, '已删除别名')
+    await deleteAliasCmd.invoke({ groupIndex, itemIndex }, msg.success.text.aliasDeleted)
     return
   }
-  await setAliasCmd.run({ groupIndex, itemIndex, alias: value }, `别名已设为「${value}」`)
+  await setAliasCmd.invoke({ groupIndex, itemIndex, alias: value }, `别名已设为「${value}」`)
 }
 
 // ---------- 确认弹层 ----------
-const confirmState = ref({ visible: false, text: '', run: async () => {} })
+const confirmState = ref({ visible: false, text: '', invoke: async () => {} })
 
-function askConfirm(text: string, run: () => Promise<void>) {
-  confirmState.value = { visible: true, text, run }
+function askConfirm(text: string, invoke: () => Promise<void>) {
+  confirmState.value = { visible: true, text, invoke }
 }
 
 async function onConfirm() {
-  await confirmState.value.run()
+  await confirmState.value.invoke()
 }
 
 function requestDeleteGroup() {
   const index = menu.value.groupIndex
   const name = groups.value[index]?.groupName ?? ''
   menu.value.visible = false
-  askConfirm(`删除分组「${name}」？组内动作只从列表移除，不影响 Photoshop。`, async () => {
-    await deleteGroupCmd.run({ index }, `已删除分组「${name}」`)
+  askConfirm(msg.confirm.fn.actionDeleteGroup(name), async () => {
+    await deleteGroupCmd.invoke({ index }, msg.success.fn.groupDeleted(name))
   })
 }
 
@@ -363,8 +361,8 @@ function requestDeleteItem() {
   const item = groups.value[groupIndex]?.list[itemIndex]
   menu.value.visible = false
   if (!item) return
-  askConfirm(`删除动作「${item.alias || item.name}」？`, async () => {
-    await deleteItemCmd.run({ groupIndex, itemIndex }, '已删除动作')
+  askConfirm(msg.confirm.fn.actionDeleteItem(item.alias || item.name), async () => {
+    await deleteItemCmd.invoke({ groupIndex, itemIndex }, msg.success.text.actionDeleted)
   })
 }
 
@@ -381,9 +379,9 @@ async function confirmAdd(items: Array<{ group: string; name: string }>) {
     addContext.value.visible = false
     return
   }
-  await addFromPsCmd.run(
+  await addFromPsCmd.invoke(
     { groupIndex: addContext.value.groupIndex, items },
-    `已添加 ${items.length} 个动作`,
+    `已添加 ${String(items.length)} 个动作`,
   )
   addContext.value.visible = false
 }
@@ -403,7 +401,7 @@ useDismiss(
 
 async function chooseLayout(columns: 1 | 2 | 3) {
   layoutMenu.value = false
-  const ok = await setListTypeCmd.run({ columns })
+  const ok = await setListTypeCmd.invoke({ columns })
   // 投影只经 store 的写入口改（TD-03-2）。`listType` 是 store 的只读 computed（TD-03-3）：
   // 写 `listType.value = …` 会被 vue-tsc 判 TS2540（read-only property），不靠这句注释守
   if (ok) store.setListType(columns)
@@ -414,19 +412,19 @@ const exportMenu = ref(false)
 
 async function exportWarehouse(current: boolean) {
   exportMenu.value = false
-  const ok = await exportWarehouseCmd.run({ current }, '导出成功')
-  if (ok) await store.load()
+  // 导出只写用户选的文件，不动仓库 ⇒ 无需重读
+  await exportWarehouseCmd.invoke({ current }, msg.success.text.exportOk)
 }
 
 async function importWarehouse(append: boolean) {
   importMenu.value = false
-  const ok = await importWarehouseCmd.run({ append }, '导入成功')
-  if (ok) await store.load()
+  // 导入写索引 + 库 ⇒ 两个 repo 的 onChange 都会推新投影，不用手工重读
+  await importWarehouseCmd.invoke({ append }, msg.success.text.importOk)
 }
 
 function requestImportReplace() {
   importMenu.value = false
-  askConfirm('导入替换会覆盖当前仓库索引，确定继续？', async () => {
+  askConfirm(msg.confirm.fn.actionImportReplace(), async () => {
     await importWarehouse(false)
   })
 }
@@ -448,7 +446,7 @@ function openFreePanel(item: ActionItem) {
 function openGroupFreePanel(groupIndex: number) {
   const group = groups.value[groupIndex]
   if (!group?.list.length) {
-    feedback.info('该分组没有动作')
+    feedback.info(msg.page.text.noActionsInGroup)
     return
   }
   openFreePanelPicker(group.list.map(freePanelItem), '批量添加动作组')
@@ -463,9 +461,9 @@ function runAction(item: GridItem, event?: MouseEvent) {
     return
   }
 
-  void callCmd.run(
+  void callCmd.invoke(
     { group: action.group, name: action.name, alias: action.alias },
-    `已执行「${action.alias || action.name}」`,
+    msg.success.fn.itemExecuted(action.alias || action.name),
   )
 }
 
@@ -479,7 +477,7 @@ onMounted(async () => {
 <template>
   <div ref="pageRoot" class="action-page">
     <ActionWarehouse
-      :data="warehouseData"
+      :data="store.warehouseView"
       @select="onWarehouseSelect"
       @add="onWarehouseAdd"
       @delete="onWarehouseDelete"
@@ -618,7 +616,11 @@ onMounted(async () => {
       @confirm="confirmFreePanel"
     />
 
-    <CepModal v-model:visible="confirmState.visible" title="确认" @ok="onConfirm">
+    <CepModal
+      v-model:visible="confirmState.visible"
+      :title="msg.confirm.text.confirmTitle"
+      @ok="onConfirm"
+    >
       <p class="action-hint">{{ confirmState.text }}</p>
     </CepModal>
 
@@ -629,7 +631,7 @@ onMounted(async () => {
       cancel-text="稍后"
       @ok="importDefaultActions"
     >
-      <p class="action-hint">动作库还是空的，是否导入默认动作预设？</p>
+      <p class="action-hint">{{ '动作库还是空的，是否导入默认动作预设？' }}</p>
     </CepModal>
   </div>
 </template>

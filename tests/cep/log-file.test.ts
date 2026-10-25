@@ -13,6 +13,8 @@ const disk = {
   files: new Map<string, string>(),
   /** 非空 = 写这个路径时抛这个错误码 */
   writeError: '',
+  /** 非空 = 读这个路径时抛这个错误码（读不到上一会话历史同样是观测缺口） */
+  readError: '',
   writes: 0,
 }
 
@@ -36,6 +38,9 @@ function fakeFs() {
       disk.files.delete(p)
     },
     readFileSync: (p: string) => {
+      if (disk.readError) {
+        throw Object.assign(new Error(`${disk.readError}: 模拟读失败`), { code: disk.readError })
+      }
       const data = disk.files.get(p)
       if (data === undefined) throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' })
       return data
@@ -57,6 +62,7 @@ const readLog = () => disk.files.get(logPath()) ?? ''
 beforeEach(() => {
   disk.files.clear()
   disk.writeError = ''
+  disk.readError = ''
   disk.writes = 0
   installRequire()
   vi.useFakeTimers()
@@ -69,19 +75,17 @@ afterEach(() => {
   vi.resetModules()
 })
 
-/** 建"面板启动"：新 logger 模块实例 + 新落盘口（读同一个假盘） */
+/**
+ * 建"面板启动"：新 logger 模块实例 + 落盘口（读同一个假盘）。
+ *
+ * 落盘口是**反向注册**的：`@/cep/log-file` 导入时在模块顶层自己注册进 logger
+ * （不再由外面拼装）。所以这里导入即生效 —— 走的正是生产那条路。
+ */
 async function boot() {
   const logger = await import('@/utils/logger')
-  const { createLogFileSink } = await import('@/cep/log-file')
-  const errors: string[] = []
-  // 与 `main.ts` 同一份接线：落盘失败要变成一条**日志**（不是只在磁盘边角里失败）
-  logger.attachLogSink(
-    createLogFileSink((reason) => {
-      errors.push(reason)
-      logger.log.warn('logger', '日志落盘失败', reason)
-    }),
-  )
-  return { logger, errors }
+  // 落盘实现**不需要被调用**：logger 在自己模块顶层就装好了（import 即装）
+  await import('@/cep/log-file')
+  return { logger }
 }
 
 describe('日志落盘 · 关掉重开还查得到', () => {
@@ -98,15 +102,67 @@ describe('日志落盘 · 关掉重开还查得到', () => {
     expect(second.logger.log.dump()).toContain('EACCES')
   })
 
+  it('读不到上一会话历史（load 抛错）→ 也算落盘失败，不静默', async () => {
+    disk.readError = 'EACCES'
+    const { logger } = await boot()
+
+    // 读历史失败也要喊出来（"关掉重开查不到"同样是观测缺口）
+    const dumped = logger.log.dump()
+    expect(dumped).toContain('日志落盘失败')
+    expect(dumped).toContain('EACCES')
+  })
+
+  it('落盘失败只喊一次（掉线时不把日志自己刷满）', async () => {
+    disk.writeError = 'ENOSPC'
+    const { logger } = await boot()
+
+    // 真实时序：append 只是入队，真正的写在**节流窗口**后 flush ⇒ 失败在那时才现形
+    for (let i = 0; i < 5; i += 1) logger.log.warn('repo', `第 ${i} 条`)
+    vi.advanceTimersByTime(500)
+
+    const failures = logger.log
+      .dump()
+      .split('\n')
+      .filter((line) => line.includes('日志落盘失败'))
+    expect(failures).toHaveLength(1)
+
+    // 再来一轮失败：仍然只应该有一条（否则掉线时日志自己会被刷满）
+    logger.log.warn('repo', '又一条')
+    vi.advanceTimersByTime(500)
+    const again = logger.log
+      .dump()
+      .split('\n')
+      .filter((line) => line.includes('日志落盘失败'))
+    expect(again).toHaveLength(1)
+  })
+
+  it('新实例的内存是空的，dump 出来的就是"上次会话的历史"（不是本次现场）', async () => {
+    const first = await boot()
+    first.logger.log.warn('style', '旧文件读不到，跳过回收')
+    vi.advanceTimersByTime(500)
+
+    // 面板重开：新模块实例 ⇒ 内存空，盘上那条还在
+    vi.resetModules()
+    const second = await boot()
+    expect(second.logger.log.dump()).toContain('旧文件读不到')
+    // 本次会话还没写任何东西 ⇒ dump 里只有历史那一行
+    expect(second.logger.log.dump().split('\n')).toHaveLength(1)
+
+    // 写一条新的 ⇒ 历史 + 本次现场
+    second.logger.log.info('logger', '本次第一条')
+    expect(second.logger.log.dump().split('\n')).toHaveLength(2)
+  })
+
   it('落盘失败不反噬业务，且日志里有一条"落盘失败"（不许静默）', async () => {
     disk.writeError = 'ENOSPC'
-    const { logger, errors } = await boot()
+    const { logger } = await boot()
 
     expect(() => logger.log.error('repo', '写入失败')).not.toThrow()
     vi.advanceTimersByTime(500)
 
-    expect(errors.join('\n')).toContain('ENOSPC')
+    // 落盘失败被记成一条**日志**（含原因 ENOSPC），不是只在磁盘边角里失败
     expect(logger.log.dump()).toContain('日志落盘失败')
+    expect(logger.log.dump()).toContain('ENOSPC')
     // 业务那条也还在（内存里）
     expect(logger.log.dump()).toContain('写入失败')
   })

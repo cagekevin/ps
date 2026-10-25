@@ -4,14 +4,14 @@
 // 谁在用：pages/fontSet/*；常用页/自定义面板/快捷键将来直接复用同一批 id
 // 禁止：页面直接调 jsx；配置持久化不要写在这里以外的地方
 
-import { getFontList } from '@/cep/ps'
+import { getFontList } from '@/cep/data/font-list'
 import {
   dayKey,
-  fontHistoryRepo,
-  hierarchyRepo,
+  fontHistoryWriter,
+  hierarchyWriter,
   normalizeCounter,
-  quickFontRepo,
-  translateCounterRepo,
+  quickFontWriter,
+  translateCounterWriter,
 } from '@/cep/data/font-extra'
 import type { QuickFont } from '@/cep/data/font-extra'
 import { patchFontSetSettings, readFontSetSettings } from '@/cep/data/legacy-settings'
@@ -28,7 +28,8 @@ import { getFontClipboard, hasFontClipboard, setFontClipboard } from '@/domain/f
 import { canAddQuickFont, toQuickFont } from '@/domain/quick-font'
 import { applyTextPatch, normalizeTextColor, refreshTextInfo } from '@/selection/current-text'
 import { CepError } from '@/utils/errors'
-import { asJsxResult, assertJsxOk, requireJsxOk } from '@/utils/jsx-result'
+import { msg } from '@/domain/messages'
+import type { JsxOutcome as _JsxOutcome } from '@/utils/jsx-result'
 import { log } from '@/utils/logger'
 import { deepClone } from '@/utils/clone'
 import { defineCommand } from './registry'
@@ -43,14 +44,16 @@ function syncTextInfo(): void {
 }
 
 /** 字体缺失是产品流程，不是普通 JSX 失败：置位后由页面弹下载确认 */
-function requireFontApplied(raw: unknown, name: string): void {
-  const result = asJsxResult(raw)
-  if (!result.ok) {
-    if (Number(result.code) === 1) {
+async function requireFontApplied(action: () => Promise<void>, name: string): Promise<void> {
+  try {
+    await action()
+  } catch (e) {
+    // `jsxWrite` 抛的 `CepError` 带 `hostCode`；`hostCode === 1` 是"字体缺失"（`useFont` 的约定）
+    if (e instanceof CepError && Number(e.hostCode) === 1) {
       missingFontPort().signal(name)
-      throw new CepError('FONT_MISSING', '字体缺失')
+      throw new CepError('FONT_MISSING', msg.command.text.fontSetMissing)
     }
-    throw new CepError('JSX', result.msg || '设置字体失败')
+    throw e
   }
 }
 
@@ -58,7 +61,7 @@ function requireFontApplied(raw: unknown, name: string): void {
 async function rememberFamily(family?: string): Promise<void> {
   if (!family) return
   try {
-    await fontHistoryRepo.update((list) => {
+    await fontHistoryWriter.update((list) => {
       const next = [family, ...list.filter((item) => item !== family)]
       list.splice(0, list.length, ...next.slice(0, 10))
     })
@@ -69,7 +72,7 @@ async function rememberFamily(family?: string): Promise<void> {
 
 function requireLevels(levels: number[]): number[] {
   if (!Array.isArray(levels) || levels.length !== LEVELS) {
-    throw new CepError('PARSE', '添加的层级数量有误')
+    throw new CepError('PARSE', msg.command.text.fontSetHierarchyCountWrong)
   }
   return levels
 }
@@ -87,43 +90,40 @@ export const fontSetCommands: Command<unknown>[] = [
     group: 'font',
     requires: 'layer',
     kind: 'instant',
-    async run(ctx, { axis, index }) {
+    async invoke(ctx, { axis, index }) {
       const font = ctx.jsx.font
 
       switch (axis) {
         case 'h':
           if (index === 3) {
-            assertJsxOk(await font.setHorizontalCenters(), '水平居中分布失败')
+            await font.setHorizontalCenters()
           } else {
             // 原版底部对齐只传一个参数（app.v4.js:38080）
-            assertJsxOk(await font.setTextAlignment(index), '设置水平对齐失败')
+            await font.setTextAlignment(index)
           }
           return
 
         case 'v':
           if (index === 3) {
-            assertJsxOk(await font.setVerticalCenter(), '垂直平均分布失败')
+            await font.setVerticalCenter()
           } else {
-            assertJsxOk(await font.setTextUpDownAlign(index), '设置垂直对齐失败')
+            await font.setTextUpDownAlign(index)
           }
           return
 
         // 原版：无自由面板时固定 3（与背景水平）/ 4（与背景垂直），app.v4.js:38203、38210
         case 'bg-h':
-          assertJsxOk(await font.setBackgroundAlign(3), '与背景对齐失败')
+          await font.setBackgroundAlign(3)
           return
         case 'bg-v':
-          assertJsxOk(await font.setBackgroundAlign(4), '与背景对齐失败')
+          await font.setBackgroundAlign(4)
           return
 
         default:
           // 以前这里是 `axis === 'bg-h' ? 3 : 4` 的兜底：**枚举外任何值都当 bg-v 执行并报成功**
           // ——拿"与背景垂直"去动用户文档，用户以为点的是别的对齐（TD-12-25）。
           // 不猜默认行为，直接拒绝并列出合法值。
-          throw new CepError(
-            'PARSE',
-            `未知的对齐方向：${String(axis)}（合法值：h / v / bg-h / bg-v）`,
-          )
+          throw new CepError('PARSE', msg.command.fn.fontSetUnknownAlign(String(axis)))
       }
     },
   }),
@@ -134,8 +134,8 @@ export const fontSetCommands: Command<unknown>[] = [
     group: 'font',
     requires: 'layer',
     kind: 'instant',
-    async run(ctx) {
-      assertJsxOk(await ctx.jsx.font.alignHorizontal(), '水平垂直居中对齐失败')
+    async invoke(ctx) {
+      await ctx.jsx.font.alignHorizontal()
     },
   }),
 
@@ -145,20 +145,17 @@ export const fontSetCommands: Command<unknown>[] = [
     group: 'font',
     requires: 'layer',
     kind: 'instant',
-    async run(ctx, { axis, value }) {
+    async invoke(ctx, { axis, value }) {
       const text = value.trim()
-      if (!text) throw new CepError('PARSE', '不能输入空字符')
+      if (!text) throw new CepError('PARSE', msg.command.text.fontSetEmptyInput)
 
       const settingsRead = await readFontSetSettings()
       // 坏设置文件 → 数据层不再给 fallback：照常跑等于拿默认 `ztDistributionFilter`
       // 去动用户的文档，用户以为用的是自己的设置（T-101-1）
       if (!settingsRead.ok) {
-        throw new CepError('IO', `字体设置文件损坏（${settingsRead.reason}），按间距分布已中止`)
+        throw new CepError('IO', msg.command.fn.fontSetSettingsCorrupt(settingsRead.reason))
       }
-      assertJsxOk(
-        await ctx.jsx.font.distributeByPitch(axis, text, settingsRead.value.ztDistributionFilter),
-        '分布元素失败',
-      )
+      await ctx.jsx.font.distributeByPitch(axis, text, settingsRead.value.ztDistributionFilter)
     },
   }),
 
@@ -168,10 +165,10 @@ export const fontSetCommands: Command<unknown>[] = [
     group: 'font',
     requires: 'layer',
     kind: 'instant',
-    async run(ctx, { mode }) {
+    async invoke(ctx, { mode }) {
       // 原版先探一次（会返回 err），再用 jsxHistory 真正执行，两步不能合并
-      assertJsxOk(await ctx.jsx.font.changeTextBranchMerge(mode), '拆分/合并文本失败')
-      assertJsxOk(await ctx.jsx.font.textBranchMerge(mode), '拆分/合并文本失败')
+      await ctx.jsx.font.changeTextBranchMerge(mode)
+      await ctx.jsx.font.textBranchMerge(mode)
     },
   }),
 
@@ -181,17 +178,18 @@ export const fontSetCommands: Command<unknown>[] = [
     group: 'font',
     requires: 'layer',
     kind: 'instant',
-    async run(ctx, { config }) {
+    async invoke(ctx, { config }) {
       // 缺配置以前是一句英文 TypeError（`Cannot read properties of undefined (reading 'padding')`），
       // 用户看不出是哪一步坏了（TD-12-25 后半）
       if (!config || typeof config.padding !== 'string') {
-        throw new CepError('PARSE', '生成按钮缺少配置：没有拿到 padding（按钮边距设置）')
+        throw new CepError('PARSE', msg.command.text.fontSetButtonNoPadding)
       }
-      if (!config.padding.trim()) throw new CepError('PARSE', '边距不能为空')
+      if (!config.padding.trim())
+        throw new CepError('PARSE', msg.command.text.fontSetPaddingRequired)
       if (typeof config.type !== 'number' || typeof config.isLine !== 'boolean') {
-        throw new CepError('PARSE', '生成按钮的配置不完整：type 必须是数字、isLine 必须是布尔')
+        throw new CepError('PARSE', msg.command.text.fontSetButtonConfigIncomplete)
       }
-      assertJsxOk(await ctx.jsx.font.createButton(config), '生成按钮失败')
+      await ctx.jsx.font.createButton(config)
     },
   }),
 
@@ -201,13 +199,13 @@ export const fontSetCommands: Command<unknown>[] = [
     group: 'font',
     requires: 'layer',
     kind: 'instant',
-    async run(ctx) {
+    async invoke(ctx) {
       const raw = await ctx.jsx.font.getFontInfo()
-      const data = requireJsxOk(raw, '复制文字属性失败')
-      if (data === undefined || data === null) {
-        throw new CepError('PARSE', '复制文字属性失败')
+      if (!raw.ok) {
+        throw new CepError(raw.code, raw.reason || msg.command.text.fontSetCopyAttrFailed)
       }
-      setFontClipboard(data)
+      // 解码器已证 `data` 是 `{ fonts: [...] }`（不可能是 undefined/null）⇒ 不再判空
+      setFontClipboard(raw.data)
     },
   }),
 
@@ -218,8 +216,8 @@ export const fontSetCommands: Command<unknown>[] = [
     requires: 'layer',
     // 原版是 $load 浮层，不是长任务 HUD；由页面包 loading 并等待完成
     kind: 'instant',
-    async run(ctx, { keeps }) {
-      if (!hasFontClipboard()) throw new CepError('PARSE', '请先复制字体样式')
+    async invoke(ctx, { keeps }) {
+      if (!hasFontClipboard()) throw new CepError('PARSE', msg.command.text.fontSetNoCopiedStyle)
 
       // 深拷贝：原版 ft.c(copyFont)，不能改到剪贴板里的原对象
       const clone = deepClone(getFontClipboard()) as {
@@ -234,8 +232,8 @@ export const fontSetCommands: Command<unknown>[] = [
       }
 
       const payload = encodeText(JSON.stringify(clone))
-      assertJsxOk(await ctx.jsx.font.checkUseFont(payload), '检查字体可用性失败')
-      assertJsxOk(await ctx.jsx.font.useFont(payload), '应用字体设置失败')
+      await ctx.jsx.font.checkUseFont(payload)
+      await ctx.jsx.font.useFont(payload)
     },
   }),
 
@@ -245,8 +243,8 @@ export const fontSetCommands: Command<unknown>[] = [
     group: 'font',
     requires: 'layer',
     kind: 'instant',
-    async run(ctx) {
-      assertJsxOk(await ctx.jsx.font.switchFontDirection(), '切换文本方向失败')
+    async invoke(ctx) {
+      await ctx.jsx.font.switchFontDirection()
     },
   }),
 
@@ -257,10 +255,10 @@ export const fontSetCommands: Command<unknown>[] = [
     // 原版只要求有选区；文字层判定交给 jsx
     requires: 'layer',
     kind: 'long',
-    async run(ctx, payload) {
+    async invoke(ctx, payload) {
       // 计数器坏了按 0 次继续（清单 §二：对用户有利、不写盘）。这个值决定**是否放行翻译**，
       // 是判断不是渲染，所以默认值也不在消费侧拼：取坏读臂的 `fallback`（仓库自己给的），坏因自己落日志
-      const counterRead = await translateCounterRepo.read()
+      const counterRead = await translateCounterWriter.read()
       if (!counterRead.ok) {
         log.warn('fontSet.translate', `翻译计数读取失败，本次按 0 次处理：${counterRead.reason}`)
       }
@@ -269,22 +267,26 @@ export const fontSetCommands: Command<unknown>[] = [
         dayKey(),
       )
       if (counter.num >= counter.max) {
-        throw new CepError('PARSE', `每天最多使用${counter.max}次翻译功能`)
+        throw new CepError('PARSE', msg.command.fn.fontSetTranslateDailyLimit(String(counter.max)))
       }
 
-      const data = requireJsxOk(await ctx.jsx.font.getCurrentText(), '读取选中文字失败')
-      const list = Array.isArray(data) ? (data as Array<Record<string, unknown>>) : []
-      if (!list.length) throw new CepError('PARSE', '没有可翻译的文本')
+      const textOutcome = await ctx.jsx.font.getCurrentText()
+      if (!textOutcome.ok) {
+        throw new CepError(textOutcome.code, textOutcome.reason || '读取选中文字失败')
+      }
+      // 解码器已证是数组，条目 `text` 若在必是字符串 ⇒ 不需要 `Array.isArray` + `as`
+      const list = textOutcome.data
+      if (!list.length) throw new CepError('PARSE', msg.command.text.fontSetNoTranslatableText)
 
       const total = list.reduce((sum, item) => sum + String(item.text ?? '').length, 0)
       if (total > MAX_TEXT_LENGTH) {
-        throw new CepError('PARSE', `文本长度不能超过${MAX_TEXT_LENGTH}个字符`)
+        throw new CepError('PARSE', msg.command.fn.fontSetTextTooLong(String(MAX_TEXT_LENGTH)))
       }
 
       for (const [index, item] of list.entries()) {
         const source = decodeText(String(item.text ?? ''))
         if (source.length > MAX_TEXT_LENGTH) {
-          throw new CepError('PARSE', `文本长度不能超过${MAX_TEXT_LENGTH}个字符`)
+          throw new CepError('PARSE', msg.command.fn.fontSetTextTooLong(String(MAX_TEXT_LENGTH)))
         }
 
         // 原版把每段译文写回 item.dst；失败时不写回（原版会带半成品，属缺陷，见页面清单）
@@ -296,7 +298,7 @@ export const fontSetCommands: Command<unknown>[] = [
             { timeout: 20000 },
           )
         } catch {
-          throw new CepError('NETWORK', '连接服务器失败')
+          throw new CepError('NETWORK', msg.command.text.fontSetNetworkFailed)
         }
 
         const parsed = parseTranslateResponse(raw)
@@ -308,9 +310,9 @@ export const fontSetCommands: Command<unknown>[] = [
         ctx.progress.update((index + 1) / list.length, '正在翻译')
       }
 
-      assertJsxOk(await ctx.jsx.font.setTranslateText(list, payload.replace), '写回翻译文本失败')
+      await ctx.jsx.font.setTranslateText(list, payload.replace)
 
-      await translateCounterRepo.update((raw) => {
+      await translateCounterWriter.update((raw) => {
         const next = normalizeCounter(raw, dayKey())
         next.num += 1
         raw.num = next.num
@@ -326,12 +328,12 @@ export const fontSetCommands: Command<unknown>[] = [
     group: 'font',
     requires: 'layer',
     kind: 'instant',
-    async run(ctx, { index, shift, paragraph }) {
+    async invoke(ctx, { index, shift, paragraph }) {
       if (paragraph) {
-        assertJsxOk(await ctx.jsx.font.setJustified(index), '设置段落文本对齐失败')
+        await ctx.jsx.font.setJustified(index)
       } else {
         // shift 不传时只发一个参数（层级面板的 changeAlign 就是这种形态）
-        assertJsxOk(await ctx.jsx.font.setTextAlignment(index, shift), '设置文本对齐失败')
+        await ctx.jsx.font.setTextAlignment(index, shift)
       }
       // 原版 setAlign 只改本地 alginIndex，不回读
       const justification = ['left', 'center', 'right'][index]
@@ -345,8 +347,8 @@ export const fontSetCommands: Command<unknown>[] = [
     group: 'font',
     requires: 'layer',
     kind: 'instant',
-    async run(ctx, { value }) {
-      assertJsxOk(await ctx.jsx.font.setHierarchySize(value), '设置层级字号失败')
+    async invoke(ctx, { value }) {
+      await ctx.jsx.font.setHierarchySize(value)
     },
   }),
 
@@ -356,11 +358,11 @@ export const fontSetCommands: Command<unknown>[] = [
     group: 'font',
     requires: 'layer',
     kind: 'instant',
-    async run(ctx, { value }) {
+    async invoke(ctx, { value }) {
       if (!Number.isFinite(value) || value <= 0) {
-        throw new CepError('PARSE', '字号必须是大于 0 的数字')
+        throw new CepError('PARSE', msg.command.text.fontSetFontSizeInvalid)
       }
-      assertJsxOk(await ctx.jsx.font.setNumberSize(value), '设置字号失败')
+      await ctx.jsx.font.setNumberSize(value)
       // 原版 setFontSize 只改本地 fontInfo.size，不回读
       applyTextPatch({ size: String(value) })
     },
@@ -372,11 +374,11 @@ export const fontSetCommands: Command<unknown>[] = [
     group: 'font',
     requires: 'layer',
     kind: 'instant',
-    async run(ctx, { value }) {
+    async invoke(ctx, { value }) {
       if (!Number.isFinite(value) || value < 0) {
-        throw new CepError('PARSE', '行距必须是不小于 0 的数字')
+        throw new CepError('PARSE', msg.command.text.fontSetLeadingInvalid)
       }
-      assertJsxOk(await ctx.jsx.font.setLeading(value), '设置行距失败')
+      await ctx.jsx.font.setLeading(value)
       // 原版 setFontLeading2 只改本地 fontInfo.leading
       applyTextPatch({ leading: value })
     },
@@ -388,9 +390,10 @@ export const fontSetCommands: Command<unknown>[] = [
     group: 'font',
     requires: 'layer',
     kind: 'instant',
-    async run(ctx, { value }) {
-      if (!Number.isFinite(value)) throw new CepError('PARSE', '字距必须是数字')
-      assertJsxOk(await ctx.jsx.font.setTracking(value), '设置字距失败')
+    async invoke(ctx, { value }) {
+      if (!Number.isFinite(value))
+        throw new CepError('PARSE', msg.command.text.fontSetTrackingInvalid)
+      await ctx.jsx.font.setTracking(value)
       // 原版 setFontTracking 只改本地 fontInfo.tracking
       applyTextPatch({ tracking: value })
     },
@@ -402,10 +405,14 @@ export const fontSetCommands: Command<unknown>[] = [
     group: 'font',
     requires: 'layer',
     kind: 'instant',
-    async run(ctx) {
+    async invoke(ctx) {
       // 原版 setFontColor：jsx 返回 data 后直接 fontInfo.color = data，不回读
-      const data = requireJsxOk(await ctx.jsx.font.setColor(), '设置字体颜色失败')
-      if (data) applyTextPatch({ color: normalizeTextColor(data) })
+      const colorOutcome = await ctx.jsx.font.setColor()
+      if (!colorOutcome.ok) {
+        throw new CepError(colorOutcome.code, colorOutcome.reason || '设置字体颜色失败')
+      }
+      // 解码器已证 `data` 是 `{ rgb: { r, g, b } }`（恒真）⇒ 不再判空
+      applyTextPatch({ color: normalizeTextColor(colorOutcome.data) })
     },
   }),
 
@@ -415,9 +422,9 @@ export const fontSetCommands: Command<unknown>[] = [
     group: 'font',
     requires: 'layer',
     kind: 'instant',
-    async run(ctx, { kind, postScriptName, name, weight, family }) {
-      if (!postScriptName) throw new CepError('PARSE', '这个字重没有 PostScript 名')
-      requireFontApplied(await ctx.jsx.font.setFontName(postScriptName, name, weight), name)
+    async invoke(ctx, { kind, postScriptName, name, weight, family }) {
+      if (!postScriptName) throw new CepError('PARSE', msg.command.text.fontSetNoPostScriptName)
+      await requireFontApplied(() => ctx.jsx.font.setFontName(postScriptName, name, weight), name)
       if (kind === 'family') await rememberFamily(family)
 
       if (kind === 'family') {
@@ -436,16 +443,13 @@ export const fontSetCommands: Command<unknown>[] = [
     group: 'font',
     requires: 'layer',
     kind: 'instant',
-    async run(ctx, { kind, value }) {
+    async invoke(ctx, { kind, value }) {
       const font = ctx.jsx.font
-      if (kind === 'caps') assertJsxOk(await font.setAllCaps(value), '切换全部大写失败')
+      if (kind === 'caps') await font.setAllCaps(value)
       else if (kind === 'kerning') {
-        assertJsxOk(
-          await font.setFontVision(value ? 'opticalKern' : 'manual'),
-          '切换文字视觉调整失败',
-        )
-      } else if (kind === 'italic') assertJsxOk(await font.setFauxItalic(value), '切换倾斜失败')
-      else assertJsxOk(await font.setFauxBold(value), '切换加粗失败')
+        await font.setFontVision(value ? 'opticalKern' : 'manual')
+      } else if (kind === 'italic') await font.setFauxItalic(value)
+      else await font.setFauxBold(value)
 
       // 原版 4 个开关都是本地取反/赋值，不回读
       if (kind === 'caps') applyTextPatch({ capitalization: value ? 'allCaps' : 'Nrml' })
@@ -462,7 +466,7 @@ export const fontSetCommands: Command<unknown>[] = [
     group: 'font',
     requires: 'none',
     kind: 'instant',
-    async run(_ctx, { patch }) {
+    async invoke(_ctx, { patch }) {
       await patchFontSetSettings(patch)
     },
   }),
@@ -473,26 +477,26 @@ export const fontSetCommands: Command<unknown>[] = [
     group: 'font',
     requires: 'layer',
     kind: 'instant',
-    async run(ctx, payload) {
+    async invoke(ctx, payload) {
       if (payload.action === 'apply') {
         const font = payload.font
         const weightIndex = payload.weightIndex ?? 0
-        if (!font) throw new CepError('PARSE', '没有要应用的快捷字体')
+        if (!font) throw new CepError('PARSE', msg.command.text.fontSetNoQuickFont)
         const postScriptName = font.hjm[weightIndex]
         const name = font.mz[weightIndex]
         const weight = font.zz[weightIndex]
-        if (!postScriptName) throw new CepError('PARSE', '这个字重没有 PostScript 名')
-        requireFontApplied(await ctx.jsx.font.setFontName(postScriptName, name, weight), name)
+        if (!postScriptName) throw new CepError('PARSE', msg.command.text.fontSetNoPostScriptName)
+        await requireFontApplied(() => ctx.jsx.font.setFontName(postScriptName, name, weight), name)
         await rememberFamily(font.family)
         syncTextInfo()
         return
       }
 
       if (payload.action === 'select') {
-        await quickFontRepo.update((file) => {
+        await quickFontWriter.update((file) => {
           const index = payload.index ?? 0
           if (index < 0 || index >= file.list.length) {
-            throw new CepError('PARSE', '切换失败')
+            throw new CepError('PARSE', msg.command.text.fontSetSwitchFailed)
           }
           file.index = index
         })
@@ -500,10 +504,12 @@ export const fontSetCommands: Command<unknown>[] = [
       }
 
       if (payload.action === 'delete') {
-        await quickFontRepo.update((file) => {
+        await quickFontWriter.update((file) => {
           const index = payload.index ?? 0
-          if (index < 0 || index >= file.list.length) throw new CepError('PARSE', '删除异常')
-          if (file.list.length === 1) throw new CepError('PARSE', '最少保留一个')
+          if (index < 0 || index >= file.list.length)
+            throw new CepError('PARSE', msg.command.text.fontSetDeleteError)
+          if (file.list.length === 1)
+            throw new CepError('PARSE', msg.command.text.fontSetKeepOneMin)
           file.list.splice(index, 1)
           file.index = 0
         })
@@ -511,18 +517,19 @@ export const fontSetCommands: Command<unknown>[] = [
       }
 
       // add：读当前图层字体 → 在系统字体里补全字重 → 去重/上限 → 落盘
-      const info = requireJsxOk(
-        await ctx.jsx.font.getCurrentFontInfo(),
-        '读取当前图层字体失败',
-      ) as Record<string, unknown> | null
-      const family = typeof info?.family === 'string' ? info.family : ''
-      if (!family) throw new CepError('PARSE', '当前图层没有字体信息')
+      const infoOutcome = await ctx.jsx.font.getCurrentFontInfo()
+      if (!infoOutcome.ok) {
+        throw new CepError(infoOutcome.code, infoOutcome.reason || '读取当前图层字体失败')
+      }
+      // 解码器已证 `family` 若在必是字符串 ⇒ 不需要 `as Record<string, unknown>`
+      const family = infoOutcome.data.family ?? ''
+      if (!family) throw new CepError('PARSE', msg.command.text.fontSetLayerNoFontInfo)
 
       const list = await getFontList()
       const hit = list.find((item) => item.family === family)
-      if (!hit) throw new CepError('PARSE', '查找字体信息失败!')
+      if (!hit) throw new CepError('PARSE', msg.command.text.fontSetFindFontInfoFailed)
 
-      await quickFontRepo.update((file) => {
+      await quickFontWriter.update((file) => {
         const blocked = canAddQuickFont(file.list, family)
         if (blocked) throw new CepError('PARSE', blocked)
 
@@ -539,41 +546,47 @@ export const fontSetCommands: Command<unknown>[] = [
     group: 'font',
     requires: 'none',
     kind: 'instant',
-    async run(_ctx, { action, name, index, levels }) {
+    async invoke(_ctx, { action, name, index, levels }) {
       if (action === 'select') {
-        if (typeof index !== 'number') throw new CepError('PARSE', '切换失败')
-        await hierarchyRepo.update((file) => {
-          if (index < 0 || index >= file.list.length) throw new CepError('PARSE', '切换失败')
+        if (typeof index !== 'number')
+          throw new CepError('PARSE', msg.command.text.fontSetSwitchFailed)
+        await hierarchyWriter.update((file) => {
+          if (index < 0 || index >= file.list.length)
+            throw new CepError('PARSE', msg.command.text.fontSetSwitchFailed)
           file.index = index
         })
         return
       }
 
       if (action === 'create') {
-        if (!name?.trim()) throw new CepError('PARSE', '请输入层级名字')
+        if (!name?.trim())
+          throw new CepError('PARSE', msg.command.text.fontSetHierarchyNameRequired)
         const next = requireLevels(levels ?? [])
-        await hierarchyRepo.update((file) => {
+        await hierarchyWriter.update((file) => {
           file.list.push({ name: name.trim(), data: [...next] })
         })
         return
       }
 
       if (action === 'rename') {
-        if (!name?.trim()) throw new CepError('PARSE', '请输入新的名字')
-        if (typeof index !== 'number') throw new CepError('PARSE', '重命名下标有误')
-        await hierarchyRepo.update((file) => {
+        if (!name?.trim()) throw new CepError('PARSE', msg.command.text.fontSetNewNameRequired)
+        if (typeof index !== 'number')
+          throw new CepError('PARSE', msg.command.text.fontSetRenameIndexWrong)
+        await hierarchyWriter.update((file) => {
           const preset = file.list[index]
-          if (!preset) throw new CepError('PARSE', '重命名下标有误')
+          if (!preset) throw new CepError('PARSE', msg.command.text.fontSetRenameIndexWrong)
           preset.name = name.trim()
         })
         return
       }
 
       if (action === 'delete') {
-        await hierarchyRepo.update((file) => {
+        await hierarchyWriter.update((file) => {
           const target = index ?? file.index
-          if (target < 0 || target >= file.list.length) throw new CepError('PARSE', '删除下标有误')
-          if (file.list.length === 1) throw new CepError('PARSE', '必须保留一个')
+          if (target < 0 || target >= file.list.length)
+            throw new CepError('PARSE', msg.command.text.fontSetDeleteIndexWrong)
+          if (file.list.length === 1)
+            throw new CepError('PARSE', msg.command.text.fontSetKeepOneRequired)
           file.list.splice(target, 1)
           file.index = 0
         })
@@ -582,9 +595,9 @@ export const fontSetCommands: Command<unknown>[] = [
 
       // save：用当前 6 级字号覆盖当前预设
       const next = requireLevels(levels ?? [])
-      await hierarchyRepo.update((file) => {
+      await hierarchyWriter.update((file) => {
         const preset = file.list[file.index]
-        if (!preset) throw new CepError('PARSE', '当前预设不存在')
+        if (!preset) throw new CepError('PARSE', msg.command.text.fontSetPresetMissing)
         preset.data = [...next]
       })
     },

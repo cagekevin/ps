@@ -1,10 +1,11 @@
 import { DATA_FILES } from '@/cep/env'
 import { hasCep } from '@/cep/transport'
-import { readTextOutcome, userDir } from '@/cep/fs'
+import { userDir } from '@/cep/paths'
 import { normalizeFontList } from '@/domain/font-normalize'
-import type { SysFontFile } from '@/cep/types'
+import { isRecord } from '@/utils/guards'
 import type { FontItem } from '@/domain/font-item'
-import { log } from '@/utils/logger'
+import { readRepoFile } from './repo-read'
+import type { DecodeFail, Decoded } from '@/utils/decode'
 import { readFontStars } from './font-meta'
 
 /**
@@ -33,24 +34,37 @@ export type SysFontRead =
   /** 读不到或读不懂：**调用方不许当成"没有字体"** */
   | { status: 'error'; reason: string }
 
+/**
+ * `SysFont2.json` 的 decode。
+ *
+ * 不许 `as SysFontFile`：`as` 之后 `file.arr` 恒可信，坏形状会漏过去变成"没有系统字体"（静默）。
+ * 判据即证明：`isRecord` + `Array.isArray` ⇒ 不转型。
+ */
+function decodeSysFont(raw: unknown): Decoded<unknown[]> | DecodeFail | null {
+  if (!isRecord(raw) || !Array.isArray(raw.arr)) return { fail: '结构不认识：缺 arr 数组' }
+  return { value: raw.arr }
+}
+
 /** 读 SysFont2.json；浏览器没有 userDir，按"文件不在"处理（不是失败） */
 export async function readSysFontFile(): Promise<SysFontRead> {
   if (!hasCep()) return { status: 'none' }
   const abs = `${userDir()}/${DATA_FILES.sysFontList}`
-  const read = await readTextOutcome(abs)
 
-  if (read.status === 'error') {
-    log.warn('sys-font', `${abs} 读不到`, read.reason)
-    return { status: 'error', reason: read.reason }
+  // 档 1 的唯一入口，**不折叠**：这个文件没有默认值 ——
+  // "文件不在"（还没生成过）与"读不到"是两种结论，拿 `[]` 顶上去就会显示"没有系统字体"（TD-09-3）
+  const outcome = readRepoFile(abs, decodeSysFont)
+  if (outcome.kind === 'absent') return { status: 'none' }
+  if (outcome.kind === 'bad') {
+    // 空文件按"还没生成"处理（原实现如此：零字节 SysFont2.json 不是坏文件）
+    if (outcome.text === '') return { status: 'none' }
+    // 读不到报原始原因；读到了但读不懂报固定那句 —— 文案保持原样
+    return {
+      status: 'error',
+      reason:
+        outcome.why === 'readError'
+          ? outcome.reason
+          : '内容读不懂（不是合法 JSON 或结构不符）',
+    }
   }
-  if (read.status === 'notSeen' || !read.text) return { status: 'none' }
-
-  try {
-    const file = JSON.parse(read.text) as SysFontFile
-    return { status: 'ok', list: await mergeFontStars(normalizeFontList(file.arr)) }
-  } catch (e) {
-    // 坏 JSON / 结构不认识：这是失败，不是"没有系统字体"
-    log.warn('sys-font', `${abs} 解析失败`, e)
-    return { status: 'error', reason: '内容读不懂（不是合法 JSON 或结构不符）' }
-  }
+  return { status: 'ok', list: await mergeFontStars(normalizeFontList(outcome.value)) }
 }

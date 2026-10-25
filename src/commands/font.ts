@@ -1,15 +1,16 @@
 import { openFile, saveFile } from '@/cep/dialog'
 import type { RawStar, RawTag } from '@/cep/data'
-import { readTextOutcome, saveExportedText } from '@/cep/fs'
+import { readExternalText } from '@/cep/fs-read'
+import { writeDisk } from '@/cep/disk-write'
 import { CepError } from '@/utils/errors'
-import { assertJsxOk } from '@/utils/jsx-result'
+import { msg } from '@/domain/messages'
 import { fontListRefresh } from '@/utils/signal'
 import { defineCommand } from './registry'
 import type { Command } from './types'
 
 /**
  * 字体域命令。payload 类型由 `payloads.ts` 的映射表约束，
- * `run` 的第二个参数会被自动推断，不需要 cast。
+ * `invoke` 的第二个参数会被自动推断，不需要 cast。
  *
  * 写操作**只在这里**发生：页面与 store 都不再直接改 `data/`（M1）。
  */
@@ -75,7 +76,7 @@ function starItemError(star: unknown, index: number): string {
 function parseTagImport(text: string): { tags: RawTag[]; stars?: RawStar[] } | { error: string } {
   let root: unknown
   try {
-    root = JSON.parse(text) as unknown
+    root = JSON.parse(text)
   } catch {
     return { error: '导入文件不是合法的 JSON' }
   }
@@ -115,7 +116,7 @@ export const fontCommands: Command<unknown>[] = [
     // 只要求有选区：是不是文字层交给 ztgl_setFont 判断（原版行为，别多加限制）
     requires: 'layer',
     kind: 'instant',
-    async run(ctx, { font, variantIndex }) {
+    async invoke(ctx, { font, variantIndex }) {
       // 直接在命令里调 jsx：`ps.ts` 不保留写函数，页面就没有绕过命令的入口
       const postScriptName = font.postScriptNames[variantIndex]
       const name = font.names[variantIndex] ?? font.family
@@ -124,16 +125,13 @@ export const fontCommands: Command<unknown>[] = [
       if (!postScriptName) {
         throw new CepError(
           'PARSE',
-          `${font.family} 没有第 ${variantIndex + 1} 个字重的 PostScript 名`,
+          msg.command.fn.fontNoPostScriptForVariant(font.family, String(variantIndex + 1)),
         )
       }
 
       // 参数顺序对齐原面板：jsx("ztgl_setFont", [hjm, mz, zz])
-      // 返回结构统一交给 jsx-result 解释，这里不再自己判 err
-      assertJsxOk(
-        await ctx.jsx.font.setFont(postScriptName, name, weight),
-        `设置字体失败：${font.family}`,
-      )
+      // 写操作：`write` 在生产者层抛（jsxWrite），消费侧只管 await
+      await ctx.jsx.font.setFont(postScriptName, name, weight)
     },
   }),
 
@@ -143,7 +141,7 @@ export const fontCommands: Command<unknown>[] = [
     group: 'font',
     requires: 'none',
     kind: 'instant',
-    async run(ctx, { family, value }) {
+    async invoke(ctx, { family, value }) {
       await ctx.data.stars.update((list) => {
         const normalized = list
           .filter((item) => typeof item.name === 'string')
@@ -168,12 +166,12 @@ export const fontCommands: Command<unknown>[] = [
     group: 'font',
     requires: 'none',
     kind: 'instant',
-    async run(ctx, { text }) {
-      if (!text.trim()) throw new CepError('PARSE', '标签名不能为空')
+    async invoke(ctx, { text }) {
+      if (!text.trim()) throw new CepError('PARSE', msg.command.text.fontTagRequired)
 
       await ctx.data.tags.update((list) => {
         if (list.some((item) => item.text === text)) {
-          throw new CepError('PARSE', `已有同名标签：${text}`)
+          throw new CepError('PARSE', msg.command.fn.fontTagExists(text))
         }
         list.push({ text, arr: [], xz: false })
       })
@@ -186,12 +184,12 @@ export const fontCommands: Command<unknown>[] = [
     group: 'font',
     requires: 'none',
     kind: 'instant',
-    async run(ctx, { from, to }) {
+    async invoke(ctx, { from, to }) {
       await ctx.data.tags.update((list) => {
         const tag = list.find((item) => item.text === from)
-        if (!tag) throw new CepError('PARSE', `标签不存在：${from}`)
+        if (!tag) throw new CepError('PARSE', msg.command.fn.fontTagMissing(from))
         if (list.some((item) => item.text === to && item.text !== from)) {
-          throw new CepError('PARSE', `已有同名标签：${to}`)
+          throw new CepError('PARSE', msg.command.fn.fontTagExists(to))
         }
         tag.text = to
       })
@@ -204,7 +202,7 @@ export const fontCommands: Command<unknown>[] = [
     group: 'font',
     requires: 'none',
     kind: 'instant',
-    async run(ctx, { text }) {
+    async invoke(ctx, { text }) {
       await ctx.data.tags.update((list) => list.filter((item) => item.text !== text))
     },
   }),
@@ -215,10 +213,10 @@ export const fontCommands: Command<unknown>[] = [
     group: 'font',
     requires: 'none',
     kind: 'instant',
-    async run(ctx, { tagText, family }) {
+    async invoke(ctx, { tagText, family }) {
       await ctx.data.tags.update((list) => {
         const tag = list.find((item) => item.text === tagText)
-        if (!tag) throw new CepError('PARSE', `标签不存在：${tagText}`)
+        if (!tag) throw new CepError('PARSE', msg.command.fn.fontTagMissing(tagText))
 
         const arr = Array.isArray(tag.arr) ? tag.arr : []
         const index = arr.indexOf(family)
@@ -235,8 +233,8 @@ export const fontCommands: Command<unknown>[] = [
     group: 'font',
     requires: 'none',
     kind: 'instant',
-    // 无参数：发信号让列表重新取一次（缓存由 ps.getFontList 自己决定是否绕过）
-    async run() {
+    // 无参数：发信号让列表重新取一次（缓存由 data/font-list 的 getFontList 自己决定是否绕过）
+    async invoke() {
       fontListRefresh.emit()
     },
   }),
@@ -256,23 +254,24 @@ export const fontCommands: Command<unknown>[] = [
      * 3. **取消不写盘**：确认回调返回 false（或用户取消文件对话框）时直接返回，不碰任何文件；
      * 4. **星级混用类型不丢**：`star` 在原文件里既有 `"3"` 又有 `2`，校验与写入都不规范化。
      */
-    async run(ctx, { onConfirm }) {
+    async invoke(ctx, { onConfirm }) {
       const path = openFile('导入标签', ['json'])
       // 取消文件对话框 = 取消导入，不写盘（与 `action.importWarehouse` 同口径）
-      if (!path) throw new CepError('PARSE', '取消操作')
+      if (!path) throw new CepError('PARSE', msg.command.text.actionCancelled)
 
-      const read = await readTextOutcome(path)
+      const read = await readExternalText(path)
       // T-107：两种不 ok 这里同果（都抛同一句），文案不变。
       // 不违反 ADR-16：ADR-16 管的是"操作定义在哪 / 谁能触发"——本处就是 Command、页面经 useCommand 触发、
       // 读的是用户刚选的文件（`openFile` 返回的路径），三条都满足。
       // 与 `data/action-archive.ts` 的差别只是**做法不一致**（那处把导入收进 `data/`，这里没有），不是违规。
       // 不必统一：用户选的一次性导入文件不是面板数据、没有唯一真相，收进 `data/` 是为对称而对称（T-119）。
-      if (read.status !== 'ok') throw new CepError('IO', '导入失败，文件读取失败')
+      if (read.status !== 'ok') throw new CepError('IO', msg.command.text.fontImportReadFailed)
       const text = read.text
 
       // 先校验：校验不过不碰任何文件
       const parsed = parseTagImport(text)
-      if ('error' in parsed) throw new CepError('PARSE', `导入失败：${parsed.error}`)
+      if ('error' in parsed)
+        throw new CepError('PARSE', msg.command.fn.fontImportError(parsed.error))
 
       const starsReplaced = parsed.stars !== undefined
       const summary = {
@@ -283,7 +282,8 @@ export const fontCommands: Command<unknown>[] = [
 
       // 覆盖前确认（原版确认框文案：「导入标签，会覆盖原来的标签及评分，是否继续？」）
       // 取消 → 不写盘
-      if (onConfirm && !(await onConfirm(summary))) throw new CepError('PARSE', '取消操作')
+      if (onConfirm && !(await onConfirm(summary)))
+        throw new CepError('PARSE', msg.command.text.actionCancelled)
 
       // 覆盖写：repo 内部先落 `.bak` 再写
       await ctx.data.tags.update(() => parsed.tags)
@@ -303,22 +303,24 @@ export const fontCommands: Command<unknown>[] = [
      *
      * 导出形状 = `{ tags: [...], stars: [...] }`；`star` 原样带走（不把 `"3"` 规范成 `3`）。
      */
-    async run(ctx, { onConfirm }) {
+    async invoke(ctx, { onConfirm }) {
       // 导出前的确认（原版文案：「导出标签，不包含字体文件，仅导出标签及评分，是否继续？」）
       // 取消 → 不弹对话框、不写盘
-      if (onConfirm && !(await onConfirm())) throw new CepError('PARSE', '取消操作')
+      if (onConfirm && !(await onConfirm()))
+        throw new CepError('PARSE', msg.command.text.actionCancelled)
 
       const path = saveFile('导出标签', ['json'], '字体标签.json')
       // 取消文件对话框 = 取消导出，不写盘（与 `action.exportWarehouse` 同口径）
-      if (!path) throw new CepError('PARSE', '取消操作')
+      if (!path) throw new CepError('PARSE', msg.command.text.actionCancelled)
 
       const tagRead = await ctx.data.tags.read()
-      if (!tagRead.ok) throw new CepError('IO', `标签读取失败：${tagRead.reason}`)
+      if (!tagRead.ok) throw new CepError('IO', msg.command.fn.fontTagReadFailed(tagRead.reason))
       const starRead = await ctx.data.stars.read()
-      if (!starRead.ok) throw new CepError('IO', `评分读取失败：${starRead.reason}`)
+      if (!starRead.ok) throw new CepError('IO', msg.command.fn.fontStarReadFailed(starRead.reason))
 
       const payload: TagImportFile = { tags: tagRead.value, stars: starRead.value }
-      saveExportedText(path, JSON.stringify(payload))
+      // 导出文件是**新文件**，无 `.bak` 概念（`previous: null`）；走唯一落盘入口（原子写）
+      await writeDisk(path, JSON.stringify(payload), { previous: null })
     },
   }),
 ]

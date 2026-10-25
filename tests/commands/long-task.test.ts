@@ -7,7 +7,7 @@ vi.mock('@/selection', () => ({
   current: () => selection,
   selectionRef: { value: selection },
 }))
-vi.mock('@/cep/data', () => ({ starsRepo: {}, tagsRepo: {} }))
+vi.mock('@/cep/data', () => ({ starsRepo: {}, starsWriter: {}, tagsRepo: {}, tagsWriter: {} }))
 vi.mock('@/cep/data/settings', () => ({ settingsSnapshot: () => ({}) }))
 vi.mock('@/cep/jsx', () => ({
   jsx: { font: {}, layer: {}, env: {} },
@@ -40,7 +40,7 @@ describe('长任务生命周期', () => {
       group: 'action',
       requires: 'none',
       kind: 'long',
-      async run(ctx) {
+      async invoke(ctx) {
         ctx.progress.update(0.5, '第 5 个')
       },
     })
@@ -63,7 +63,7 @@ describe('长任务生命周期', () => {
       group: 'file',
       requires: 'none',
       kind: 'long',
-      async run() {
+      async invoke() {
         throw new Error('导出失败')
       },
     })
@@ -81,7 +81,7 @@ describe('长任务生命周期', () => {
       group: 'system',
       requires: 'none',
       kind: 'instant',
-      async run() {},
+      async invoke() {},
     })
 
     await expect(execute('test.instant')).resolves.toEqual({ ok: true })

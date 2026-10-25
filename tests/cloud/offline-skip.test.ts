@@ -64,7 +64,6 @@ beforeEach(() => {
  */
 async function boot() {
   const logger = await import('@/utils/logger')
-  logger.__resetLoggerForTest()
   const setup = await import('@/cep/cloud/setup')
   return { log: logger.log, queue: setup.cloudSyncQueue }
 }
@@ -113,7 +112,8 @@ describe('离线走闸门', () => {
     expect(pending.record).not.toHaveBeenCalled()
 
     // 旧实现到这里就永远不动了；现在按最大等待慢轮询，网络回来能自己恢复
-    log.clear()
+    // 清现场靠「模块重载」（boot() 里重新 import ⇒ 新实例），
+    // 不再需要 logger 导出一个清场函数（它的导出面只有 `log` 一个东西）
     setOnline(true)
     await vi.advanceTimersByTimeAsync(MAX_WAIT)
 

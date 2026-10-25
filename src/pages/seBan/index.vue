@@ -34,11 +34,11 @@ function payloadOf(item: SwatchItem): Record<string, unknown> {
 }
 
 function pick(item: SwatchItem): void {
-  void sendColor.run({ item: payloadOf(item) })
+  void sendColor.invoke({ item: payloadOf(item) })
 }
 
 function outline(item: SwatchItem): void {
-  void sendWireframe.run({ item: payloadOf(item) })
+  void sendWireframe.invoke({ item: payloadOf(item) })
 }
 
 const settingsVisible = ref(false)
@@ -51,7 +51,7 @@ function openSettings(): void {
 
 function confirmLimit(): void {
   // 范围校验（0–15）在命令层，文案照抄官方；页面只负责把输入变成数字
-  void setLimit.run({ limit: Number(limitText.value.trim()) })
+  void setLimit.invoke({ limit: Number(limitText.value.trim()) })
 }
 </script>
 
@@ -100,7 +100,7 @@ function confirmLimit(): void {
       <span class="divider" aria-hidden="true" />
 
       <div class="group group--actions">
-        <GButton type="text" title="把当前颜色存进常用" @click="addColor.run()">
+        <GButton type="text" title="把当前颜色存进常用" @click="addColor.invoke()">
           <Icon name="#iconchuangjian" size="sm" />
         </GButton>
         <GButton type="text" title="最近颜色数量" @click="openSettings">

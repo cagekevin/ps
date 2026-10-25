@@ -24,10 +24,10 @@ const applyGuide = () => {
     feedback.warn('请输入宽度')
     return
   }
-  void guideCmd.run({ options: width.value })
+  void guideCmd.invoke({ options: width.value })
 }
-const clearGuide = () => void sliceCmd.run({ options: { mode: 'clear' } })
-const makeSlice = () => void sliceCmd.run({ options: { mode: 'slice' } })
+const clearGuide = () => void sliceCmd.invoke({ options: { mode: 'clear' } })
+const makeSlice = () => void sliceCmd.invoke({ options: { mode: 'slice' } })
 </script>
 
 <template>

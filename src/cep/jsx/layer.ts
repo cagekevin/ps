@@ -1,4 +1,4 @@
-import { jsxCall } from '@/cep/transport'
+import { jsxRead } from '@/cep/transport'
 import { READ } from './timeouts'
 import type { LayerJsx } from './types'
 
@@ -6,13 +6,13 @@ import type { LayerJsx } from './types'
 export function createLayerJsx(): LayerJsx {
   return {
     isSelectLayer: () =>
-      jsxCall('Layer_isSelectLayer', [], {
+      jsxRead('Layer_isSelectLayer', [], {
         label: '查询是否有选中图层',
         timeout: READ,
       }),
 
     getTypeNumber: () =>
-      jsxCall('Layer_getTypeNumber', [], {
+      jsxRead('Layer_getTypeNumber', [], {
         label: '查询图层类型',
         timeout: READ,
       }),

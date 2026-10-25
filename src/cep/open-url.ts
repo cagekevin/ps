@@ -1,4 +1,5 @@
 import { CepError } from '@/utils/errors'
+import { msg } from '@/domain/messages'
 
 /**
  * 打开外部链接的两个出口。
@@ -12,7 +13,7 @@ import { CepError } from '@/utils/errors'
 export function openUrlInDefaultBrowser(url: string): void {
   const util = window.cep?.util
   if (!util?.openURLInDefaultBrowser) {
-    throw new CepError('NO_CEP', 'CEP 外链接口不可用（window.cep.util.openURLInDefaultBrowser）')
+    throw new CepError('NO_CEP', msg.ps.text.cepOpenUrlUnavailable)
   }
   util.openURLInDefaultBrowser(url)
 }

@@ -15,29 +15,34 @@ const state = vi.hoisted(() => ({ files: new Map<string, string>() }))
 
 vi.mock('@/cep/transport', () => ({ hasCep: () => true }))
 
-vi.mock('@/cep/fs', () => ({
+vi.mock('@/cep/node', () => ({
   hasNode: () => true,
-  userDir: () => '/user',
-  readTextSmart: async (path: string) => state.files.get(path) ?? null,
-  // T-105：写路径改用三态读；这个假 fs 没有"读不出"的场景，只会 ok / missing
-  readTextOutcome: async (path: string) => {
-    const text = state.files.get(path)
-    return text === undefined ? { status: 'notSeen' as const } : { status: 'ok' as const, text }
-  },
-  readTextSync: (path: string) => {
-    const text = state.files.get(path)
-    return text === undefined ? { status: 'notSeen' as const } : { status: 'ok' as const, text }
-  },
-  writeTextFile: (path: string, text: string) => {
-    state.files.set(path, text)
-  },
-  writeTextFileAtomic: (path: string, text: string) => {
-    state.files.set(path, text)
-    return true
-  },
 }))
 
-const { freePanelRepo } = await import('@/cep/data/free-panel')
+vi.mock('@/cep/paths', () => ({
+  userDir: () => '/user',
+}))
+
+vi.mock('@/cep/fs-read', () => ({
+  readTextSmart: async (path: string) => state.files.get(path) ?? null,
+  // T-105：写路径改用三态读；这个假 fs 没有"读不出"的场景，只会 ok / missing  readTextOutcome: async (path: string) => {
+      const text = state.files.get(path)
+      return text === undefined ? { status: 'notSeen' as const } : { status: 'ok' as const, text }
+    },
+  readTextSync: (path: string) => {
+      const text = state.files.get(path)
+      return text === undefined ? { status: 'notSeen' as const } : { status: 'ok' as const, text }
+    },
+  writeTextFile: (path: string, text: string) => {
+      state.files.set(path, text)
+    },
+  writeTextFileAtomic: (path: string, text: string) => {
+      state.files.set(path, text)
+      return true
+    },
+}))
+
+const { freePanelWriter } = await import('@/cep/data/free-panel')
 const { DATA_FILES } = await import('@/cep/env')
 
 const PATH = `/user/${DATA_FILES.appFreePanel}`
@@ -90,7 +95,7 @@ describe('自由面板仓库 · 读边界归一（T-99-2）', () => {
   it('正常文件逐值读回，degraded 为空', async () => {
     seed(realShape)
 
-    const read = await freePanelRepo.read()
+    const read = await freePanelWriter.read()
 
     expect(read.reason).toBeUndefined()
     expect(readValue(read).uid).toBe(2)
@@ -106,7 +111,7 @@ describe('自由面板仓库 · 读边界归一（T-99-2）', () => {
   it('形状不认识（缺 obj）时 degraded 有值，业务拿不到坏数据', async () => {
     seed({})
 
-    const read = await freePanelRepo.read()
+    const read = await freePanelWriter.read()
 
     expect(read.reason).toBe('内容结构不认识')
     // 旧断言是「值退到 fallback：一个空区域、没有项」；坏读没有 value（4a96f63 的
@@ -118,7 +123,7 @@ describe('自由面板仓库 · 读边界归一（T-99-2）', () => {
   it('obj.list 不是数组时同样判为结构不认识', async () => {
     seed({ uid: 1, btnId: 0, obj: { version: '1.0', type: 'row', list: '不是数组' } })
 
-    const read = await freePanelRepo.read()
+    const read = await freePanelWriter.read()
 
     expect(read.reason).toBe('内容结构不认识')
     expect(read).not.toHaveProperty('value')
@@ -127,7 +132,7 @@ describe('自由面板仓库 · 读边界归一（T-99-2）', () => {
   it('顶层是数组（把别的库文件拷进来）也不当面板用', async () => {
     seed([{ groupName: '修图', list: [] }])
 
-    const read = await freePanelRepo.read()
+    const read = await freePanelWriter.read()
 
     expect(read.reason).toBe('内容结构不认识')
   })
@@ -135,13 +140,13 @@ describe('自由面板仓库 · 读边界归一（T-99-2）', () => {
   it('非法 JSON 与结构不认识是两个原因', async () => {
     state.files.set(PATH, '{坏文件')
 
-    const read = await freePanelRepo.read()
+    const read = await freePanelWriter.read()
 
     expect(read.reason).toBe('内容不是合法 JSON')
   })
 
   it('文件不存在不算 degraded（首次使用是正常状态）', async () => {
-    const read = await freePanelRepo.read()
+    const read = await freePanelWriter.read()
 
     expect(read.reason).toBeUndefined()
     expect(readValue(read).obj.list).toHaveLength(1)
@@ -152,7 +157,7 @@ describe('自由面板仓库 · 读边界归一（T-99-2）', () => {
     const before = state.files.get(PATH)
 
     await expect(
-      freePanelRepo.update((file) => {
+      freePanelWriter.update((file) => {
         file.btnId += 1
       }),
     ).rejects.toThrow('拒绝覆盖写')

@@ -10,7 +10,7 @@ import ts from 'typescript'
  * 差集就是缺口，**漏一个就红**。
  *
  * 病（今晚最狠的一条）：`src/cep/data` 的写路径测试长期是**假绿**。jsdom 下 `hasCep()` 为 `false`
- * → `pick()` 选 `memoryRepo`（它有自己的 `enqueue`，不是全局写链）⇒ 连被测实现都不是 `fileRepo`。
+ * → `dataRepo()` 选 `memoryRepo`（它有自己的 `enqueue`，不是全局写链）⇒ 连被测实现都不是 `fileRepo`。
  * 于是 `runQueued` 自锁（TD-09-30）、原子写被删（TD-09-27）全都不红。`style-library-real-fs.test.ts`
  * 与 `fs-atomic.test.ts` 各自修好了一处，但那是**个案，不是判据**：下一个 repo 照样可以只写内存版用例。
  *
@@ -22,22 +22,26 @@ import ts from 'typescript'
  * ## 判据（全部从磁盘推导，**没有一行手写名单** —— A4）
  *
  * **A. 哪些模块"写盘"**（`src/cep/data/**` 内，自身体内出现下列任一调用）：
- *   1. `pick(`      —— 造一个由 `fileRepo` 落盘的 Repo；
- *   2. `fileRepo(`  —— 直接造文件实现（`pick.ts`）；
+ *   1. `dataRepo(`  —— 造一个由 `fileRepo` 落盘的 Repo；
+ *   2. `fileRepo(`  —— 直接造文件实现（`data-repo.ts`）；
  *   3. `@/cep/fs` 的**写原语** —— 名单从 `src/cep/fs.ts` 的 AST **推导**：函数体（含文件内调用链）
  *      触达 node fs 的写类 API（`writeFileSync` / `renameSync` / `unlinkSync` / `mkdirSync` …）即算。
  *
  * 只看**自己动手**的写：经另一个仓库间接写盘的模块不算（它的写必然经过那个仓库，
  * 由那条仓库的真机用例覆盖 —— 所以这不是缝，是边界）。**只读**（`readTextOutcome`）、
- * **纯内存**（`memory-repo.ts`）、**纯逻辑**（`write-queue.ts`）因此都不在名单里，不会被要求真机用例。
+ * **纯逻辑**（`write-queue.ts`）因此都不在名单里，不会被要求真机用例。
+ *
+ * ⚠️ **历史结构说明**：内存实现原先单独成文件 `src/cep/data/memory-repo.ts`，现已内联进
+ * `data-repo.ts` 且**不再导出**（唯一入口）。下面夹具里出现的 `memory-repo.ts` 是**虚拟根**
+ * （`makeRoot()` 造的临时目录），用来测扫描器的边界判据，**不代表真仓还有这个文件**。
  *
  * **B. 哪些用例是"真机装法"**（`tests/**\/*.test.ts` 的 AST）：
  *   必须**同时**装两样，少一样都不算 ——
- *   · `X.__adobe_cep__ = { evalScript: … }` ⇒ `hasCep()` 为真 ⇒ `pick()` 选 `fileRepo`（不然被测对象就被换掉了）；
+ *   · `X.__adobe_cep__ = { evalScript: … }` ⇒ `hasCep()` 为真 ⇒ `dataRepo()` 选 `fileRepo`（不然被测对象就被换掉了）；
  *   · `X.require = …`（`window.require`）⇒ `hasNode()` 为真 ⇒ 写真的落盘（否则写路径只走 NO_NODE 抛错）。
  *
  * **C. 覆盖**：真机用例**直接** import 的 `src/cep/data/**` 模块 + 它们在 `src/cep/data/**` 内的
- *   传递 import 闭包（`style-library-repo` → `pick` / `file-repo` / `write-queue` 是结构上的委托，
+ *   传递 import 闭包（`style-library-repo` → `data-repo` / `file-repo` / `write-queue` 是结构上的委托，
  *   不是"碰巧被页面图加载"）。**页面 / store / 命令图**加载进来的 data 模块**不算覆盖** ——
  *   那种"只要有人 import 过就算测过"的算法会让判据恒绿，正是要防的假绿。
  *
@@ -217,8 +221,14 @@ function writingModules(root: string): string[] {
   for (const file of walkSources(join(root, 'src/cep/data'), ['.ts'])) {
     if (file.endsWith('.d.ts')) continue
     const calls = calledIdentifiers(parse(file))
+    // `writeDisk` / `writeDiskSync` 是**唯一落盘入口**（`src/cep/disk-write.ts`）：
+    // 调它们 = 这个模块自己动手写盘（`data/` 里的模块已不再直调 `@/cep/fs` 写原语）
     const writes =
-      calls.has('pick') || calls.has('fileRepo') || [...calls].some((name) => prims.has(name))
+      calls.has('dataRepo') ||
+      calls.has('fileRepo') ||
+      calls.has('writeDisk') ||
+      calls.has('writeDiskSync') ||
+      [...calls].some((name) => prims.has(name))
     if (writes) out.push(relative(root, file).replace(/\\/g, '/'))
   }
   return out.sort()
@@ -350,10 +360,10 @@ export function readTextOutcome(p: string): string {
 }
 `
 
-const MINI_PICK = `import { fileRepo } from './file-repo'
+const MINI_DATA_REPO = `import { fileRepo } from './file-repo'
 import { memoryRepo } from './memory-repo'
-export function pick<T>(path: () => string, seed: () => T) {
-  return () => fileRepo(path, seed) ?? memoryRepo(seed)
+export function dataRepo<T>(path: () => string, seed: () => T, decode: (raw: unknown) => { value: T } | null) {
+  return () => fileRepo(path, seed, decode) ?? memoryRepo(seed)
 }
 `
 
@@ -374,7 +384,7 @@ describe('写盘的数据模块必须有真机用例（TD-09-38）', () => {
     const { writePrimitives, writing, realTests } = scan(REPO_ROOT)
     expect(writePrimitives).toEqual(expect.arrayContaining(['writeTextFileAtomic']))
     expect(writing).toEqual(
-      expect.arrayContaining(['src/cep/data/file-repo.ts', 'src/cep/data/pick.ts']),
+      expect.arrayContaining(['src/cep/data/file-repo.ts', 'src/cep/data/data-repo.ts']),
     )
     expect(realTests.length).toBeGreaterThan(0)
   })
@@ -383,7 +393,7 @@ describe('写盘的数据模块必须有真机用例（TD-09-38）', () => {
     const { writing } = scan(REPO_ROOT)
     // `memory-repo.ts` 就是那条"被测对象被换掉"的内存实现，它不写盘；
     // `write-queue.ts` 是纯内存 promise 链，`types.ts` 只有类型 —— 要求它们真机用例是误伤。
-    expect(writing).not.toContain('src/cep/data/memory-repo.ts')
+    // `memory-repo.ts` 已收进 `data-repo.ts` 且不再导出（唯一入口）⇒ 原来这条"不在名单"的断言随之作废
     expect(writing).not.toContain('src/cep/data/write-queue.ts')
     expect(writing).not.toContain('src/cep/data/types.ts')
     expect(writing).not.toContain('src/cep/data/classification-repo.ts')
@@ -398,13 +408,13 @@ describe('写盘的数据模块必须有真机用例（TD-09-38）', () => {
   it('反例：新写盘仓库没有真机用例 → 缺口里必须有它（红）', () => {
     const root = makeRoot({
       'src/cep/fs.ts': MINI_FS,
-      'src/cep/data/pick.ts': MINI_PICK,
+      'src/cep/data/data-repo.ts': MINI_DATA_REPO,
       'src/cep/data/file-repo.ts': 'export const fileRepo = (..._a: unknown[]) => null\n',
       'src/cep/data/memory-repo.ts': 'export const memoryRepo = (..._a: unknown[]) => null\n',
-      'src/cep/data/new-repo.ts': `import { pick } from './pick'
-export const newRepo = pick(() => 'x', () => [])
+      'src/cep/data/new-repo.ts': `import { dataRepo } from './data-repo'
+export const newRepo = dataRepo(() => 'x', () => [], () => null)
 `,
-      'tests/cep/other.test.ts': REAL_TEST('@/cep/data/pick'),
+      'tests/cep/other.test.ts': REAL_TEST('@/cep/data/data-repo'),
     })
     const { gap, writing } = scan(root)
     expect(writing).toContain('src/cep/data/new-repo.ts')
@@ -428,19 +438,19 @@ it('x', () => { add(1, 2) })
     expect(scan(pure).writing).toEqual([])
     expect(scan(pure).gap).toEqual([])
 
-    // 同一个根再加一个写盘仓库：只有它（和造写者的 `pick`）进名单，
+    // 同一个根再加一个写盘仓库：只有它（和造写者的 `dataRepo`）进名单，
     // `memory-repo` / `logic` / `queue` 一个都不许被要求真机用例
     const mixed = makeRoot({
       'src/cep/fs.ts': MINI_FS,
-      'src/cep/data/pick.ts': MINI_PICK,
+      'src/cep/data/data-repo.ts': MINI_DATA_REPO,
       'src/cep/data/file-repo.ts': 'export const fileRepo = (..._a: unknown[]) => null\n',
       'src/cep/data/memory-repo.ts': 'export const memoryRepo = (..._a: unknown[]) => null\n',
       'src/cep/data/logic.ts': `export const add = (a: number, b: number) => a + b
 `,
       'src/cep/data/queue.ts': `export const runQueued = <T>(task: () => Promise<T>) => task()
 `,
-      'src/cep/data/writer-repo.ts': `import { pick } from './pick'
-export const writerRepo = pick(() => 'x', () => [])
+      'src/cep/data/writer-repo.ts': `import { dataRepo } from './data-repo'
+export const writerRepo = dataRepo(() => 'x', () => [], () => null)
 `,
       'tests/cep/logic.test.ts': `import { it } from 'vitest'
 import { add } from '@/cep/data/logic'
@@ -448,17 +458,17 @@ it('x', () => { add(1, 2) })
 `,
     })
     const { writing } = scan(mixed)
-    expect(writing).toEqual(['src/cep/data/pick.ts', 'src/cep/data/writer-repo.ts'])
+    expect(writing).toEqual(['src/cep/data/data-repo.ts', 'src/cep/data/writer-repo.ts'])
   })
 
   it('反例：只装 __adobe_cep__ 没装 window.require 不算真机装法 → 红', () => {
     const root = makeRoot({
       'src/cep/fs.ts': MINI_FS,
-      'src/cep/data/pick.ts': MINI_PICK,
+      'src/cep/data/data-repo.ts': MINI_DATA_REPO,
       'src/cep/data/file-repo.ts': 'export const fileRepo = (..._a: unknown[]) => null\n',
       'src/cep/data/memory-repo.ts': 'export const memoryRepo = (..._a: unknown[]) => null\n',
-      'src/cep/data/half-repo.ts': `import { pick } from './pick'
-export const halfRepo = pick(() => 'x', () => [])
+      'src/cep/data/half-repo.ts': `import { dataRepo } from './data-repo'
+export const halfRepo = dataRepo(() => 'x', () => [], () => null)
 `,
       // 只装了桥：hasCep 为真但写会走 NO_NODE 抛错，测不出"真落盘"
       'tests/cep/half.test.ts': `import { it } from 'vitest'
@@ -475,22 +485,22 @@ it('x', async () => { await import('@/cep/data/half-repo') })
   it('反例：真机用例直接 import（含传递闭包）即算覆盖 → 缺口清空', () => {
     const root = makeRoot({
       'src/cep/fs.ts': MINI_FS,
-      'src/cep/data/pick.ts': MINI_PICK,
+      'src/cep/data/data-repo.ts': MINI_DATA_REPO,
       'src/cep/data/file-repo.ts': 'export const fileRepo = (..._a: unknown[]) => null\n',
       'src/cep/data/memory-repo.ts': 'export const memoryRepo = (..._a: unknown[]) => null\n',
-      'src/cep/data/covered-repo.ts': `import { pick } from './pick'
+      'src/cep/data/covered-repo.ts': `import { dataRepo } from './data-repo'
 import { writeTextFileAtomic } from '@/cep/fs'
 export const coveredRepo = () => {
   writeTextFileAtomic('x', 'y')
-  return pick(() => 'x', () => [])
+  return dataRepo(() => 'x', () => [], () => null)
 }
 `,
       'tests/cep/covered.test.ts': REAL_TEST('@/cep/data/covered-repo'),
     })
     const { gap, covered } = scan(root)
-    // `file-repo` 只是被 `pick` import，没被用例直接 import —— 结构上是委托，算覆盖
+    // `file-repo` 只是被 `dataRepo` import，没被用例直接 import —— 结构上是委托，算覆盖
     expect(covered).toEqual(
-      expect.arrayContaining(['src/cep/data/covered-repo.ts', 'src/cep/data/pick.ts']),
+      expect.arrayContaining(['src/cep/data/covered-repo.ts', 'src/cep/data/data-repo.ts']),
     )
     expect(gap).toEqual([])
   })

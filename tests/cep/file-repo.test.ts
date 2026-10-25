@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { WriteOutcome } from '@/cep/fs'
+import { type WriteOutcome } from '@/cep/disk-write'
+import { isRecord } from '@/utils/guards'
 import { readValue } from '../support/repo-read'
 
 /**
@@ -30,7 +31,12 @@ const fs = vi.hoisted(() => ({
   ),
 }))
 
-vi.mock('@/cep/fs', () => fs)
+vi.mock('@/cep/fs-read', () => ({
+  debug: vi.fn(),
+  info: vi.fn(),
+  warn: vi.fn(),
+  error: vi.fn(),
+}))
 
 /** 开发者通道：坏文件必须 `log.error`（用户能「打开日志」查到），不许静默 warn/无声 */
 const logger = vi.hoisted(() => ({
@@ -44,6 +50,16 @@ vi.mock('@/utils/logger', () => ({ log: logger }))
 
 const { fileRepo } = await import('@/cep/data/file-repo')
 
+/** `decode` 是必填参数（TD-03-5）：只认 `{ items: string[] }`，别的一律 null = 形状不认识 */
+const decodeItems = (raw: unknown): { value: { items: string[] } } | null => {
+  if (!isRecord(raw) || !Array.isArray(raw.items)) return null
+  return { value: { items: raw.items.filter((item): item is string => typeof item === 'string') } }
+}
+
+/** 任意普通对象（`{}` 那组用例只关心写盘，不关心形状） */
+const decodeRecord = (raw: unknown): { value: Record<string, unknown> } | null =>
+  isRecord(raw) ? { value: raw } : null
+
 beforeEach(() => {
   vi.clearAllMocks()
   disk.text = null
@@ -56,6 +72,7 @@ describe('fileRepo requireExisting', () => {
     const repo = fileRepo(
       () => '/tmp/config.json',
       () => ({}),
+      decodeRecord,
       { requireExisting: true },
     )
 
@@ -71,6 +88,7 @@ describe('fileRepo requireExisting', () => {
     const repo = fileRepo(
       () => '/tmp/config.json',
       () => ({}),
+      decodeRecord,
       { requireExisting: true },
     )
 
@@ -84,6 +102,7 @@ describe('fileRepo requireExisting', () => {
     const repo = fileRepo(
       () => '/tmp/config.json',
       () => ({}),
+      decodeRecord,
     )
 
     await repo.update((value) => Object.assign(value, { a: 1 }))
@@ -93,25 +112,18 @@ describe('fileRepo requireExisting', () => {
 })
 
 /**
- * T-99-2：读边界的 `normalize`。
+ * TD-03-5 / T-99-2：读边界的 `decode`（**必填**）。
  *
- * 钉的是三件事：① 形状不认识 → `degraded` + fallback，坏数据一个字段都不进业务；
- * ② 文件不存在 ≠ 文件坏了（前者 `degraded` 为空）；③ `degraded` 时 `update` 拒绝写、磁盘不变。
+ * 钉的是四件事：① 形状不认识 → `ok:false` + `reason`，坏数据一个字段都不进业务；
+ * ② 文件不存在 ≠ 文件坏了；③ 坏读时 `update` 拒绝写、磁盘不变；
+ * ④ `degraded` 非空 → `ok:true` + `reason`（ADR-14 读可降级但必须标记）。
  */
-describe('fileRepo normalize（读边界归一）', () => {
-  /** 只认 `{ items: string[] }`；别的一律 null（= 形状不认识） */
-  const normalize = (raw: unknown): { items: string[] } | null => {
-    if (!raw || typeof raw !== 'object') return null
-    const items = (raw as { items?: unknown }).items
-    if (!Array.isArray(items)) return null
-    return { items: items.filter((item): item is string => typeof item === 'string') }
-  }
-
+describe('fileRepo decode（读边界唯一形状通道）', () => {
   const make = () =>
     fileRepo(
       () => '/tmp/panel.json',
       () => ({ items: [] as string[] }),
-      { normalize },
+      decodeItems,
     )
 
   it('正常文件逐值读回，degraded 为空', async () => {
@@ -174,17 +186,17 @@ describe('fileRepo normalize（读边界归一）', () => {
     expect(fs.writeTextFileAtomic).not.toHaveBeenCalled()
   })
 
-  it('不传 normalize 时保持旧行为（解析结果直接当 T）', async () => {
-    disk.text = '{"items":"不是数组"}'
+  it('degraded 非空 → ok:true 且带 reason（读可降级但必须标记）', async () => {
+    disk.text = '{"items":[]}'
 
     const read = await fileRepo(
       () => '/tmp/panel.json',
       () => ({ items: [] as string[] }),
+      () => ({ value: { items: [] as string[] }, degraded: '数据里没有可用条目' }),
     ).read()
 
-    // 旧行为把形状错误的文件原样交出去，正是这刀要拆掉的那份断言（剩余仓库见台账 T-99-2）
-    expect(read.reason).toBeUndefined()
-    expect(readValue(read).items).toBe('不是数组')
+    expect(read.ok).toBe(true)
+    expect(read.reason).toBe('数据里没有可用条目')
   })
 })
 
@@ -199,6 +211,7 @@ describe('fileRepo 三态读（T-105）', () => {
     fileRepo(
       () => '/tmp/tags.json',
       () => ({ items: [] as string[] }),
+      decodeItems,
     )
 
   it('判据 A：文件不存在 → ok:true + fallback', async () => {
@@ -263,5 +276,67 @@ describe('fileRepo 三态读（T-105）', () => {
       expect.stringContaining('/tmp/tags.json 读取失败'),
       'EBUSY: resource busy or locked',
     )
+  })
+})
+
+/**
+ * A3-1：`overwrite` = **整份覆盖 + 保留原文做备份/隔离**。
+ * 与另两个写的区别（这四条就是它存在的理由）：
+ * - `write` 不看原文（`previous` 恒 `null`）⇒ `.bak` 无从谈起；
+ * - `update` 在原文坏时**拒绝写**（D-42），而整份替换要**读坏也写**、但把坏原文隔离到 `.corrupt-*`。
+ */
+describe('fileRepo overwrite（整份覆盖 + 保留原文）', () => {
+  const makeReplace = () =>
+    fileRepo(
+      () => '/tmp/panel.json',
+      () => ({ items: [] as string[] }),
+      decodeItems,
+    )
+
+  it('读不到原文 → 抛，磁盘一个字节都不动（T-112）', async () => {
+    disk.readError = 'EPERM:拒绝访问'
+    disk.text = '{"items":["旧"]}'
+
+    await expect(makeReplace().overwrite({ items: ['新'] })).rejects.toThrow('读不到')
+
+    expect(fs.writeTextFileAtomic).not.toHaveBeenCalled()
+    expect(disk.text).toBe('{"items":["旧"]}')
+  })
+
+  it('文件还没有（notSeen）→ 写成功，且不写 .bak（没有旧内容）', async () => {
+    disk.text = null
+
+    await makeReplace().overwrite({ items: ['新'] })
+
+    // 断言**落盘参数**：本文件的 beforeEach 用 `mockReturnValue` 覆盖了写盘实现，
+    // `disk.text` 永远不变（这个坑我踩过两次，见轮次文件 §四）
+    expect(fs.writeTextFileAtomic).toHaveBeenCalledWith('/tmp/panel.json', '{"items":["新"]}')
+    // 没有旧内容 ⇒ `backupOrQuarantine` 根本不会被调（既无 .bak 也无 .corrupt-*）
+    expect(fs.writeTextFile).not.toHaveBeenCalled()
+  })
+
+  it('好原文 → .bak 内容就是原文（真能拿来恢复）', async () => {
+    const previous = '{"items":["旧"]}'
+    disk.text = previous
+
+    await makeReplace().overwrite({ items: ['新'] })
+
+    expect(fs.writeTextFileAtomic).toHaveBeenCalledWith('/tmp/panel.json.bak', previous)
+    expect(fs.writeTextFileAtomic).toHaveBeenCalledWith('/tmp/panel.json', '{"items":["新"]}')
+  })
+
+  it('坏原文（半截 JSON）→ 不写 .bak，改存 .corrupt-* 且**照写**（与 update 的关键区别）', async () => {
+    const broken = '{"items":["旧"' // 半截
+    disk.text = broken
+
+    // `update` 在这里会拒绝写（D-42）；`overwrite` 照写，但把坏原文隔离（TD-09-21）
+    await makeReplace().overwrite({ items: ['新'] })
+
+    const bakCalls = fs.writeTextFileAtomic.mock.calls.filter(([p]) => p.endsWith('.bak'))
+    const corruptCalls = fs.writeTextFileAtomic.mock.calls.filter(([p]) => p.includes('.corrupt-'))
+    expect(bakCalls).toHaveLength(0)
+    expect(corruptCalls).toHaveLength(1)
+    expect(corruptCalls[0]?.[1]).toBe(broken) // 坏字节一个不丢
+    expect(fs.writeTextFileAtomic).toHaveBeenCalledWith('/tmp/panel.json', '{"items":["新"]}') // 照写
   })
 })

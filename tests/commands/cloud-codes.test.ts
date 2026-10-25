@@ -70,7 +70,9 @@ describe('云同步错误码折成命令层码', () => {
         errorCode: code,
       })
 
-      const result = await execute('cloud.download', { onConfirm: async () => true })
+      const result = await execute('cloud.download', {
+        onConfirm: async () => ({ ok: true, data: true }),
+      })
 
       expect(result, code).toMatchObject({ ok: false, code: 'NETWORK', reason: message })
     }
@@ -86,7 +88,9 @@ describe('云同步错误码折成命令层码', () => {
       errorCode: 'CLOUD_CANCELLED',
     })
 
-    const result = await execute('cloud.download', { onConfirm: async () => true })
+    const result = await execute('cloud.download', {
+      onConfirm: async () => ({ ok: true, data: true }),
+    })
 
     expect(result).toEqual({ ok: 'cancelled' })
   })
@@ -100,7 +104,9 @@ describe('云同步错误码折成命令层码', () => {
       error: '取消操作',
     })
 
-    await expect(execute('cloud.download', { onConfirm: async () => true })).resolves.toEqual({
+    await expect(
+      execute('cloud.download', { onConfirm: async () => ({ ok: true, data: true }) }),
+    ).resolves.toEqual({
       ok: 'cancelled',
     })
   })
@@ -114,7 +120,9 @@ describe('云同步错误码折成命令层码', () => {
       errorCode: 'CLOUD_NOT_CONFIGURED',
     })
 
-    const result = await execute('cloud.download', { onConfirm: async () => true })
+    const result = await execute('cloud.download', {
+      onConfirm: async () => ({ ok: true, data: true }),
+    })
 
     expect(result).toMatchObject({ ok: false, code: 'NETWORK', reason: '未配置同步地址' })
     if (result.ok === false) expect(result.reason).not.toContain('脚本初始化失败')
@@ -130,7 +138,9 @@ describe('云同步错误码折成命令层码', () => {
       errorCode: 'CLOUD_REV_CONFLICT',
     })
 
-    const result = await execute('cloud.download', { onConfirm: async () => true })
+    const result = await execute('cloud.download', {
+      onConfirm: async () => ({ ok: true, data: true }),
+    })
 
     expect(result).toMatchObject({ ok: false, code: 'NETWORK' })
   })

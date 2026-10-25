@@ -12,11 +12,11 @@ import { jsx } from '@/cep/jsx'
 const output = ref('')
 const running = ref('')
 
-async function probe(label: string, run: () => Promise<unknown>) {
+async function probe(label: string, invoke: () => Promise<unknown>) {
   running.value = label
   try {
     await initJsx()
-    const raw = await run()
+    const raw = await invoke()
     output.value = `${label}\n\n${format(raw)}`
   } catch (error) {
     const message = error instanceof Error ? error.message : String(error)

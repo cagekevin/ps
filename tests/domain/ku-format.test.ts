@@ -11,12 +11,14 @@ const B64 = btoa(GROUPS)
 
 describe('ku-format 形态分派', () => {
   it('裸组数组 → groups', () => {
-    expect(kuShapeOf(JSON.parse(GROUPS))).toBe('groups')
+    expect(kuShapeOf(JSON.parse(GROUPS))).toMatchObject({ shape: 'groups' })
   })
 
   it('扁平清单 → flat；容器 → container', () => {
-    expect(kuShapeOf([{ name: 'a', data: B64 }])).toBe('flat')
-    expect(kuShapeOf({ arrFileData: [{ name: 'a', data: B64 }], store: {} })).toBe('container')
+    expect(kuShapeOf([{ name: 'a', data: B64 }])).toMatchObject({ shape: 'flat' })
+    expect(kuShapeOf({ arrFileData: [{ name: 'a', data: B64 }], store: {} })).toMatchObject({
+      shape: 'container',
+    })
   })
 
   it('既不数组也没 arrFileData → null', () => {

@@ -13,7 +13,13 @@ const meta = vi.hoisted(() => ({
 }))
 
 vi.mock('@/cep/transport', () => ({ hasCep: () => true }))
-vi.mock('@/cep/fs', () => ({ readTextOutcome: fs.readTextOutcome, userDir: () => '/user' }))
+vi.mock('@/cep/fs-read', () => ({
+  readTextOutcome: fs.readTextOutcome,
+}))
+
+vi.mock('@/cep/paths', () => ({
+  userDir: () => '/user',
+}))
 vi.mock('@/cep/data/font-meta', () => meta)
 
 const { readSysFontFile } = await import('@/cep/data/sys-font')

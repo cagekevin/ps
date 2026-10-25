@@ -18,7 +18,7 @@ const sortBy = ref<string>('layer')
 const distributeCmd = useCommand('commonUse.distribute')
 /** 两颗图标按钮 = 官方 handle(1) / handle(2)（:37282、:37298）；[t, 间距, 排序模式] */
 const distribute = (t: number) =>
-  void distributeCmd.run({
+  void distributeCmd.invoke({
     params: [t, Number(gap.value) || 0, sortBy.value === 'layer' ? 1 : 2],
   })
 </script>

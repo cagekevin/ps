@@ -5,10 +5,11 @@ import {
   actionLibraryRepo,
   currentWarehouseFile,
   defaultActionIndex,
+  getRawActionList,
   selectActionFile,
 } from '@/cep/data/actions'
-import { getRawActionList } from '@/cep/ps'
 import { getPref } from '@/cep/data/settings'
+import { msg } from '@/domain/messages'
 import { readActionList, type ActionGroup, type ActionWarehouse } from '@/domain/action'
 import { describeCepError } from '@/utils/error-text'
 import { log } from '@/utils/logger'
@@ -61,16 +62,16 @@ export const useActionStore = defineStore('action', () => {
     const reasons: string[] = []
     const indexFile = currentWarehouseFile(indexValue)
     if (!index.ok) {
-      reasons.push(`动作库索引文件损坏（${index.reason}），当前显示的是默认仓库 ${indexFile}`)
+      reasons.push(msg.data.fn.actionIndexCorruptDefault(index.reason, indexFile))
       log.error('action', `索引损坏，已回退默认仓库 ${indexFile}`, index.reason)
     }
     selectActionFile(indexFile)
 
     const library = await actionLibraryRepo.read()
-    // 坏库的默认值取生产者给的 `fallback`（`actionLibraryRepo` 的 `pick(…, () => [])`，`actions.ts:75-79`），
+    // 坏库的默认值取生产者给的 `fallback`（`actionLibraryRepo` 构造时传的 `() => []`，`actions.ts:75-79`），
     // 消费侧不另写一份空数组（T-104 / ADR-24）
     groups.value = library.ok ? library.value : library.fallback
-    if (!library.ok) reasons.push(`动作库文件损坏（${library.reason}）`)
+    if (!library.ok) reasons.push(msg.data.fn.actionLibraryCorrupt(library.reason))
     degraded.value = reasons.join('；')
   }
 
@@ -109,9 +110,48 @@ export const useActionStore = defineStore('action', () => {
     }
   }
 
+  /**
+   * 数据投影的**唯一写入口**（供 `bindActionData` 的 `onChange` 调用）。
+   *
+   * 对外只导出 `readonly` 投影 —— 页面/组件想直改会 TS 报错（结构上不可能），
+   * 要改只能走这里或 `load()`。以前 `bindActionData` 从外部 `store.groups = value`，
+   * 逼得投影必须是可写 `ref`（谁都能改，绕过 store 的更新逻辑）。
+   */
+  function applyLibrary(value: ActionGroup[]): void {
+    groups.value = value
+    // 写成功 ⇒ 刚写下去的这份是合法的，之前"索引/库损坏"的降级提示该清
+    degraded.value = ''
+  }
+
+  function applyIndex(value: { list: ActionWarehouse[]; index: number }): void {
+    warehouses.value = value.list
+    activeIndex.value = value.index
+    selectActionFile(currentWarehouseFile(value))
+    degraded.value = ''
+  }
+
+  // ── 对外**只给用途**，不给内部字段（深模块：窄接口） ──────────────────
+  // 以前导出 `warehouses` + `activeIndex` 两个裸 ref，页面只好自己
+  // `computed(() => ({ index: activeIndex.value, list: warehouses.value }))` ——
+  // 那是页面在做 store 的事，而且内部表示一改（如改成 activeWarehouse）就全炸。
+
+  /** 仓库下拉的视图模型（页面直接 `:data="store.warehouseView"`，不再自己拼） */
+  const warehouseView = computed(() => ({ index: activeIndex.value, list: warehouses.value }))
+
+  /** 按序取仓库名（页面不再摸 `warehouses` 数组） */
+  function warehouseName(index: number): string {
+    return warehouses.value[index]?.name ?? ''
+  }
+
+  /** 第 `index` 个是不是当前选中的（页面不再读 `activeIndex`） */
+  function isActiveWarehouse(index: number): boolean {
+    return index === activeIndex.value
+  }
+
   return {
-    warehouses,
-    activeIndex,
+    warehouseView,
+    warehouseName,
+    isActiveWarehouse,
     groups,
     listType,
     setListType,
@@ -122,6 +162,8 @@ export const useActionStore = defineStore('action', () => {
     psUnparsed,
     psError,
     loadPsActions,
+    applyLibrary,
+    applyIndex,
   }
 })
 
@@ -132,13 +174,11 @@ export function bindActionData() {
   if (bound) return
   bound = true
 
+  // 投影是 `readonly`（外部改不了）⇒ 写只能走 store 自己的 `apply*` 方法
   actionLibraryRepo.onChange((value) => {
-    useActionStore().groups = value
+    useActionStore().applyLibrary(value)
   })
   actionIndexRepo.onChange((value) => {
-    const store = useActionStore()
-    store.warehouses = value.list
-    store.activeIndex = value.index
-    selectActionFile(currentWarehouseFile(value))
+    useActionStore().applyIndex(value)
   })
 }

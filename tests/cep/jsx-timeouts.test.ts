@@ -8,8 +8,13 @@ import { describe, expect, it, vi } from 'vitest'
  * 1. 三档的数值与语义（改回旧值会红）；
  * 2. **每个域真的用那一档**（按"这次调用在等什么"），靠 mock 掉 jsxCall 看它收到什么。
  */
-const jsxCall = vi.hoisted(() => vi.fn(async () => 'ok'))
-vi.mock('@/cep/transport', () => ({ jsxCall }))
+const jsxCall = vi.hoisted(() => vi.fn(async () => ({ ok: true, data: undefined })))
+vi.mock('@/cep/transport', () => ({
+  // 唯一入口的公开面是 `jsxRead`/`jsxWrite`；内部 `jsxCall` 不导出。
+  // 本测试只看底下 `jsxCall` 收到的 timeout ⇒ 两个入口都透传给它。
+  jsxRead: (...args: Parameters<typeof jsxCall>) => jsxCall(...args),
+  jsxWrite: (...args: Parameters<typeof jsxCall>) => jsxCall(...args),
+}))
 
 const { READ, WRITE, LONG } = await import('@/cep/jsx/timeouts')
 const { createFontJsx } = await import('@/cep/jsx/font')

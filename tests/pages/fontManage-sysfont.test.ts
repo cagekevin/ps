@@ -13,10 +13,10 @@ import type { FontItem } from '@/domain/font-item'
  * 病根在数据层 `return []`：一折，页面就只剩那句空态，用户以为机器上没有字体。
  */
 
-const ps = vi.hoisted(() => ({
+const reads = vi.hoisted(() => ({
   getFontList: vi.fn(),
-  getFontTags: vi.fn(async () => []),
-  getFontStars: vi.fn(async () => ({ ok: true, stars: {} })),
+  readFontTags: vi.fn(async () => []),
+  readFontStars: vi.fn(async () => ({ ok: true, stars: {} })),
 }))
 
 const selection = vi.hoisted(() => ({ hasSelection: true, typeNumber: 2 }))
@@ -26,7 +26,11 @@ vi.mock('@/selection', () => ({
   current: () => selection,
   selectionRef: { value: selection },
 }))
-vi.mock('@/cep/ps', () => ps)
+vi.mock('@/cep/data/font-list', () => ({ getFontList: reads.getFontList }))
+vi.mock('@/cep/data/font-meta', () => ({
+  readFontTags: reads.readFontTags,
+  readFontStars: reads.readFontStars,
+}))
 vi.mock('@/cep/jsx', () => ({
   jsx: {
     action: { callAction: vi.fn(), getActionList: vi.fn() },
@@ -59,7 +63,7 @@ beforeEach(() => {
   pinia = createPinia()
   setActivePinia(pinia)
   vi.clearAllMocks()
-  ps.getFontList.mockResolvedValue([font('MiSans')])
+  reads.getFontList.mockResolvedValue([font('MiSans')])
   class NoopObserver {
     observe() {}
     unobserve() {}
@@ -70,7 +74,7 @@ beforeEach(() => {
 
 describe('字体管理页 · 系统字体读不到（TD-09-3）', () => {
   it('读盘失败 → 错误块 + 重试，且不是空态那句话', async () => {
-    ps.getFontList.mockRejectedValue(new Error('读不到系统字体：EACCES: 拒绝访问'))
+    reads.getFontList.mockRejectedValue(new Error('读不到系统字体：EACCES: 拒绝访问'))
 
     const text = (await mountPage()).text()
 
@@ -80,7 +84,7 @@ describe('字体管理页 · 系统字体读不到（TD-09-3）', () => {
   })
 
   it('真的一个字体都没有 → 空态，且不是"读不到"', async () => {
-    ps.getFontList.mockResolvedValue([])
+    reads.getFontList.mockResolvedValue([])
 
     const text = (await mountPage()).text()
 

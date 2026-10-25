@@ -1,4 +1,5 @@
-import { starsRepo } from '@/cep/data'
+import { starsWriter, isRawStar } from '@/cep/data'
+import { isArrayOf } from '@/utils/guards'
 import type { SyncUnitAdapter, WriteOutcome } from '@/domain/cloud'
 import { inlineFile, readInlineJson, unitPayload } from './util'
 
@@ -9,10 +10,10 @@ export const fontStarsEntry: SyncUnitAdapter = {
   schema: 1,
 
   // 收藏写成功 → 标脏（`file-repo` 的 emit 在落盘之后，写失败不会走到这里）
-  watch: (markDirty) => starsRepo.onChange(markDirty),
+  watch: (markDirty) => starsWriter.onChange(markDirty),
 
   async read() {
-    const read = await starsRepo.read()
+    const read = await starsWriter.read()
     if (!read.ok) throw new Error(read.reason)
     return unitPayload([inlineFile(PATH, JSON.stringify(read.value))])
   },
@@ -20,8 +21,8 @@ export const fontStarsEntry: SyncUnitAdapter = {
   async write(payload): Promise<WriteOutcome> {
     try {
       const value = readInlineJson(payload)
-      if (!Array.isArray(value)) return { ok: false, message: '字体收藏不是数组' }
-      await starsRepo.write(value)
+      if (!isArrayOf(value, isRawStar)) return { ok: false, message: '字体收藏不是数组' }
+      await starsWriter.write(value)
       return { ok: true }
     } catch (error) {
       return { ok: false, message: error instanceof Error ? error.message : '字体收藏写回失败' }

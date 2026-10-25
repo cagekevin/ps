@@ -16,32 +16,36 @@ const state = vi.hoisted(() => ({
 
 vi.mock('@/cep/transport', () => ({ hasCep: () => true }))
 
-vi.mock('@/cep/fs', () => ({
+vi.mock('@/cep/node', () => ({
   hasNode: () => true,
+}))
+
+vi.mock('@/cep/paths', () => ({
   userDir: () => '/user',
+}))
+
+vi.mock('@/cep/fs-read', () => ({
   readTextSmart: async (path: string) => {
-    if (state.failRead) throw new Error('EBUSY')
-    return state.files.get(path) ?? null
-  },
-  // T-105：`failRead` 现在走 error 分支（旧实现只有"抛错"能让 D-42 生效，真实读取原语从不抛）
-  readTextOutcome: async (path: string) => {
-    if (state.failRead) return { status: 'error' as const, reason: 'EBUSY' }
-    const text = state.files.get(path)
-    return text === undefined ? { status: 'notSeen' as const } : { status: 'ok' as const, text }
-  },
+      if (state.failRead) throw new Error('EBUSY')
+      return state.files.get(path) ?? null
+    },
+  // T-105：`failRead` 现在走 error 分支（旧实现只有"抛错"能让 D-42 生效，真实读取原语从不抛）  readTextOutcome: async (path: string) => {
+      if (state.failRead) return { status: 'error' as const, reason: 'EBUSY' }
+      const text = state.files.get(path)
+      return text === undefined ? { status: 'notSeen' as const } : { status: 'ok' as const, text }
+    },
   readTextSync: (path: string) => {
-    // 读不到 ≠ 没有（TD-09-23/24）：failRead 现在是 error，不是 notSeen
-    if (state.failRead) return { status: 'error' as const, reason: 'EACCES: 模拟读不到' }
-    const text = state.files.get(path)
-    return text === undefined ? { status: 'notSeen' as const } : { status: 'ok' as const, text }
-  },
+      // 读不到 ≠ 没有（TD-09-23/24）：failRead 现在是 error，不是 notSeen    if (state.failRead) return { status: 'error' as const, reason: 'EACCES: 模拟读不到' }
+      const text = state.files.get(path)
+      return text === undefined ? { status: 'notSeen' as const } : { status: 'ok' as const, text }
+    },
   writeTextFile: (path: string, text: string) => {
-    state.files.set(path, text)
-  },
+      state.files.set(path, text)
+    },
   writeTextFileAtomic: (path: string, text: string) => {
-    state.files.set(path, text)
-    return true
-  },
+      state.files.set(path, text)
+      return true
+    },
 }))
 
 const PATH = '/user/sj_commonFunction.json'

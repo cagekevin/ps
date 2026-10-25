@@ -6,7 +6,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
  * → 真 logger（落盘）→ 关掉重开仍查得到。
  *
  * 判据只有一个：**失败之后还有谁能知道它发生过**。
- * 「用户能看见」= `CommandResult.reason`（`useCommand.run` 拿它 toast）/ `watchStateRef`（页面提示条下一轮接）；
+ * 「用户能看见」= `CommandOutcome.reason`（`useCommand.invoke` 拿它 toast）/ `watchStateRef`（页面提示条下一轮接）；
  * 「日志有原因」= 落盘文件里能查到这条失败，且带得上 PS 侧给的原话。
  *
  * 三种失败对应 TD-13-2 / TD-13-4 / TD-13-5 的爆炸半径：
@@ -69,9 +69,14 @@ function installRequire() {
 }
 
 /** 只挡掉命令层的数据仓库（与本轮失败链无关，避免把 fs/Node 全拖进来） */
-vi.mock('@/cep/data', () => ({ starsRepo: {}, tagsRepo: {} }))
-vi.mock('@/cep/data/actions', () => ({ actionIndexRepo: {}, actionLibraryRepo: {} }))
-vi.mock('@/cep/data/free-panel', () => ({ freePanelRepo: {} }))
+vi.mock('@/cep/data', () => ({ starsRepo: {}, starsWriter: {}, tagsRepo: {}, tagsWriter: {} }))
+vi.mock('@/cep/data/actions', () => ({
+  actionIndexRepo: {},
+  actionLibraryRepo: {},
+  actionIndexWriter: {},
+  actionLibraryWriter: {},
+}))
+vi.mock('@/cep/data/free-panel', () => ({ freePanelRepo: {}, freePanelWriter: {} }))
 vi.mock('@/cep/data/settings', () => ({ settingsSnapshot: () => ({}) }))
 
 const { userDir } = await import('@/cep/fs')
@@ -79,10 +84,8 @@ const logPath = () => `${userDir()}/sj_v5_log.txt`
 
 async function bootPanel() {
   const logger = await import('@/utils/logger')
-  const { createLogFileSink } = await import('@/cep/log-file')
-  logger.attachLogSink(
-    createLogFileSink((reason) => logger.log.warn('logger', '日志落盘失败', reason)),
-  )
+  // 落盘口：logger 在自己模块顶层就装好了（import logger 即装，无需调用）
+  await import('@/cep/log-file')
   return logger
 }
 
@@ -90,8 +93,7 @@ async function bootPanel() {
 async function reopenPanel() {
   vi.resetModules()
   const logger = await import('@/utils/logger')
-  const { createLogFileSink } = await import('@/cep/log-file')
-  logger.attachLogSink(createLogFileSink())
+  await import('@/cep/log-file')
   return logger.log.dump()
 }
 
@@ -120,14 +122,14 @@ describe('假 PS 全链路：三类宿主失败', () => {
       group: 'font',
       requires: 'none',
       kind: 'instant',
-      async run(ctx) {
+      async invoke(ctx) {
         await ctx.jsx.font.setFont('MiSans-Bold', 'MiSans', 'Bold')
       },
     })
 
     const result = await execute('e2e.write')
 
-    // ① 用户能看见：`useCommand.run` 就是把 reason 弹出来
+    // ① 用户能看见：`useCommand.invoke` 就是把 reason 弹出来
     expect(result.ok).toBe(false)
     if (result.ok === false) {
       expect(result.reason).toContain('没有选中图层')
@@ -151,7 +153,7 @@ describe('假 PS 全链路：三类宿主失败', () => {
       group: 'font',
       requires: 'none',
       kind: 'instant',
-      async run(ctx) {
+      async invoke(ctx) {
         await ctx.jsx.font.setFont('MiSans-Bold', 'MiSans', 'Bold')
       },
     })

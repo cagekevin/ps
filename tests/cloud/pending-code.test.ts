@@ -1,5 +1,11 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import { __resetLoggerForTest, log } from '@/utils/logger'
+
+/**
+ * logger 与被测模块必须拿到**同一个模块实例**的 `log`：
+ * `vi.resetModules()` 之后，静态 import 的与动态 import 的不是同一份。
+ * 所以两个都在 `beforeEach` 里动态 import（同一轮解析 ⇒ 同一实例）。
+ */
+let log: typeof import('@/utils/logger').log
 
 /**
  * TD-11-8：待同步痕迹要带得上**具体错误码**，不能只有 5 个粗桶。
@@ -21,14 +27,21 @@ vi.mock('@/cep/data/settings', () => ({
   },
 }))
 
-const { readPendingChanges, recordPendingChanges, __resetPendingWarnForTest } =
-  await import('@/cep/cloud/pending')
-
-beforeEach(() => {
+beforeEach(async () => {
+  // 重载模块 = "面板重开" ⇒ logger 的内存缓冲是干净的（不再需要专门的清场函数）
+  vi.resetModules()
+  log = (await import('@/utils/logger')).log
+  const pending = await import('@/cep/cloud/pending')
+  readPendingChanges = pending.readPendingChanges
+  recordPendingChanges = pending.recordPendingChanges
+  resetPendingWarn = pending.__resetPendingWarnForTest
   store.prefs.clear()
-  __resetPendingWarnForTest()
-  __resetLoggerForTest()
+  resetPendingWarn()
 })
+
+let readPendingChanges: typeof import('@/cep/cloud/pending').readPendingChanges
+let recordPendingChanges: typeof import('@/cep/cloud/pending').recordPendingChanges
+let resetPendingWarn: typeof import('@/cep/cloud/pending').__resetPendingWarnForTest
 
 describe('pending 痕迹的错误码', () => {
   it('记进去的码能读回来（落盘形状带上 code）', () => {

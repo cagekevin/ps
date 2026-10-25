@@ -80,8 +80,8 @@ async function exportImages(mode: 'image' | 'first' | 'second') {
   const text =
     mode === 'first' ? '正在导出一级图层...' : mode === 'second' ? '正在导出二级图层...' : ''
   const ok = text
-    ? await loading.run(text, () => exportCmd.run({ mode, options: exportOptions.value }))
-    : await exportCmd.run({ mode, options: exportOptions.value })
+    ? await loading.invoke(text, () => exportCmd.invoke({ mode, options: exportOptions.value }))
+    : await exportCmd.invoke({ mode, options: exportOptions.value })
   // 命令层失败会自己提示；这里补一条面板级的可见提示，避免"点了没反应"
   if (!ok) feedback.error('导出失败：请检查导出目录与参数后重试')
 }
@@ -149,7 +149,7 @@ async function exportImages(mode: 'image' | 'first' | 'second') {
       @update:open="showSetFolder = $event"
     >
       <SettingsRow>
-        <GButton type="primary" width="full" @click="openFolderCmd.run()">打开所在目录</GButton>
+        <GButton type="primary" width="full" @click="openFolderCmd.invoke()">打开所在目录</GButton>
       </SettingsRow>
       <SettingsRow><CheckBox v-model="openAfterSave">保存后自动打开所在目录</CheckBox></SettingsRow>
     </GCollapse>
@@ -170,7 +170,7 @@ async function exportImages(mode: 'image' | 'first' | 'second') {
         <GButton
           type="primary"
           width="full"
-          @click="exportFolderCmd.run({ options: exportOptions })"
+          @click="exportFolderCmd.invoke({ options: exportOptions })"
         >
           批量导出文件夹所有PSD
         </GButton>

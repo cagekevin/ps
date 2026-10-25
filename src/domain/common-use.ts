@@ -2,6 +2,8 @@
 // 替代了什么：原版 `V.a.info` 数组上的就地读写（app.v4.js:11088-11261 的存储类与 configReset）
 // 谁在用：`cep/data/common-use.ts`（仓库）、后续 `stores/common-use.ts`（只读投影，T-87）
 // 禁止：不读文件、不调 jsx、不 import Vue；不在这里判断"要不要写"（那是命令层的事）
+import { isArrayOf, isRecord, isUnknownArray } from '@/utils/guards'
+import { type Decoded } from '@/utils/decode'
 
 /**
  * 一条常用项：官方 `configReset()` 的 10 个键（`app.v4.js:11113-11161` 起）。
@@ -225,7 +227,7 @@ export const COMMON_USE_SEED: readonly CommonUseItem[] = [
   },
 ]
 
-/** 空文件：`pick()` 的 fallback——**不是**种子，种子只在 `ensure()` 里显式写 */
+/** 空文件：仓库的 fallback——**不是**种子，种子只在 `ensure()` 里显式写 */
 export function createEmptyCommonUseFile(): CommonUseFile {
   return []
 }
@@ -236,15 +238,35 @@ export function createCommonUseSeed(): CommonUseFile {
 }
 
 /**
- * 取项数组；形状不对时给空数组（形状校验在仓库层做，这里不抛）。
+ * 根形状 → 项数组（**唯一实现**；读边界与写路径共用）：裸数组 或 旧 `{ info: [...] }`，其它返回 `null`。
+ * 声明边界：这是「一份实现」，不是「唯一入口」—— TS 挡不住别人再写一遍 `raw.info` 解包。
  *
  * 兼容旧形状：我们早期把文件写成 `{ info: [...] }`（错误），读侧认它、写侧归一成裸数组，
  * 这样已经跑过旧版本的用户不会丢那 14 项。
+ *
+ * 条目级只证"是对象"；有任何一条不是对象 → `null`（整份不认识，不 filter 掉后写回）。
+ *
+ * **怎么用**：读边界走 `decodeCommonUseFile(raw)`，写路径走 `requireItems(file)`（它在 `null` 时抛
+ * `CepError('PARSE')`）。两处都**调这个函数**，不要各自解包。
+ *
+ * **别这么写**：`(raw as { info?: unknown }).info`、`Array.isArray(file) ? file : file.info`、
+ * `file.info as CommonUseItem[]` —— 都是第二份解包判据，改判据时必漏一处。
  */
+export function toCommonUseItems(raw: unknown): CommonUseItem[] | null {
+  const candidate = isUnknownArray(raw) ? raw : isRecord(raw) ? raw.info : null
+  // 「数组 + 逐条证明」用 `guards.isArrayOf`；条目证明用 `isCommonUseItem`（本文件唯一一份）
+  return isArrayOf(candidate, isCommonUseItem) ? candidate : null
+}
+
+/** 取项数组；形状不对时给空数组（视图侧兜底，形状判定在 `toCommonUseItems`） */
 export function readCommonUseItems(file: CommonUseFile | null | undefined): CommonUseItem[] {
-  if (Array.isArray(file)) return file
-  const legacy = (file as { info?: unknown } | null | undefined)?.info
-  return Array.isArray(legacy) ? (legacy as CommonUseItem[]) : []
+  return toCommonUseItems(file) ?? []
+}
+
+/** 读边界：常用页文件（判据在 `toCommonUseItems`，认裸数组与旧 `{ info: [...] }`） */
+export function decodeCommonUseFile(raw: unknown): Decoded<CommonUseFile> | null {
+  const items = toCommonUseItems(raw)
+  return items === null ? null : { value: items }
 }
 
 /**
@@ -376,4 +398,12 @@ export function buildOptionPatch(path: string, value: unknown): Record<string, u
   // 只在最后断言一次（`as never` 会让这一处彻底逃过类型检查，什么都能塞进去）
   const patch = segments.reduceRight<unknown>((inner, segment) => ({ [segment]: inner }), value)
   return patch as Record<string, unknown>
+}
+
+/**
+ * `CommonUseItem` 的形状证明：字段全可选 + 索引签名 ⇒ "是个普通对象"即满足契约。
+ * 存在意义：文件里读回来的元素进 `CommonUseItem[]` 时用证明，不用 `as`（`as` 是没人校验的盖章）。
+ */
+export function isCommonUseItem(value: unknown): value is CommonUseItem {
+  return isRecord(value)
 }

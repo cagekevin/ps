@@ -17,6 +17,7 @@ import {
 import { getCloudUrl } from './config'
 import { postText } from '@/cep/http'
 import { CepError } from '@/utils/errors'
+import { msg } from '@/domain/messages'
 
 const TIMEOUT_MS = 20_000
 
@@ -49,15 +50,12 @@ function serial<T>(task: () => Promise<T>): Promise<T> {
  */
 function httpError(status: number): CloudError {
   if (status === 401 || status === 403) {
-    return new CloudError(
-      'CLOUD_PERMISSION',
-      `云同步网关拒绝访问（HTTP ${status}）：请确认 GAS 部署权限是「所有人」，并检查同步地址`,
-    )
+    return new CloudError('CLOUD_PERMISSION', msg.cloud.fn.gatewayDenied(String(status)))
   }
   if (status === 429) {
-    return new CloudError('CLOUD_RATE_LIMITED', '云同步网关限流（HTTP 429）：会等更久再自动重试')
+    return new CloudError('CLOUD_RATE_LIMITED', msg.cloud.text.gatewayRateLimited)
   }
-  return new CloudError('CLOUD_NETWORK', `GAS HTTP ${status}`)
+  return new CloudError('CLOUD_NETWORK', msg.cloud.fn.gasHttpError(String(status)))
 }
 
 async function callGateway(
@@ -72,7 +70,7 @@ async function request(
   data?: CloudSnapshot,
 ): Promise<Record<string, unknown>> {
   const url = getCloudUrl()
-  if (!url) throw new CloudError('CLOUD_NOT_CONFIGURED', '未配置同步地址')
+  if (!url) throw new CloudError('CLOUD_NOT_CONFIGURED', msg.cloud.text.notConfigured)
 
   try {
     // 网络出口只有一个：`cep/http.ts`（TD-13-3）。这里不再自己 `fetch`——
@@ -92,14 +90,14 @@ async function request(
     const text = response.text
     if (text.includes('<html')) {
       // 登录页/权限页与 401/403 是同一件事：用户要做的事与重试策略完全一样，共用一个码
-      throw new CloudError('CLOUD_PERMISSION', 'GAS 返回了权限页，请确认部署权限为“所有人”')
+      throw new CloudError('CLOUD_PERMISSION', msg.cloud.text.gasPermissionPage)
     }
 
     let json: Record<string, unknown>
     try {
       json = JSON.parse(text) as Record<string, unknown>
     } catch {
-      throw new CloudError('CLOUD_BAD_RESPONSE', 'GAS 返回不是合法 JSON')
+      throw new CloudError('CLOUD_BAD_RESPONSE', msg.cloud.text.gasNotJson)
     }
 
     if (typeof json.error === 'string' && json.error) {
@@ -114,7 +112,7 @@ async function request(
     if (error instanceof CloudError) throw error
     // 11-8 的判据：超时与"发不出去"的重试方式、用户动作都一样 → 同一个码
     if (error instanceof CepError && error.code === 'TIMEOUT') {
-      throw new CloudError('CLOUD_NETWORK', '同步超时')
+      throw new CloudError('CLOUD_NETWORK', msg.cloud.text.syncTimeout)
     }
     throw new CloudError('CLOUD_NETWORK', error instanceof Error ? error.message : '同步网络失败')
   }

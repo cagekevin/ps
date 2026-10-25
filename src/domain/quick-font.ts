@@ -5,6 +5,7 @@
 // 禁止：这里不读文件、不调 jsx（数据由调用方传入）
 
 import { CepError } from '@/utils/errors'
+import { msg } from './messages'
 import type { QuickFont } from '@/domain/font-set-config'
 import type { FontItem } from './font-item'
 
@@ -46,7 +47,12 @@ function requireAligned(font: QuickFont): void {
   if (zz.length === mz.length && zz.length === hjm.length) return
   throw new CepError(
     'PARSE',
-    `字体「${font.family}」的字重/名称/PostScript 名数量不一致（${zz.length}/${mz.length}/${hjm.length}），已拒绝写入快选`,
+    msg.validate.fn.quickFontMisaligned(
+      font.family,
+      String(zz.length),
+      String(mz.length),
+      String(hjm.length),
+    ),
   )
 }
 

@@ -30,7 +30,7 @@
 | `@container` 容器查询 | ❌ | Chromium **105+**，CEP 12 是 99 → 宽度响应只能用 `useElementWidth` |
 | ESM / 动态 `import()` | ❌ | `file://` 下 origin 是 null，被 CORS 拦 |
 | 外部 `<use href="x.svg#id">` | ❌ | 同源限制，必须把 sprite 注入文档 |
-| `fetch('file://...')` | ❌ | 同源策略，读文件走 `cep/fs.ts` |
+| `fetch('file://...')` | ❌ | 同源策略，读文件走 `cep/` 的读原语 |
 | `structuredClone` | ✅ | Chromium 98+ |
 
 > 这份表就是"CEP 环境能力清单"，不再单独建文档，避免同一知识散落多处。

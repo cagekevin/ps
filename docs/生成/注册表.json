@@ -1,6 +1,6 @@
 {
   "version": 1,
-  "updated": "2026-10-24",
+  "updated": "2026-10-25",
   "note": "横切能力注册表。新增 src/{cep,composables,stores,utils,styles} 下的文件必须在这里登记，否则 npm run build 会失败。",
   "items": [
     {
@@ -16,8 +16,8 @@
       "id": "logger",
       "name": "日志",
       "entry": "src/utils/logger.ts",
-      "api": "log.debug/info/warn/error(scope, msg, detail)；log.dump()；控制台 __pszDump()",
-      "when": "所有 catch、关键流程节点",
+      "api": "log.debug/info/warn/error(scope, msg, detail)；log.dump()；控制台 __pszDump()（= log.dump 的别名）。**只导出这一个对象**，落盘口由本模块自己 import 落盘实现并装上（外面无装配 API）",
+      "when": "**该留痕**的 catch 与关键流程节点（不是每个 catch 都记 —— 失败要有可见去向：log / rethrow 给上层记 / 设可见信号，三选一）",
       "status": "stable",
       "since": "2026-10-20"
     },
@@ -122,19 +122,10 @@
     },
     {
       "id": "cep-ps",
-      "name": "PS 领域封装（只读 + 初始化）",
+      "name": "PS 初始化与选区状态",
       "entry": "src/cep/ps.ts",
-      "api": "initJsx / getFontList / getFontTags / getRawActionList / getLayerState",
-      "when": "写能力的入口在 commands/*；页面读走 store，不直接 import 这里（ADR-16）",
-      "status": "stable",
-      "since": "2026-10-20"
-    },
-    {
-      "id": "cep-fs",
-      "name": "文件读写",
-      "entry": "src/cep/fs.ts",
-      "api": "readTextFile / readTextSmart / writeTextFile / userDir / extensionDir / hasNode",
-      "when": "读写 %APPDATA%\\SheJiZhuLi 下的数据文件",
+      "api": "initJsx / getLayerState",
+      "when": "写能力在 commands/*；读能力在 cep/data（font-list / font-meta / actions），stores 不需要 import 这里（ADR-16）",
       "status": "stable",
       "since": "2026-10-20"
     },
@@ -268,7 +259,7 @@
       "id": "cep-data-repo",
       "name": "数据仓库（串行 + 原子写 + 备份 + degraded）",
       "entry": "src/cep/data/",
-      "api": "fileRepo(path, fallback) / memoryRepo(fallback) → { read, write, update, onChange }",
+      "api": "dataRepo(resolvePath, fallback, decode, opts) → { read, write, update, onChange }（内部 fileRepo / memoryRepo 不导出，唯一入口见 data-repo.ts）",
       "when": "读写 %APPDATA%\\SheJiZhuLi 下任何数据文件；禁止自己拼 read/modify/write",
       "status": "stable",
       "since": "2026-10-21"
@@ -331,7 +322,7 @@
       "id": "cep-data-file-repo-ts",
       "name": "单文件 JSON 仓库",
       "entry": "src/cep/data/file-repo.ts",
-      "api": "fileRepo(path, fallback) → read/write/update/onChange",
+      "api": "fileRepo(path, fallback, decode) → read/write/update/onChange（唯一实现，非入口；应用层用 dataRepo）",
       "when": "任何数据文件；串行 + 原子写 + .bak + degraded，禁止自己拼 read-modify-write",
       "status": "stable",
       "since": "2026-10-21"
@@ -342,24 +333,6 @@
       "entry": "src/cep/data/index.ts",
       "api": "tagsRepo / starsRepo",
       "when": "标签与星级的读写入口",
-      "status": "stable",
-      "since": "2026-10-21"
-    },
-    {
-      "id": "cep-data-memory-repo-ts",
-      "name": "内存仓库（浏览器 dev）",
-      "entry": "src/cep/data/memory-repo.ts",
-      "api": "memoryRepo(seed)",
-      "when": "只在无 CEP 时由 pick 选用，页面不直接引用",
-      "status": "stable",
-      "since": "2026-10-21"
-    },
-    {
-      "id": "cep-data-pick-ts",
-      "name": "仓库环境选择",
-      "entry": "src/cep/data/pick.ts",
-      "api": "pick(resolvePath, fallback, seed)",
-      "when": "新增数据文件时套一层，不要在新文件里判断 hasCep",
       "status": "stable",
       "since": "2026-10-21"
     },
@@ -938,6 +911,204 @@
       "when": "色板面板（pages/seBan）展示用，替代原版 sf.js 的 g_aZiDingYi / g_ShuLiang 直接持有真相。**唯一事件订阅点**：onChange（本地写）+ onAppEvent(APP_EVENT_SEBAN)（别处写）。不写文件、不调 jsx，写操作在 commands/swatch.ts",
       "status": "stable",
       "since": "2026-10-24"
+    },
+    {
+      "id": "cep-cloud-sync-report-ts",
+      "name": "（待补：中文名）",
+      "entry": "src/cep/cloud/sync-report.ts",
+      "api": "（待补：怎么调）",
+      "when": "（待补：什么时候用）",
+      "status": "todo",
+      "since": "2026-10-25"
+    },
+    {
+      "id": "cep-data-data-repo-ts",
+      "name": "仓库构造（按环境选实现 + 强制 decode）",
+      "entry": "src/cep/data/data-repo.ts",
+      "api": "dataRepo(resolvePath, fallback, decode, { seed?, requireExisting?, backup?, retries? })",
+      "when": "新增数据文件时套这一层；decode 必填，不要在新文件里判断 hasCep。无 CEP 时的内存分支内联在本文件且不导出（唯一入口）",
+      "status": "stable",
+      "since": "2026-10-25"
+    },
+    {
+      "id": "cep-data-font-list-ts",
+      "name": "（待补：中文名）",
+      "entry": "src/cep/data/font-list.ts",
+      "api": "（待补：怎么调）",
+      "when": "（待补：什么时候用）",
+      "status": "todo",
+      "since": "2026-10-25"
+    },
+    {
+      "id": "cep-data-protected-text-ts",
+      "name": "（待补：中文名）",
+      "entry": "src/cep/data/protected-text.ts",
+      "api": "（待补：怎么调）",
+      "when": "（待补：什么时候用）",
+      "status": "todo",
+      "since": "2026-10-25"
+    },
+    {
+      "id": "cep-data-write-queue-ts",
+      "name": "（待补：中文名）",
+      "entry": "src/cep/data/write-queue.ts",
+      "api": "（待补：怎么调）",
+      "when": "（待补：什么时候用）",
+      "status": "todo",
+      "since": "2026-10-25"
+    },
+    {
+      "id": "cep-jsx-names-ts",
+      "name": "（待补：中文名）",
+      "entry": "src/cep/jsx/names.ts",
+      "api": "（待补：怎么调）",
+      "when": "（待补：什么时候用）",
+      "status": "todo",
+      "since": "2026-10-25"
+    },
+    {
+      "id": "cep-jsx-timeouts-ts",
+      "name": "（待补：中文名）",
+      "entry": "src/cep/jsx/timeouts.ts",
+      "api": "（待补：怎么调）",
+      "when": "（待补：什么时候用）",
+      "status": "todo",
+      "since": "2026-10-25"
+    },
+    {
+      "id": "cep-log-file-ts",
+      "name": "日志落盘口",
+      "entry": "src/cep/log-file.ts",
+      "api": "createLogFileSink(onError?)：落盘口的**磁盘实现**（返回 {load, append}）。**不用手调** —— `utils/logger.ts` 在自己模块顶层 import 它并装上（反向注册），外面没有装配 API",
+      "when": "日志要\"关掉重开还查得到\"时（落盘 `sj_v5_log.txt`）：由 logger 自动用，页面/命令层只经 `log.*`",
+      "status": "stable",
+      "since": "2026-10-25"
+    },
+    {
+      "id": "cep-readonly-ts",
+      "name": "（待补：中文名）",
+      "entry": "src/cep/readonly.ts",
+      "api": "（待补：怎么调）",
+      "when": "（待补：什么时候用）",
+      "status": "todo",
+      "since": "2026-10-25"
+    },
+    {
+      "id": "stores-font-missing-ts",
+      "name": "（待补：中文名）",
+      "entry": "src/stores/font-missing.ts",
+      "api": "（待补：怎么调）",
+      "when": "（待补：什么时候用）",
+      "status": "todo",
+      "since": "2026-10-25"
+    },
+    {
+      "id": "utils-decode-ts",
+      "name": "读边界解码契约（Decoded / Decoder / decodeIndexed / decodeList）",
+      "entry": "src/utils/decode.ts",
+      "api": "decodeIndexed(raw, isItem) / decodeList(raw, isItem)；类型 Decoder<T>",
+      "when": "仓库的 decode 参数与各域 decode* 共用；decode 里不许补默认值，缺字段要 degraded",
+      "status": "stable",
+      "since": "2026-10-25"
+    },
+    {
+      "id": "utils-guards-ts",
+      "name": "（待补：中文名）",
+      "entry": "src/utils/guards.ts",
+      "api": "（待补：怎么调）",
+      "when": "（待补：什么时候用）",
+      "status": "todo",
+      "since": "2026-10-25"
+    },
+    {
+      "id": "utils-json-ts",
+      "name": "（待补：中文名）",
+      "entry": "src/utils/json.ts",
+      "api": "（待补：怎么调）",
+      "when": "（待补：什么时候用）",
+      "status": "todo",
+      "since": "2026-10-25"
+    },
+    {
+      "id": "cep-data-repo-at-ts",
+      "name": "（待补：中文名）",
+      "entry": "src/cep/data/repo-at.ts",
+      "api": "（待补：怎么调）",
+      "when": "（待补：什么时候用）",
+      "status": "todo",
+      "since": "2026-10-25"
+    },
+    {
+      "id": "cep-disk-write-ts",
+      "name": "（待补：中文名）",
+      "entry": "src/cep/disk-write.ts",
+      "api": "（待补：怎么调）",
+      "when": "（待补：什么时候用）",
+      "status": "todo",
+      "since": "2026-10-25"
+    },
+    {
+      "id": "utils-code-registry-ts",
+      "name": "（待补：中文名）",
+      "entry": "src/utils/code-registry.ts",
+      "api": "（待补：怎么调）",
+      "when": "（待补：什么时候用）",
+      "status": "todo",
+      "since": "2026-10-25"
+    },
+    {
+      "id": "cep-codec-ts",
+      "name": "base64 编解码",
+      "entry": "src/cep/codec.ts",
+      "api": "b64ToUtf8(b64) / utf8ToB64(text)",
+      "when": "库文件 .kus/.kug/.kux 的 data 字段与 JSON 文本互转",
+      "status": "stable",
+      "since": "2026-10-25"
+    },
+    {
+      "id": "cep-data-repo-read-ts",
+      "name": "（待补：中文名）",
+      "entry": "src/cep/data/repo-read.ts",
+      "api": "（待补：怎么调）",
+      "when": "（待补：什么时候用）",
+      "status": "todo",
+      "since": "2026-10-25"
+    },
+    {
+      "id": "cep-dir-usage-ts",
+      "name": "目录占用统计",
+      "entry": "src/cep/dir-usage.ts",
+      "api": "dirUsage(path)",
+      "when": "显示缓存目录占用（读不到返回 null，不许当 0）",
+      "status": "stable",
+      "since": "2026-10-25"
+    },
+    {
+      "id": "cep-fs-read-ts",
+      "name": "读原语（观测层）",
+      "entry": "src/cep/fs-read.ts",
+      "api": "readTextOutcome(p) / readTextSync(p) / readBase64Outcome(p) / classifyFsError(e)",
+      "when": "读文件；三态观测，结论由数据层 decode 下",
+      "status": "stable",
+      "since": "2026-10-25"
+    },
+    {
+      "id": "cep-node-ts",
+      "name": "Node 环境",
+      "entry": "src/cep/node.ts",
+      "api": "hasNode() / nodeRequire(id) / toPosix(p)",
+      "when": "要取 Node 内置模块或判断 --enable-nodejs 是否开启",
+      "status": "stable",
+      "since": "2026-10-25"
+    },
+    {
+      "id": "cep-paths-ts",
+      "name": "路径定义",
+      "entry": "src/cep/paths.ts",
+      "api": "userDir() / extensionDir() / psScriptsDir()",
+      "when": "拼任何用户目录或扩展目录下的路径",
+      "status": "stable",
+      "since": "2026-10-25"
     }
   ]
 }

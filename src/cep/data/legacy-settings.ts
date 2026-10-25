@@ -6,10 +6,13 @@
 
 import { DATA_FILES } from '@/cep/env'
 import { CepError } from '@/utils/errors'
-import { readTextOutcome, userDir } from '@/cep/fs'
+import { msg } from '@/domain/messages'
+import { userDir } from '@/cep/paths'
 import { FONT_SET_DEFAULTS, type FontSetSettings } from '@/domain/font-set-config'
-import { pick } from './pick'
-import type { Repo, RepoRead } from './types'
+import { isRecord } from '@/utils/guards'
+import { dataRepo } from './data-repo'
+import { readRepoFile } from './repo-read'
+import type { Repo, RepoRead, RepoView } from './types'
 
 export type {
   CreateButtonConfig,
@@ -23,12 +26,23 @@ export { FONT_SET_DEFAULTS } from '@/domain/font-set-config'
  * 用整份对象做仓库类型，是为了 `update` 时**未知键不被丢掉**。
  * 原面板同时写这个文件（目标架构 W3），只认识本页字段就整写等于删数据。
  */
-export const legacySettingsRepo: Repo<Record<string, unknown>> = pick(
+/** 设置文件是几十个键的扁平对象：只证"是对象"，逐键归一在 `mergeFontSetSettings`（消费侧） */
+function decodeSettingsRecord(raw: unknown): { value: Record<string, unknown> } | null {
+  return isRecord(raw) ? { value: raw } : null
+}
+
+const legacySettingsImpl: Repo<Record<string, unknown>> = dataRepo(
   () => `${userDir()}/${DATA_FILES.ztSet}`,
   () => ({}),
-  () => ({}),
+  decodeSettingsRecord,
   { requireExisting: true },
 )
+
+/** 只读视图（store 唯一能拿到的形状）：没有 write / update —— 调用不到 */
+export const legacySettingsRepo: RepoView<Record<string, unknown>> = legacySettingsImpl
+// 业务写入口是本文件的写函数（patchFontSetSettings / patchCommonUseOptions …），不另开写句柄；
+// 只有测试要观察落盘时才用下面这个句柄（tests/cep/cloud-entries.test.ts、tests/commands/swatch.test.ts）。
+export const legacySettingsWriter: Repo<Record<string, unknown>> = legacySettingsImpl
 
 function array6(value: unknown, fallback: number[]): number[] {
   if (!Array.isArray(value) || value.length !== 6) return [...fallback]
@@ -110,26 +124,28 @@ export async function readFontSetSettings(): Promise<RepoRead<FontSetSettings>> 
  * 缺文件时页面可以显示默认值，但同步不能把默认值当成用户数据上传。
  */
 export async function readFontSetSettingsForSync(): Promise<FontSetSettings> {
-  const read = await readTextOutcome(`${userDir()}/${DATA_FILES.ztSet}`)
-  // T-116：同步要的是"真实存在且可读"。两种不 ok 都中止，但原因必须分开报——
+  // 云同步要的是"真实存在且可读" ⇒ 用档 1 的**未折叠**结论（不拿默认值顶）
+  const outcome = readRepoFile(`${userDir()}/${DATA_FILES.ztSet}`, decodeSettingsRecord)
+  // T-116：四种坏法都中止，但原因必须分开报 ——
   // "不存在"会让用户以为设置丢了要去重建，"读不到"是关掉占用文件的程序再试
-  if (read.status === 'notSeen') throw new Error(`${DATA_FILES.ztSet} 不存在`)
-  if (read.status === 'error') throw new Error(`${DATA_FILES.ztSet} 读不到：${read.reason}`)
-  const text = read.text
-  let raw: Record<string, unknown>
-  try {
-    raw = JSON.parse(text) as Record<string, unknown>
-  } catch {
-    throw new Error(`${DATA_FILES.ztSet} 不是合法 JSON`)
+  if (outcome.kind === 'absent') throw new Error(`${DATA_FILES.ztSet} 不存在`)
+  if (outcome.kind === 'bad') {
+    throw new Error(
+      outcome.why === 'readError'
+        ? `${DATA_FILES.ztSet} 读不到：${outcome.reason}`
+        : outcome.why === 'notJson'
+          ? `${DATA_FILES.ztSet} 不是合法 JSON`
+          : `${DATA_FILES.ztSet} 内容结构不认识`,
+    )
   }
-  return mergeFontSetSettings(raw)
+  return mergeFontSetSettings(outcome.value)
 }
 
 /** 只改动本页字段，其余键原样写回 */
 export async function patchFontSetSettings(
   patch: Partial<FontSetSettings>,
 ): Promise<FontSetSettings> {
-  const next = await legacySettingsRepo.update((all) => {
+  const next = await legacySettingsImpl.update((all) => {
     Object.assign(all, patch)
   })
   return mergeFontSetSettings(next)
@@ -168,10 +184,6 @@ export const COMMON_USE_SETTING_KEYS = [
 export type CommonUseSettingKey = (typeof COMMON_USE_SETTING_KEYS)[number]
 export type CommonUseOptions = Record<CommonUseSettingKey, unknown>
 
-function isPlainRecord(value: unknown): value is Record<string, unknown> {
-  return Boolean(value) && typeof value === 'object' && !Array.isArray(value)
-}
-
 /**
  * 深合并：**递归到叶子**，数组**整体替换**，深对象**绝不整块替换**。
  *
@@ -182,7 +194,7 @@ function assignDeep(target: Record<string, unknown>, patch: Record<string, unkno
   for (const [key, next] of Object.entries(patch)) {
     if (next === undefined) continue
     const current = target[key]
-    if (isPlainRecord(next) && isPlainRecord(current)) {
+    if (isRecord(next) && isRecord(current)) {
       assignDeep(current, next)
     } else {
       target[key] = next
@@ -219,9 +231,9 @@ export async function updateCommonUseOptions(
     (key) => !COMMON_USE_SETTING_KEYS.includes(key as CommonUseSettingKey),
   )
   if (unknown.length) {
-    throw new CepError('PARSE', `不认识的常用页设置键：${unknown.join('、')}`)
+    throw new CepError('PARSE', msg.data.fn.unknownSettingKeys(unknown.join('、')))
   }
-  const next = await legacySettingsRepo.update((all) => {
+  const next = await legacySettingsImpl.update((all) => {
     assignDeep(all, patch as Record<string, unknown>)
   })
   const picked: Partial<CommonUseOptions> = {}

@@ -30,7 +30,7 @@ function makeDist(html: string): string {
 const page = (head: string) =>
   `<!doctype html>\n<html><head>${head}</head><body><div id="app"></div></body></html>\n`
 
-function run(dist: string): { code: number; out: string } {
+function invoke(dist: string): { code: number; out: string } {
   try {
     return {
       code: 0,
@@ -47,13 +47,13 @@ function run(dist: string): { code: number; out: string } {
 
 describe('verify-dist · script 属性判据', () => {
   it('真 defer + src → 退出码 0', () => {
-    const result = run(makeDist(page(TAG)))
+    const result = invoke(makeDist(page(TAG)))
     expect(result.code).toBe(0)
     expect(result.out).toContain('有 defer+src')
   })
 
   it('`data-note="defer"` 冒充 defer → 非 0（子串判定会放过这里）', () => {
-    const result = run(
+    const result = invoke(
       makeDist(page('<script data-note="defer" src="./assets/index.js"></script>')),
     )
     expect(result.code).not.toBe(0)
@@ -61,20 +61,20 @@ describe('verify-dist · script 属性判据', () => {
   })
 
   it('`data-type="module"` 不算 type="module" → 退出码 0（旧版会误杀）', () => {
-    const result = run(
+    const result = invoke(
       makeDist(page('<script defer src="./assets/index.js" data-type="module"></script>')),
     )
     expect(result.code).toBe(0)
   })
 
   it('真 `type="module"` → 非 0，报 file:// 白屏', () => {
-    const result = run(makeDist(page('<script type="module" src="./assets/index.js"></script>')))
+    const result = invoke(makeDist(page('<script type="module" src="./assets/index.js"></script>')))
     expect(result.code).not.toBe(0)
     expect(result.out).toContain('type="module"')
   })
 
   it('有 defer 却没有 src → 非 0', () => {
-    const result = run(makeDist(page('<script defer></script>')))
+    const result = invoke(makeDist(page('<script defer></script>')))
     expect(result.code).not.toBe(0)
     expect(result.out).toContain('没有 src')
   })

@@ -50,4 +50,13 @@ export const DATA_FILES = {
    * 四个字段存的是**相对文件名**，格式见 `docs/生成/库文件格式契约.md` §2.2。
    */
   styleLibrary: 'sj_kuStoreInfo.ini',
+  /**
+   * 面板自己的界面偏好。**原版没有这个文件**（原版界面状态在 `sj_set.json` 里），
+   * 我们不往别人的文件里加字段（决策 D2=A）。
+   */
+  uiPrefs: 'sj_v5_ui.json',
+  /** 面板自己的日志（纯文本，不是 JSON —— 所以它走 `readOwnFileText`，进不了 `readRepoFile`） */
+  logFile: 'sj_v5_log.txt',
+  /** 云同步台账：`{ rev, syncedAt, localHash, units? }`；面板自有，原版没有这个文件 */
+  cloudLedger: 'sj_v5_cloud_sync.json',
 } as const

@@ -60,6 +60,8 @@ export interface DataPort {
   freePanel: Repo<FreePanelFile>
 }
 
+import type { CepErrorCode } from '@/utils/errors'
+
 export interface Command<P = void> {
   /** 稳定标识：快捷键、设置、日志、错误归因共用 */
   id: string
@@ -69,10 +71,10 @@ export interface Command<P = void> {
   requires: Requirement
   kind: CommandKind
   /** 成功不返回值，失败直接 throw；统一由 registry.execute 归一 */
-  run(ctx: CommandContext, payload: P): Promise<void>
+  invoke(ctx: CommandContext, payload: P): Promise<void>
 }
 
-/** 给 UI 渲染用的元数据（不含 run，避免页面直接调用） */
+/** 给 UI 渲染用的元数据（不含 `invoke`，避免页面直接调用） */
 export interface CommandMeta {
   id: string
   title: string
@@ -82,7 +84,12 @@ export interface CommandMeta {
   kind: CommandKind
 }
 
-export type CommandResult =
+/**
+ * 命令的统一结果。失败臂的 `code` **必填且是 `CepErrorCode`**（R3）——
+ * 以前是 `code?: string`，于是消费侧要写 `(result.code ?? 'JSX') as CepErrorCode`
+ * （`??` 默认值 + `as` 假收窄，纪律 2 违约）；现在写不出来。
+ */
+export type CommandOutcome =
   | { ok: true; message?: string }
-  | { ok: false; reason: string; code?: string }
+  | { ok: false; reason: string; code: CepErrorCode }
   | { ok: 'cancelled' }

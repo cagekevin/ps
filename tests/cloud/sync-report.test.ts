@@ -1,11 +1,15 @@
-import { beforeEach, describe, expect, it } from 'vitest'
-import { __resetLoggerForTest, log } from '@/utils/logger'
-import {
-  __resetSyncReportForTest,
-  reportSyncError,
-  reportSyncOutcome,
-} from '@/cep/cloud/sync-report'
+import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { SyncOutcome } from '@/cloud/change-sync'
+
+/**
+ * logger 与被测模块必须拿到**同一个模块实例**的 `log`：
+ * `vi.resetModules()` 之后，静态 import 的与动态 import 的不是同一份。
+ * 所以这里两个都在 `beforeEach` 里动态 import（同一轮解析 ⇒ 同一实例）。
+ */
+let log: typeof import('@/utils/logger').log
+let reportSyncError: typeof import('@/cep/cloud/sync-report').reportSyncError
+let reportSyncOutcome: typeof import('@/cep/cloud/sync-report').reportSyncOutcome
+let resetSyncReport: typeof import('@/cep/cloud/sync-report').__resetSyncReportForTest
 
 /**
  * TD-11-6：后台同步的结局必须有接收者，并且**成功也要有痕迹——但只记跃迁**。
@@ -17,9 +21,15 @@ import type { SyncOutcome } from '@/cloud/change-sync'
  * - 抛错：error 级（这是引擎里少数没被自己包住的路径唯一的出口）。
  */
 
-beforeEach(() => {
-  __resetLoggerForTest()
-  __resetSyncReportForTest()
+beforeEach(async () => {
+  // 重载模块 = "面板重开" ⇒ logger 的内存缓冲是干净的（不再需要专门的清场函数）
+  vi.resetModules()
+  log = (await import('@/utils/logger')).log
+  const report = await import('@/cep/cloud/sync-report')
+  reportSyncError = report.reportSyncError
+  reportSyncOutcome = report.reportSyncOutcome
+  resetSyncReport = report.__resetSyncReportForTest
+  resetSyncReport()
 })
 
 describe('后台同步的结局 → 日志', () => {

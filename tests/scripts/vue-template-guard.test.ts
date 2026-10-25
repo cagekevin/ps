@@ -16,7 +16,7 @@ import { join, resolve } from 'node:path'
 
 const SCRIPT = resolve(__dirname, '../../scripts/vue-template-guard.mjs')
 
-function run(file: string): { code: number; out: string } {
+function invoke(file: string): { code: number; out: string } {
   try {
     return { code: 0, out: execFileSync(process.execPath, [SCRIPT, file], { encoding: 'utf8' }) }
   } catch (e) {
@@ -58,13 +58,13 @@ const a = 1
 
 describe('Vue 模板守卫', () => {
   it('干净文件 → 退出码 0', () => {
-    const result = run(writeVue(CLEAN))
+    const result = invoke(writeVue(CLEAN))
     expect(result.code).toBe(0)
     expect(result.out).toContain('通过')
   })
 
   it('游离反引号 token → 非 0，报行号 + R2', () => {
-    const result = run(writeVue(STRAY))
+    const result = invoke(writeVue(STRAY))
     expect(result.code).not.toBe(0)
     expect(result.out).toContain('R2')
     expect(result.out).toMatch(/:\d+/)
@@ -72,7 +72,7 @@ describe('Vue 模板守卫', () => {
   })
 
   it('解析不了的 SFC → 非 0，报 R3', () => {
-    const result = run(writeVue('<template><div></template>'))
+    const result = invoke(writeVue('<template><div></template>'))
     expect(result.code).not.toBe(0)
     expect(result.out).toMatch(/R2|R3/)
   })

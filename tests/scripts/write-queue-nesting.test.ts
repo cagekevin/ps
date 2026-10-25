@@ -31,7 +31,7 @@ import ts from 'typescript'
  *   自动进判据）。
  * - **R2 传递**：任务体调用的本地函数 / 同目录跨文件函数，若其（可递归）体内触达 R1，同样算违规。
  *   这一条是必须的：TD-09-30 的真病是深度 2-4 的 —— `deleteWarehouse` 的任务体 →
- *   `usableIndex()` → `readIndexState()` → `styleIndexRepo.read()`。
+ *   `usableIndex()` → `readIndexState()` → `styleIndexWriter.read()`。
  * - **R0 作用域闭环**：`runQueued(` 的调用点只许出现在 `src/cep/data/**`，
  *   否则本扫描的目录边界不成立（别处再开一条链同样是 `write-queue.ts` 禁的）。
  */
@@ -152,7 +152,13 @@ function scanNesting(root: string): Violation[] {
             return
           }
           const target = resolveIdent(file, callee.text)
-          if (target) {
+          // 仓库**构造器**（名字以 `Repo` 结尾：`fileRepo` / `dataRepo` / `memoryRepo` / `swatchRepo`）
+          // 不是 sink：构造**不排队**，排队发生在它的方法上，而方法名已由 `queued` 集合 +
+          // 下面的属性访问分支覆盖（`repo.read()` / `repo.overwrite()` 会被抓）。
+          // 递归进构造器只会在它**返回对象的方法体**里找到 `runQueued(` ⇒ 假违规
+          // （真实链：`writeSwatchItems() → swatchRepo() → fileRepo() → runQueued(`，
+          // 实际调的是 `overwriteInLock` —— 不排队、不会自锁）。
+          if (target && !/Repo$/.test(target.name)) {
             const sub = sinkOfFn(target.file, target.name)
             if (sub) {
               found = [`${callee.text}()`, ...sub]
@@ -276,10 +282,10 @@ const REPO_TYPES = `export interface Repo<T> {
 `
 
 describe('任务体内不许再排 runQueued（TD-09-35）', () => {
-  it('排队入口名单从 types.ts 推导，不是手写：read / update / write', () => {
+  it('排队入口名单从 types.ts 推导，不是手写：read / update / write / overwrite', () => {
     // 这条是"判据本身失效"的报警器：`Repo` 若被改名/重构，下面三条规则会静默变成
     // "什么都不是排队入口"，全绿但什么都没查。红的时候先看这里，不是去改白名单。
-    expect(queuedRepoMethods(REPO_ROOT).sort()).toEqual(['read', 'update', 'write'])
+    expect(queuedRepoMethods(REPO_ROOT).sort()).toEqual(['overwrite', 'read', 'update', 'write'])
   })
 
   it('真实仓 src/cep/data/** 零违规', () => {

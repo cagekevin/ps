@@ -1,6 +1,6 @@
 import { buildOptionPatch, FLIP_DIRECTIONS, type FlipDirection } from '@/domain/common-use'
 import { CepError } from '@/utils/errors'
-import { assertJsxOk } from '@/utils/jsx-result'
+import { msg } from '@/domain/messages'
 import { describeCepError } from '@/utils/error-text'
 import { log } from '@/utils/logger'
 import { commonUseRepo } from '@/cep/data/common-use'
@@ -119,7 +119,14 @@ function assertAllSucceeded(outcome: BatchOutcome, total: number, action: string
   const first = outcome.failed[0]
   throw new CepError(
     'JSX',
-    `${action}成功 ${outcome.done}/${total}，失败 ${outcome.failed.length} 张（${first.file}：${first.reason}）`,
+    msg.command.fn.commonUseBatchPartial(
+      action,
+      String(outcome.done),
+      String(total),
+      String(outcome.failed.length),
+      first.file,
+      first.reason,
+    ),
   )
 }
 
@@ -135,12 +142,12 @@ export const commonUseCommands: Command<unknown>[] = [
     group: 'layer',
     requires: 'layer',
     kind: 'instant',
-    async run(ctx, { scale }) {
+    async invoke(ctx, { scale }) {
       const value = Number(scale)
       if (!Number.isFinite(value) || value <= 0) {
-        throw new CepError('PARSE', '倍数必须是正数')
+        throw new CepError('PARSE', msg.command.text.commonUseMultiplierInvalid)
       }
-      assertJsxOk(await ctx.jsx.commonUse.zoom(value), '缩放失败')
+      await ctx.jsx.commonUse.zoom(value)
     },
   }),
 
@@ -150,11 +157,11 @@ export const commonUseCommands: Command<unknown>[] = [
     group: 'layer',
     requires: 'layer',
     kind: 'instant',
-    async run(ctx, { direction }) {
+    async invoke(ctx, { direction }) {
       if (!FLIP_DIRECTIONS.includes(direction as FlipDirection)) {
-        throw new CepError('PARSE', `翻转方向不支持：${direction}`)
+        throw new CepError('PARSE', msg.command.fn.commonUseFlipDirectionUnsupported(direction))
       }
-      assertJsxOk(await ctx.jsx.commonUse.flip(direction), '翻转失败')
+      await ctx.jsx.commonUse.flip(direction)
     },
   }),
 
@@ -166,18 +173,24 @@ export const commonUseCommands: Command<unknown>[] = [
     group: 'layer',
     requires: 'none',
     kind: 'long',
-    async run(ctx, { options }) {
+    async invoke(ctx, { options }) {
       // 官方实参 `{path, bLink2, bDelete}`（`app.v4.js:38070-38074`）：`bLink2`/`bDelete`
       // 分别对应设置里的 `cyLinkObject` / `cyDeleteNext`，由调用方（子面板/命令）传入。
       // `path` 为空时先走 `cy_getImagePath()` 选图——官方 `embedImage()` 也是先选图再嵌入
       // （`app.v4.js:38063` 起），取消（`-1`）则静默返回。
       let picked = options?.path
       if (!picked) {
-        const got = await ctx.jsx.commonUse.getImagePath()
+        const gotOutcome = await ctx.jsx.commonUse.getImagePath()
+        if (!gotOutcome.ok) {
+          throw new CepError(gotOutcome.code, gotOutcome.reason || '选择图片失败')
+        }
+        const got = gotOutcome.data
         if (got === -1) return
-        picked = got as string
+        if (typeof got !== 'string')
+          throw new CepError('PARSE', msg.command.text.commonUsePickNotPath)
+        picked = got
       }
-      assertJsxOk(await ctx.jsx.commonUse.embedImage({ ...options, path: picked }), '嵌入图片失败')
+      await ctx.jsx.commonUse.embedImage({ ...options, path: picked })
     },
   }),
 
@@ -187,9 +200,9 @@ export const commonUseCommands: Command<unknown>[] = [
     group: 'layer',
     requires: 'none',
     kind: 'long',
-    async run(ctx) {
+    async invoke(ctx) {
       // 官方 `cy_embedMultipleImage` 无参（`:37902`）
-      assertJsxOk(await ctx.jsx.commonUse.embedMultipleImages(), '嵌入多图片失败')
+      await ctx.jsx.commonUse.embedMultipleImages()
     },
   }),
 
@@ -212,7 +225,7 @@ export const commonUseCommands: Command<unknown>[] = [
     group: 'file',
     requires: 'none',
     kind: 'instant',
-    async run(ctx) {
+    async invoke(ctx) {
       await startPlaceImageWatch(ctx)
     },
   }),
@@ -223,9 +236,9 @@ export const commonUseCommands: Command<unknown>[] = [
     group: 'layer',
     requires: 'layer',
     kind: 'instant',
-    async run(ctx) {
+    async invoke(ctx) {
       // 官方 `toLinkSmart()` → `cy_smartToLinkSmartObject([], "转链接智能对象")`（`:35882-35891`），无参
-      assertJsxOk(await ctx.jsx.commonUse.smartToLinkSmartObject(), '转链接智能对象失败')
+      await ctx.jsx.commonUse.smartToLinkSmartObject()
     },
   }),
 
@@ -235,9 +248,9 @@ export const commonUseCommands: Command<unknown>[] = [
     group: 'layer',
     requires: 'layer',
     kind: 'instant',
-    async run(ctx) {
+    async invoke(ctx) {
       // 官方 `linkToSmart()` → `cy_linkSmartObjectToSmartObject([], "转智能对象")`（`:35862-35871`），无参
-      assertJsxOk(await ctx.jsx.commonUse.linkSmartObjectToSmartObject(), '转智能对象失败')
+      await ctx.jsx.commonUse.linkSmartObjectToSmartObject()
     },
   }),
 
@@ -247,18 +260,20 @@ export const commonUseCommands: Command<unknown>[] = [
     group: 'layer',
     requires: 'none',
     kind: 'long',
-    async run(ctx, { path, toLinkObject }) {
+    async invoke(ctx, { path, toLinkObject }) {
       // `path` 未给时先走 `cy_getImagePath()`；官方用 `!== -1` 判取消并**静默返回**（`:38096-38106`）。
       // 取到的 path **原样透传**，不做任何加工（数组/单张两种形状都对）。
       let picked = path
       if (picked === undefined) {
-        picked = await ctx.jsx.commonUse.getImagePath()
-        if (picked === -1) return
+        const gotOutcome = await ctx.jsx.commonUse.getImagePath()
+        if (!gotOutcome.ok) {
+          throw new CepError(gotOutcome.code, gotOutcome.reason || '选择图片失败')
+        }
+        // 官方 `!== -1` 判取消并静默返回（`:38096-38106`）
+        if (gotOutcome.data === -1) return
+        picked = gotOutcome.data
       }
-      assertJsxOk(
-        await ctx.jsx.commonUse.importMultipleImages({ path: picked, toLinkObject }),
-        '导入多图片失败',
-      )
+      await ctx.jsx.commonUse.importMultipleImages({ path: picked, toLinkObject })
     },
   }),
 
@@ -270,10 +285,10 @@ export const commonUseCommands: Command<unknown>[] = [
     group: 'file',
     requires: 'none',
     kind: 'long',
-    async run(ctx, { options }) {
+    async invoke(ctx, { options }) {
       // 单文档优化：官方 `cy_optimizeDoc([配置])`（`:38057`）
       ctx.progress.update(undefined, '正在优化文档')
-      assertJsxOk(await ctx.jsx.commonUse.optimizeOnce(options), '优化文档失败')
+      await ctx.jsx.commonUse.optimizeOnce(options)
       ctx.progress.update(1, '正在优化文档：1/1')
     },
   }),
@@ -284,17 +299,21 @@ export const commonUseCommands: Command<unknown>[] = [
     group: 'file',
     requires: 'none',
     kind: 'long',
-    async run(ctx, { options }) {
+    async invoke(ctx, { options }) {
       // 官方是**前端循环**（`:36024-36046`）：先 `cy_getPsdForFolder()`（无参，jsx 自己弹选目录），
       // 再逐张 `cy_batchOptimizeDoc([配置, 文件])`。循环搬到命令层（C-1），页面不再自己 for。
-      const files = toFileList(await ctx.jsx.commonUse.getPsdList())
-      if (!files.length) throw new CepError('PARSE', '文件夹内没有PSD文件')
+      const psdOutcome = await ctx.jsx.commonUse.getPsdList()
+      if (!psdOutcome.ok) {
+        throw new CepError(psdOutcome.code, psdOutcome.reason || '读取 PSD 列表失败')
+      }
+      const files = toFileList(psdOutcome.data)
+      if (!files.length) throw new CepError('PARSE', msg.command.text.commonUseNoPsdInFolder)
 
       const outcome = await runPerFile(
         files,
         (file) => ctx.jsx.commonUse.optimizeFolder(options, file).then(() => undefined),
         ctx.progress,
-        (i, total) => `正在优化文档：${i + 1}/${total}`,
+        (i, total) => msg.command.fn.optimizingDoc(String(i + 1), String(total)),
       )
       assertAllSucceeded(outcome, files.length, '优化文档')
     },
@@ -306,17 +325,18 @@ export const commonUseCommands: Command<unknown>[] = [
     group: 'file',
     requires: 'none',
     kind: 'long',
-    async run(ctx, { options, confirmed }) {
+    async invoke(ctx, { options, confirmed }) {
       // 官方 `:17123-17161`：同样先取列表，再逐张 `cy_BacthExportPsdToImage([文件, 选项])`（注意官方拼错 Bacth）。
       // `> 30` 张原版弹确认（`:17157-17158` 文案「文件夹内超过30个psd，导出时间较长是否继续？」）；
       // 命令层不引 UI，改为**没有 `confirmed` 就抛**，由页面显示 CepModal 后再带 `confirmed: true` 重试。
-      const files = toFileList(await ctx.jsx.commonUse.getPsdList())
-      if (!files.length) throw new CepError('PARSE', '文件夹内没有PSD文件')
+      const psdOutcome = await ctx.jsx.commonUse.getPsdList()
+      if (!psdOutcome.ok) {
+        throw new CepError(psdOutcome.code, psdOutcome.reason || '读取 PSD 列表失败')
+      }
+      const files = toFileList(psdOutcome.data)
+      if (!files.length) throw new CepError('PARSE', msg.command.text.commonUseNoPsdInFolder)
       if (files.length > 30 && confirmed !== true) {
-        throw new CepError(
-          'PARSE',
-          `文件夹内超过30个psd，导出时间较长是否继续？（共 ${files.length} 张）`,
-        )
+        throw new CepError('PARSE', msg.command.fn.commonUseTooManyPsd(String(files.length)))
       }
 
       const outcome = await runPerFile(
@@ -324,7 +344,7 @@ export const commonUseCommands: Command<unknown>[] = [
         (file) => ctx.jsx.commonUse.exportPsdImage(file, options).then(() => undefined),
         ctx.progress,
         // 原版文案把顺序写反了（`:17137` 是 `长度/(i+1)`），这里按正常顺序
-        (i, total) => `正在导出：${i + 1}/${total}`,
+        (i, total) => msg.command.fn.exporting(String(i + 1), String(total)),
       )
       assertAllSucceeded(outcome, files.length, '导出')
     },
@@ -338,7 +358,7 @@ export const commonUseCommands: Command<unknown>[] = [
     group: 'layer',
     requires: 'layer',
     kind: 'instant',
-    async run(ctx) {
+    async invoke(ctx) {
       await ctx.jsx.commonUse.correctBlur()
     },
   }),
@@ -349,7 +369,7 @@ export const commonUseCommands: Command<unknown>[] = [
     group: 'layer',
     requires: 'layer',
     kind: 'instant',
-    async run(ctx) {
+    async invoke(ctx) {
       await ctx.jsx.commonUse.layerReplace()
     },
   }),
@@ -360,7 +380,7 @@ export const commonUseCommands: Command<unknown>[] = [
     group: 'layer',
     requires: 'layer',
     kind: 'instant',
-    async run(ctx) {
+    async invoke(ctx) {
       await ctx.jsx.commonUse.locationTrade()
     },
   }),
@@ -371,7 +391,7 @@ export const commonUseCommands: Command<unknown>[] = [
     group: 'layer',
     requires: 'layer',
     kind: 'instant',
-    async run(ctx) {
+    async invoke(ctx) {
       await ctx.jsx.commonUse.exchangeLayerColor()
     },
   }),
@@ -383,11 +403,11 @@ export const commonUseCommands: Command<unknown>[] = [
     group: 'system',
     requires: 'none',
     kind: 'instant',
-    async run(_ctx, { path, value }) {
+    async invoke(_ctx, { path, value }) {
       const root = path.split('.')[0]
       // 白名单：只认官方那 17 个键（`COMMON_USE_SETTING_KEYS`），其余拒绝——写进去就是污染别人的设置文件
       if (!COMMON_USE_SETTING_KEYS.includes(root as CommonUseSettingKey)) {
-        throw new CepError('PARSE', `不认识的常用页设置项：${path}`)
+        throw new CepError('PARSE', msg.command.fn.commonUseUnknownSetting(path))
       }
       // 嵌套补丁 + `assignDeep`：改 `cyExport.ext` 时 `compress` 等兄弟键逐字节不变（靶点⑤）
       await updateCommonUseOptions(buildOptionPatch(path, value))
@@ -401,7 +421,7 @@ export const commonUseCommands: Command<unknown>[] = [
     group: 'system',
     requires: 'none',
     kind: 'instant',
-    async run(_ctx, { id, show }) {
+    async invoke(_ctx, { id, show }) {
       // 只改这一项的 `isShow`，其它项与顺序由 `setShow` 内部按落盘下标处理（不重排数组）
       await commonUseRepo.setShow(id, show)
     },
@@ -413,7 +433,7 @@ export const commonUseCommands: Command<unknown>[] = [
     group: 'system',
     requires: 'none',
     kind: 'instant',
-    async run() {
+    async invoke() {
       // 恢复成官方种子（14 项，顺序同 `configReset()`：cya1…cya9、cya11、cya13、cya14、cya15、cya12）
       await commonUseRepo.resetAll()
     },
@@ -424,7 +444,7 @@ export const commonUseCommands: Command<unknown>[] = [
     group: 'system',
     requires: 'none',
     kind: 'instant',
-    async run(_ctx, { from, to, position }) {
+    async invoke(_ctx, { from, to, position }) {
       // 顺序唯一来源：`applyListDrop`（`domain/reorder`），与 `/style`、`/action` 的落点计算同源（ADR-19）
       await commonUseRepo.move(from, to, position)
     },
@@ -437,7 +457,7 @@ export const commonUseCommands: Command<unknown>[] = [
     group: 'system',
     requires: 'none',
     kind: 'instant',
-    async run(_ctx, { id, collapsed }) {
+    async invoke(_ctx, { id, collapsed }) {
       // 落 `sj_v5_ui.json`（`data/settings.ts` 的 `commonUse.collapsed`）；`sj_set.json` 一个字节不碰
       setCommonUseCollapsed({ ...getCommonUseCollapsed(), [id]: collapsed })
     },
@@ -450,11 +470,11 @@ export const commonUseCommands: Command<unknown>[] = [
     group: 'layer',
     requires: 'layer',
     kind: 'long',
-    async run(ctx, { params }) {
+    async invoke(ctx, { params }) {
       if (!Array.isArray(params) || params.length !== TRANSFORM_KEYS.length) {
-        throw new CepError('PARSE', '变换参数不完整')
+        throw new CepError('PARSE', msg.command.text.commonUseTransformIncomplete)
       }
-      assertJsxOk(await ctx.jsx.commonUse.transform(params), '生成变换失败')
+      await ctx.jsx.commonUse.transform(params)
     },
   }),
 
@@ -464,9 +484,9 @@ export const commonUseCommands: Command<unknown>[] = [
     group: 'layer',
     requires: 'none',
     kind: 'instant',
-    async run(ctx, { options }) {
+    async invoke(ctx, { options }) {
       // 官方 key `cy_useGride` → jsx `cy_createSafeAreaGuide`（`:17168`）
-      assertJsxOk(await ctx.jsx.commonUse.referenceGuide(options), '参考线工具失败')
+      await ctx.jsx.commonUse.referenceGuide(options)
     },
   }),
 
@@ -476,9 +496,9 @@ export const commonUseCommands: Command<unknown>[] = [
     group: 'layer',
     requires: 'none',
     kind: 'instant',
-    async run(ctx, { options }) {
+    async invoke(ctx, { options }) {
       // 官方 key `cy_clearCutGuide` → jsx `cy_guideFunction`（`:17171`）
-      assertJsxOk(await ctx.jsx.commonUse.referenceSlice(options), '参考线操作失败')
+      await ctx.jsx.commonUse.referenceSlice(options)
     },
   }),
 
@@ -488,11 +508,11 @@ export const commonUseCommands: Command<unknown>[] = [
     group: 'layer',
     requires: 'layer',
     kind: 'instant',
-    async run(ctx, { params }) {
+    async invoke(ctx, { params }) {
       if (!Array.isArray(params) || params.length !== DISTRIBUTE_KEYS.length) {
-        throw new CepError('PARSE', '分布参数不完整')
+        throw new CepError('PARSE', msg.command.text.commonUseDistributeIncomplete)
       }
-      assertJsxOk(await ctx.jsx.commonUse.distribute(params), '按间距分布失败')
+      await ctx.jsx.commonUse.distribute(params)
     },
   }),
 
@@ -504,7 +524,7 @@ export const commonUseCommands: Command<unknown>[] = [
     group: 'file',
     requires: 'none',
     kind: 'long',
-    async run(ctx, { mode, options }) {
+    async invoke(ctx, { mode, options }) {
       // 三种导出形态对应三条既有白名单 key（`docs/架构/dataflow.md:296-300`）
       const key =
         mode === 'first'
@@ -522,7 +542,7 @@ export const commonUseCommands: Command<unknown>[] = [
     group: 'file',
     requires: 'none',
     kind: 'instant',
-    async run(ctx) {
+    async invoke(ctx) {
       await ctx.jsx.legacy.call('cy_openDirectory', [], '打开所在目录')
     },
   }),
@@ -533,7 +553,7 @@ export const commonUseCommands: Command<unknown>[] = [
     group: 'layer',
     requires: 'layer',
     kind: 'instant',
-    async run(ctx) {
+    async invoke(ctx) {
       await ctx.jsx.legacy.call('cy_swapWireframeFill', [], '填充线框互换')
     },
   }),
@@ -596,10 +616,7 @@ export async function dispatchPlaceImage(
   // 事件回调没有 `useCommand` 接住，弹不了 toast（命令层不许 import 视图层，ADR-16），
   // 所以按本文件既有口径落 error 日志（`设置页 → 打开日志` 能看到），并且**不按默认值猜**。
   if (!read.ok) {
-    log.error(
-      'commonUse.placeImage',
-      `常用页设置文件损坏（${read.reason}），${name} 未处理：请到设置页修复 sj_set.json 后重试`,
-    )
+    log.error('commonUse.placeImage', msg.command.fn.commonUseSettingsCorrupt(read.reason, name))
     return 'none'
   }
   const action = placeImageAction(name, read.value)
@@ -638,7 +655,7 @@ export async function startPlaceImageWatch(ctx: {
   stopPlaceImage = await Promise.all(
     names.map((name) =>
       subscribeHostEvent(name, (payload) => {
-        // 事件回调是"发出去就没人接"的路径：这里抛错不会有 `useCommand.run` 接住，
+        // 事件回调是"发出去就没人接"的路径：这里抛错不会有 `useCommand.invoke` 接住，
         // 所以必须自己落日志（`设置页 → 打开日志` 能看到），不许再 `void` 静默吞掉。
         void dispatchPlaceImage(name, payload, deps).catch((e: unknown) => {
           log.warn('commonUse.placeImage', `${name} 处理失败：${describeCepError(e)}`)

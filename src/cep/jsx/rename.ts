@@ -1,4 +1,4 @@
-import { jsxCall } from '@/cep/transport'
+import { jsxWrite } from '@/cep/transport'
 import { LONG, WRITE } from './timeouts'
 import type { RenameJsx } from './types'
 
@@ -15,7 +15,7 @@ export function createRenameJsx(): RenameJsx {
   return {
     /** cmm_batchName([表达式, 是否过滤子图层], "重命名")（app.v4.js:57234） */
     batchName: (expression, filterChildren) =>
-      jsxCall('cmm_batchName', [expression, filterChildren], {
+      jsxWrite('cmm_batchName', [expression, filterChildren], {
         label: '批量重命名图层',
         // 图层多的时候 PS 侧会跑一阵，给足余量；原版靠 $load 转圈，我们走长任务 HUD
         timeout: LONG,
@@ -23,7 +23,7 @@ export function createRenameJsx(): RenameJsx {
 
     /** cmm_setLayerColor([颜色序号])（app.v4.js:57220）；0 = 清除颜色 */
     setLayerColor: (colorIndex) =>
-      jsxCall('cmm_setLayerColor', [colorIndex], {
+      jsxWrite('cmm_setLayerColor', [colorIndex], {
         label: '设置图层颜色标记',
         timeout: WRITE,
       }),

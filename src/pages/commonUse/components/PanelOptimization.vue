@@ -27,7 +27,7 @@ const optimizeFolderCmd = useCommand('commonUse.optimizeFolder')
         type="primary"
         width="full"
         @click="
-          optimizeFolderCmd.run({
+          optimizeFolderCmd.invoke({
             options: {
               optimizeAll: optimizeAll,
               deleteAllEmpty: deleteAllEmpty,

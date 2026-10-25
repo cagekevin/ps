@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { msg } from '@/domain/messages'
 import { computed, onMounted, onUnmounted, ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import CheckBox from '@/components/CheckBox.vue'
@@ -38,7 +39,7 @@ const commonUse = useCommonUseStore()
 const { tiles: commonUseTiles, options: commonUseOptions } = storeToRefs(commonUse)
 
 function setShow(id: string, show: boolean) {
-  void setShowCmd.run({ id, show })
+  void setShowCmd.invoke({ id, show })
 }
 
 /**
@@ -47,13 +48,13 @@ function setShow(id: string, show: boolean) {
  * 官方默认都是 true（`:65813`/`:65814`），所以缺键 = 勾上。写回落 `sj_set.json`，写完重读投影。
  */
 function setCommonUseOption(path: string, value: boolean) {
-  void setOptionCmd.run({ path, value }).then(() => commonUse.loadOptions())
+  void setOptionCmd.invoke({ path, value }).then(() => commonUse.loadOptions())
 }
 const showZoom = computed(() => commonUseOptions.value.cyShowZoom !== false)
 const showTransformation = computed(() => commonUseOptions.value.cyShowTransformation !== false)
 
 function resetCommonUse() {
-  void resetAllCmd.run()
+  void resetAllCmd.invoke()
 }
 
 // 设置页打开时读一次（命令写成功后由 store 的订阅刷新）
@@ -70,7 +71,7 @@ const navAutoJump = usePersistedRef('nav.autoJump', false)
 const autoSync = computed({
   get: () => status.value.autoSyncEnabled,
   set: (enabled: boolean) => {
-    void autoSyncCmd.run({ enabled }).then((ok) => {
+    void autoSyncCmd.invoke({ enabled }).then((ok) => {
       if (ok) cloud.refresh()
     })
   },
@@ -82,7 +83,7 @@ function fontSetting(key: 'ztShowQuick' | 'ztShowCustom' | 'ztExpandMultiple') {
     set: (value: boolean) => {
       const previous = fontSet.settings[key]
       fontSet.settings[key] = value
-      void saveFontSettings.run({ patch: { [key]: value } }).then((applied) => {
+      void saveFontSettings.invoke({ patch: { [key]: value } }).then((applied) => {
         if (!applied) fontSet.settings[key] = previous
       })
     },
@@ -133,7 +134,7 @@ async function submitPreset(values: number[]) {
   const previous = [...fontSet.settings[key]]
   fontSet.settings[key] = values
   editingPreset.value = null
-  const ok = await saveFontSettings.run({ patch: { [key]: values } })
+  const ok = await saveFontSettings.invoke({ patch: { [key]: values } })
   if (!ok) fontSet.settings[key] = previous
 }
 
@@ -150,7 +151,7 @@ const unitIndex = computed({
     const unit = UNITS[index]
     if (!unit) return
     fontSet.settings.appUnit = unit.value
-    void saveFontSettings.run({ patch: { appUnit: unit.value } }).then((savedUnit) => {
+    void saveFontSettings.invoke({ patch: { appUnit: unit.value } }).then((savedUnit) => {
       if (!savedUnit) fontSet.settings.appUnit = previous
     })
   },
@@ -163,11 +164,11 @@ const copying = computed(() => copyShortcutScripts.running.value)
 const refreshing = computed(() => resetShortcutScripts.running.value)
 
 function copyScripts() {
-  void copyShortcutScripts.run({ groups: [...SHORTCUT_GROUPS] }, '已拷贝配置文件')
+  void copyShortcutScripts.invoke({ groups: [...SHORTCUT_GROUPS] }, msg.success.text.configCopied)
 }
 
 function refreshScripts() {
-  void resetShortcutScripts.run({ groups: [...SHORTCUT_GROUPS] }, '刷新成功')
+  void resetShortcutScripts.invoke({ groups: [...SHORTCUT_GROUPS] }, msg.success.text.refreshOk)
 }
 
 /**
@@ -185,9 +186,11 @@ const pulling = computed(() => downloadCmd.running.value)
 
 function confirmPull() {
   // 覆盖本地已在确认框里说清，这里直接放行引擎层的冲突确认，不再二次弹窗
-  void downloadCmd.run({ onConfirm: async () => true }, '已从云端拉取').then((ok) => {
-    if (ok) cloud.refresh()
-  })
+  void downloadCmd
+    .invoke({ onConfirm: async () => true }, msg.success.text.pulledFromCloud)
+    .then((ok) => {
+      if (ok) cloud.refresh()
+    })
 }
 
 /** 队列脏数只活在内存里，5 秒刷一次就够；台账（上次同步）不参与，避免每次都读盘 */
@@ -240,7 +243,7 @@ onUnmounted(() => {
     </SettingsSection>
 
     <SettingsSection title="快捷键设置 ?" default-open>
-      <EmptyState compact>当前版本未提供快捷键配置，暂无快捷键可设置。</EmptyState>
+      <EmptyState compact>{{ '当前版本未提供快捷键配置，暂无快捷键可设置。' }}</EmptyState>
 
       <GButton block :loading="copying" @click="copyScripts">手动拷贝配置文件</GButton>
       <GButton type="text" :loading="refreshing" @click="refreshScripts"> 刷新配置文件 </GButton>

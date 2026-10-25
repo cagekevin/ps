@@ -18,27 +18,32 @@ const state = vi.hoisted(() => ({
 
 vi.mock('@/cep/transport', () => ({ hasCep: () => true }))
 
-vi.mock('@/cep/fs', () => ({
+vi.mock('@/cep/node', () => ({
   hasNode: () => true,
+}))
+
+vi.mock('@/cep/paths', () => ({
   userDir: () => '/user',
+}))
+
+vi.mock('@/cep/fs-read', () => ({
   readTextSmart: async (path: string) => state.files.get(path) ?? null,
-  // T-105：写路径改用三态读；T-116 起支持"读不到"（`readError`）这个分支
-  readTextOutcome: async (path: string) => {
-    if (state.readError) return { status: 'error' as const, reason: state.readError }
-    const text = state.files.get(path)
-    return text === undefined ? { status: 'notSeen' as const } : { status: 'ok' as const, text }
-  },
+  // T-105：写路径改用三态读；T-116 起支持"读不到"（`readError`）这个分支  readTextOutcome: async (path: string) => {
+      if (state.readError) return { status: 'error' as const, reason: state.readError }
+      const text = state.files.get(path)
+      return text === undefined ? { status: 'notSeen' as const } : { status: 'ok' as const, text }
+    },
   readTextSync: (path: string) => {
-    const text = state.files.get(path)
-    return text === undefined ? { status: 'notSeen' as const } : { status: 'ok' as const, text }
-  },
+      const text = state.files.get(path)
+      return text === undefined ? { status: 'notSeen' as const } : { status: 'ok' as const, text }
+    },
   writeTextFile: (path: string, text: string) => {
-    state.files.set(path, text)
-  },
+      state.files.set(path, text)
+    },
   writeTextFileAtomic: (path: string, text: string) => {
-    state.files.set(path, text)
-    return true
-  },
+      state.files.set(path, text)
+      return true
+    },
 }))
 
 const PATH = '/user/sj_set.json'

@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { msg } from '@/domain/messages'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import BackTop from '@/components/BackTop.vue'
@@ -16,7 +17,7 @@ import { useDismiss } from '@/composables/useDismiss'
 import { useFloatingPosition } from '@/composables/useFloatingPosition'
 import { useLongPressDrag, type LongPressDragResult } from '@/composables/useLongPressDrag'
 import { usePersistedRef } from '@/composables/usePersisted'
-import { userDir } from '@/cep/fs'
+import { userDir } from '@/cep/readonly'
 import {
   KU_KINDS,
   KU_TAB_LABELS,
@@ -205,13 +206,13 @@ const exportKuCurrentCmd = useCommand('style.exportKuCurrent')
  */
 async function importArchive(append: boolean) {
   importMenu.value = false
-  const ok = await (append ? importKuAppendCmd : importKuReplaceCmd).run()
+  const ok = await (append ? importKuAppendCmd : importKuReplaceCmd).invoke()
   if (ok) await store.load()
 }
 
 async function exportArchive(current: boolean) {
   exportMenu.value = false
-  await (current ? exportKuCurrentCmd : exportKuAllCmd).run()
+  await (current ? exportKuCurrentCmd : exportKuAllCmd).invoke()
 }
 
 const visibleKinds = computed(() => KU_KINDS.filter((_, index) => !!showTabs.value[index]))
@@ -230,8 +231,8 @@ const isEmpty = computed(() =>
  */
 async function setGroupShow(kind: KuKind, groupIndex: number, only: boolean) {
   const ok = only
-    ? await toggleGroupShowCmd.run({ kind, groupIndex, only: true })
-    : await toggleGroupShowCmd.run({ kind, groupIndex })
+    ? await toggleGroupShowCmd.invoke({ kind, groupIndex, only: true })
+    : await toggleGroupShowCmd.invoke({ kind, groupIndex })
   if (ok) await store.load()
 }
 
@@ -359,17 +360,17 @@ async function applyKind(
 ): Promise<boolean> {
   switch (kind) {
     case 'color':
-      await applyColorCmd.run({ groupIndex, itemIndex, modifier })
+      await applyColorCmd.invoke({ groupIndex, itemIndex, modifier })
       return modifier === 'alt'
     case 'gradient':
-      await applyGradientCmd.run({ groupIndex, itemIndex })
+      await applyGradientCmd.invoke({ groupIndex, itemIndex })
       return false
     case 'font':
       // 原版 `useFont`（`:51200-51215`）：先 check 再 use，不改库文件
-      await applyFontCmd.run({ groupIndex, itemIndex })
+      await applyFontCmd.invoke({ groupIndex, itemIndex })
       return false
     case 'style':
-      await applyStyleCmd.run({ groupIndex, itemIndex })
+      await applyStyleCmd.invoke({ groupIndex, itemIndex })
       return false
   }
 }
@@ -381,18 +382,21 @@ async function applyKind(
 async function addKind(kind: KuKind, groupIndex: number): Promise<boolean> {
   switch (kind) {
     case 'color':
-      return addColorCmd.run({ groupIndex }, '已添加前景色')
+      return addColorCmd.invoke({ groupIndex }, msg.success.text.foregroundAdded)
     case 'gradient':
-      return addGradientCmd.run({ groupIndex }, '已添加当前渐变')
+      return addGradientCmd.invoke({ groupIndex }, msg.success.text.gradientAdded)
     case 'font':
-      return addFontCmd.run({ groupIndex }, '已添加当前字体')
+      return addFontCmd.invoke({ groupIndex }, msg.success.text.fontAttrAdded)
     case 'style':
-      return addStyleCmd.run({ groupIndex }, '已保存图层样式')
+      return addStyleCmd.invoke({ groupIndex }, msg.success.text.layerStyleSaved)
   }
 }
 
 async function pickColorToGroup(kind: KuKind, groupIndex: number) {
-  const ok = await pickColorToGroupCmd.run({ kind, groupIndex }, '已添加到分组')
+  const ok = await pickColorToGroupCmd.invoke(
+    { kind, groupIndex },
+    msg.success.text.colorAddedToGroup,
+  )
   if (ok) await store.load()
 }
 
@@ -494,7 +498,7 @@ async function endItemDrag(result: LongPressDragResult) {
   if (!source || !target || !result.dragged) return
   if (source.groupIndex === target.groupIndex && source.itemIndex === target.itemIndex) return
 
-  const ok = await moveItemToCmd.run({
+  const ok = await moveItemToCmd.invoke({
     kind: source.kind,
     fromGroup: source.groupIndex,
     fromIndex: source.itemIndex,
@@ -545,7 +549,7 @@ async function endGroupDrag(result: LongPressDragResult) {
   if (!source || !target || !result.dragged) return
   if (source.groupIndex === target.groupIndex) return
 
-  const ok = await moveGroupToCmd.run({
+  const ok = await moveGroupToCmd.invoke({
     kind: source.kind,
     from: source.groupIndex,
     to: target.groupIndex,
@@ -734,13 +738,19 @@ async function submitPrompt() {
   const ok =
     mode === 'createGroup'
       ? // 原版 `addGroup(t, e)`：插在右键的那个组之后（`:50235`）；底栏按钮没有"那个组"，追加到末尾
-        await addGroupCmd.run(
+        await addGroupCmd.invoke(
           { kind, name: value, afterIndex: groupIndex >= 0 ? groupIndex : undefined },
-          '已新建分组',
+          msg.success.text.groupCreated,
         )
       : mode === 'renameGroup'
-        ? await renameGroupCmd.run({ kind, groupIndex, name: value }, '已重命名分组')
-        : await renameItemCmd.run({ kind, groupIndex, itemIndex, name: value }, '已重命名')
+        ? await renameGroupCmd.invoke(
+            { kind, groupIndex, name: value },
+            msg.success.text.groupRenamed,
+          )
+        : await renameItemCmd.invoke(
+            { kind, groupIndex, itemIndex, name: value },
+            msg.success.text.itemRenamed,
+          )
 
   if (ok) await store.load()
 }
@@ -750,42 +760,49 @@ async function submitPrompt() {
 async function requestDeleteItem(kind: KuKind, groupIndex: number, itemIndex: number) {
   const name = libraries.value[kind][groupIndex]?.items[itemIndex]?.name ?? ''
   const ok = await confirm.confirm({
-    title: '确认删除',
-    message: `删除「${name}」？删除后无法恢复。`,
+    title: msg.confirm.text.deleteConfirmTitle,
+    message: msg.confirm.fn.deleteItem(name),
   })
   if (!ok) return
-  if (await deleteItemCmd.run({ kind, groupIndex, itemIndex }, '已删除')) await store.load()
+  if (
+    await deleteItemCmd.invoke({ kind, groupIndex, itemIndex }, msg.success.text.itemDeletedGeneric)
+  )
+    await store.load()
 }
 
 async function requestDeleteGroup(kind: KuKind, groupIndex: number) {
   const group = libraries.value[kind][groupIndex]
   // `style.deleteGroup` 删空后会自动补一个「<库名>默认分组」（`app.v4.js:52451-52454`），所以没有"第 0 组不可删"
   const ok = await confirm.confirm({
-    title: '确认删除',
-    message: `删除分组「${group?.name ?? ''}」？组内 ${group?.items.length ?? 0} 项会一起删除。`,
+    title: msg.confirm.text.deleteConfirmTitle,
+    message: msg.confirm.fn.deleteGroup(group?.name ?? '', String(group?.items.length ?? 0)),
   })
   if (!ok) return
-  if (await deleteGroupCmd.run({ kind, groupIndex }, '已删除分组')) await store.load()
+  if (await deleteGroupCmd.invoke({ kind, groupIndex }, msg.success.text.groupDeletedGeneric))
+    await store.load()
 }
 
 /** 原版「发送到色板」（`:50349-50355`）：把这一项写成色板全文，随后 tips「追加成功」 */
 async function sendToSwatch(kind: KuKind, groupIndex: number, itemIndex: number) {
-  await sendToSwatchCmd.run({ kind, groupIndex, itemIndex }, '已发送到色板')
+  await sendToSwatchCmd.invoke({ kind, groupIndex, itemIndex }, msg.success.text.sentToSwatch)
 }
 
 /** 原版「追加到色板」（`:50356-50364`）：读回 seBan → push 该项 → 写回 */
 async function appendItemToSwatch(kind: KuKind, groupIndex: number, itemIndex: number) {
-  await appendItemToSwatchCmd.run({ kind, groupIndex, itemIndex }, '已追加到色板')
+  await appendItemToSwatchCmd.invoke(
+    { kind, groupIndex, itemIndex },
+    msg.success.text.appendedToSwatch,
+  )
 }
 
 /** 原版分组「发送到色板」（`:50260-50268`）：该组 `list` 整份替换 seBan（不是追加） */
 async function sendGroupToSwatch(kind: KuKind, groupIndex: number) {
-  await sendGroupToSwatchCmd.run({ kind, groupIndex }, '已发送到色板')
+  await sendGroupToSwatchCmd.invoke({ kind, groupIndex }, msg.success.text.sentToSwatch)
 }
 
 /** 原版分组「追加到色板」（`:50269-50290`）：读回 → 逐项 push 该组 `list` → 写回 */
 async function appendGroupToSwatch(kind: KuKind, groupIndex: number) {
-  await appendGroupToSwatchCmd.run({ kind, groupIndex }, '已追加到色板')
+  await appendGroupToSwatchCmd.invoke({ kind, groupIndex }, msg.success.text.appendedToSwatch)
 }
 
 // ---------- 仓库下拉：切换 / 改名 / 删除 / 新建 ----------
@@ -816,7 +833,7 @@ useDismiss(() => warehouseOpen.value, warehouseRoot, closeWarehouse)
  * 页面处理器 `selectWarehouse`（`:55008-55011`）写索引后重读四库（`initData`）。
  */
 async function selectWarehouseRow(index: number) {
-  const ok = await selectWarehouseCmd.run({ index })
+  const ok = await selectWarehouseCmd.invoke({ index })
   // 关下拉照原版：无论写成功与否，`f_select` 都会 `showDown = false`
   closeWarehouse()
   if (ok) await store.load()
@@ -838,11 +855,11 @@ async function submitRenameWarehouse() {
   const name = editValue.value.trim()
   // 有意偏离：原版 `f_editEnd` 不校验空名，空名会让仓库条整行变空白（命令层也会拒）
   if (!name) {
-    feedback.warn('仓库名不能为空')
+    feedback.warn(msg.data.text.warehouseNameRequired)
     return
   }
 
-  if (await renameWarehouseCmd.run({ index, name }, '已重命名仓库')) {
+  if (await renameWarehouseCmd.invoke({ index, name }, msg.success.text.warehouseRenamed)) {
     resetWarehouseEdit()
     await store.load()
   }
@@ -853,7 +870,7 @@ async function submitRenameWarehouse() {
  * 新仓库的下标要等重读完索引才知道，所以先 `load` 再定位末位。
  */
 async function addWarehouseGroup() {
-  if (!(await addWarehouseCmd.run())) return
+  if (!(await addWarehouseCmd.invoke())) return
   await store.load()
   const index = warehouses.value.length - 1
   editingIndex.value = index
@@ -868,18 +885,19 @@ async function addWarehouseGroup() {
  */
 async function requestDeleteWarehouse(index: number) {
   if (warehouses.value.length === 1) {
-    feedback.info('最少保留一个分组哦')
+    feedback.info(msg.data.text.keepOneGroupMin)
     return
   }
 
   const name = warehouses.value[index]?.name ?? ''
   const ok = await confirm.confirm({
-    title: '确认删除',
-    message: `删除仓库「${name}」？四个库文件与组图片会移到用户目录下的 .deleted-<时间戳> 文件夹，可手动恢复。`,
+    title: msg.confirm.text.deleteConfirmTitle,
+    message: msg.confirm.fn.deleteWarehouse(name),
   })
   if (!ok) return
   // 下拉不关：原版删完仍停在下拉里（`delWarehouseGroup` 只 `initData`，`:54987-54998`）
-  if (await deleteWarehouseCmd.run({ index }, '已删除仓库')) await store.load()
+  if (await deleteWarehouseCmd.invoke({ index }, msg.success.text.warehouseDeleted))
+    await store.load()
 }
 
 onMounted(() => {
@@ -960,7 +978,7 @@ onMounted(() => {
     </div>
 
     <div id="style-scroll" ref="bodyRef" class="style-body">
-      <p v-if="loading" class="style-hint style-loading">正在读取样式库…</p>
+      <p v-if="loading" class="style-hint style-loading">{{ '正在读取样式库…' }}</p>
 
       <div v-else-if="error" class="style-error">
         <p class="style-hint style-hint--error">{{ error }}</p>

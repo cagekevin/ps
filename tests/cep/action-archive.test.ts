@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
-import type { TextRead } from '@/cep/fs'
+import { type TextRead } from '@/cep/fs-read'
 import type { ActionWarehouseIndex } from '@/domain/action'
 import type { Repo, RepoRead } from '@/cep/data/types'
 
@@ -13,6 +13,8 @@ const fs = vi.hoisted(() => ({
   readTextSync: vi.fn<(p: string) => TextRead>(() => ({ status: 'notSeen' })),
   readTextOutcome: vi.fn(async (p: string) => fs.readTextSync(p)),
   writeTextFile: vi.fn(),
+  // 落盘走 `@/cep/disk-write` 的 `writeDisk` → 最终调 `writeTextFileAtomic`（原子写）
+  writeTextFileAtomic: vi.fn(() => ({ status: 'ok' as const })),
   removeFile: vi.fn(() => ({ ok: true as const })),
 }))
 
@@ -24,10 +26,19 @@ const data = vi.hoisted(() => ({
   selectActionFile: vi.fn(),
 }))
 
-vi.mock('@/cep/fs', () => fs)
+vi.mock('@/cep/fs-read', () => ({
+  // 导入/导出事务在全局写锁内读→写索引 → 走 readInLock / writeInLock（TD-09-18 / TD-09-30）  actionIndexWriter: {
+      read: data.read,
+      readInLock: data.read,
+      write: data.write,
+      writeInLock: data.write,
+    },
+  currentWarehouseFile: (index: { list: Array<{ fileName: string }> }) => index.list[0].fileName,
+  selectActionFile: data.selectActionFile,
+}))
 vi.mock('@/cep/data/actions', () => ({
   // 导入/导出事务在全局写锁内读→写索引 → 走 readInLock / writeInLock（TD-09-18 / TD-09-30）
-  actionIndexRepo: {
+  actionIndexWriter: {
     read: data.read,
     readInLock: data.read,
     write: data.write,
@@ -105,7 +116,7 @@ describe('action-archive', () => {
 
     expect(fs.readBase64Outcome).toHaveBeenCalledTimes(1)
     expect(fs.readBase64Outcome).toHaveBeenCalledWith('/user/sj_dz_current.json')
-    expect(fs.writeTextFile).toHaveBeenCalledWith('/tmp/export.dzx', expect.any(String))
+    expect(fs.writeTextFileAtomic).toHaveBeenCalledWith('/tmp/export.dzx', expect.any(String))
   })
 })
 
@@ -157,6 +168,6 @@ describe('action-archive · 坏索引（T-99-4）', () => {
     await expect(archiveDefaultName(true)).rejects.toThrow('导出已中止')
 
     expect(fs.readBase64Outcome).not.toHaveBeenCalled()
-    expect(fs.writeTextFile).not.toHaveBeenCalled()
+    expect(fs.writeTextFileAtomic).not.toHaveBeenCalled()
   })
 })

@@ -15,5 +15,5 @@ export function unitPayload(files: SyncFile[]): UnitPayload {
 export function readInlineJson(payload: UnitPayload): unknown {
   const file = payload.files[0]
   if (!file || file.content.kind !== 'inline') throw new Error('同步项没有内联内容')
-  return JSON.parse(file.content.data) as unknown
+  return JSON.parse(file.content.data)
 }

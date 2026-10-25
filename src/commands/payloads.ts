@@ -4,6 +4,7 @@ import type {
   PasteFontConfig,
 } from '@/cep/data/legacy-settings'
 import type { QuickFont } from '@/cep/data/font-extra'
+import type { JsxName } from '@/cep/jsx/names'
 import type { FontItem } from '@/domain/font-item'
 import type { KuKind } from '@/domain/style-library'
 import type { DropPosition } from '@/domain/reorder'
@@ -12,7 +13,7 @@ import type { DropPosition } from '@/domain/reorder'
  * 命令 id → payload 类型的**唯一映射**。
  *
  * 为什么需要：`useCommand<P>` 的 P 如果由调用方自己写，传错 payload 编译不报错，
- * 只在运行时炸。有了这张表，`execute(id, payload)` 和 `useCommand(id).run(payload)`
+ * 只在运行时炸。有了这张表，`execute(id, payload)` 和 `useCommand(id).invoke(payload)`
  * 都由 id 推断类型，传错字段直接编译失败。
  *
  * 新增命令：先在这里加一行，再写实现（`defineCommand` 会强制 id 在表里）。
@@ -203,7 +204,8 @@ export interface ShortcutScriptsPayload {
 }
 
 export interface LegacyCallPayload {
-  key: string
+  /** 只收原版派发表里的合法名字（`src/cep/jsx/names.ts` 生成）：写错一个字母编译不过 */
+  key: JsxName
   args: unknown[]
   label?: string
 }

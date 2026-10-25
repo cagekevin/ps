@@ -1,4 +1,5 @@
-import { tagsRepo } from '@/cep/data'
+import { tagsWriter, isRawTag } from '@/cep/data'
+import { isArrayOf } from '@/utils/guards'
 import type { SyncUnitAdapter, WriteOutcome } from '@/domain/cloud'
 import { inlineFile, readInlineJson, unitPayload } from './util'
 
@@ -9,10 +10,10 @@ export const fontTagsEntry: SyncUnitAdapter = {
   schema: 1,
 
   // 标签写成功 → 标脏
-  watch: (markDirty) => tagsRepo.onChange(markDirty),
+  watch: (markDirty) => tagsWriter.onChange(markDirty),
 
   async read() {
-    const read = await tagsRepo.read()
+    const read = await tagsWriter.read()
     if (!read.ok) throw new Error(read.reason)
     return unitPayload([inlineFile(PATH, JSON.stringify(read.value))])
   },
@@ -20,8 +21,8 @@ export const fontTagsEntry: SyncUnitAdapter = {
   async write(payload): Promise<WriteOutcome> {
     try {
       const value = readInlineJson(payload)
-      if (!Array.isArray(value)) return { ok: false, message: '字体标签不是数组' }
-      await tagsRepo.write(value)
+      if (!isArrayOf(value, isRawTag)) return { ok: false, message: '字体标签不是数组' }
+      await tagsWriter.write(value)
       return { ok: true }
     } catch (error) {
       return { ok: false, message: error instanceof Error ? error.message : '字体标签写回失败' }

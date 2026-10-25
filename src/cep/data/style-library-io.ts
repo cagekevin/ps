@@ -5,17 +5,10 @@
 // 谁在用：`commands/style.ts`
 // 禁止：页面不许 import；不弹文件对话框（命令层负责）；不碰 jsx
 
-import { DATA_FILES } from '@/cep/env'
-import {
-  b64ToUtf8,
-  readBase64Outcome,
-  readTextOutcome,
-  removeFile,
-  userDir,
-  utf8ToB64,
-  writeBase64File,
-  writeTextFile,
-} from '@/cep/fs'
+import { b64ToUtf8, utf8ToB64 } from '@/cep/codec'
+import { readBase64Outcome, readExternalText } from '@/cep/fs-read'
+import { userDir } from '@/cep/paths'
+import { removeFile, writeBase64File, writeDisk } from '@/cep/disk-write'
 import { isKuLibraryFileName } from '@/domain/ku-format'
 import { isUsableJsonText } from '@/utils/json'
 import {
@@ -36,8 +29,9 @@ import {
   type StyleWarehouseIndex,
 } from '@/domain/style-library'
 import { CepError } from '@/utils/errors'
+import { msg } from '@/domain/messages'
 import { log } from '@/utils/logger'
-import { kuGuid, readIndexState, readKuFileText, styleIndexRepo } from './style-library-repo'
+import { kuGuid, readIndexState, readKuFileText, styleIndexWriter } from './style-library-repo'
 // 与日常编辑共用 data/write-queue 的唯一串行链（TD-09-28）
 import { runQueued } from './write-queue'
 import { isRecord } from '@/utils/guards'
@@ -56,9 +50,7 @@ export interface KuImportResult {
   recycleDir: string
 }
 
-function indexPath(): string {
-  return `${userDir()}/${DATA_FILES.styleLibrary}`
-}
+// `indexPath()` 已不需要：索引的读/备份/写全在 `styleIndexWriter.overwriteInLock` 里。
 
 function parseOrThrow<T>(read: () => T): T {
   try {
@@ -95,10 +87,7 @@ function backupOriginal(relative: string, path: string, base64: string): void {
       const quarantine = `${path}.corrupt-${Date.now()}`
       const kept = writeBase64File(quarantine, base64)
       if (kept.status === 'error') {
-        throw new CepError(
-          'IO',
-          `原文不可用且无法留存副本，已中止导入：${relative}（${kept.reason}）`,
-        )
+        throw new CepError('IO', msg.data.fn.noOriginalNoBackupAbortImport(relative, kept.reason))
       }
       log.warn(
         'style',
@@ -112,7 +101,7 @@ function backupOriginal(relative: string, path: string, base64: string): void {
   // 结果是"导入报成功、原件被覆盖、`.bak` 不存在、日志一行都没有"（EISDIR 可复现）
   const backedUp = writeBase64File(`${path}.bak`, base64)
   if (backedUp.status === 'error') {
-    throw new CepError('IO', `备份原文件失败，已中止导入：${relative}（${backedUp.reason}）`)
+    throw new CepError('IO', msg.data.fn.backupOriginalFailedAbortImport(relative, backedUp.reason))
   }
 }
 
@@ -128,12 +117,12 @@ function writeKuFile(relative: string, base64: string): boolean {
   // T-109：**读不到 ≠ 没有**。读不到时若当成"本次新建"，回滚会删掉一个本来就存在的文件；
   // 若照旧覆盖，原文没进 `.bak` 就再也回不去。所以读不到直接中止这次导入
   if (read.status === 'error') {
-    throw new CepError('IO', `读取原文件失败，已中止导入：${relative}（${read.reason}）`)
+    throw new CepError('IO', msg.data.fn.readOriginalFailedAbortImport(relative, read.reason))
   }
   if (read.status === 'ok') backupOriginal(relative, path, read.base64)
   const written = writeBase64File(path, base64)
   if (written.status === 'error') {
-    throw new CepError('IO', `写入文件失败：${relative}（${written.reason}）`)
+    throw new CepError('IO', msg.data.fn.writeFileFailed(relative, written.reason))
   }
   return read.status === 'ok'
 }
@@ -194,9 +183,9 @@ function assertSafeNames(entries: readonly KuFileEntry[]): void {
   const seen = new Set<string>()
   for (const entry of entries) {
     if (!isSafeKuEntryName(entry.name)) {
-      throw new CepError('PARSE', `导入文件名不合法：${entry.name}`)
+      throw new CepError('PARSE', msg.data.fn.importFileNameInvalid(entry.name))
     }
-    if (seen.has(entry.name)) throw new CepError('PARSE', `导入文件名重复：${entry.name}`)
+    if (seen.has(entry.name)) throw new CepError('PARSE', msg.data.fn.importFileNameDup(entry.name))
     seen.add(entry.name)
   }
 }
@@ -213,7 +202,7 @@ function validateContainer(file: KuContainerFile): void {
     for (const kind of KU_CONTAINER_ORDER) {
       const fileName = fileNameOf(warehouse, kind)
       if (fileName && !names.has(fileName)) {
-        throw new CepError('PARSE', `索引引用了不存在的文件：${fileName}`)
+        throw new CepError('PARSE', msg.data.fn.indexRefMissingFile(fileName))
       }
     }
   }
@@ -225,7 +214,7 @@ function validateContainer(file: KuContainerFile): void {
  */
 async function currentIndex(): Promise<StyleWarehouseIndex> {
   const { value, degraded } = await readIndexState()
-  if (degraded) throw new CepError('PARSE', `仓库索引不可用：${degraded}`)
+  if (degraded) throw new CepError('PARSE', msg.data.fn.warehouseIndexUnusable(degraded))
   return value
 }
 
@@ -254,7 +243,7 @@ export async function exportKuArchive(
   return runQueued(async () => {
     const index = await currentIndex()
     const list = current ? [index.list[index.index]].filter(Boolean) : index.list
-    if (!list.length) throw new CepError('PARSE', '没有可导出的仓库')
+    if (!list.length) throw new CepError('PARSE', msg.data.text.noExportableWarehouse)
 
     const store: StyleWarehouseIndex = current
       ? { ...index, index: 0, list: [{ ...list[0] }] }
@@ -284,14 +273,14 @@ export async function exportKuArchive(
       }
 
       done += 1
-      onProgress?.(`已读取 ${done}/${list.length} 个仓库`)
+      onProgress?.(msg.data.fn.warehousesReadProgress(String(done), String(list.length)))
     }
 
     // 一条都读不到就不是"导出了一个空仓库"，而是索引/磁盘不对：宁可失败也不产出空壳文件
-    if (!arrFileData.length)
-      throw new CepError('PARSE', '没有可导出的库文件（索引里的文件都读不到）')
+    if (!arrFileData.length) throw new CepError('PARSE', msg.data.text.noExportableLibFile)
 
-    writeTextFile(targetPath, encodeKuContainer({ arrFileData, store }))
+    // 导出包是**新文件**，无 `.bak` 概念（`previous: null`）；走唯一落盘入口（原子写）
+    await writeDisk(targetPath, encodeKuContainer({ arrFileData, store }), { previous: null })
   })
 }
 
@@ -362,9 +351,9 @@ export async function importKuArchive(
   // 否则导入途中拖拽分组 → 两条读改写交错 → 后写覆盖先写（TD-09-28）。
   // 锁内索引读写一律走 *InLock（不自排自，TD-09-30）。
   return runQueued(async () => {
-    const read = await readTextOutcome(sourcePath)
+    const read = await readExternalText(sourcePath)
     // T-107：导入前读不到就不许继续。两种不 ok 这里同果（都抛同一句），文案不变
-    if (read.status !== 'ok') throw new CepError('IO', '读取导入文件失败')
+    if (read.status !== 'ok') throw new CepError('IO', msg.data.text.readImportFileFailed)
     const text = read.text
 
     onProgress?.('解析导入文件')
@@ -386,11 +375,16 @@ export async function importKuArchive(
         if (typeof entry.data !== 'string') continue
         if (!writeKuFile(entry.name, entry.data)) created.push(entry.name)
         written.push(entry.name)
-        onProgress?.(`已写入 ${written.length}/${remapped.arrFileData.length} 个文件`)
+        onProgress?.(
+          msg.data.fn.filesWrittenProgress(
+            String(written.length),
+            String(remapped.arrFileData.length),
+          ),
+        )
       }
 
       if (append) {
-        await styleIndexRepo.updateInLock((value) => {
+        await styleIndexWriter.updateInLock((value) => {
           const current = readStyleWarehouseIndex(value).value
           const list = [...current.list, ...nextIndex.list]
           // 与 action-archive 同口径：追加后选中最后一个新仓库。
@@ -398,21 +392,10 @@ export async function importKuArchive(
           return { ...value, index: list.length - 1, list }
         })
       } else {
-        // `fileRepo.write` 不备份，替换索引前自己留一份原文。
-        // T-112：**读不到旧索引就中止替换**——拿不到旧原文就写不出 `.bak`，整份替换等于把索引
-        // 变成没有退路的版本。`notSeen`（索引本来不存在，首次导入）照旧：没有旧内容可备份。
-        // 抛在这里是安全的：外层 catch 只删本次新建的库文件，旧索引与旧文件都没动。
-        const previous = await readTextOutcome(indexPath())
-        if (previous.status === 'error') {
-          throw new CepError(
-            'IO',
-            `索引读不到，已中止替换（没有 .bak 的替换等于没有退路）：${previous.reason}`,
-          )
-        }
-        if (previous.status === 'ok' && previous.text) {
-          writeTextFile(`${indexPath()}.bak`, previous.text)
-        }
-        await styleIndexRepo.writeInLock(nextIndex)
+        // 整份替换索引：`overwriteInLock` = 读原文 → `.bak` → 原子写 → emit，且**在锁内**。
+        // 以前这里自己 `readExternalText` + `backupOrQuarantine` + `writeInLock` 三步 ——
+        // 那是上层在做底层的事（T-112 的"读不到就中止"由 `overwrite` 的 D-42 拒绝覆盖保证）。
+        await styleIndexWriter.overwriteInLock(nextIndex)
       }
     } catch (e) {
       // 只回滚这次新建的文件：被覆盖的原件还在原位（`.bak` 是它的上一版）

@@ -4,7 +4,7 @@
 // 谁在用：cep/cloud/entries/index.ts 注册进 cloudEntries
 // 禁止：页面/组件不许 import；这里不判断冲突、不发请求
 
-import { hierarchyRepo } from '@/cep/data/font-extra'
+import { hierarchyWriter } from '@/cep/data/font-extra'
 import type { SyncUnitAdapter, WriteOutcome } from '@/domain/cloud'
 import type { HierarchyFile, HierarchyPreset } from '@/domain/font-set-config'
 import { inlineFile, readInlineJson, unitPayload } from './util'
@@ -22,7 +22,7 @@ function toLevels(value: unknown): number[] {
 
 /**
  * 形状校验：`{index, list:[{name, data:number[]}]}`。
- * 依据：`data/font-extra.ts:135-143` 的默认值 + `hierarchyRepo` 的 `HierarchyFile`；
+ * 依据：`data/font-extra.ts:135-143` 的默认值 + `hierarchyWriter` 的 `HierarchyFile`；
  * 真实文件样本未取得，故按「宽松读取、严格拒绝」处理（字段缺失就报错，不猜）。
  */
 function toHierarchyFile(value: unknown): HierarchyFile {
@@ -51,10 +51,10 @@ export const fontHierarchyEntry: SyncUnitAdapter = {
   schema: 1,
 
   // 层级预设写成功 → 标脏（原版 `fontSetHierarych` 直接 `$sync.pushFile`，见文件首注释）
-  watch: (markDirty) => hierarchyRepo.onChange(markDirty),
+  watch: (markDirty) => hierarchyWriter.onChange(markDirty),
 
   async read() {
-    const read = await hierarchyRepo.read()
+    const read = await hierarchyWriter.read()
     if (!read.ok) throw new Error(read.reason)
     return unitPayload([inlineFile(PATH, JSON.stringify(read.value))])
   },
@@ -62,7 +62,7 @@ export const fontHierarchyEntry: SyncUnitAdapter = {
   async write(payload): Promise<WriteOutcome> {
     try {
       const file = toHierarchyFile(readInlineJson(payload))
-      await hierarchyRepo.write(file)
+      await hierarchyWriter.write(file)
       return { ok: true }
     } catch (error) {
       return {

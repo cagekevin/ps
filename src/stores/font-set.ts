@@ -21,6 +21,7 @@ import {
   type FontSetSettings,
 } from '@/cep/data/legacy-settings'
 import { textInfoError, textInfoRef, typeUnitsRef } from '@/selection/current-text'
+import { msg } from '@/domain/messages'
 import { deepClone } from '@/utils/clone'
 
 export const useFontSetStore = defineStore('fontSet', () => {
@@ -72,17 +73,16 @@ export const useFontSetStore = defineStore('fontSet', () => {
     // 在界面上不可分辨，所以必须让用户看见。**只有 `ok:false` 才有 reason**——
     // 首次使用（`notSeen`）走 `ok:true` 且无 reason，天然不进这里（T-111 判据 C，用例钉住）
     const reasons: string[] = []
-    if (!settingsRead.ok) reasons.push(`面板设置读取失败（${settingsRead.reason}），已按默认值显示`)
+    if (!settingsRead.ok) reasons.push(msg.data.fn.panelSettingsReadFailed(settingsRead.reason))
 
     quickFonts.value = quickRead.ok ? quickRead.value : quickRead.fallback
-    if (!quickRead.ok) reasons.push(`快捷字体读取失败（${quickRead.reason}），已按默认值显示`)
+    if (!quickRead.ok) reasons.push(msg.data.fn.quickFontReadFailed(quickRead.reason))
 
     hierarchy.value = hierarchyRead.ok ? hierarchyRead.value : hierarchyRead.fallback
-    if (!hierarchyRead.ok)
-      reasons.push(`层级预设读取失败（${hierarchyRead.reason}），已按默认值显示`)
+    if (!hierarchyRead.ok) reasons.push(msg.data.fn.hierarchyReadFailed(hierarchyRead.reason))
 
     counter.value = counterRead.ok ? counterRead.value : counterRead.fallback
-    if (!counterRead.ok) reasons.push(`翻译计数读取失败（${counterRead.reason}），已按默认值显示`)
+    if (!counterRead.ok) reasons.push(msg.data.fn.translateCounterReadFailed(counterRead.reason))
 
     // 最近字体 fallback 是 `[]`（S3 档）："没有最近记录"本来就是合法状态，日志够了
     recentFonts.value = historyRead.ok ? historyRead.value : historyRead.fallback

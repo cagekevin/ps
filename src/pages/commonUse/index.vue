@@ -167,7 +167,7 @@ function onGridContextMenu(tile: CommonUseTile) {
     feedback.warn('自由面板还没有可添加的区域')
     return
   }
-  void addToPanelCmd.run({
+  void addToPanelCmd.invoke({
     blockId,
     items: [{ text: tile.name, key, icon: tile.icon.rest.replace(/^#/, '') }],
   })
@@ -212,18 +212,18 @@ function panelOfRow(row: CommonUseTile[]) {
  */
 const COMMAND_RUNNERS: Record<string, () => Promise<boolean>> = {
   'commonUse.embedImage': () =>
-    embedImageCmd.run({
+    embedImageCmd.invoke({
       options: {
         path: '',
         bLink2: options.value.cyLinkObject,
         bDelete: options.value.cyDeleteNext,
       },
     }),
-  'commonUse.embedMultipleImages': () => embedMultiCmd.run(),
+  'commonUse.embedMultipleImages': () => embedMultiCmd.invoke(),
   'commonUse.importMultipleImages': () =>
-    importMultiCmd.run({ toLinkObject: options.value.cyImportToLinkObject }),
+    importMultiCmd.invoke({ toLinkObject: options.value.cyImportToLinkObject }),
   'commonUse.optimizeOnce': () =>
-    optimizeOnceCmd.run({
+    optimizeOnceCmd.invoke({
       options: {
         optimizeAll: Boolean(options.value.cyOptimizeAll),
         deleteAllEmpty: Boolean(options.value.cyOptimizeDeleteAllEmpty),
@@ -231,15 +231,15 @@ const COMMAND_RUNNERS: Record<string, () => Promise<boolean>> = {
       },
     }),
   'commonUse.exportImages': () =>
-    exportImagesCmd.run({
+    exportImagesCmd.invoke({
       mode: 'image',
       options: { ...(options.value.cyExport as Record<string, unknown> | undefined) },
     }),
-  'commonUse.correctBlur': () => correctBlurCmd.run(),
-  'commonUse.swapWireframeFill': () => swapWireframeCmd.run(),
-  'commonUse.layerReplace': () => layerReplaceCmd.run(),
-  'commonUse.locationTrade': () => locationTradeCmd.run(),
-  'commonUse.exchangeLayerColor': () => exchangeLayerColorCmd.run(),
+  'commonUse.correctBlur': () => correctBlurCmd.invoke(),
+  'commonUse.swapWireframeFill': () => swapWireframeCmd.invoke(),
+  'commonUse.layerReplace': () => layerReplaceCmd.invoke(),
+  'commonUse.locationTrade': () => locationTradeCmd.invoke(),
+  'commonUse.exchangeLayerColor': () => exchangeLayerColorCmd.invoke(),
 }
 
 /**
@@ -263,7 +263,7 @@ function onGridMouseDown(event: MouseEvent) {
       const to = Number(result.target.dataset.dropIdx)
       // 落到自己 = 原版 `t != moveEndIndex` 判等（`app.v4.js:50053`），不写盘
       if (!Number.isInteger(from) || !Number.isInteger(to) || to === from) return
-      void moveCmd.run({ from, to, position: result.position })
+      void moveCmd.invoke({ from, to, position: result.position })
     },
   })
 }
@@ -274,7 +274,7 @@ function onGridMouseDown(event: MouseEvent) {
 function expandTile(tile: CommonUseTile) {
   const open = expandedId.value !== tile.id
   expandedId.value = open ? tile.id : ''
-  void setCollapsedCmd.run({ id: tile.id, collapsed: !open })
+  void setCollapsedCmd.invoke({ id: tile.id, collapsed: !open })
 }
 
 /**
@@ -294,7 +294,7 @@ function toggle(tile: CommonUseTile) {
   if (action.kind === 'toggle-setting') {
     // 官方 case 13（`:37910-37911`）：翻转设置 + 一句提示，**不展开面板**
     const next = !options.value[action.path]
-    void setOptionCmd.run({ path: action.path, value: next })
+    void setOptionCmd.invoke({ path: action.path, value: next })
     feedback.ok(next ? '开启智能填色' : '已关闭')
     return
   }
@@ -310,18 +310,18 @@ onMounted(async () => {
   await store.loadOptions()
   store.loadCollapsed()
   // 置入图片的宿主事件监听（官方 mounted 里按开关注册，:37606-37615）
-  void watchPlaceCmd.run()
+  void watchPlaceCmd.invoke()
   // 缺省收起；文件里显式记过 `collapsed:false` 的那一格恢复展开（同时只开一个，取第一个）
   const open = tiles.value.find((tile) => tile.comName && collapsed.value[tile.id] === false)
   expandedId.value = open?.id ?? ''
 })
 
 function zoom(scale: number) {
-  void zoomCmd.run({ scale })
+  void zoomCmd.invoke({ scale })
 }
 
 function flip(direction: FlipDirection) {
-  void flipCmd.run({ direction })
+  void flipCmd.invoke({ direction })
 }
 </script>
 

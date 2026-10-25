@@ -1,6 +1,9 @@
-import { readTextOutcome, userDir } from '@/cep/fs'
+import { userDir } from '@/cep/paths'
+import { DATA_FILES } from '@/cep/env'
 import { hasCep } from '@/cep/transport'
-import { log } from '@/utils/logger'
+import { isRecord, isUnknownArray } from '@/utils/guards'
+import { foldAbsent, readRepoFile } from './repo-read'
+import type { DecodeFail, Decoded } from '@/utils/decode'
 import type { RepoRead } from './types'
 
 /**
@@ -11,14 +14,12 @@ import type { RepoRead } from './types'
  * ADR-14：CEP 里读失败**不许**用 MOCK 冒充真数据——
  * MOCK 只有 2 条 commercials，会让"免费商用"筛出错的结果。只返回 degraded。
  */
-import type { Category, Classification } from '@/domain/classification'
+import { toCategoryTags, type Category, type Classification } from '@/domain/classification'
 
 export type { Category, CategoryTag, Classification } from '@/domain/classification'
 
 /** 分类顺序按原版面板的展示顺序 */
 const ORDER = ['rating', 'language', 'commercial', 'type', 'style']
-
-const FILE = 'classification.json'
 
 /** 仅浏览器 dev 使用；CEP 里永远不返回它 */
 const MOCK: Classification = {
@@ -85,58 +86,64 @@ export async function getClassification(): Promise<RepoRead<Classification>> {
   // dev：浏览器里没有真实文件，用 MOCK 才能开发 UI
   if (!hasCep()) return { ok: true, value: MOCK }
 
-  const abs = `${userDir()}/${FILE}`
-  const read = await readTextOutcome(abs)
+  const abs = `${userDir()}/${DATA_FILES.classification}`
+  // 档 1 的唯一结论入口（三态 → JSON → decode → RepoRead）。判据不在本文件里。
+  const outcome = readRepoFile(abs, decodeClassification)
+  // 读不到（`text === null`）与"读到了但读不懂"是两句不同的话，不许合并（T-107）
+  if (outcome.kind === 'bad') {
+    return outcome.why === 'readError'
+      ? { ok: false, reason: '分类数据读取失败', fallback: emptyClassification() }
+      : { ok: false, reason: '分类数据格式不正确', fallback: emptyClassification() }
+  }
+  // 这个文件不随面板分发（`getClassificationURL` → `v1/font/link`，`:49501`），
+  // 新机器上第一次用确实没有 —— `ok:true` 但**必须留 reason**，去掉就是静默回退（20(b)）
+  return foldAbsent(outcome, emptyClassification, { notSeenReason: '分类数据文件不存在' })
+}
 
-  // 读不到 → 整份不可用。这条分支以前靠 `readTextSmart` 抛错触发，而它从不抛，
-  // 所以一次都没跑到过（读失败被当成"文件不存在"）；三态分对后它第一次可达（T-107 / ADR-26 ②）
-  if (read.status === 'error') {
-    log.warn('classification', `${abs} 读取失败`, read.reason)
-    return { ok: false, reason: '分类数据读取失败', fallback: emptyClassification() }
+/**
+ * `classification.json` 的 decode。
+ *
+ * 逐条不许丢：某个分组结构不认识就**跳过那一个分组**（不是整份拒绝）—— 这是原实现的语义，
+ * 因为 `presets` / `commercials` 与分组无关，整份拒绝会让"免费商用"筛选一起空。
+ * 顶层不是对象则整份拒绝（`null`），因为那时连 `presets` 都没有可信来源。
+ */
+function decodeClassification(raw: unknown): Decoded<Classification> | DecodeFail | null {
+  if (!isRecord(raw)) return null
+
+  const rawCategories = isRecord(raw.categories) ? raw.categories : {}
+  const categories: Category[] = []
+  for (const key of ORDER) {
+    const item = rawCategories[key]
+    if (!isRecord(item) || !isUnknownArray(item.tags)) continue
+    categories.push({
+      key,
+      name: typeof item.name === 'string' ? item.name : key,
+      extraTag: typeof item.extraTag === 'number' ? item.extraTag : undefined,
+      tags: toCategoryTags(item.tags),
+    })
   }
 
-  // 查不到 = 首次使用的正常状态，不是读失败（T-103）。
-  // 依据：`file-repo.ts:71-72` 同一条规则；原版 `app.v4.js:45717-45721` 读本地抛 `ENOENT`
-  // 时走的是"下载并写回"（`ww`，`:45713`），从不把"没有这个文件"报给用户。
-  // 这个文件也不随面板分发（`getClassificationURL` → `v1/font/link`，`:49501`），
-  // 所以新机器上第一次用确实没有。值给空分类，`reason` 保留：去掉它就是静默回退（20(b)）。
-  if (read.status === 'notSeen') {
-    return {
-      ok: true,
-      value: emptyClassification(),
-      reason: '分类数据文件不存在',
+  const presets: Record<string, Record<string, number[]>> = {}
+  if (isRecord(raw.presets)) {
+    for (const [name, groups] of Object.entries(raw.presets)) {
+      if (!isRecord(groups)) continue
+      const bucket: Record<string, number[]> = {}
+      for (const [k, arr] of Object.entries(groups)) {
+        if (isUnknownArray(arr)) bucket[k] = arr.filter((n): n is number => typeof n === 'number')
+      }
+      presets[name] = bucket
     }
   }
 
-  const text = read.text
-
-  try {
-    const raw = JSON.parse(text) as {
-      categories?: Record<string, Omit<Category, 'key'>>
-      presets?: Record<string, Record<string, number[]>>
-      commercials?: string[]
-    }
-
-    const categories: Category[] = []
-    for (const key of ORDER) {
-      const item = raw.categories?.[key]
-      if (!item || !Array.isArray(item.tags)) continue
-      categories.push({ key, name: item.name ?? key, extraTag: item.extraTag, tags: item.tags })
-    }
-
-    // 文件是合法 JSON，只是分组为空：`presets` / `commercials` 仍然可用，所以是 `ok: true` + reason，
-    // 不是 `ok: false`（丢掉 value 会让"免费商用"筛选一起空）
-    return {
-      ok: true,
-      value: {
-        categories,
-        presets: raw.presets ?? {},
-        commercials: Array.isArray(raw.commercials) ? raw.commercials : [],
-      },
-      reason: categories.length ? undefined : '分类数据里没有可用分组',
-    }
-  } catch (e) {
-    log.warn('classification', `${abs} 不是合法 JSON`, e)
-    return { ok: false, reason: '分类数据格式不正确', fallback: emptyClassification() }
+  // 文件是合法 JSON，只是分组为空：`presets` / `commercials` 仍然可用 ⇒ 值可用但不完整（degraded）
+  return {
+    value: {
+      categories,
+      presets,
+      commercials: isUnknownArray(raw.commercials)
+        ? raw.commercials.filter((c): c is string => typeof c === 'string')
+        : [],
+    },
+    degraded: categories.length ? undefined : '分类数据里没有可用分组',
   }
 }

@@ -4,7 +4,7 @@ import { SPLIT_BUTTONS, SPLIT_TITLES } from '../font-set-constants'
 /** 原版 split（app.v4.js:38866）：2×2 四个按钮，点了就走命令 */
 const emit = defineEmits<{ (e: 'split', mode: 1 | 2 | 3 | 4): void }>()
 
-function run(index: number) {
+function invoke(index: number) {
   emit('split', (index + 1) as 1 | 2 | 3 | 4)
 }
 </script>
@@ -17,7 +17,7 @@ function run(index: number) {
       class="fontset-split__btn"
       type="button"
       :title="SPLIT_TITLES[index]"
-      @click="run(index)"
+      @click="invoke(index)"
     >
       {{ text }}
     </button>

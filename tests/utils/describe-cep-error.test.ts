@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { CepError } from '@/utils/errors'
+import { codeText } from '@/utils/code-registry'
 import { describeCepError } from '@/utils/error-text'
 
 describe('describeCepError', () => {
@@ -36,8 +37,27 @@ describe('describeCepError', () => {
     expect(describeCepError(new CepError('NO_SELECTION', '请先选择图层'))).toBe('请先选择图层')
   })
 
-  it('未知错误码回退到 message', () => {
-    expect(describeCepError(new CepError('OTHER' as never, '原始错误'))).toBe('原始错误')
+  it('所有 CepErrorCode 都在 CODE_REGISTRY 里（never 收尾：新增码不填表就编译不过）', () => {
+    // 以前这是"未知码回退到 message"（switch 的 default 分支）；现在 `Record<CepErrorCode, …>`
+    // 保证穷尽，未知码**结构上不可能**。这里验证表覆盖了所有码。
+    const codes: Array<Parameters<typeof codeText>[0]> = [
+      'NO_CEP',
+      'NO_NODE',
+      'TIMEOUT',
+      'TIMEOUT_UNKNOWN',
+      'JSX',
+      'PARSE',
+      'INIT',
+      'IO',
+      'NETWORK',
+      'NO_SELECTION',
+      'FONT_MISSING',
+      'CANCELLED',
+      'INTERNAL',
+    ]
+    for (const code of codes) {
+      expect(codeText(code, '原始错误')).toBeTruthy()
+    }
   })
 
   it('普通 Error 取 message', () => {

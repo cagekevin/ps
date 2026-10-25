@@ -8,7 +8,7 @@ import type { FreePanelBlock } from '@/domain/free-panel'
  *
  * 写操作全部在 `commands/freePanel.ts`；这里只负责读文件并投影。
  *
- * 归一在**读边界**（`data/free-panel.ts` 的 `normalize: readFreePanelFile`），不在这里，
+ * 归一在**读边界**（`data/free-panel.ts` 的 `decode: decodeFreePanelFile`），不在这里，
  * 所以投影拿到的 `value.obj.list` 一定存在，`degraded` 也一定意味着"磁盘上那份文件不能当数据用"。
  *
  * `degraded` 是 D-40 加回来的：当时判"没有消费方"，现在页面有（读坏时提示"原文件已保留"，

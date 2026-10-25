@@ -1,9 +1,10 @@
 import { describe, expect, it, vi } from 'vitest'
+import { isRecord } from '@/utils/guards'
 
 /**
- * T-113：`pick()` 必须**在第一次使用时**才定实现，不许在模块加载时定死。
+ * T-113：`dataRepo()` 必须**在第一次使用时**才定实现，不许在模块加载时定死。
  *
- * 为什么这条值得单独一个文件：13 个仓库都在 import 期调 `pick()`。只要它是急求值的
+ * 为什么这条值得单独一个文件：13 个仓库都在 import 期构造。只要它是急求值的
  * （`return hasCep() ? fileRepo : memoryRepo`），测试把 CEP 桥装晚一步就会静默走
  * `memoryRepo`——**永不失败**，于是"喂 EPERM 也不会红"，用例全绿但测的不是真实接线。
  * T-111 第一版就是这么绿的。
@@ -17,8 +18,11 @@ vi.mock('@/cep/transport', () => ({ hasCep: () => env.cep }))
 
 const disk = vi.hoisted(() => ({ text: '{"a":1}' }))
 
-vi.mock('@/cep/fs', () => ({
+vi.mock('@/cep/node', () => ({
   hasNode: () => true,
+}))
+
+vi.mock('@/cep/fs-read', () => ({
   readTextOutcome: async () => ({ status: 'ok' as const, text: disk.text }),
   readTextSync: () => ({ status: 'ok' as const, text: disk.text }),
   writeTextFile: () => undefined,
@@ -26,27 +30,35 @@ vi.mock('@/cep/fs', () => ({
 }))
 
 // import 时 `hasCep()` 还是 false —— 这正是急求值实现被定死的时刻
-const { pick } = await import('@/cep/data/pick')
+const { dataRepo } = await import('@/cep/data/data-repo')
 
 interface Shape {
   a: number
 }
 
+/** 与 `data/*.ts` 一样：decode 是必填参数，形状不认识就 null（不是 `as`） */
+function decodeShape(raw: unknown): { value: Shape } | null {
+  return isRecord(raw) && typeof raw.a === 'number' ? { value: { a: raw.a } } : null
+}
+
 /** 模块顶层建仓库 = `data/*.ts` 的真实写法 */
-const lateBridge = pick<Shape>(
+const lateBridge = dataRepo<Shape>(
   () => '/user/x.json',
   () => ({ a: 0 }),
+  decodeShape,
 )
-const noBridge = pick<Shape>(
+const noBridge = dataRepo<Shape>(
   () => '/user/y.json',
   () => ({ a: 0 }),
+  decodeShape,
 )
-const fixedOnce = pick<Shape>(
+const fixedOnce = dataRepo<Shape>(
   () => '/user/z.json',
   () => ({ a: 0 }),
+  decodeShape,
 )
 
-describe('pick · 首次使用时才定实现（T-113）', () => {
+describe('dataRepo · 首次使用时才定实现（T-113）', () => {
   it('import 之后才装桥，仍然走文件仓库（急求值实现在这里只会给 seed）', async () => {
     env.cep = true
 

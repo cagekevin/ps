@@ -7,14 +7,14 @@ import { afterAll, beforeEach, describe, expect, it } from 'vitest'
 /**
  * 真机装法下的 `fileRepo` —— 原子写与全局写链**有牙**的凭证（TD-09-38）。
  *
- * 为什么必须单开一个文件：jsdom 下 `hasCep()` 为 `false` → `pick()` 选 `memoryRepo`，
+ * 为什么必须单开一个文件：jsdom 下 `hasCep()` 为 `false` → `dataRepo()` 选 `memoryRepo`，
  * 而 `memoryRepo` 自己就是同步赋值（没有 tmp、没有 rename、没有 `runQueued`）。
  * 于是"原子写被删""排队被删"在旧用例里**都不会红** —— 被测对象早被换掉了。
  * 这里装真 `window.require`（node:fs）+ 真 `window.__adobe_cep__` → `hasCep()`=true
- * → `pick()` 走 `fileRepo`，测的是真代码 + 真磁盘 + 真全局写链。
+ * → `dataRepo()` 走 `fileRepo`，测的是真代码 + 真磁盘 + 真全局写链。
  *
  * 三条测试点（对应两处 P0 数据完整性保证，删掉实现必红 —— 探针结论见本轮报告）：
- * 1. `pick` 在真机装法下选的就是 `fileRepo`：写入真落盘。
+ * 1. `dataRepo` 在真机装法下选的就是 `fileRepo`：写入真落盘。
  * 2. **原子**：写一半失败时目标文件仍是**旧内容**（非原子直写会把它截成半截 JSON）。
  * 3. **排队**：并发 10 次 `update` 全部落地、不抛错（不排队 = 丢更新 / 重试耗尽）。
  * 4. 坏文件不覆盖：读到的不是真数据时 `update` 必须抛（不许拿 fallback 盖掉用户文件）。
@@ -67,15 +67,23 @@ function installRealEnv(): void {
   }
 }
 
-// `pick` 的实现是**首次调用**时才求值（T-113），所以顶层 import 安全：
+// `dataRepo` 的实现是**首次调用**时才求值（T-113），所以顶层 import 安全：
 // 只要在第一次 `repo.read()` / `repo.write()` 之前把环境装好即可。
-const { pick } = await import('@/cep/data/pick')
+const { dataRepo } = await import('@/cep/data/data-repo')
 
-/** 每个用例一份新的 `pick()` 实例（实例自带缓存，不能跨用例共用） */
+/** decode 必填（TD-03-5）：只认数字数组，别的一律 null = 形状不认识 */
+function decodeNumberList(raw: unknown): { value: number[] } | null {
+  if (!Array.isArray(raw)) return null
+  const list = raw.filter((item): item is number => typeof item === 'number')
+  return list.length === raw.length ? { value: list } : null
+}
+
+/** 每个用例一份新的 `dataRepo()` 实例（实例自带缓存，不能跨用例共用） */
 function makeRepo() {
-  return pick<number[]>(
+  return dataRepo<number[]>(
     () => target,
     () => [],
+    decodeNumberList,
   )
 }
 
@@ -136,13 +144,15 @@ describe('fileRepo（真机装法：真 node:fs + 真 __adobe_cep__）', () => {
   it('全局一条链：两个仓库的读-改-写不许交错（排队）', async () => {
     const pathA = path.join(dir, 'sj_probe_a.json')
     const pathB = path.join(dir, 'sj_probe_b.json')
-    const a = pick<number[]>(
+    const a = dataRepo<number[]>(
       () => pathA,
       () => [],
+      decodeNumberList,
     )
-    const b = pick<number[]>(
+    const b = dataRepo<number[]>(
       () => pathB,
       () => [],
+      decodeNumberList,
     )
 
     await Promise.all([a.update((value) => [...value, 1]), b.update((value) => [...value, 2])])

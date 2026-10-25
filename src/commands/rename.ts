@@ -1,6 +1,7 @@
 import { openFile, saveFile } from '@/cep/dialog'
-import { renameRepo } from '@/cep/data/rename'
-import { readTextOutcome, writeTextFile } from '@/cep/fs'
+import { renameWriter } from '@/cep/data/rename'
+import { readExternalText } from '@/cep/fs-read'
+import { writeDisk } from '@/cep/disk-write'
 import {
   addGroupAt,
   addItemAt,
@@ -16,6 +17,7 @@ import {
 } from '@/domain/rename'
 import { applyItemDrop, applyListDrop } from '@/domain/reorder'
 import { CepError } from '@/utils/errors'
+import { msg } from '@/domain/messages'
 import { defineCommand } from './registry'
 import type { Command } from './types'
 
@@ -37,12 +39,12 @@ export const renameCommands: Command<unknown>[] = [
     requires: 'layer',
     // 图层多时 PS 侧要跑一会，原版用 $load 转圈（app.v4.js:57232）；我们走长任务 HUD
     kind: 'long',
-    async run(ctx, { expression, filterChildren }) {
+    async invoke(ctx, { expression, filterChildren }) {
       const message = checkExpression(expression)
       if (message) throw new CepError('PARSE', message)
 
       // 原版先 addHistory(表达式) 再执行（:57230），历史因此包含失败的那些——保持一致
-      await renameRepo.update((preset) => pushHistory(preset, expression))
+      await renameWriter.update((preset) => pushHistory(preset, expression))
       await ctx.jsx.rename.batchName(expression, filterChildren)
     },
   }),
@@ -53,9 +55,9 @@ export const renameCommands: Command<unknown>[] = [
     group: 'layer',
     requires: 'layer',
     kind: 'instant',
-    async run(ctx, { colorIndex }) {
+    async invoke(ctx, { colorIndex }) {
       if (!Number.isInteger(colorIndex) || colorIndex < 0 || colorIndex > 7) {
-        throw new CepError('PARSE', '颜色序号只能是 0-7')
+        throw new CepError('PARSE', msg.command.text.renameColorIndexInvalid)
       }
       await ctx.jsx.rename.setLayerColor(colorIndex)
     },
@@ -67,8 +69,8 @@ export const renameCommands: Command<unknown>[] = [
     group: 'system',
     requires: 'none',
     kind: 'instant',
-    async run(_ctx, { index }) {
-      await renameRepo.update((preset) => toggleGroupAt(preset, index))
+    async invoke(_ctx, { index }) {
+      await renameWriter.update((preset) => toggleGroupAt(preset, index))
     },
   }),
 
@@ -78,8 +80,8 @@ export const renameCommands: Command<unknown>[] = [
     group: 'system',
     requires: 'none',
     kind: 'instant',
-    async run(_ctx, { name, afterIndex }) {
-      await renameRepo.update((preset) => addGroupAt(preset, name, afterIndex))
+    async invoke(_ctx, { name, afterIndex }) {
+      await renameWriter.update((preset) => addGroupAt(preset, name, afterIndex))
     },
   }),
 
@@ -89,8 +91,8 @@ export const renameCommands: Command<unknown>[] = [
     group: 'system',
     requires: 'none',
     kind: 'instant',
-    async run(_ctx, { index, name }) {
-      await renameRepo.update((preset) => renameGroupAt(preset, index, name))
+    async invoke(_ctx, { index, name }) {
+      await renameWriter.update((preset) => renameGroupAt(preset, index, name))
     },
   }),
 
@@ -100,8 +102,8 @@ export const renameCommands: Command<unknown>[] = [
     group: 'system',
     requires: 'none',
     kind: 'instant',
-    async run(_ctx, { index }) {
-      await renameRepo.update((preset) => deleteGroupAt(preset, index))
+    async invoke(_ctx, { index }) {
+      await renameWriter.update((preset) => deleteGroupAt(preset, index))
     },
   }),
 
@@ -111,8 +113,8 @@ export const renameCommands: Command<unknown>[] = [
     group: 'system',
     requires: 'none',
     kind: 'instant',
-    async run(_ctx, { groupIndex, text }) {
-      await renameRepo.update((preset) => addItemAt(preset, groupIndex, text))
+    async invoke(_ctx, { groupIndex, text }) {
+      await renameWriter.update((preset) => addItemAt(preset, groupIndex, text))
     },
   }),
 
@@ -122,8 +124,8 @@ export const renameCommands: Command<unknown>[] = [
     group: 'system',
     requires: 'none',
     kind: 'instant',
-    async run(_ctx, { groupIndex, itemIndex, text }) {
-      await renameRepo.update((preset) => changeItemAt(preset, groupIndex, itemIndex, text))
+    async invoke(_ctx, { groupIndex, itemIndex, text }) {
+      await renameWriter.update((preset) => changeItemAt(preset, groupIndex, itemIndex, text))
     },
   }),
 
@@ -133,8 +135,8 @@ export const renameCommands: Command<unknown>[] = [
     group: 'system',
     requires: 'none',
     kind: 'instant',
-    async run(_ctx, { groupIndex, itemIndex }) {
-      await renameRepo.update((preset) => deleteItemAt(preset, groupIndex, itemIndex))
+    async invoke(_ctx, { groupIndex, itemIndex }) {
+      await renameWriter.update((preset) => deleteItemAt(preset, groupIndex, itemIndex))
     },
   }),
 
@@ -144,11 +146,12 @@ export const renameCommands: Command<unknown>[] = [
     group: 'system',
     requires: 'none',
     kind: 'instant',
-    async run(_ctx, { from, to, position }) {
-      await renameRepo.update((preset) => {
+    async invoke(_ctx, { from, to, position }) {
+      await renameWriter.update((preset) => {
         if (from === to) return
         // 台账 T-67 判据④：第 0 组（最近使用）固定，不参与排序
-        if (from < 1 || to < 1) throw new CepError('PARSE', '第一个分组是固定组，不能拖动排序')
+        if (from < 1 || to < 1)
+          throw new CepError('PARSE', msg.command.text.renameFixedGroupNoReorder)
         const moved = applyListDrop(preset, from, to, position)
         // 照 `/style` 范本：被拖组随同一次写盘折叠。
         // UNVERIFIED: 判据没有点名这条；原版源码在 `docs/原版/01-原版源码/panel/js/app.v4.js`，未复核到出处。
@@ -163,12 +166,12 @@ export const renameCommands: Command<unknown>[] = [
     group: 'system',
     requires: 'none',
     kind: 'instant',
-    async run(_ctx, { fromGroup, fromIndex, toGroup, toIndex, position }) {
-      await renameRepo.update((preset) => {
+    async invoke(_ctx, { fromGroup, fromIndex, toGroup, toIndex, position }) {
+      await renameWriter.update((preset) => {
         // 台账 T-67 判据④：源组和落点组都不能是第 0 组。
         // UNVERIFIED: 判据只点名「第 0 组不可拖」，没有逐字说项拖拽的源/落点。
         if (fromGroup === 0 || toGroup === 0) {
-          throw new CepError('PARSE', '第一个分组是固定组，不能拖动排序')
+          throw new CepError('PARSE', msg.command.text.renameFixedGroupNoReorder)
         }
         applyItemDrop(
           preset.map((group) => group.list),
@@ -188,15 +191,16 @@ export const renameCommands: Command<unknown>[] = [
     group: 'file',
     requires: 'none',
     kind: 'instant',
-    async run() {
-      const read = await renameRepo.read()
+    async invoke() {
+      const read = await renameWriter.read()
       if (!read.ok) throw new CepError('IO', read.reason)
 
       // 原版 saveFile("导出", ["cmm"], "重命名.cmm", "设计助理导出文件")（:57020）
       const path = saveFile('导出', ['cmm'], '重命名.cmm')
-      if (!path) throw new CepError('PARSE', '取消操作')
+      if (!path) throw new CepError('PARSE', msg.command.text.actionCancelled)
 
-      writeTextFile(path, serializePreset(read.value))
+      // 导出文件是**新文件**，无 `.bak` 概念（`previous: null`）；走唯一落盘入口（原子写）
+      await writeDisk(path, serializePreset(read.value), { previous: null })
     },
   }),
 
@@ -206,22 +210,22 @@ export const renameCommands: Command<unknown>[] = [
     group: 'file',
     requires: 'none',
     kind: 'instant',
-    async run() {
+    async invoke() {
       // 原版 openFile("导入重命名预设", ["cmm"], "设计助理导入文件")（:57030）
       const path = openFile('导入重命名预设', ['cmm'])
-      if (!path) throw new CepError('PARSE', '取消操作')
+      if (!path) throw new CepError('PARSE', msg.command.text.actionCancelled)
 
-      const read = await readTextOutcome(path)
+      const read = await readExternalText(path)
       // T-107：两种不 ok 这里同果（都抛同一句），文案不变。
       // 不违反 ADR-16：ADR-16 管的是"操作定义在哪 / 谁能触发"——本处就是 Command、页面经 useCommand 触发、
       // 读的是用户刚选的文件（`openFile` 返回的路径），三条都满足。
       // 与 `data/action-archive.ts` 的差别只是**做法不一致**（那处把导入收进 `data/`，这里没有），不是违规。
       // 不必统一：用户选的一次性导入文件不是面板数据、没有唯一真相，收进 `data/` 是为对称而对称（T-119）。
-      if (read.status !== 'ok') throw new CepError('IO', '导入失败，文件读取失败')
+      if (read.status !== 'ok') throw new CepError('IO', msg.command.text.fontImportReadFailed)
       const text = read.text
 
       // JSON 优先、旧格式 `<z>`/`<>` 兜底，见 domain/rename.ts 的 parsePreset（原版 :57036-57045）
-      await renameRepo.write(parsePreset(text))
+      await renameWriter.write(parsePreset(text))
     },
   }),
 ]

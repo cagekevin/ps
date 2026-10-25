@@ -8,7 +8,8 @@ import {
 } from '@/domain/free-panel'
 import { adaptFreePanelItem } from '@/domain/free-panel-legacy'
 import { applyItemDrop } from '@/domain/reorder'
-import { CepError, type CepErrorCode } from '@/utils/errors'
+import { CepError } from '@/utils/errors'
+import { msg } from '@/domain/messages'
 import { defineCommand, executeInherited, get } from './registry'
 import type { Command } from './types'
 
@@ -52,19 +53,19 @@ export const freePanelCommands: Command<unknown>[] = [
     group: 'system',
     requires: 'none',
     kind: 'instant',
-    async run(ctx, { blockId, items }) {
-      if (!items.length) throw new CepError('PARSE', '没有要添加的项')
+    async invoke(ctx, { blockId, items }) {
+      if (!items.length) throw new CepError('PARSE', msg.command.text.freePanelNothingToAdd)
 
       await ctx.data.freePanel.update((file) => {
         const next = normalizeFreePanel(file)
         const block = findBlock(next.obj.list, blockId)
-        if (!block) throw new CepError('PARSE', '自由面板区域不存在')
+        if (!block) throw new CepError('PARSE', msg.command.text.freePanelRegionMissing)
 
         for (const item of items) {
           const text = item.text.trim()
           const key = item.key.trim()
-          if (!text) throw new CepError('PARSE', '名字不能为空')
-          if (!key) throw new CepError('PARSE', 'key 不能为空')
+          if (!text) throw new CepError('PARSE', msg.command.text.freePanelNameRequired)
+          if (!key) throw new CepError('PARSE', msg.command.text.freePanelKeyRequired)
 
           next.btnId += 1
           block.data.push({
@@ -93,13 +94,13 @@ export const freePanelCommands: Command<unknown>[] = [
     group: 'system',
     requires: 'none',
     kind: 'instant',
-    async run(ctx, { blockId, btnId }) {
+    async invoke(ctx, { blockId, btnId }) {
       await ctx.data.freePanel.update((file) => {
         const next = normalizeFreePanel(file)
         const block = findBlock(next.obj.list, blockId)
-        if (!block) throw new CepError('PARSE', '自由面板区域不存在')
+        if (!block) throw new CepError('PARSE', msg.command.text.freePanelRegionMissing)
         const index = block.data.findIndex((item) => item.btnId === btnId)
-        if (index < 0) throw new CepError('PARSE', '自由面板项不存在')
+        if (index < 0) throw new CepError('PARSE', msg.command.text.freePanelItemMissing)
         block.data.splice(index, 1)
         commit(file, next)
       })
@@ -112,16 +113,16 @@ export const freePanelCommands: Command<unknown>[] = [
     group: 'system',
     requires: 'none',
     kind: 'instant',
-    async run(ctx, { fromBlockId, fromBtnId, toBlockId, toBtnId, position }) {
+    async invoke(ctx, { fromBlockId, fromBtnId, toBlockId, toBtnId, position }) {
       await ctx.data.freePanel.update((file) => {
         const next = normalizeFreePanel(file)
         const source = findBlock(next.obj.list, fromBlockId)
         const target = findBlock(next.obj.list, toBlockId)
-        if (!source || !target) throw new CepError('PARSE', '自由面板区域不存在')
+        if (!source || !target) throw new CepError('PARSE', msg.command.text.freePanelRegionMissing)
 
         const from = source.data.findIndex((item) => item.btnId === fromBtnId)
         const to = target.data.findIndex((item) => item.btnId === toBtnId)
-        if (from < 0 || to < 0) throw new CepError('PARSE', '自由面板项不存在')
+        if (from < 0 || to < 0) throw new CepError('PARSE', msg.command.text.freePanelItemMissing)
 
         // 落点只在 `domain/reorder.ts` 一份：同 block 传一条列表，跨 block 传两条
         const moved = applyItemDrop(
@@ -157,7 +158,7 @@ export const freePanelCommands: Command<unknown>[] = [
     group: 'system',
     requires: 'none',
     kind: 'instant',
-    async run(ctx, { showNumber, showIcon, showText }) {
+    async invoke(ctx, { showNumber, showIcon, showText }) {
       await ctx.data.freePanel.update((file) => {
         const next = normalizeFreePanel(file)
         walkBlocks(next.obj.list, (block) => {
@@ -176,7 +177,7 @@ export const freePanelCommands: Command<unknown>[] = [
     group: 'system',
     requires: 'none',
     kind: 'instant',
-    async run(ctx) {
+    async invoke(ctx) {
       await ctx.data.freePanel.update((file) => {
         // D-38：清空**不**复位 uid。旧 id 一旦被复用，按 id 存的会话态（showText）
         // 和任何外部引用都会串到新工作区上；原版 uid 是单调计数器，复位不是它的语义。
@@ -196,7 +197,7 @@ export const freePanelCommands: Command<unknown>[] = [
     group: 'system',
     requires: 'none',
     kind: 'instant',
-    async run(ctx, { parentId, type }) {
+    async invoke(ctx, { parentId, type }) {
       await ctx.data.freePanel.update((file) => {
         const next = normalizeFreePanel(file)
         const block = {
@@ -215,7 +216,7 @@ export const freePanelCommands: Command<unknown>[] = [
 
         if (parentId !== undefined) {
           const parent = findBlock(next.obj.list, parentId)
-          if (!parent) throw new CepError('PARSE', '自由面板区域不存在')
+          if (!parent) throw new CepError('PARSE', msg.command.text.freePanelRegionMissing)
           parent.children.push(block)
         } else {
           next.obj.list.push(block)
@@ -232,7 +233,7 @@ export const freePanelCommands: Command<unknown>[] = [
     group: 'system',
     requires: 'none',
     kind: 'instant',
-    async run(ctx, { blockId }) {
+    async invoke(ctx, { blockId }) {
       await ctx.data.freePanel.update((file) => {
         const next = normalizeFreePanel(file)
 
@@ -245,7 +246,8 @@ export const freePanelCommands: Command<unknown>[] = [
           return blocks.some((block) => remove(block.children))
         }
 
-        if (!remove(next.obj.list)) throw new CepError('PARSE', '自由面板区域不存在')
+        if (!remove(next.obj.list))
+          throw new CepError('PARSE', msg.command.text.freePanelRegionMissing)
 
         // 至少保留一个区域，避免工作区变成不可编辑状态
         if (!next.obj.list.length) {
@@ -274,11 +276,11 @@ export const freePanelCommands: Command<unknown>[] = [
     group: 'system',
     requires: 'none',
     kind: 'instant',
-    async run(ctx, { blockId, type, width, height }) {
+    async invoke(ctx, { blockId, type, width, height }) {
       await ctx.data.freePanel.update((file) => {
         const next = normalizeFreePanel(file)
         const block = findBlock(next.obj.list, blockId)
-        if (!block) throw new CepError('PARSE', '自由面板区域不存在')
+        if (!block) throw new CepError('PARSE', msg.command.text.freePanelRegionMissing)
         if (type !== undefined) block.type = type
         if (width !== undefined) block.width = width
         if (height !== undefined) block.height = height
@@ -293,28 +295,29 @@ export const freePanelCommands: Command<unknown>[] = [
     group: 'system',
     requires: 'none',
     kind: 'instant',
-    async run(ctx, { blockId, btnId }) {
+    async invoke(ctx, { blockId, btnId }) {
       const read = await ctx.data.freePanel.read()
       // 读边界（`data/free-panel.ts` 的 normalize）已经归一过，这里不再归一第二次。
       // 坏文件必须说"文件坏了"：以前拿 fallback 空面板继续找，报的是"自由面板项不存在"（T-101-1）
       if (!read.ok) {
-        throw new CepError('IO', `自由面板文件损坏（${read.reason}），执行已中止`)
+        throw new CepError('IO', msg.command.fn.freePanelFileCorrupt(read.reason))
       }
       const block = findBlock(read.value.obj.list, blockId)
       const item = block?.data.find((entry) => entry.btnId === btnId)
-      if (!item) throw new CepError('PARSE', '自由面板项不存在')
+      if (!item) throw new CepError('PARSE', msg.command.text.freePanelItemMissing)
 
       const mapped = adaptFreePanelItem(item)
       if (!mapped || !get(mapped.id)) {
-        throw new CepError('PARSE', `自由面板 key 未适配：${item.key}`)
+        throw new CepError('PARSE', msg.command.fn.freePanelKeyUnadapted(item.key))
       }
 
       // D-33：子命令复用本次执行刚刷过的选区快照，不再 refresh 一次；
       // 失败时把子命令自己的 `code` 原样抛回去——以前硬编码成 'JSX'，
       // 把 `FONT_MISSING` 这类"要页面弹确认"的语义冲掉了，useCommand 那条分支因此失效。
-      // CommandResult.code 是 string（注册表只在枚举内产出）；CepError 收 CepErrorCode
+      // `CommandOutcome.code` 是 `CepErrorCode`（R3 起必填）；直接传给 `CepError`
       const result = await executeInherited(mapped.id, mapped.payload, { selection: ctx.selection })
-      if (!result.ok) throw new CepError((result.code ?? 'JSX') as CepErrorCode, result.reason)
+      // `code` 已是必填的 `CepErrorCode`（R3）⇒ 不再需要 `?? 'JSX'` + `as`
+      if (!result.ok) throw new CepError(result.code, result.reason)
     },
   }),
 ]

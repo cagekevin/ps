@@ -5,6 +5,7 @@
 // 禁止：不读文件、不认"库/页"、不兜底——下标越界一律抛，让调用方看见
 
 import { CepError } from '@/utils/errors'
+import { msg } from './messages'
 
 /**
  * 落点位置：插在目标**前**还是**后**。
@@ -52,7 +53,7 @@ export function dropInsertIndex(move: DropMove): number {
 
 function requireIndex(value: number, length: number, what: string): void {
   if (!Number.isInteger(value) || value < 0 || value >= length) {
-    throw new CepError('PARSE', `${what} ${value} 不存在`)
+    throw new CepError('PARSE', msg.validate.fn.reorderIndexMissing(what, String(value)))
   }
 }
 
@@ -89,8 +90,10 @@ export function applyListDrop<T>(
 export function applyItemDrop(lists: unknown[][], move: DropMove): number {
   const source = lists[move.from.group]
   const target = lists[move.to.group]
-  if (!source) throw new CepError('PARSE', `分组 ${move.from.group} 不存在`)
-  if (!target) throw new CepError('PARSE', `分组 ${move.to.group} 不存在`)
+  if (!source)
+    throw new CepError('PARSE', msg.validate.fn.reorderGroupMissing(String(move.from.group)))
+  if (!target)
+    throw new CepError('PARSE', msg.validate.fn.reorderGroupMissing(String(move.to.group)))
 
   requireIndex(move.from.index, source.length, '第')
   requireIndex(move.to.index, target.length, '第')

@@ -21,55 +21,59 @@ const fsMock = vi.hoisted(() => ({
   readErrorPath: '',
 }))
 
-vi.mock('@/cep/fs', () => ({
+vi.mock('@/cep/node', () => ({
   hasNode: () => true,
+}))
+
+vi.mock('@/cep/paths', () => ({
   userDir: () => 'ROAM/SheJiZhuLi',
+}))
+
+vi.mock('@/cep/fs-read', () => ({
   readTextSmart: async (path: string) => fsMock.files.get(path) ?? null,
-  // T-107：唯一读入口（三态）+ 同步例外（CAS / 结构上同步的调用方）
-  readTextOutcome: async (path: string) => {
-    // T-112：文件在、但读不到（EPERM / EBUSY）——这是"读不到"，不是"没有"
-    if (fsMock.readErrorPath && path === fsMock.readErrorPath) {
-      return { status: 'error' as const, reason: 'EPERM: operation not permitted' }
-    }
-    const text = fsMock.files.get(path)
-    return text === undefined ? { status: 'notSeen' as const } : { status: 'ok' as const, text }
-  },
+  // T-107：唯一读入口（三态）+ 同步例外（CAS / 结构上同步的调用方）  readTextOutcome: async (path: string) => {
+      // T-112：文件在、但读不到（EPERM / EBUSY）——这是"读不到"，不是"没有"    if (fsMock.readErrorPath && path === fsMock.readErrorPath) {
+        return { status: 'error' as const, reason: 'EPERM: operation not permitted' }
+      }
+      const text = fsMock.files.get(path)
+      return text === undefined ? { status: 'notSeen' as const } : { status: 'ok' as const, text }
+    },
   readTextSync: (path: string) => {
-    const text = fsMock.files.get(path)
-    return text === undefined ? { status: 'notSeen' as const } : { status: 'ok' as const, text }
-  },
+      const text = fsMock.files.get(path)
+      return text === undefined ? { status: 'notSeen' as const } : { status: 'ok' as const, text }
+    },
   writeTextFileAtomic: (path: string, text: string) => {
-    if (fsMock.failAtomic) return { status: 'error' as const, reason: 'EPERM: 模拟原子写失败' }
-    fsMock.atomicWrites.push(path)
-    fsMock.files.set(path, text)
-    return { status: 'ok' as const }
-  },
+      if (fsMock.failAtomic) return { status: 'error' as const, reason: 'EPERM: 模拟原子写失败' }
+      fsMock.atomicWrites.push(path)
+      fsMock.files.set(path, text)
+      return { status: 'ok' as const }
+    },
   writeTextFile: (path: string, text: string) => {
-    fsMock.files.set(path, text)
-  },
-  // 删除仓库把文件移进回收目录：base64 只是"原样搬运"的载体，这里用同一个 Map 存文本即可
-  // T-109：base64 读也走三态（只认 ENOENT 是 notSeen）
-  readBase64Outcome: (path: string) => {
-    const text = fsMock.files.get(path)
-    return text === undefined
-      ? { status: 'notSeen' as const }
-      : { status: 'ok' as const, base64: Buffer.from(text).toString('base64') }
-  },
+      fsMock.files.set(path, text)
+    },
+  // 删除仓库把文件移进回收目录：base64 只是"原样搬运"的载体，这里用同一个 Map 存文本即可  // T-109：base64 读也走三态（只认 ENOENT 是 notSeen）  readBase64Outcome: (path: string) => {
+      const text = fsMock.files.get(path)
+      return text === undefined
+        ? { status: 'notSeen' as const }
+        : { status: 'ok' as const, base64: Buffer.from(text).toString('base64') }
+    },
   writeBase64File: (path: string, base64: string) => {
-    if (fsMock.failAtomic) return { status: 'error' as const, reason: 'EPERM: 模拟写失败' }
-    fsMock.files.set(path, Buffer.from(base64, 'base64').toString('utf8'))
-    return { status: 'ok' as const }
-  },
-  // T-109：`removeFile` 现在返回 `{ ok } | { ok:false, reason }`，不再是 boolean
-  removeFile: (path: string) => {
-    fsMock.files.delete(path)
-    return { ok: true as const }
-  },
+      if (fsMock.failAtomic) return { status: 'error' as const, reason: 'EPERM: 模拟写失败' }
+      fsMock.files.set(path, Buffer.from(base64, 'base64').toString('utf8'))
+      return { status: 'ok' as const }
+    },
+  // T-109：`removeFile` 现在返回 `{ ok } | { ok:false, reason }`，不再是 boolean  removeFile: (path: string) => {
+      fsMock.files.delete(path)
+      return { ok: true as const }
+    },
+}))
+
+vi.mock('@/cep/codec', () => ({
   b64ToUtf8: (b64: string) => Buffer.from(b64, 'base64').toString('utf8'),
 }))
 
 const {
-  styleIndexRepo,
+  styleIndexWriter,
   readKuLibrary,
   addKuGroup,
   addKuItem,
@@ -150,7 +154,7 @@ describe('备份（ADR-12）', () => {
   it('改库前把原文复制成 <库文件>.bak，原文件被新内容覆盖', async () => {
     const before = JSON.stringify([{ name: '灰白', show: true, list: [] }])
     seedLib(before)
-    await styleIndexRepo.write(INDEX_VALUE)
+    await styleIndexWriter.write(INDEX_VALUE)
 
     await addKuGroup('color', '新组')
 
@@ -160,7 +164,7 @@ describe('备份（ADR-12）', () => {
   })
 
   it('文件本来不存在（首次使用）→ 不产生空备份', async () => {
-    await styleIndexRepo.write(INDEX_VALUE)
+    await styleIndexWriter.write(INDEX_VALUE)
 
     await addKuGroup('color', '新组')
 
@@ -172,7 +176,7 @@ describe('备份（ADR-12）', () => {
 
 describe('索引里没有库文件名：先写库文件，再补索引（照 action-archive 顺序）', () => {
   it('生成 sj_kuCol<16 位大写 hex>.json，写成功后索引才登记', async () => {
-    await styleIndexRepo.write({ index: 0, list: [{ name: '新仓库' }] })
+    await styleIndexWriter.write({ index: 0, list: [{ name: '新仓库' }] })
 
     await addKuGroup('color', '第一组')
 
@@ -185,17 +189,17 @@ describe('索引里没有库文件名：先写库文件，再补索引（照 act
       { name: '第一组', show: true, list: [] },
     ])
     // 索引补登记的是同一个文件名
-    const index = await styleIndexRepo.read()
+    const index = await styleIndexWriter.read()
     expect(readValue(index).list[0].color).toBe(fileName?.replace(`${USER}/`, ''))
   })
 
   it('写库失败（原子写返回 false）→ 抛错，索引不登记，不留半截文件', async () => {
-    await styleIndexRepo.write({ index: 0, list: [{ name: '新仓库' }] })
+    await styleIndexWriter.write({ index: 0, list: [{ name: '新仓库' }] })
     fsMock.failAtomic = true
 
     await expect(addKuGroup('color', '第一组')).rejects.toThrow('写入失败')
 
-    const index = await styleIndexRepo.read()
+    const index = await styleIndexWriter.read()
     expect(readValue(index).list[0].color).toBeUndefined()
     expect([...fsMock.files.keys()].some((path) => path.includes('sj_kuCol'))).toBe(false)
   })
@@ -204,7 +208,7 @@ describe('索引里没有库文件名：先写库文件，再补索引（照 act
 describe('不静默兜底', () => {
   it('库文件不是合法 JSON → 抛错，原件一个字节都不动', async () => {
     seedLib('{坏掉的')
-    await styleIndexRepo.write(INDEX_VALUE)
+    await styleIndexWriter.write(INDEX_VALUE)
 
     await expect(addKuGroup('color', '新组')).rejects.toThrow('不是合法 JSON')
 
@@ -214,7 +218,7 @@ describe('不静默兜底', () => {
 
   it('库文件顶层不是数组 → 抛错，不覆盖', async () => {
     seedLib('{"arrFileData":[],"store":{}}')
-    await styleIndexRepo.write(INDEX_VALUE)
+    await styleIndexWriter.write(INDEX_VALUE)
 
     await expect(addKuGroup('color', '新组')).rejects.toThrow('顶层不是数组')
 
@@ -222,7 +226,7 @@ describe('不静默兜底', () => {
   })
 
   it('索引里一个仓库都没有（= 索引不可用）→ 抛错，不写库文件（不猜路径、不写到别处）', async () => {
-    await styleIndexRepo.write({ index: 0, list: [] })
+    await styleIndexWriter.write({ index: 0, list: [] })
 
     await expect(addKuGroup('color', '新组')).rejects.toThrow('仓库索引不可用')
 
@@ -232,7 +236,7 @@ describe('不静默兜底', () => {
   it('项不是对象 → 抛错，不动文件', async () => {
     const before = JSON.stringify([{ name: '灰白', show: true, list: [] }])
     seedLib(before)
-    await styleIndexRepo.write(INDEX_VALUE)
+    await styleIndexWriter.write(INDEX_VALUE)
 
     await expect(addKuItem('color', 0, 'not-an-object')).rejects.toThrow('项必须是非空对象')
 
@@ -243,7 +247,7 @@ describe('不静默兜底', () => {
 describe('串行队列（D-12：连点两次不能丢更新）', () => {
   it('并发两次 addKuItem 都落盘', async () => {
     seedLib(JSON.stringify([{ name: '灰白', show: true, list: [] }]))
-    await styleIndexRepo.write(INDEX_VALUE)
+    await styleIndexWriter.write(INDEX_VALUE)
 
     await Promise.all([
       addKuItem('color', 0, { name: 'a', color: { hex: '111111' } }),
@@ -267,7 +271,7 @@ describe('串行队列（D-12：连点两次不能丢更新）', () => {
         },
       ]),
     )
-    await styleIndexRepo.write(INDEX_VALUE)
+    await styleIndexWriter.write(INDEX_VALUE)
 
     await Promise.all([deleteKuItem('color', 0, 0), deleteKuItem('color', 0, 0)])
 
@@ -283,7 +287,7 @@ describe('发送到色板', () => {
         { name: '灰白', show: true, list: [{ name: '主色', color: { hex: '302F34' } }] },
       ]),
     )
-    await styleIndexRepo.write(INDEX_VALUE)
+    await styleIndexWriter.write(INDEX_VALUE)
     const swatch = 'ROAM/FengZiSeBan/userColor.ini'
     fsMock.files.set(swatch, '[]')
 
@@ -301,10 +305,12 @@ describe('发送到色板', () => {
         { name: '灰白', show: true, list: [{ name: '主色', color: { hex: '302F34' } }] },
       ]),
     )
-    await styleIndexRepo.write(INDEX_VALUE)
+    await styleIndexWriter.write(INDEX_VALUE)
     fsMock.failAtomic = true
 
-    await expect(sendKuItemToSwatch('color', 0, 0)).rejects.toThrow('色板文件写入失败')
+    // 文案从「色板文件写入失败」变成 `file-repo.persist` 的统一报错（带目标路径 + OS 原因）——
+    // 行为（必须抛、不让用户以为发送成功）没变，变的是**用户可见文案**（更有诊断价值，已记账）
+    await expect(sendKuItemToSwatch('color', 0, 0)).rejects.toThrow(/写入失败/)
   })
 })
 
@@ -323,7 +329,7 @@ describe('读不到时不许写盘（T-112）', () => {
   it('updateKuGroups：库文件读不到 → 抛错，原件一个字节都不动、不写 .bak', async () => {
     const original = JSON.stringify([{ name: '旧组', show: true, list: [] }])
     seedLib(original)
-    await styleIndexRepo.write(INDEX_VALUE)
+    await styleIndexWriter.write(INDEX_VALUE)
     fsMock.readErrorPath = COLOR_LIB
 
     await expect(addKuGroup('color', '新组')).rejects.toThrow('读不到')
@@ -338,7 +344,7 @@ describe('读不到时不许写盘（T-112）', () => {
         { name: '灰白', show: true, list: [{ name: '主色', color: { hex: '302F34' } }] },
       ]),
     )
-    await styleIndexRepo.write(INDEX_VALUE)
+    await styleIndexWriter.write(INDEX_VALUE)
     fsMock.files.set(swatch, OLD_SWATCH)
     fsMock.readErrorPath = swatch
 
@@ -354,7 +360,7 @@ describe('读不到时不许写盘（T-112）', () => {
         { name: '灰白', show: true, list: [{ name: '主色', color: { hex: '302F34' } }] },
       ]),
     )
-    await styleIndexRepo.write(INDEX_VALUE)
+    await styleIndexWriter.write(INDEX_VALUE)
     fsMock.files.set(swatch, OLD_SWATCH)
     fsMock.readErrorPath = swatch
 
@@ -391,34 +397,34 @@ function two() {
 
 describe('切换仓库（原版 select，app.v4.js:53365-53372）', () => {
   it('写 index：列表不动，当前项换成点的那一条', async () => {
-    await styleIndexRepo.write(two())
+    await styleIndexWriter.write(two())
 
     await selectWarehouse(0)
 
-    const index = await styleIndexRepo.read()
+    const index = await styleIndexWriter.read()
     expect(readValue(index).index).toBe(0)
     expect(readValue(index).list.map((w) => w.name)).toEqual(['默认仓库', '客户A'])
   })
 
   it('越界（负数 / 超过末位 / 正好等于 list.length）一律归 0', async () => {
-    await styleIndexRepo.write(two())
+    await styleIndexWriter.write(two())
 
     await selectWarehouse(2) // 原版判 `t > list.length` 会漏过这一条，这里也归 0
-    expect(readValue(await styleIndexRepo.read()).index).toBe(0)
+    expect(readValue(await styleIndexWriter.read()).index).toBe(0)
 
-    await styleIndexRepo.write(two())
+    await styleIndexWriter.write(two())
     await selectWarehouse(-1)
-    expect(readValue(await styleIndexRepo.read()).index).toBe(0)
+    expect(readValue(await styleIndexWriter.read()).index).toBe(0)
   })
 })
 
 describe('新建仓库（原版 add / P_，app.v4.js:53357-53363 / 53284-53293）', () => {
   it('追加「未命名分组」+ 四个库文件名，四个 guid 互不相同', async () => {
-    await styleIndexRepo.write(INDEX_VALUE)
+    await styleIndexWriter.write(INDEX_VALUE)
 
     await addWarehouse()
 
-    const { list } = readValue(await styleIndexRepo.read())
+    const { list } = readValue(await styleIndexWriter.read())
     expect(list.map((w) => w.name)).toEqual(['默认仓库', '未命名分组'])
 
     const added = list[1]
@@ -436,22 +442,22 @@ describe('新建仓库（原版 add / P_，app.v4.js:53357-53363 / 53284-53293�
 
 describe('重命名仓库（原版 rename，:53324-53327）', () => {
   it('只改 name，其它字段原样保留', async () => {
-    await styleIndexRepo.write(two())
+    await styleIndexWriter.write(two())
 
     await renameWarehouse(0, '  我的仓库  ')
 
-    const { list } = readValue(await styleIndexRepo.read())
+    const { list } = readValue(await styleIndexWriter.read())
     expect(list[0].name).toBe('我的仓库')
     expect(list[0].color).toBe('sj_kuColA.json')
     expect(list[1].name).toBe('客户A')
   })
 
   it('空名 → 抛错，索引一个字节都不动（有意偏离：原版不校验）', async () => {
-    await styleIndexRepo.write(two())
+    await styleIndexWriter.write(two())
 
     await expect(renameWarehouse(0, '   ')).rejects.toThrow('仓库名不能为空')
 
-    expect(readValue(await styleIndexRepo.read()).list[0].name).toBe('默认仓库')
+    expect(readValue(await styleIndexWriter.read()).list[0].name).toBe('默认仓库')
   })
 })
 
@@ -485,11 +491,11 @@ describe('删除仓库（原版 delete，:53329-53356）', () => {
 
   it('删索引项 + 修 index（被删项在当前项之前 → -1），磁盘文件移进 .deleted-<时间戳>/', async () => {
     seedWarehouseFiles()
-    await styleIndexRepo.write(two())
+    await styleIndexWriter.write(two())
 
     const result = await deleteWarehouse(0)
 
-    const index = await styleIndexRepo.read()
+    const index = await styleIndexWriter.read()
     expect(readValue(index).list.map((w) => w.name)).toEqual(['客户A'])
     expect(readValue(index).index).toBe(0) // 原来 1，删掉前面的 0 → -1
 
@@ -513,32 +519,32 @@ describe('删除仓库（原版 delete，:53329-53356）', () => {
   })
 
   it('删当前仓库 → index 归 0', async () => {
-    await styleIndexRepo.write(two())
+    await styleIndexWriter.write(two())
 
     await deleteWarehouse(1)
 
-    const index = await styleIndexRepo.read()
+    const index = await styleIndexWriter.read()
     expect(readValue(index).list.map((w) => w.name)).toEqual(['默认仓库'])
     expect(readValue(index).index).toBe(0)
   })
 
   it('只剩一个仓库 → 抛错，索引与文件都不动', async () => {
     seedWarehouseFiles()
-    await styleIndexRepo.write(INDEX_VALUE)
+    await styleIndexWriter.write(INDEX_VALUE)
 
     await expect(deleteWarehouse(0)).rejects.toThrow('最少保留一个分组哦')
 
-    expect(readValue(await styleIndexRepo.read()).list).toHaveLength(1)
+    expect(readValue(await styleIndexWriter.read()).list).toHaveLength(1)
     expect(fsMock.files.has(`${USER}/sj_kuColA.json`)).toBe(true)
     expect([...fsMock.files.keys()].some((path) => path.includes('.deleted-'))).toBe(false)
   })
 
   it('下标不存在 → 抛错，不写索引', async () => {
-    await styleIndexRepo.write(two())
+    await styleIndexWriter.write(two())
 
     await expect(deleteWarehouse(9)).rejects.toThrow('仓库 9 不存在')
 
-    expect(readValue(await styleIndexRepo.read()).list).toHaveLength(2)
+    expect(readValue(await styleIndexWriter.read()).list).toHaveLength(2)
   })
 })
 
@@ -554,7 +560,7 @@ describe('拖拽落点（moveKuItemTo / moveKuGroupTo）', () => {
 
   it('项跨组移动：一次调用 = 一次原子写 + 一份 .bak', async () => {
     seedLib(twoGroups)
-    await styleIndexRepo.write(INDEX_VALUE)
+    await styleIndexWriter.write(INDEX_VALUE)
     fsMock.atomicWrites.length = 0
 
     await moveKuItemTo('color', {
@@ -564,7 +570,8 @@ describe('拖拽落点（moveKuItemTo / moveKuGroupTo）', () => {
     })
 
     // 只有库文件那一次；索引没被动过
-    expect(fsMock.atomicWrites).toEqual([COLOR_LIB])
+    // `.bak` 现在也走原子写（唯一落盘入口）⇒ 只数**本体**那一次
+    expect(fsMock.atomicWrites.filter((p) => !p.endsWith('.bak'))).toEqual([COLOR_LIB])
     expect(fsMock.files.get(`${COLOR_LIB}.bak`)).toBe(twoGroups)
 
     const groups = groupsOf()
@@ -574,7 +581,7 @@ describe('拖拽落点（moveKuItemTo / moveKuGroupTo）', () => {
 
   it('项同组向后插前：目标在源前面，插入下标不受删除影响（原版 :50055-50057）', async () => {
     seedLib(twoGroups)
-    await styleIndexRepo.write(INDEX_VALUE)
+    await styleIndexWriter.write(INDEX_VALUE)
 
     await moveKuItemTo('color', {
       from: { group: 0, index: 1 },
@@ -587,7 +594,7 @@ describe('拖拽落点（moveKuItemTo / moveKuGroupTo）', () => {
 
   it('原位不写盘：库文件与 .bak 都不变', async () => {
     seedLib(twoGroups)
-    await styleIndexRepo.write(INDEX_VALUE)
+    await styleIndexWriter.write(INDEX_VALUE)
     fsMock.atomicWrites.length = 0
 
     await moveKuItemTo('color', {
@@ -602,12 +609,13 @@ describe('拖拽落点（moveKuItemTo / moveKuGroupTo）', () => {
 
   it('组排序：一次原子写，且被移动的组顺带折叠（原版 before() + 同一次 updata()）', async () => {
     seedLib(twoGroups)
-    await styleIndexRepo.write(INDEX_VALUE)
+    await styleIndexWriter.write(INDEX_VALUE)
     fsMock.atomicWrites.length = 0
 
     await moveKuGroupTo('color', 0, 1, 'after')
 
-    expect(fsMock.atomicWrites).toEqual([COLOR_LIB])
+    // `.bak` 现在也走原子写（唯一落盘入口）⇒ 只数**本体**那一次
+    expect(fsMock.atomicWrites.filter((p) => !p.endsWith('.bak'))).toEqual([COLOR_LIB])
     const groups = groupsOf()
     expect(groups.map((g) => g.name)).toEqual(['组二', '组一'])
     expect(groups[1].show).toBe(false)
@@ -616,7 +624,7 @@ describe('拖拽落点（moveKuItemTo / moveKuGroupTo）', () => {
 
   it('组排序落回自己：不写盘', async () => {
     seedLib(twoGroups)
-    await styleIndexRepo.write(INDEX_VALUE)
+    await styleIndexWriter.write(INDEX_VALUE)
     fsMock.atomicWrites.length = 0
 
     await moveKuGroupTo('color', 1, 1, 'before')
@@ -626,7 +634,7 @@ describe('拖拽落点（moveKuItemTo / moveKuGroupTo）', () => {
 
   it('越界落点抛错，库文件一个字节都不动', async () => {
     seedLib(twoGroups)
-    await styleIndexRepo.write(INDEX_VALUE)
+    await styleIndexWriter.write(INDEX_VALUE)
 
     await expect(
       moveKuItemTo('color', {
@@ -656,7 +664,7 @@ describe('appendKuGroup（原版 addGroupItem，:52470-52475）', () => {
 
   it('整份 push 到库**末尾**，字段原样保留（不补 id）', async () => {
     seedLib(JSON.stringify([{ name: '灰白', show: true, list: [] }]))
-    await styleIndexRepo.write(INDEX_VALUE)
+    await styleIndexWriter.write(INDEX_VALUE)
 
     await appendKuGroup('color', GROUP)
 
@@ -665,7 +673,7 @@ describe('appendKuGroup（原版 addGroupItem，:52470-52475）', () => {
   })
 
   it('落盘后重读得到（新组在，颜色项能归一成色块）', async () => {
-    await styleIndexRepo.write(INDEX_VALUE)
+    await styleIndexWriter.write(INDEX_VALUE)
 
     await appendKuGroup('color', GROUP)
 
@@ -678,18 +686,19 @@ describe('appendKuGroup（原版 addGroupItem，:52470-52475）', () => {
   it('一次调用 = 一次原子写 + 一份 .bak（旧内容进 .bak）', async () => {
     const before = JSON.stringify([{ name: '灰白', show: true, list: [] }])
     seedLib(before)
-    await styleIndexRepo.write(INDEX_VALUE)
+    await styleIndexWriter.write(INDEX_VALUE)
     fsMock.atomicWrites.length = 0
 
     await appendKuGroup('color', GROUP)
 
-    expect(fsMock.atomicWrites).toEqual([COLOR_LIB])
+    // `.bak` 现在也走原子写（唯一落盘入口）⇒ 只数**本体**那一次
+    expect(fsMock.atomicWrites.filter((p) => !p.endsWith('.bak'))).toEqual([COLOR_LIB])
     expect(fsMock.files.get(`${COLOR_LIB}.bak`)).toBe(before)
   })
 
   it('走同一条串行队列：并发两次都落盘，后写的不会覆盖先写的', async () => {
     seedLib(JSON.stringify([{ name: '灰白', show: true, list: [] }]))
-    await styleIndexRepo.write(INDEX_VALUE)
+    await styleIndexWriter.write(INDEX_VALUE)
 
     await Promise.all([
       appendKuGroup('color', { name: 'A', show: true, list: [] }),
@@ -703,7 +712,7 @@ describe('appendKuGroup（原版 addGroupItem，:52470-52475）', () => {
   it('不是对象 → 抛错，库文件一个字节都不动', async () => {
     const before = JSON.stringify([{ name: '灰白', show: true, list: [] }])
     seedLib(before)
-    await styleIndexRepo.write(INDEX_VALUE)
+    await styleIndexWriter.write(INDEX_VALUE)
 
     await expect(appendKuGroup('color', 'not-a-group')).rejects.toThrow('组必须是非空对象')
     expect(fsMock.files.get(COLOR_LIB)).toBe(before)

@@ -4,12 +4,18 @@
 // 谁在用：cep/cloud/setup.ts 注入 engine；cloud/auto-sync.ts 的 hasCloudLedger
 // 禁止：不在这里判断冲突、不发请求；这里只做「文件 ↔ 对象」
 
-import { readTextOutcome, userDir, writeTextFileAtomic } from '@/cep/fs'
+import { userDir } from '@/cep/paths'
+import { DATA_FILES } from '@/cep/env'
+import { writeDiskSync } from '@/cep/disk-write'
+import { readRepoFile } from '@/cep/data/repo-read'
 import type { CloudLedgerRecord, LedgerRead } from '@/cloud/types'
 import { CloudError } from '@/domain/cloud'
+import { msg } from '@/domain/messages'
+import { isRecord } from '@/utils/guards'
 import { log } from '@/utils/logger'
+import type { DecodeFail, Decoded } from '@/utils/decode'
 
-const FILE = 'sj_v5_cloud_sync.json'
+const FILE = DATA_FILES.cloudLedger
 
 function path(): string {
   return `${userDir()}/${FILE}`
@@ -37,33 +43,35 @@ function readUnits(value: unknown): Record<string, string> | undefined {
  * 所以 ADR-26 ④ 的"同步例外"从 3 处降到 2 处（CAS 比对、界面偏好）。
  */
 export async function readCloudLedger(): Promise<LedgerRead> {
-  const read = await readTextOutcome(path())
-  if (read.status === 'notSeen') return { status: 'none' }
-  if (read.status === 'error') {
-    log.error('cloud', `台账读不到：${read.reason}`)
-    return { status: 'broken', reason: read.reason }
+  // 走档 1 的**未折叠**结论：台账"不在"与"读坏了"是两个结论，不能拿默认值顶（T-114）
+  const outcome = readRepoFile(path(), decodeLedger)
+  if (outcome.kind === 'absent') return { status: 'none' }
+  if (outcome.kind === 'bad') {
+    log.error('cloud', `台账读不到：${outcome.reason}`)
+    return { status: 'broken', reason: outcome.reason }
   }
+  return { status: 'ok', ledger: outcome.value }
+}
 
-  let raw: Partial<CloudLedgerRecord>
-  try {
-    raw = JSON.parse(read.text) as Partial<CloudLedgerRecord>
-  } catch (e) {
-    log.error('cloud', '台账不是合法 JSON', e)
-    return { status: 'broken', reason: '不是合法 JSON' }
-  }
-  if (typeof raw.localHash !== 'string' || !raw.localHash) {
-    log.error('cloud', '台账缺少 localHash，无法判断"上次同步到哪"')
-    return { status: 'broken', reason: '缺少 localHash' }
-  }
+/** 非负整数；取不到就 0（`rev` / `syncedAt` 缺失只影响"从哪开始比"，不影响台账可信度） */
+function nonNegInt(value: unknown): number {
+  return Number.isFinite(Number(value)) ? Math.max(0, Math.floor(Number(value))) : 0
+}
+
+/**
+ * 台账的 decode。`localHash` 是判断"上次同步到哪"的**唯一依据**，缺了就是坏台账 ——
+ * 不能当成"rev 0 的新台账"，那会让 `decideUpload` 判成 `cloud-newer`（T-114）。
+ */
+function decodeLedger(raw: unknown): Decoded<CloudLedgerRecord> | DecodeFail | null {
+  if (!isRecord(raw)) return null
+  const localHash = raw.localHash
+  if (typeof localHash !== 'string' || !localHash) return { fail: '缺少 localHash' }
   const units = readUnits(raw.units)
   return {
-    status: 'ok',
-    ledger: {
-      rev: Number.isFinite(Number(raw.rev)) ? Math.max(0, Math.floor(Number(raw.rev))) : 0,
-      syncedAt: Number.isFinite(Number(raw.syncedAt))
-        ? Math.max(0, Math.floor(Number(raw.syncedAt)))
-        : 0,
-      localHash: raw.localHash,
+    value: {
+      rev: nonNegInt(raw.rev),
+      syncedAt: nonNegInt(raw.syncedAt),
+      localHash,
       ...(units ? { units } : {}),
     },
   }
@@ -74,9 +82,14 @@ export function writeCloudLedger(ledger: CloudLedgerRecord): void {
   try {
     const target = path()
     // 原子写失败必须抛：退回普通写等于摘掉 rename 保护（TD-09-27），台账写坏会污染同步判定
-    const written = writeTextFileAtomic(target, text)
-    if (written.status === 'error') {
-      throw new CloudError('CLOUD_WRITE_FAILED', `台账写入失败：${written.reason}`)
+    // 台账是覆盖写、无 `.bak` 概念（`previous: null`）
+    try {
+      writeDiskSync(target, text, { previous: null })
+    } catch (error) {
+      throw new CloudError(
+        'CLOUD_WRITE_FAILED',
+        msg.cloud.fn.ledgerWriteFailed(error instanceof Error ? error.message : String(error)),
+      )
     }
   } catch (error) {
     throw new CloudError(

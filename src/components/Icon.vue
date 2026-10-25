@@ -3,6 +3,7 @@ import { computed, watchEffect } from 'vue'
 import { hasIcon } from './icon/names'
 import { toPx, type IconSize } from './icon/size'
 import { getSymbol } from './icon/sprite'
+import { log } from '@/utils/logger'
 
 /**
  * 图标。名字对应原面板 sprite 里的 symbol id，可以带 # 前缀（兼容模板里的 #iconxxx）。
@@ -30,7 +31,9 @@ const px = computed(() => toPx(props.size))
 const symbol = computed(() => getSymbol(id.value))
 
 watchEffect(() => {
-  if (!hasIcon(id.value)) console.warn(`[Icon] 图标不存在：${id.value}`)
+  // 图标缺失是**开发者**线索（用户看到的是空 svg，界面不显示任何东西），
+  // 所以走 logger 而不是提示语；`console.*` 只允许出现在 `utils/logger.ts` 一处。
+  if (!hasIcon(id.value)) log.warn('icon', `图标不存在：${id.value}`)
 })
 </script>
 

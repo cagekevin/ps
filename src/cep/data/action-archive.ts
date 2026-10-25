@@ -1,16 +1,13 @@
-import {
-  readBase64Outcome,
-  readTextOutcome,
-  removeFile,
-  userDir,
-  writeBase64File,
-  writeTextFile,
-} from '@/cep/fs'
+import { readBase64Outcome, readExternalText } from '@/cep/fs-read'
+import { userDir } from '@/cep/paths'
+import { removeFile, writeBase64File } from '@/cep/disk-write'
+import { writeDisk } from '@/cep/disk-write'
 import type { ActionWarehouseIndex } from '@/domain/action'
 import { decodeDzx, encodeDzx, remapDzxFileNames, type DzxFile } from '@/domain/action-dzx'
 import { CepError } from '@/utils/errors'
+import { msg } from '@/domain/messages'
 import { log } from '@/utils/logger'
-import { actionIndexRepo, currentWarehouseFile, selectActionFile } from './actions'
+import { actionIndexWriter, currentWarehouseFile, selectActionFile } from './actions'
 import { runQueued } from './write-queue'
 import type { RepoRead } from './types'
 
@@ -22,33 +19,34 @@ import type { RepoRead } from './types'
  */
 function pathOf(fileName: string): string {
   if (!fileName || /[\\/]/.test(fileName)) {
-    throw new CepError('PARSE', `仓库文件名不合法：${fileName}`)
+    throw new CepError('PARSE', msg.data.fn.warehouseFileNameInvalid(fileName))
   }
   return `${userDir()}/${fileName}`
 }
 
 function validateImported(file: DzxFile): void {
-  if (!file.store.list.length) throw new CepError('PARSE', '导入文件没有仓库')
+  if (!file.store.list.length) throw new CepError('PARSE', msg.data.text.importNoWarehouse)
 
   const names = new Set<string>()
   for (const entry of file.arrFileData) {
     if (!entry.name || /[\\/]/.test(entry.name)) {
-      throw new CepError('PARSE', `导入文件名不合法：${entry.name}`)
+      throw new CepError('PARSE', msg.data.fn.importFileNameInvalid(entry.name))
     }
-    if (names.has(entry.name)) throw new CepError('PARSE', `导入文件名重复：${entry.name}`)
+    if (names.has(entry.name))
+      throw new CepError('PARSE', msg.data.fn.importFileNameDup(entry.name))
     names.add(entry.name)
   }
 
   const seen = new Set<string>()
   for (const item of file.store.list) {
     if (!item.fileName || /[\\/]/.test(item.fileName)) {
-      throw new CepError('PARSE', `仓库文件名不合法：${item.fileName}`)
+      throw new CepError('PARSE', msg.data.fn.warehouseFileNameInvalid(item.fileName))
     }
     if (!names.has(item.fileName)) {
-      throw new CepError('PARSE', `索引引用了不存在的文件：${item.fileName}`)
+      throw new CepError('PARSE', msg.data.fn.indexRefMissingFile(item.fileName))
     }
     if (seen.has(item.fileName)) {
-      throw new CepError('PARSE', `索引重复引用文件：${item.fileName}`)
+      throw new CepError('PARSE', msg.data.fn.indexDupRefFile(item.fileName))
     }
     seen.add(item.fileName)
   }
@@ -57,7 +55,7 @@ function validateImported(file: DzxFile): void {
 function removeAll(fileNames: string[]): void {
   for (const name of fileNames) {
     // 删除失败只留下孤儿文件，不回滚已成功的索引——但**必须记下来**（旧实现的 catch 是死代码：
-    // `removeFile` 从不抛，返回值却被丢掉，删没删掉没人知道，TD-06-6）
+    // `removeFile` 从不抛，返回值却被丢掉，删没删掉没人知道，TD-09-26）
     const removed = removeFile(pathOf(name))
     if (!removed.ok) log.warn('action', `清理旧仓库文件失败（留下孤儿）：${name}`, removed.reason)
   }
@@ -77,32 +75,30 @@ function requireIndex(
   action: '导入' | '导出',
 ): ActionWarehouseIndex {
   if (!read.ok) {
-    throw new CepError(
-      'IO',
-      `动作库索引文件损坏（${read.reason}），${action}已中止：磁盘上的仓库文件没动`,
-    )
+    throw new CepError('IO', msg.data.fn.actionIndexCorruptAbort(read.reason, action))
   }
   return read.value
 }
 
 export async function archiveDefaultName(current: boolean): Promise<string> {
-  const index = requireIndex(await actionIndexRepo.read(), '导出')
+  const index = requireIndex(await actionIndexWriter.read(), '导出')
   const list = current ? [index.list[index.index]].filter(Boolean) : index.list
-  if (!list.length) throw new CepError('PARSE', '没有可导出的仓库')
+  if (!list.length) throw new CepError('PARSE', msg.data.text.noExportableWarehouse)
   return current ? `${list[0].name}.dzx` : '全部仓库.dzx'
 }
 
 export function exportActionArchive(current: boolean, targetPath: string): Promise<void> {
   return runQueued(async () => {
     // 锁内读：走不排队的 readInLock，避免 runQueued 套 runQueued 自锁（write-queue.ts:6 / TD-09-30）
-    const index = requireIndex(await actionIndexRepo.readInLock(), '导出')
+    const index = requireIndex(await actionIndexWriter.readInLock(), '导出')
     const list = current ? [index.list[index.index]].filter(Boolean) : index.list
-    if (!list.length) throw new CepError('PARSE', '没有可导出的仓库')
+    if (!list.length) throw new CepError('PARSE', msg.data.text.noExportableWarehouse)
 
     const arrFileData = list.map((item) => {
       const read = readBase64Outcome(pathOf(item.fileName))
       // T-109：导出前读不到就不许导出。两种不 ok 这里同果（都抛同一句），文案不变
-      if (read.status !== 'ok') throw new CepError('IO', `读取仓库失败：${item.fileName}`)
+      if (read.status !== 'ok')
+        throw new CepError('IO', msg.data.fn.readWarehouseFailed(item.fileName))
       return { name: item.fileName, data: read.base64 }
     })
 
@@ -110,15 +106,16 @@ export function exportActionArchive(current: boolean, targetPath: string): Promi
       ? { ...index, index: 0, list: [{ ...list[0] }] }
       : index
 
-    writeTextFile(targetPath, encodeDzx({ arrFileData, store }))
+    // 导出包是**新文件**，无 `.bak` 概念（`previous: null`）；走唯一落盘入口（原子写）
+    await writeDisk(targetPath, encodeDzx({ arrFileData, store }), { previous: null })
   })
 }
 
 export function importActionArchive(append: boolean, sourcePath: string): Promise<void> {
   return runQueued(async () => {
-    const read = await readTextOutcome(sourcePath)
+    const read = await readExternalText(sourcePath)
     // T-107：导入前读不到就不许继续。两种不 ok 这里同果（都抛同一句），文案不变
-    if (read.status !== 'ok') throw new CepError('IO', '读取导入文件失败')
+    if (read.status !== 'ok') throw new CepError('IO', msg.data.text.readImportFileFailed)
     const text = read.text
 
     let imported: DzxFile
@@ -132,7 +129,7 @@ export function importActionArchive(append: boolean, sourcePath: string): Promis
 
     // 任何写之前先确认索引是真实数据：坏索引时下面的 next.list 会基于 fallback 算出来
     // 锁内读：readInLock（不自排自，TD-09-30）
-    const current = requireIndex(await actionIndexRepo.readInLock(), '导入')
+    const current = requireIndex(await actionIndexWriter.readInLock(), '导入')
     const nextList = append ? [...current.list, ...imported.store.list] : imported.store.list
     const next: ActionWarehouseIndex = {
       index: append ? nextList.length - 1 : 0,
@@ -144,13 +141,13 @@ export function importActionArchive(append: boolean, sourcePath: string): Promis
       for (const entry of imported.arrFileData) {
         const outcome = writeBase64File(pathOf(entry.name), entry.data)
         if (outcome.status === 'error') {
-          throw new CepError('IO', `写入仓库失败：${entry.name}（${outcome.reason}）`)
+          throw new CepError('IO', msg.data.fn.writeWarehouseFailed(entry.name, outcome.reason))
         }
         written.push(entry.name)
       }
 
       // 已在全局写锁内：再排队会自锁（writeInLock 的注释写了这一条）
-      await actionIndexRepo.writeInLock(next)
+      await actionIndexWriter.writeInLock(next)
     } catch (e) {
       removeAll(written)
       throw e

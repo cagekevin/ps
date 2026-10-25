@@ -1,9 +1,11 @@
+import type { JsxName } from '@/cep/jsx/names'
 import { CepError } from '@/utils/errors'
+import { msg } from '@/domain/messages'
 import { defineCommand } from './registry'
 import type { Command } from './types'
 
 /** 旧自由面板 key 白名单；只放已经核对过原版签名的 */
-const ALLOWED = new Set([
+const ALLOWED = new Set<JsxName>([
   'cy_swapWireframeFill',
   'cy_openDirectory',
   'cy_BatchExportLayer',
@@ -36,9 +38,9 @@ export const legacyCommands: Command<unknown>[] = [
     group: 'system',
     requires: 'none',
     kind: 'instant',
-    async run(ctx, { key, args, label }) {
+    async invoke(ctx, { key, args, label }) {
       if (!ALLOWED.has(key)) {
-        throw new CepError('PARSE', `旧自由面板 key 未开放：${key}`)
+        throw new CepError('PARSE', msg.command.fn.legacyKeyNotOpen(key))
       }
       await ctx.jsx.legacy.call(key, args, label)
     },

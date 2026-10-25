@@ -22,33 +22,41 @@ const selection = vi.hoisted(() => ({ hasSelection: true, typeNumber: 2 }))
 
 vi.mock('@/cep/transport', () => ({ hasCep: () => true }))
 
-vi.mock('@/cep/fs', () => ({
+vi.mock('@/cep/node', () => ({
   hasNode: () => true,
+}))
+
+vi.mock('@/cep/paths', () => ({
   userDir: () => 'ROAM/SheJiZhuLi',
+}))
+
+vi.mock('@/cep/fs-read', () => ({
   readTextSmart: async (path: string) => fsMock.files.get(path) ?? null,
-  // T-105：写路径改用三态读；这个假 fs 没有"读不出"的场景，只会 ok / missing
-  readTextOutcome: async (path: string) => {
-    const text = fsMock.files.get(path)
-    return text === undefined ? { status: 'notSeen' as const } : { status: 'ok' as const, text }
-  },
+  // T-105：写路径改用三态读；这个假 fs 没有"读不出"的场景，只会 ok / missing  readTextOutcome: async (path: string) => {
+      const text = fsMock.files.get(path)
+      return text === undefined ? { status: 'notSeen' as const } : { status: 'ok' as const, text }
+    },
   readTextSync: (path: string) => {
-    const text = fsMock.files.get(path)
-    return text === undefined ? { status: 'notSeen' as const } : { status: 'ok' as const, text }
-  },
+      const text = fsMock.files.get(path)
+      return text === undefined ? { status: 'notSeen' as const } : { status: 'ok' as const, text }
+    },
   writeTextFile: (path: string, text: string) => {
-    fsMock.files.set(path, text)
-  },
+      fsMock.files.set(path, text)
+    },
   writeTextFileAtomic: (path: string, text: string) => {
-    fsMock.files.set(path, text)
-    return true
-  },
+      fsMock.files.set(path, text)
+      return true
+    },
   saveExportedText: (path: string, text: string) => {
-    fsMock.files.set(path, text)
-  },
+      fsMock.files.set(path, text)
+    },
   removeFile: (path: string) => {
-    fsMock.files.delete(path)
-    return true
-  },
+      fsMock.files.delete(path)
+      return true
+    },
+}))
+
+vi.mock('@/cep/codec', () => ({
   b64ToUtf8: (base64: string) => Buffer.from(base64, 'base64').toString('utf8'),
   utf8ToB64: (text: string) => Buffer.from(text, 'utf8').toString('base64'),
 }))

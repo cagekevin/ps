@@ -28,7 +28,7 @@ function makeCommand(partial: Partial<Command<void>> = {}): Command<void> {
     group: 'system',
     requires: 'none',
     kind: 'instant',
-    run: async () => {},
+    invoke: async () => {},
     ...partial,
   }
 }
@@ -57,22 +57,22 @@ describe('选区查询失败时', () => {
 
   it('requires:none 的命令不受连坐，照常执行', async () => {
     selection.refresh.mockRejectedValue(new CepError('NO_CEP', 'CEP 回调监听不可用'))
-    const run = vi.fn(async () => {})
-    register(makeCommand({ id: 'test.export', requires: 'none', run }))
+    const invoke = vi.fn(async () => {})
+    register(makeCommand({ id: 'test.export', requires: 'none', invoke }))
 
     await expect(execute('test.export')).resolves.toEqual({ ok: true })
-    expect(run).toHaveBeenCalledTimes(1)
+    expect(invoke).toHaveBeenCalledTimes(1)
     // 用的是上一次快照，而不是"空选区"
     expect(selection.current).toHaveBeenCalled()
   })
 
   it('requires:document 同样不连坐', async () => {
     selection.refresh.mockRejectedValue(new CepError('JSX', 'EvalScript 执行失败'))
-    const run = vi.fn(async () => {})
-    register(makeCommand({ id: 'test.doc', requires: 'document', run }))
+    const invoke = vi.fn(async () => {})
+    register(makeCommand({ id: 'test.doc', requires: 'document', invoke }))
 
     await expect(execute('test.doc')).resolves.toEqual({ ok: true })
-    expect(run).toHaveBeenCalledTimes(1)
+    expect(invoke).toHaveBeenCalledTimes(1)
   })
 
   it('textLayer 的失败也要说原因（这条最容易被误读成「没选文字图层」）', async () => {

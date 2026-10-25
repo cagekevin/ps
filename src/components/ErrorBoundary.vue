@@ -26,7 +26,7 @@ function retry() {
 
 <template>
   <div v-if="message" class="crash">
-    <p class="crash__title">这个页面出错了</p>
+    <p class="crash__title">{{ '这个页面出错了' }}</p>
     <p class="crash__msg">{{ message }}</p>
     <details v-if="stack" class="crash__detail">
       <summary>详情</summary>

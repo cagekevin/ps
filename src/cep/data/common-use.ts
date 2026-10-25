@@ -5,18 +5,24 @@
 // 禁止：把页面视图字段（`created`）写回文件；用 fallback 覆盖已有文件；在读坏时建种子
 
 import { hasCep } from '@/cep/transport'
-import { readTextOutcome, userDir } from '@/cep/fs'
+import { readRepoFile } from './repo-read'
+import { userDir } from '@/cep/paths'
 import { DATA_FILES } from '@/cep/env'
 import {
   createCommonUseSeed,
   createEmptyCommonUseFile,
+  decodeCommonUseFile,
   findCommonUseIndex,
+  toCommonUseItems,
   type CommonUseFile,
   type CommonUseItem,
 } from '@/domain/common-use'
 import { applyListDrop, type DropPosition } from '@/domain/reorder'
+import type { Decoded } from '@/utils/decode'
 import { CepError } from '@/utils/errors'
-import { pick } from './pick'
+import { isRecord } from '@/utils/guards'
+import { msg } from '@/domain/messages'
+import { dataRepo } from './data-repo'
 import type { Repo, RepoRead } from './types'
 
 /** 文件名与路径都来自 `env.ts` 的 `DATA_FILES`（唯一来源；原版 `app.v4.js:5218`） */
@@ -28,10 +34,10 @@ const resolvePath = (): string => `${userDir()}/${FILE_NAME}`
  * `requireExisting: true`（与 `legacy-settings.ts` 同一口径，D-20）：
  * `update` 读不到文件直接报 `IO`，**绝不**用 fallback 覆盖用户文件。
  */
-const base: Repo<CommonUseFile> = pick(
+const base: Repo<CommonUseFile> = dataRepo(
   resolvePath,
   createEmptyCommonUseFile,
-  createEmptyCommonUseFile,
+  decodeCommonUseFile,
   { requireExisting: true },
 )
 
@@ -63,35 +69,38 @@ export async function ensureCommonUseFile(): Promise<EnsureResult> {
     return { created: true }
   }
 
-  const read = await readTextOutcome(resolvePath())
-
-  // 读不到 → 拒绝写。这条分支以前靠 `readTextSmart` 抛错触发，而它从不抛，
-  // 所以一次都没跑到过（读失败被当成"首次使用"，直接写种子覆盖）；三态分对后第一次可达（T-107）
-  if (read.status === 'error') {
-    throw new CepError('IO', `${FILE_NAME} 读取失败，拒绝写入`)
-  }
+  // 档 1 的唯一入口，**不折叠**：这条路上"查不到"要写种子、"读不到"要拒写，
+  // 两者后果相反，折成默认值就分不出来了（T-107 就是这条分支以前从没跑到过）
+  const outcome = readRepoFile(resolvePath(), decodeCommonUseRoot)
 
   // 查不到 = 首次使用，写种子（`requireExisting` 在这条路上是"文件确实没有"，不是"读不出"）
-  if (read.status === 'notSeen') {
+  if (outcome.kind === 'absent') {
     await base.write(createCommonUseSeed())
     return { created: true }
   }
 
-  const text = read.text
-
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(text)
-  } catch {
-    throw new CepError('IO', `${FILE_NAME} 内容不是合法 JSON，拒绝覆盖`)
-  }
-  // 根必须是数组（官方 `configReset()` 返回数组、`updata()` 直接 stringify 它，`:11112` / `:6401`）；
-  // 旧形状 `{ info: [...] }` 也接受——那是我们自己写错的历史文件，读得懂、下次写会归一成数组。
-  const legacyInfo = (parsed as { info?: unknown } | null)?.info
-  if (!Array.isArray(parsed) && !Array.isArray(legacyInfo)) {
-    throw new CepError('IO', `${FILE_NAME} 根不是数组，拒绝覆盖`)
+  // 读不到 / 不是合法 JSON / 根不是数组：三种都拒绝写，但三句文案不同（用户下一步动作不同）
+  if (outcome.kind === 'bad') {
+    throw outcome.why === 'readError'
+      ? new CepError('IO', msg.data.fn.commonUseReadFailedRefuseWrite(FILE_NAME))
+      : outcome.why === 'notJson'
+        ? new CepError('IO', msg.data.fn.commonUseNotJsonRefuse(FILE_NAME))
+        : new CepError('IO', msg.data.fn.commonUseRootNotArrayRefuse(FILE_NAME))
   }
   return { created: false }
+}
+
+/**
+ * 常用项文件的 decode：根必须是数组，或旧形状 `{ info: [...] }`。
+ *
+ * 根为数组是官方形状（`configReset()` 返回数组、`updata()` 直接 stringify 它，`:11112` / `:6401`）；
+ * `{ info: [...] }` 是我们自己写错的历史文件 —— 读得懂、下次写会归一成数组。
+ * 判据即证明（`isRecord` + 字段访问）⇒ 不 `as` 断言。
+ */
+function decodeCommonUseRoot(raw: unknown): Decoded<unknown> | null {
+  if (Array.isArray(raw)) return { value: raw }
+  if (isRecord(raw) && Array.isArray(raw.info)) return { value: raw }
+  return null
 }
 
 /**
@@ -102,12 +111,11 @@ export async function ensureCommonUseFile(): Promise<EnsureResult> {
  * 旧形状 `{ info: [...] }` 在第一次写入时就被转正（官方只认数组，`:6401`）。
  */
 function requireItems(file: unknown): CommonUseItem[] {
-  if (Array.isArray(file)) return file
-  // 旧形状 `{ info: [...] }`：`in` 收窄本身就是证明，不再用 `as unknown as` 断言（撒谎）
-  if (file !== null && typeof file === 'object' && 'info' in file && Array.isArray(file.info)) {
-    return file.info
-  }
-  throw new CepError('PARSE', `${FILE_NAME} 根不是数组，无法改写`)
+  // 解包判据只有一份：`domain/common-use.toCommonUseItems`（读边界与写路径共用同一条）
+  const items = toCommonUseItems(file)
+  if (items === null)
+    throw new CepError('PARSE', msg.data.fn.commonUseRootNotArrayRewrite(FILE_NAME))
+  return items
 }
 
 /**
@@ -127,7 +135,7 @@ async function setShow(id: string, show: boolean): Promise<CommonUseFile> {
   return base.update((file) => {
     const items = requireItems(file)
     const index = findCommonUseIndex(items, id)
-    if (index < 0) throw new CepError('PARSE', `常用项不存在：${id}`)
+    if (index < 0) throw new CepError('PARSE', msg.data.fn.commonUseItemMissing(id))
     items[index].isShow = show
     return items
   })

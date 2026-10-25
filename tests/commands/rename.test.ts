@@ -30,7 +30,7 @@ vi.mock('@/cep/jsx', () => ({ jsx }))
 
 await import('@/commands')
 const { execute } = await import('@/commands/registry')
-const { renameRepo } = await import('@/cep/data/rename')
+const { renameWriter } = await import('@/cep/data/rename')
 
 function seed(): RenamePreset {
   return [
@@ -41,13 +41,13 @@ function seed(): RenamePreset {
 }
 
 async function read(): Promise<RenamePreset> {
-  return readValue(await renameRepo.read())
+  return readValue(await renameWriter.read())
 }
 
 beforeEach(async () => {
   setActivePinia(createPinia())
   vi.clearAllMocks()
-  await renameRepo.write(seed())
+  await renameWriter.write(seed())
 })
 
 describe('rename.reorderGroup（组排序）', () => {

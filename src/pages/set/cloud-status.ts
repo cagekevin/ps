@@ -102,9 +102,7 @@ export function describeCloudStatus(input: {
     // 然后点「上传」把云端覆盖掉。这里必须说清"读不到"和"已停止上传"。
     // TD-11-12：这里原来写「自动同步和<上传>都已暂停」——「上传」在界面上**没有按钮**，
     // 用户会去找一个不存在的东西。说的是自动上传这件事，就按自动上传写。
-    notice =
-      `本地同步记录读不到（${status.ledgerState.reason}）：自动上传已暂停，避免把云端覆盖掉。` +
-      '修好这个文件后重开面板，或点「从云端拉取」重新建立记录。'
+    notice = `本地同步记录读不到（${status.ledgerState.reason}）：自动上传已暂停，避免把云端覆盖掉。修好这个文件后重开面板，或点「从云端拉取」重新建立记录。`
   } else if (status.ledgerState.status === 'none') {
     notice = '本地还没有同步记录。先点「从云端拉取」建立记录；新设备不会自动上传，避免覆盖云端。'
   } else if (!status.autoSyncEnabled) {
@@ -116,17 +114,17 @@ export function describeCloudStatus(input: {
     syncedText: status.ledgerState.status === 'broken' ? '读不到' : formatSyncedAt(status.syncedAt),
     // 两个数各自写明出处：前者是"本会话还没到点"，后者是"历史没推上去"（TD-11-2）
     queuedText:
-      queuedUnits === 0 ? '无' : `${queuedUnits} 项（本会话的改动，等下一次自动同步；不是失败）`,
+      queuedUnits === 0
+        ? '无'
+        : `${String(queuedUnits)} 项（本会话的改动，等下一次自动同步；不是失败）`,
     failedText:
       failed.length === 0
         ? ''
-        : `${failed.length} 项（之前没推上去的，记在本地）：${reasons.join('；')}`,
+        : `${String(failed.length)} 项（之前没推上去的，记在本地）：${reasons.join('；')}`,
     conflictText:
       conflicts.length === 0
         ? ''
-        : `${conflicts.length} 项 —— 云端和本地都改过，需要你决定保留哪边：` +
-          '想保留云端，点下面的「从云端拉取」（本地这些改动会被覆盖）；' +
-          '想保留本地，目前没有一键上传，只能先拉取、再把改动做一遍。',
+        : `${String(conflicts.length)} 项 —— 云端和本地都改过，需要你决定保留哪边：想保留云端，点下面的「从云端拉取」（本地这些改动会被覆盖）；想保留本地，目前没有一键上传，只能先拉取、再把改动做一遍。`,
     notice,
     failedCount: failed.length,
     conflictCount: conflicts.length,

@@ -1,4 +1,5 @@
 ﻿import { CepError } from '@/utils/errors'
+import { msg } from './messages'
 import type { FreePanelItem } from './free-panel'
 
 /**
@@ -33,10 +34,7 @@ function requireNumber(option: unknown, key: string): number {
   const value = Number(option)
   const empty = option === null || option === undefined || option === ''
   if (empty || !Number.isFinite(value)) {
-    throw new CepError(
-      'PARSE',
-      `自由面板项 ${key} 的 option 不是有效数字（原值 ${preview(option)}），已拒绝执行`,
-    )
+    throw new CepError('PARSE', msg.validate.fn.freePanelOptionNotNumber(key, preview(option)))
   }
   return value
 }
@@ -49,20 +47,14 @@ function requireTransformParams(
     const raw = cfg[field]
     const value = Number(raw)
     if (raw === null || raw === undefined || raw === '' || !Number.isFinite(value)) {
-      throw new CepError(
-        'PARSE',
-        `自由面板项 zdy_customBuildTransform 的字段 ${field} 不是数字（原值 ${preview(raw)}），已拒绝执行`,
-      )
+      throw new CepError('PARSE', msg.validate.fn.freePanelTransformNotNumber(field, preview(raw)))
     }
     return value
   }
   const text = (field: string) => {
     const raw = cfg[field]
     if (typeof raw !== 'string') {
-      throw new CepError(
-        'PARSE',
-        `自由面板项 zdy_customBuildTransform 的字段 ${field} 不是文本（原值 ${preview(raw)}），已拒绝执行`,
-      )
+      throw new CepError('PARSE', msg.validate.fn.freePanelTransformNotText(field, preview(raw)))
     }
     return raw
   }

@@ -28,7 +28,7 @@ const jsx = vi.hoisted(() => ({
   env: { setEnv: vi.fn() },
 }))
 
-vi.mock('@/cep/data/free-panel', () => ({ freePanelRepo: repo }))
+vi.mock('@/cep/data/free-panel', () => ({ freePanelRepo: repo, freePanelWriter: repo }))
 vi.mock('@/selection', () => ({
   refresh: async () => selection,
   current: () => selection,

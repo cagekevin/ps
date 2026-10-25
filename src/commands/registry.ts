@@ -1,9 +1,11 @@
-import { starsRepo, tagsRepo } from '@/cep/data'
-import { actionIndexRepo, actionLibraryRepo } from '@/cep/data/actions'
-import { freePanelRepo } from '@/cep/data/free-panel'
+import { starsWriter, tagsWriter } from '@/cep/data'
+import { msg } from '@/domain/messages'
+import { actionIndexWriter, actionLibraryWriter } from '@/cep/data/actions'
+import { freePanelWriter } from '@/cep/data/free-panel'
 import { jsx } from '@/cep/jsx'
 import { current, refresh, type SelectionSnapshot } from '@/selection'
 import { CepError } from '@/utils/errors'
+import { CODE_REGISTRY } from '@/utils/code-registry'
 import { describeCepError } from '@/utils/error-text'
 import { log } from '@/utils/logger'
 import type { CommandId, CommandPayloads } from './payloads'
@@ -13,7 +15,7 @@ import type {
   CommandContext,
   CommandGroup,
   CommandMeta,
-  CommandResult,
+  CommandOutcome,
   ProgressHandle,
   Requirement,
 } from './types'
@@ -78,11 +80,11 @@ function context(selection: SelectionSnapshot, progress: ProgressHandle): Comman
   return {
     selection,
     data: {
-      stars: starsRepo,
-      tags: tagsRepo,
-      actionIndex: actionIndexRepo,
-      actionLibrary: actionLibraryRepo,
-      freePanel: freePanelRepo,
+      stars: starsWriter,
+      tags: tagsWriter,
+      actionIndex: actionIndexWriter,
+      actionLibrary: actionLibraryWriter,
+      freePanel: freePanelWriter,
     },
     jsx,
     progress,
@@ -103,20 +105,23 @@ export function isEnabled(id: string, snapshot: SelectionSnapshot = current()): 
 /**
  * 在给定选区快照下跑一条命令。
  *
- * 顺序固定：检查 requires → run → catch 归一 → 日志 + 耗时。
- * 页面拿不到命令内部异常，只拿 `CommandResult`，所以"忘记处理失败"写不出来。
+ * 顺序固定：检查 requires → invoke → catch 归一 → 日志 + 耗时。
+ * 页面拿不到命令内部异常，只拿 `CommandOutcome`，所以"忘记处理失败"写不出来。
  */
 async function runWith(
   id: string,
   payload: unknown,
   selection: SelectionSnapshot,
-): Promise<CommandResult> {
+): Promise<CommandOutcome> {
   const command = registry.get(id)
-  if (!command) return { ok: false, reason: `命令不存在：${id}` }
+  if (!command)
+    // UNVERIFIED: `命令不存在` 是开发者诊断还是用户提示待定；若是提示语应归 msg.command
+    return { ok: false, reason: `命令不存在：${id}`, code: 'INTERNAL' }
 
-  // requires 检查放在 run 之前：没选区就不该调 jsx，否则只会拿到一句看不懂的 evalScript 错
+  // requires 检查放在 invoke 之前：没选区就不该调 jsx，否则只会拿到一句看不懂的 evalScript 错
   if (!canRun(command.requires, selection)) {
-    return { ok: false, reason: unmetReason(command.requires) }
+    // `unmetReason` 只产选区类文案（"请先选择…"）⇒ 归 `NO_SELECTION`
+    return { ok: false, reason: unmetReason(command.requires), code: 'NO_SELECTION' }
   }
 
   // 长任务由 registry 统一管理生命周期，命令只管上报进度
@@ -128,13 +133,14 @@ async function runWith(
     // payload 来自命令网格 / 自由面板 / 快捷键，编译期只有 `unknown`；形状由各自的入口保证
     // （`CommandPayloads` 是类型契约，自由面板那条还有运行时校验，见 TD-12-24）。
     // 这里不再写 `as never`：那会把"形状不确定"说成"确定"，让类型检查在这个口子上彻底失效。
-    await command.run(context(selection, progress), payload)
+    await command.invoke(context(selection, progress), payload)
     log.info('cmd', `${id} ${Date.now() - started}ms`)
     return { ok: true }
   } catch (e) {
-    const code = e instanceof CepError ? e.code : undefined
-    // 用户自己取消不是失败：单独一支，页面据此不提示（TD-12-22）
-    if (code === 'CANCELLED') {
+    // 非 `CepError` 统一落 `INTERNAL`：失败臂 `code` 必填，不许"失败但没码"
+    const code = e instanceof CepError ? e.code : 'INTERNAL'
+    // 用户自己取消不是失败（TD-12-22）——是否 cancelled 由 `CODE_REGISTRY` 一张表决定
+    if (CODE_REGISTRY[code].cancelled) {
       log.info('cmd', `${id} 已被用户取消`)
       return { ok: 'cancelled' }
     }
@@ -153,13 +159,13 @@ async function runWith(
 export async function execute<K extends CommandId>(
   id: K,
   payload?: CommandPayloads[K],
-): Promise<CommandResult>
+): Promise<CommandOutcome>
 /** 宽松重载：测试里用假 id、网格里用 string 时走这条 */
-export async function execute(id: string, payload?: unknown): Promise<CommandResult>
-export async function execute(id: string, payload?: unknown): Promise<CommandResult> {
+export async function execute(id: string, payload?: unknown): Promise<CommandOutcome>
+export async function execute(id: string, payload?: unknown): Promise<CommandOutcome> {
   // 命令不存在就不必去问 PS 要选区（保持"未知 id 不 refresh"的旧行为）
   const command = registry.get(id)
-  if (!command) return { ok: false, reason: `命令不存在：${id}` }
+  if (!command) return { ok: false, reason: `命令不存在：${id}`, code: 'INTERNAL' }
 
   // 一次执行只查一次选区，不再让每个命令自己调 getLayerState
   let selection: SelectionSnapshot
@@ -169,10 +175,10 @@ export async function execute(id: string, payload?: unknown): Promise<CommandRes
     // 读不到选区 ≠ 没有选区：原因（INIT / TIMEOUT_UNKNOWN / PARSE…）必须原样带走，
     // 以前 `.catch(() => null)` 把 code 和原文都丢了，用户只看到一句「读取选区失败」（TD-13-4）
     const reason = describeCepError(e)
-    const code = e instanceof CepError ? e.code : undefined
+    const code = e instanceof CepError ? e.code : 'INTERNAL'
     log.warn('cmd', `${id} 前置查询选区失败：${reason}`, e)
     if (needsSelection(command.requires)) {
-      return { ok: false, reason: `读取选区失败：${reason}`, code }
+      return { ok: false, reason: msg.command.fn.readSelectionFailed(reason), code }
     }
     // requires 为 none / document 的命令本来就不看选区，不能被无关失败连坐；
     // 继续用上一次快照（`canRun` 对这两档不看内容，命令拿到的 selection 只是转发）
@@ -194,13 +200,13 @@ function needsSelection(requires: Requirement): boolean {
  * refresh（多一次 evalScript 往返），而且子命令的失败被外层再包一层 `CepError('JSX')`，
  * 把子命令原本的 `code`（如 `FONT_MISSING`）冲掉，页面的"弹字体下载确认"分支就失效。
  *
- * 调用方负责把子命令的 `code` 原样抛回去：
- * `throw new CepError(result.code ?? 'JSX', result.reason)`。
+ * 调用方负责把子命令的 `code` 原样抛回去（`code` 必填，不需要 `?? 'JSX'`）：
+ * `throw new CepError(result.code, result.reason)`。
  */
 export async function executeInherited(
   id: string,
   payload: unknown,
   parent: { selection: SelectionSnapshot },
-): Promise<CommandResult> {
+): Promise<CommandOutcome> {
   return runWith(id, payload, parent.selection)
 }

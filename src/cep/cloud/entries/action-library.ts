@@ -1,8 +1,11 @@
-import { readTextOutcome, userDir, writeTextFileAtomic } from '@/cep/fs'
-import { actionIndexRepo, actionLibraryRepo } from '@/cep/data/actions'
+import { readOwnFileText } from '@/cep/fs-read'
+import { userDir } from '@/cep/paths'
+import { writeDisk } from '@/cep/disk-write'
+import { actionIndexWriter, actionLibraryRepo } from '@/cep/data/actions'
 import type { ActionWarehouseIndex } from '@/domain/action'
 import type { SyncFile, SyncUnitAdapter, WriteOutcome } from '@/domain/cloud'
 import { CepError } from '@/utils/errors'
+import { msg } from '@/domain/messages'
 import { inlineFile, unitPayload } from './util'
 
 const INDEX_PATH = '/sj_dzStoreInfo.json'
@@ -17,7 +20,7 @@ function safeName(name: unknown): string {
 function parseFile(file: SyncFile | undefined, label: string): unknown {
   if (!file || file.content.kind !== 'inline') throw new Error(`${label}没有内联内容`)
   try {
-    return JSON.parse(file.content.data) as unknown
+    return JSON.parse(file.content.data)
   } catch {
     throw new Error(`${label}不是合法 JSON`)
   }
@@ -58,14 +61,14 @@ export const actionLibraryEntry: SyncUnitAdapter = {
    * 所以两边都要订。原来这两行手写在 `cep/cloud/change-sync.ts`，现在跟着 unit 走。
    */
   watch: (markDirty) => {
-    const offs = [actionIndexRepo.onChange(markDirty), actionLibraryRepo.onChange(markDirty)]
+    const offs = [actionIndexWriter.onChange(markDirty), actionLibraryRepo.onChange(markDirty)]
     return () => {
       for (const off of offs) off()
     }
   },
 
   async read() {
-    const read = await actionIndexRepo.read()
+    const read = await actionIndexWriter.read()
     if (!read.ok) throw new Error(read.reason)
 
     const files: SyncFile[] = [inlineFile(INDEX_PATH, JSON.stringify(read.value))]
@@ -76,7 +79,7 @@ export const actionLibraryEntry: SyncUnitAdapter = {
       if (seen.has(name)) throw new Error(`动作仓库文件名重复：${name}`)
       seen.add(name)
 
-      const read = await readTextOutcome(`${userDir()}/${name}`)
+      const read = await readOwnFileText(`${userDir()}/${name}`)
       // 上传前读不到就不许上传（拿默认值顶上去等于把空仓库推给云端）。
       // T-116：两种不 ok 的**动作相同**（都中止上传），但**用户该做什么不同**——
       // 文件不在 = 索引指向了一个已删的仓库；读不到 = 关掉占用它的程序再试。
@@ -101,17 +104,26 @@ export const actionLibraryEntry: SyncUnitAdapter = {
         parseFile(file, `动作仓库 ${entry.fileName}`)
       }
 
-      // 先写仓库文件，最后写索引
+      // 先写仓库文件，最后写索引。
+      // 落盘走**唯一入口** `writeDisk`（`.bak` + 原子写）——
+      // 以前裸 `writeTextFileAtomic`：无 `.bak`、坏写无退路（债 11-24）。
       for (const entry of index.list) {
         const file = payload.files.find((item) => item.path === `/${entry.fileName}`)
         if (!file || file.content.kind !== 'inline') continue
         const target = `${userDir()}/${entry.fileName}`
-        const written = writeTextFileAtomic(target, file.content.data)
-        if (written.status === 'error') {
-          throw new CepError('IO', `动作库写回失败：${entry.fileName}（${written.reason}）`)
+        try {
+          await writeDisk(target, file.content.data)
+        } catch (error) {
+          throw new CepError(
+            'IO',
+            msg.cloud.fn.actionLibWriteBackFailed(
+              entry.fileName,
+              error instanceof Error ? error.message : String(error),
+            ),
+          )
         }
       }
-      await actionIndexRepo.write(index)
+      await actionIndexWriter.write(index)
       return { ok: true }
     } catch (error) {
       return {

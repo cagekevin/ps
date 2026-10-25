@@ -21,18 +21,18 @@ vi.mock('@/cep/jsx', () => ({ jsx }))
 await import('@/commands')
 const { execute } = await import('@/commands/registry')
 const { useActionStore } = await import('@/stores/action')
-const { actionIndexRepo, actionLibraryRepo } = await import('@/cep/data/actions')
+const { actionIndexWriter, actionLibraryWriter } = await import('@/cep/data/actions')
 
 /** 每个用例重置成可控的初值（浏览器分支是内存仓库） */
 async function seedIndex() {
-  await actionIndexRepo.write({
+  await actionIndexWriter.write({
     index: 0,
     list: [{ name: '默认仓库', fileName: 'sj_dz_default.json' }],
   })
 }
 
 async function seedLibrary() {
-  await actionLibraryRepo.write([
+  await actionLibraryWriter.write([
     {
       groupName: '修图',
       show: true,
@@ -48,7 +48,7 @@ async function seedLibrary() {
 beforeEach(async () => {
   setActivePinia(createPinia())
   vi.clearAllMocks()
-  jsx.action.callAction.mockResolvedValue(null)
+  jsx.action.callAction.mockResolvedValue({ ok: true, data: null })
   await seedIndex()
   await seedLibrary()
 })
@@ -76,9 +76,10 @@ describe('action.call', () => {
 
 describe('loadPsActions（store 读模型）', () => {
   it('原版 {name,children} 结构能解析出动作', async () => {
-    jsx.action.getActionList.mockResolvedValue([
-      { name: '修图', children: [{ name: '磨皮' }, { name: '锐化' }] },
-    ])
+    jsx.action.getActionList.mockResolvedValue({
+      ok: true,
+      data: [{ name: '修图', children: [{ name: '磨皮' }, { name: '锐化' }] }],
+    })
 
     const store = useActionStore()
     await store.loadPsActions()
@@ -98,7 +99,7 @@ describe('loadPsActions（store 读模型）', () => {
   })
 
   it('结构不认识时标 unparsed，不谎报"没有动作"', async () => {
-    jsx.action.getActionList.mockResolvedValue({ weird: true })
+    jsx.action.getActionList.mockResolvedValue({ ok: true, data: { weird: true } })
 
     const store = useActionStore()
     await store.loadPsActions()
@@ -108,7 +109,7 @@ describe('loadPsActions（store 读模型）', () => {
   })
 
   it('确实为空时不标 unparsed', async () => {
-    jsx.action.getActionList.mockResolvedValue([])
+    jsx.action.getActionList.mockResolvedValue({ ok: true, data: [] })
 
     const store = useActionStore()
     await store.loadPsActions()
@@ -130,30 +131,30 @@ describe('loadPsActions（store 读模型）', () => {
 describe('分组 CRUD', () => {
   it('折叠状态写回 show 字段（切页仍保持）', async () => {
     await execute('action.toggleGroup', { index: 0 })
-    expect(readValue(await actionLibraryRepo.read())[0].show).toBe(false)
+    expect(readValue(await actionLibraryWriter.read())[0].show).toBe(false)
 
     await execute('action.toggleGroup', { index: 0 })
-    expect(readValue(await actionLibraryRepo.read())[0].show).toBe(true)
+    expect(readValue(await actionLibraryWriter.read())[0].show).toBe(true)
   })
 
   it('新建分组追加到末尾', async () => {
     await execute('action.addGroup', { name: '后期' })
 
-    const value = readValue(await actionLibraryRepo.read())
+    const value = readValue(await actionLibraryWriter.read())
     expect(value.map((group) => group.groupName)).toEqual(['修图', '新建', '后期'])
   })
 
   it('同名分组允许（原版 addGroup 不查重）', async () => {
     await execute('action.addGroup', { name: '修图' })
 
-    const value = readValue(await actionLibraryRepo.read())
+    const value = readValue(await actionLibraryWriter.read())
     expect(value.map((group) => group.groupName)).toEqual(['修图', '新建', '修图'])
   })
 
   it('afterIndex 有效时插到该分组之后', async () => {
     await execute('action.addGroup', { name: '后期', afterIndex: 0 })
 
-    const value = readValue(await actionLibraryRepo.read())
+    const value = readValue(await actionLibraryWriter.read())
     expect(value.map((group) => group.groupName)).toEqual(['修图', '后期', '新建'])
   })
 
@@ -164,16 +165,16 @@ describe('分组 CRUD', () => {
   it('重命名分组', async () => {
     await execute('action.renameGroup', { index: 1, name: '文档' })
 
-    const value = readValue(await actionLibraryRepo.read())
+    const value = readValue(await actionLibraryWriter.read())
     expect(value[1].groupName).toBe('文档')
   })
 
   it('删除分组；删最后一个时补“默认分组”', async () => {
     await execute('action.deleteGroup', { index: 1 })
-    expect(readValue(await actionLibraryRepo.read())).toHaveLength(1)
+    expect(readValue(await actionLibraryWriter.read())).toHaveLength(1)
 
     await execute('action.deleteGroup', { index: 0 })
-    const value = readValue(await actionLibraryRepo.read())
+    const value = readValue(await actionLibraryWriter.read())
     expect(value).toEqual([{ groupName: '默认分组', show: true, list: [] }])
   })
 })
@@ -182,16 +183,16 @@ describe('仓库与排序', () => {
   it('新建仓库只加索引，不切换当前仓库', async () => {
     await execute('action.addWarehouse', { name: '电商' })
 
-    const value = readValue(await actionIndexRepo.read())
+    const value = readValue(await actionIndexWriter.read())
     expect(value.list.map((item) => item.name)).toEqual(['默认仓库', '电商'])
     expect(value.index).toBe(0)
   })
 
   it('重命名仓库只改 name，不改 fileName', async () => {
-    const before = readValue(await actionIndexRepo.read()).list[0].fileName
+    const before = readValue(await actionIndexWriter.read()).list[0].fileName
     await execute('action.renameWarehouse', { index: 0, name: '主仓库' })
 
-    const after = readValue(await actionIndexRepo.read()).list[0]
+    const after = readValue(await actionIndexWriter.read()).list[0]
     expect(after.name).toBe('主仓库')
     expect(after.fileName).toBe(before)
   })
@@ -200,14 +201,14 @@ describe('仓库与排序', () => {
     await execute('action.addWarehouse', { name: '电商' })
     await execute('action.selectWarehouse', { index: 1 })
 
-    expect(readValue(await actionIndexRepo.read()).index).toBe(1)
+    expect(readValue(await actionIndexWriter.read()).index).toBe(1)
   })
 
   it('删除仓库至少保留一个', async () => {
     await execute('action.addWarehouse', { name: '电商' })
     await execute('action.deleteWarehouse', { index: 0 })
 
-    const value = readValue(await actionIndexRepo.read())
+    const value = readValue(await actionIndexWriter.read())
     expect(value.list).toHaveLength(1)
     expect(value.list[0].name).toBe('电商')
     expect(value.index).toBe(0)
@@ -216,7 +217,7 @@ describe('仓库与排序', () => {
   it('分组排序按落点插后，并把被拖组折叠（原版 before :56128）', async () => {
     await execute('action.reorderGroup', { from: 0, to: 1, position: 'after' })
 
-    const value = readValue(await actionLibraryRepo.read())
+    const value = readValue(await actionLibraryWriter.read())
     expect(value.map((group) => group.groupName)).toEqual(['新建', '修图'])
     expect(value[1].show).toBe(false)
   })
@@ -230,7 +231,7 @@ describe('仓库与排序', () => {
       position: 'after',
     })
 
-    let value = readValue(await actionLibraryRepo.read())
+    let value = readValue(await actionLibraryWriter.read())
     expect(value[0].list.map((item) => item.name)).toEqual(['锐化', '磨皮'])
 
     await execute('action.reorderItem', {
@@ -241,7 +242,7 @@ describe('仓库与排序', () => {
       position: 'before',
     })
 
-    value = readValue(await actionLibraryRepo.read())
+    value = readValue(await actionLibraryWriter.read())
     expect(value[0].list.map((item) => item.name)).toEqual(['磨皮', '锐化'])
   })
 })
@@ -250,21 +251,21 @@ describe('动作项', () => {
   it('删除动作', async () => {
     await execute('action.deleteItem', { groupIndex: 0, itemIndex: 0 })
 
-    const value = readValue(await actionLibraryRepo.read())
+    const value = readValue(await actionLibraryWriter.read())
     expect(value[0].list.map((item) => item.name)).toEqual(['锐化'])
   })
 
   it('设置别名时保留 group 和 name（执行仍需要）', async () => {
     await execute('action.setAlias', { groupIndex: 0, itemIndex: 0, alias: '一键美颜' })
 
-    const value = readValue(await actionLibraryRepo.read())
+    const value = readValue(await actionLibraryWriter.read())
     expect(value[0].list[0]).toEqual({ group: '修图', name: '磨皮', alias: '一键美颜' })
   })
 
   it('删除别名后回到 group + name', async () => {
     await execute('action.deleteAlias', { groupIndex: 0, itemIndex: 1 })
 
-    const value = readValue(await actionLibraryRepo.read())
+    const value = readValue(await actionLibraryWriter.read())
     expect(value[0].list[1]).toEqual({ group: '修图', name: '锐化' })
   })
 
@@ -278,7 +279,7 @@ describe('动作项', () => {
       ],
     })
 
-    const value = readValue(await actionLibraryRepo.read())
+    const value = readValue(await actionLibraryWriter.read())
     expect(value[1].list.map((item) => item.name)).toEqual(['800', '800', '1200'])
   })
 

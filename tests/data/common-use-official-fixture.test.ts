@@ -16,26 +16,31 @@ const state = vi.hoisted(() => ({ files: new Map<string, string>() }))
 
 vi.mock('@/cep/transport', () => ({ hasCep: () => true }))
 
-vi.mock('@/cep/fs', () => ({
+vi.mock('@/cep/node', () => ({
   hasNode: () => true,
+}))
+
+vi.mock('@/cep/paths', () => ({
   userDir: () => '/user',
+}))
+
+vi.mock('@/cep/fs-read', () => ({
   readTextSmart: async (path: string) => state.files.get(path) ?? null,
-  // T-105：写路径改用三态读；这个假 fs 没有"读不出"的场景，只会 ok / missing
-  readTextOutcome: async (path: string) => {
-    const text = state.files.get(path)
-    return text === undefined ? { status: 'notSeen' as const } : { status: 'ok' as const, text }
-  },
+  // T-105：写路径改用三态读；这个假 fs 没有"读不出"的场景，只会 ok / missing  readTextOutcome: async (path: string) => {
+      const text = state.files.get(path)
+      return text === undefined ? { status: 'notSeen' as const } : { status: 'ok' as const, text }
+    },
   readTextSync: (path: string) => {
-    const text = state.files.get(path)
-    return text === undefined ? { status: 'notSeen' as const } : { status: 'ok' as const, text }
-  },
+      const text = state.files.get(path)
+      return text === undefined ? { status: 'notSeen' as const } : { status: 'ok' as const, text }
+    },
   writeTextFile: (path: string, text: string) => {
-    state.files.set(path, text)
-  },
+      state.files.set(path, text)
+    },
   writeTextFileAtomic: (path: string, text: string) => {
-    state.files.set(path, text)
-    return true
-  },
+      state.files.set(path, text)
+      return true
+    },
 }))
 
 const PATH = '/user/sj_commonFunction.json'

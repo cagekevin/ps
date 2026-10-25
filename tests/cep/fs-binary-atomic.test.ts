@@ -46,7 +46,7 @@ function installRequire() {
   w.require = (id: string) => (id === 'fs' ? fakeFs : realRequire(id))
 }
 
-const { writeBase64File } = await import('@/cep/fs')
+const { writeBase64File } = await import('@/cep/disk-write')
 
 beforeEach(() => {
   installRequire()

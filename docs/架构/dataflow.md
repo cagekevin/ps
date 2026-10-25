@@ -69,11 +69,11 @@ window.location.hash.startsWith('#/freePanel')
 ### 2.2 命令执行链（`commands/registry.ts`）
 
 ```
-useCommand.run(payload, successText)
+useCommand.invoke(payload, successText)
   → execute(id, payload)
   → refresh() 选区一次
   → canRun(requires)
-  → command.run(ctx, payload)
+  → command.invoke(ctx, payload)
   → 成功：feedback.success
   → 失败：CepError / reason 归一
 ```
@@ -90,7 +90,7 @@ useCommand.run(payload, successText)
 }
 ```
 
-`CommandResult`：
+`CommandOutcome`：
 
 ```ts
 { ok: true } | { ok: false, reason, code? } | { ok: 'cancelled' }
@@ -183,7 +183,7 @@ mousedown + Ctrl/Meta + 300ms
 | 5 | `legacy.call` 只走 `jsxCall` | 不写 `jsxHistory/jsxHistoryNoCheck`，历史记录与原版不同 |
 | 6 | `freePanel.setDisplay` 对所有 block 写 `showNumber/showIcon/showText` | 不能按区域单独设置；`showNumber` 同时是列数（2/3/4） |
 | 7 | `freePanel.clear` 用 `createEmptyFreePanel()` 重置 `uid=1`；`addBlock` 用 `uid += 1` | id 不保证全局唯一；不要假设旧 id 不会复用 |
-| 8 | `free-panel` store 的 `degraded` 由 `load()` 写入，`onChange` 不更新 | D-40 曾判"无消费方"删掉；**T-99-2 加回来**：读边界归一（`normalize: readFreePanelFile`）后 `degraded` 才真正表示"磁盘那份文件不能当数据用"，页面空态靠它区分"文件坏了"与"面板是空的"。写后不刷新是对的——`degraded` 时 `file-repo.update` 直接抛 `IO`，不会有成功写入 |
+| 8 | `free-panel` store 的 `degraded` 由 `load()` 写入，`onChange` 不更新 | D-40 曾判"无消费方"删掉；**T-99-2 加回来**：读边界归一（`decode: decodeFreePanelFile`）后 `degraded` 才真正表示"磁盘那份文件不能当数据用"，页面空态靠它区分"文件坏了"与"面板是空的"。写后不刷新是对的——`degraded` 时 `file-repo.update` 直接抛 `IO`，不会有成功写入 |
 | 9 | `settingsSnapshot()` 是命令执行时的快照 | 命令运行中再改偏好，不影响当前 `ctx.settings` |
 | 10 | `freePanel.add` 的 option 规则：`undefined → {}`，`null` 原样保留 | 原版实际存在 `option:null`，不要统一成 `{}` |
 | 11 | `actionIndexRepo.onChange` 里写当前文件指针 | 这是带副作用的读模型监听；新增监听不要照抄 |
@@ -273,7 +273,7 @@ Ctrl/Meta + 长按 300ms
 
 ```
 ActionGrid @run
-  → FreePanel.run(blockId, item)
+  → FreePanel.invoke(blockId, item)
   → freePanel.execute({ blockId, btnId })
   → read + normalize
   → adaptFreePanelItem(item)

@@ -4,11 +4,12 @@
 // 谁在用：stores/font-set.ts → pages/fontSet/components/FontColor.vue
 // 禁止：页面/组件直接调 jsx；不要把这里的值当成可写真相（写走 commands/fontSet.ts）
 
+import { msg } from '@/domain/messages'
 import { ref, shallowRef } from 'vue'
 import { subscribeHostEvent, type PhotoshopEventPayload } from '@/cep/events'
 import { jsx } from '@/cep/jsx'
 import { initJsx } from '@/cep/ps'
-import { asJsxResult } from '@/utils/jsx-result'
+import type { JsxOutcome } from '@/utils/jsx-result'
 import { log } from '@/utils/logger'
 
 export interface RgbColor {
@@ -95,8 +96,10 @@ export async function refreshTypeUnits(): Promise<void> {
     // jsx 必须先 evalFile 注入环境变量，否则函数未定义；字体列表走 ps 时会 init，
     // 这条读路径是独立的，必须自己保证
     await initJsx()
-    const raw = await jsx.font.getTypeUnits()
-    if (typeof raw === 'string' && raw) typeUnitsRef.value = raw
+    const rawOutcome = await jsx.font.getTypeUnits()
+    if (rawOutcome.ok && typeof rawOutcome.data === 'string' && rawOutcome.data) {
+      typeUnitsRef.value = rawOutcome.data
+    }
   } catch (e) {
     log.warn('selection', '读取单位设置失败，按点处理', e)
   }
@@ -145,21 +148,20 @@ export async function refreshTextInfo(): Promise<TextInfo | null> {
   await initJsx()
   log.info('selection', '开始读取文字属性')
 
-  let raw: unknown
+  let result: JsxOutcome<unknown>
   try {
-    raw = await jsx.font.getFontSimpleInfo()
+    result = await jsx.font.getFontSimpleInfo()
   } catch (error) {
     // 没有文字图层/没有文档时 jsx 会直接 throw；这是可预期的空选区，不是订阅失败
-    textInfoError.value = error instanceof Error ? error.message : '读取文字属性失败'
+    textInfoError.value =
+      error instanceof Error ? error.message : msg.selection.text.textInfoReadFailed
     log.warn('selection', '读取文字属性失败', { error: textInfoError.value })
     return textInfoRef.value
   }
 
-  const result = asJsxResult(raw)
-
   if (!result.ok) {
-    textInfoError.value = result.msg || '读取文字属性失败'
-    log.warn('selection', '读取文字属性失败', { err: result.err, msg: textInfoError.value })
+    textInfoError.value = result.reason || msg.selection.text.textInfoReadFailed
+    log.warn('selection', '读取文字属性失败', { err: result.hostCode, msg: textInfoError.value })
     return textInfoRef.value
   }
 
@@ -234,9 +236,7 @@ function withHeartbeat<T>(what: string, task: Promise<T>): Promise<T> {
   let settled = false
   const timer = setTimeout(() => {
     if (settled) return
-    textInfoStale.value =
-      `刚才${what}，但 ${STALE_AFTER_MS / 1000}s 内没读到新的文字属性：` +
-      '面板上现在显示的可能不是当前选区/当前图层的值'
+    textInfoStale.value = msg.selection.fn.textInfoStale(what, String(STALE_AFTER_MS / 1000))
     log.error('selection', '文字属性更新超时，快照可能还是上一层/上一次的', {
       what,
       waitedMs: STALE_AFTER_MS,
@@ -261,7 +261,7 @@ export async function startTextInfoWatch(): Promise<() => void> {
         }
         log.info('selection', `宿主事件触发：${name}`)
         void withHeartbeat(
-          `在 Photoshop 里触发了「${name}」事件`,
+          msg.selection.fn.hostEventFired(name),
           refreshTextInfo().catch((e) => {
             textInfoError.value = e instanceof Error ? e.message : String(e)
             log.warn('selection', '事件触发的文字属性读取失败', e)

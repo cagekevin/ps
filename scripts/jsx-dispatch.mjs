@@ -27,6 +27,8 @@ import { fileURLToPath } from 'node:url'
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const SRC = resolve(ROOT, 'docs/原版/01-原版源码/panel/js/app.v4.js')
 const OUT = resolve(ROOT, 'docs/生成/jsx派发表.json')
+/** 名字联合类型（代码侧唯一真相）：`jsxCall` 的形参类型就是它 */
+const NAMES = resolve(ROOT, 'src/cep/jsx/names.ts')
 
 const source = readFileSync(SRC, 'utf8')
 const lines = source.split('\n')
@@ -97,9 +99,14 @@ for (const m of table.text.matchAll(/n\.t0 === "([^"]+)" \? (\d+)/g)) {
 
 /** 全库调用点：页面/组件直接调 jsx 时用的名字（覆盖不经派发表的那些） */
 const calls = []
-// 第三种调用形态：`n.evalScript("Layer_isSelectLayer()", cb)`——不经 $cep.jsx 包装，但确实是 jsx 函数名。
-const callRe =
-  /\.(jsx|jsxHistory|jsxNoCheck|jsxHistoryNoCheck)\("([A-Za-z0-9_]+)"|evalScript\("([A-Za-z0-9_]+)\(/g
+// 名字字符集含 `.`：官方里有带点的 jsx 名（`app.v4.js:42096`
+// `t.$cep.jsxNoCheck("AppPreferences.typeUnits", [])`）。只认 `[A-Za-z0-9_]+` 时它永远进不了名单，
+// 于是我方同名的调用被判成"编的名字"——名字其实是对的，只是含点（假阴性）。
+const NAME = '[A-Za-z0-9_.]+'
+const callRe = new RegExp(
+  `\\.(jsx|jsxHistory|jsxNoCheck|jsxHistoryNoCheck)\\("(${NAME})"|evalScript\\("(${NAME})\\(`,
+  'g',
+)
 for (let i = 0; i < lines.length; i++) {
   for (const m of lines[i].matchAll(callRe)) {
     calls.push({ name: m[2] ?? m[3], channel: m[1] ?? 'evalScript', line: i + 1 })
@@ -123,6 +130,41 @@ const snapshot = {
 }
 
 const text = JSON.stringify(snapshot, null, 2) + '\n'
+
+/**
+ * 名字联合类型（`src/cep/jsx/names.ts`）。
+ *
+ * **这就是 `jsx:dispatch:check` 那道闸的结构替代物**：名字不再靠"扫源码比对"来守，
+ * 而是 `jsxCall(fn: JsxName, …)` 只收这个联合类型 —— 写错一个字母，`vue-tsc` 当场报错，
+ * 不需要任何额外步骤。生成物与源码同步由"下次新增名字时编译失败"自然暴露（响的，不是静默的）。
+ *
+ * 口径：派发表的 `key` 与 `jsxName` **两个都合法**——同一函数的两个入口。
+ * 现成的例子：`font.ts:113` 用 `zt_changeTextBranchMerge`（key）、`:114` 用 `zt_textBranchMerge`
+ * （jsxName），是同一个函数的两个名字，不是错。
+ */
+const allNames = [
+  ...new Set([
+    ...snapshot.dispatch.flatMap((d) => [d.key, d.jsxName]),
+    ...snapshot.calls.map((c) => c.name),
+  ]),
+].sort((a, b) => a.localeCompare(b))
+
+const namesFile = `// 是什么｜替代了什么｜谁在用
+// 是什么：jsx 调用名的唯一真相（**生成物，别手改**）。
+// 替代了什么：\`npm run jsx:dispatch:check\` 那道"扫源码比对名字"的闸 —— 现在名字由**类型**保证：
+//   \`jsxCall(fn: JsxName, …)\` 只收下面这个联合类型，写错一个字母 \`vue-tsc\` 就红。
+// 谁在用：\`src/cep/transport.ts\` 的 \`jsxCall\` 签名（域实现 \`src/cep/jsx/*.ts\` 经它调用）。
+//
+// 生成：\`npm run jsx:dispatch\`（源 = docs/原版/01-原版源码/panel/js/app.v4.js 的派发表 + 全库调用点）
+// 口径：派发表的 \`key\` 与 \`jsxName\` 两个都合法（同一函数的两个入口，例：\`zt_changeTextBranchMerge\` /
+//   \`zt_textBranchMerge\`，font.ts:113/114 各用一个）。要新增一个名字，先回原版源码核对，再重跑生成。
+//
+// 派表 ${snapshot.dispatchCount} 条 · 全库调用名 ${snapshot.callCount} 个 · 去重后 ${allNames.length} 个
+
+export type JsxName =
+${allNames.map((n) => `  | '${n.replace(/'/g, "\\'")}'`).join('\n')}
+`
+
 const check = process.argv.includes('--check')
 
 if (check) {
@@ -131,8 +173,11 @@ if (check) {
     process.exit(1)
   }
   const old = readFileSync(OUT, 'utf8')
-  if (old !== text) {
-    console.error('[jsx-dispatch] 产物已过期：与源码重新生成的结果不一致，跑 npm run jsx:dispatch')
+  const oldNames = existsSync(NAMES) ? readFileSync(NAMES, 'utf8') : null
+  if (old !== text || oldNames !== namesFile) {
+    console.error(
+      '[jsx-dispatch] 产物已过期：与源码重新生成的结果不一致（派发表或 names.ts），跑 npm run jsx:dispatch',
+    )
     process.exit(1)
   }
   console.log(
@@ -141,7 +186,10 @@ if (check) {
 } else {
   mkdirSync(dirname(OUT), { recursive: true })
   writeFileSync(OUT, text)
+  mkdirSync(dirname(NAMES), { recursive: true })
+  writeFileSync(NAMES, namesFile)
   console.log(
     `[jsx-dispatch] 已生成 ${OUT}：派表 ${snapshot.dispatchCount} 条（表在 :${snapshot.dispatchTableLine}）/ 调用名 ${snapshot.callCount} 个`,
   )
+  console.log(`[jsx-dispatch] 已生成 ${NAMES}：JsxName 共 ${allNames.length} 个`)
 }

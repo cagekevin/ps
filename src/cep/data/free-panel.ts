@@ -5,16 +5,16 @@
 // 禁止：把只属于本面板的 UI 字段（showText）写回原版文件——原版没有这个键（D-35）
 
 import { DATA_FILES } from '@/cep/env'
-import { userDir } from '@/cep/fs'
+import { userDir } from '@/cep/paths'
 import {
   createEmptyFreePanel,
-  readFreePanelFile,
+  decodeFreePanelFile,
   type FreePanelBlock,
   type FreePanelFile,
 } from '@/domain/free-panel'
 import { deepClone } from '@/utils/clone'
-import { pick } from './pick'
-import type { Repo, RepoRead } from './types'
+import { dataRepo } from './data-repo'
+import type { Repo, RepoRead, RepoView } from './types'
 
 /**
  * showText 是我方新增的 UI 字段，原版没有这个键（D-35）。
@@ -91,11 +91,10 @@ function applySessionShowText(blocks: FreePanelBlock[]): void {
  * `FreePanelFile`；认不出 → `degraded`，页面提示，绝不当空面板用。所以下面每处都可以直接
  * `value.obj.list`，不再需要 `?.` / `?? []`。
  */
-const base: Repo<FreePanelFile> = pick(
+const base: Repo<FreePanelFile> = dataRepo(
   () => `${userDir()}/${DATA_FILES.appFreePanel}`,
   createEmptyFreePanel,
-  createEmptyFreePanel,
-  { normalize: readFreePanelFile },
+  decodeFreePanelFile,
 )
 
 const listeners = new Set<(value: FreePanelFile) => void>()
@@ -145,27 +144,36 @@ function wrapMutator(
   }
 }
 
-export const freePanelRepo: Repo<FreePanelFile> = {
+/**
+ * 落盘剥 `showText` → 调底层写 → 回填会话态 → 通知。
+ * **四个写方法（`write` / `writeInLock` / `overwrite` / `overwriteInLock`）共用这一份** ——
+ * `showText` 是会话态、不落盘（ADR-05），四条写路都要走同一条剥/回填序列。
+ */
+async function persistStripped(
+  value: FreePanelFile,
+  writeToBase: (onDisk: FreePanelFile) => Promise<void>,
+): Promise<void> {
+  const onDisk = deepClone(value)
+  captureShowText(onDisk.obj.list)
+  await writeToBase(onDisk)
+  applySessionShowText(value.obj.list)
+  emit(value)
+}
+
+const freePanelImpl: Repo<FreePanelFile> = {
   async read(): Promise<RepoRead<FreePanelFile>> {
     return prepareRead(await base.read())
   },
 
   /** 与 `write` 同语义的"锁内"版本：转给底层仓库的同名方法（TD-09-18） */
-  async writeInLock(value: FreePanelFile): Promise<void> {
-    const onDisk = deepClone(value)
-    captureShowText(onDisk.obj.list)
-    await base.writeInLock(onDisk)
-    applySessionShowText(value.obj.list)
-    emit(value)
-  },
+  writeInLock: (value) => persistStripped(value, base.writeInLock),
 
-  async write(value: FreePanelFile): Promise<void> {
-    const onDisk = deepClone(value)
-    captureShowText(onDisk.obj.list)
-    await base.write(onDisk)
-    applySessionShowText(value.obj.list)
-    emit(value)
-  },
+  write: (value) => persistStripped(value, base.write),
+
+  /** 整份覆盖 + 保留原文做备份/隔离：底层 `base.overwrite`，剥/回填序列同 `write` */
+  overwrite: (value) => persistStripped(value, base.overwrite),
+
+  overwriteInLock: (value) => persistStripped(value, base.overwriteInLock),
 
   async update(mutator: (value: FreePanelFile) => FreePanelFile | void): Promise<FreePanelFile> {
     const persisted = await base.update(wrapMutator(mutator))
@@ -194,3 +202,8 @@ export const freePanelRepo: Repo<FreePanelFile> = {
     }
   },
 }
+
+/** 只读视图（store 唯一能拿到的形状）：没有 write / update —— 调用不到 */
+export const freePanelRepo: RepoView<FreePanelFile> = freePanelImpl
+/** 写侧句柄：只给 commands/registry 的 ctx.data 用 */
+export const freePanelWriter: Repo<FreePanelFile> = freePanelImpl

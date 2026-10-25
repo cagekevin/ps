@@ -10,7 +10,7 @@
 
 > ### ★ 本 SOP 的分工：**底线交给机器，判断留给人**
 >
-> 本仓**有**机器守卫（不是"全靠人"）：`npm run style:guard` 拦**裸色值 / 裸字号 / 裸圆角 / 图标裸尺寸**（`npm run style:fix` 可自动改，`style:baseline` 记基线）；`npm run template:guard` 查模板；`npm run assert:guard` 查断言基线；`npm run dispatch:check` 查公共件分发；`npm run boundary:pages` 查页面层越界。它们已接进 `npm run check`。
+> 本仓**有**机器守卫（不是"全靠人"）：`npm run style:guard` 拦**裸色值 / 裸字号 / 裸圆角 / 图标裸尺寸**（`npm run style:fix` 可自动改，`style:baseline` 记基线）；`npm run template:guard` 查模板；`npm run lint` 查转型禁令 / 层边界 / 页面白名单（原 `assert:guard` 与 `boundary:pages` 已并入）；`npm run dispatch:check` 查公共件分发。它们已接进 `npm run check`。
 >
 > **所以 8 查只管机器管不了的判断**：
 > ① 守卫只能判"裸值"，**判不了"这个值对不对"**（对比度够不够、基色覆不覆盖全、语义有没有混用）；
@@ -530,7 +530,7 @@ Grep  "尚未落地|未落地|磁盘|索引|注入|预算|兜底|序列化"
 
 **打勾条件**：**9 个框全勾**（含查 0）**且**每条后面贴了**证据**（命令 + 输出，或"看了哪一行"）。
 **任一未过 ⇒ 不许打勾，也不许说"基本完成"。**
-**机器兜底**：`npm run style:guard` · `npm run template:guard` · `npm run assert:guard` · `npm run dispatch:check` · `npm run boundary:pages` —— 守卫绿**只是底线**，不代表 8 查通过。
+**机器兜底**：`npm run style:guard` · `npm run template:guard` · `npm run lint` · `npm run dispatch:check` —— 守卫绿**只是底线**，不代表 8 查通过。
 
 ---
 

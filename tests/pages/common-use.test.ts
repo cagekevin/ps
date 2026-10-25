@@ -73,7 +73,7 @@ vi.mock('@/components/command/useCommand', () => ({
       'freePanel.add': commands.addToPanel,
     }
     return {
-      run: map[id] ?? commands.flip,
+      invoke: map[id] ?? commands.flip,
       disabled: false,
       running: false,
       command: undefined,

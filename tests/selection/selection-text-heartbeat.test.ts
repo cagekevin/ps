@@ -30,6 +30,8 @@ const TEXT_INFO = {
   family: '苹方',
   color: { rgb: { r: 0, g: 0, b: 0 } },
 }
+/** 两臂成功臂：宿主返回值包在 `data` 里 */
+const TEXT_OK = { ok: true, data: TEXT_INFO }
 
 beforeEach(() => {
   jsx.font.getFontSimpleInfo.mockReset()
@@ -40,14 +42,14 @@ beforeEach(() => {
 describe('文字属性心跳', () => {
   it('事件触发后迟迟读不回来 → 标 stale 且日志有 error；读到后自动解除', async () => {
     vi.useFakeTimers()
-    jsx.font.getFontSimpleInfo.mockResolvedValue(TEXT_INFO)
+    jsx.font.getFontSimpleInfo.mockResolvedValue(TEXT_OK)
     await startTextInfoWatch()
 
     // 这一次读取挂住不返回（PS 没回包）
-    let release: (value: unknown) => void = () => {}
+    let release: () => void = () => {}
     jsx.font.getFontSimpleInfo.mockReturnValue(
       new Promise((resolve) => {
-        release = resolve
+        release = () => resolve(TEXT_OK)
       }),
     )
 
@@ -58,7 +60,7 @@ describe('文字属性心跳', () => {
     expect(textInfoStale.value).toContain('可能不是当前选区')
     expect(log.dump()).toContain('文字属性更新超时')
 
-    release(TEXT_INFO)
+    release()
     await vi.advanceTimersByTimeAsync(0)
     expect(textInfoStale.value).toBe('')
 
@@ -67,7 +69,7 @@ describe('文字属性心跳', () => {
 
   it('用户什么都没动（没有事件）时不误报', async () => {
     vi.useFakeTimers()
-    jsx.font.getFontSimpleInfo.mockResolvedValue(TEXT_INFO)
+    jsx.font.getFontSimpleInfo.mockResolvedValue(TEXT_OK)
     await startTextInfoWatch()
 
     await vi.advanceTimersByTimeAsync(STALE_AFTER_MS * 10)
@@ -77,7 +79,7 @@ describe('文字属性心跳', () => {
   })
 
   it('跳过的原因写具体：只写「跳过」等于没写（分不清正常跳过还是 payload 坏了）', async () => {
-    jsx.font.getFontSimpleInfo.mockResolvedValue(TEXT_INFO)
+    jsx.font.getFontSimpleInfo.mockResolvedValue(TEXT_OK)
     await startTextInfoWatch()
 
     events.listeners.selection({ eventData: { layerID: [1, 2] } })
@@ -87,7 +89,7 @@ describe('文字属性心跳', () => {
   })
 
   it('读失败时 stale 不冒充「读失败」（两个状态各管一段）', async () => {
-    jsx.font.getFontSimpleInfo.mockRejectedValue(new Error('没有文字图层'))
+    jsx.font.getFontSimpleInfo.mockResolvedValue({ ok: false, code: 'JSX', reason: '没有文字图层' })
     await refreshTextInfo()
 
     expect(textInfoStale.value).toBe('')

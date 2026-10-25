@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { msg } from '@/domain/messages'
 import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import { storeToRefs } from 'pinia'
 import type { FontItem } from '@/domain/font-item'
@@ -35,8 +36,14 @@ import { useCommand } from '@/components/command/useCommand'
 
 const store = useFontStore()
 const feedback = useFeedbackStore()
-const { tags, tagsError, stars, starsError, previewMode, activeFamily, customPreviewText } =
-  storeToRefs(store)
+const { tags, tagsError, stars, starsError, previewMode, customPreviewText } = storeToRefs(store)
+
+/**
+ * 最近一次成功应用的家族 —— **纯本页 UI 高亮状态**，不是业务真相：
+ * 只有本页读写（`:class` 高亮），别的页面/命令都不关心 ⇒ 放页面本地，不进 store。
+ * 放 store 里等于凭空多一个"可写投影"（谁都能改），且与 store 的真实状态混在一起。
+ */
+const activeFamily = ref('')
 
 // 写操作全部走命令（ADR-16）：页面只拿 boolean，失败由 useCommand 统一提示
 const applyFont = useCommand('font.apply')
@@ -72,7 +79,7 @@ function openTagMenu(event: MouseEvent, font: FontItem) {
 
 function onTagToggle(text: string) {
   if (!tagMenu.value.family) return
-  void toggleTagCmd.run({ tagText: text, family: tagMenu.value.family })
+  void toggleTagCmd.invoke({ tagText: text, family: tagMenu.value.family })
 }
 
 /* ---------- 标签的新建 / 重命名 / 删除 ---------- */
@@ -110,7 +117,7 @@ function askDelete() {
 
 async function submitTag(value: string) {
   if (!value) {
-    feedback.error('标签名不能为空')
+    feedback.error(msg.command.text.fontTagRequired)
     tagCreator.value.visible = true
     return
   }
@@ -121,12 +128,12 @@ async function submitTag(value: string) {
   }
 
   if (tagCreator.value.mode === 'create') {
-    await createTagCmd.run({ text: value }, `已新建标签「${value}」`)
+    await createTagCmd.invoke({ text: value }, msg.success.fn.tagCreated(value))
     return
   }
 
   if (value === tagCreator.value.from) return
-  const ok = await renameTagCmd.run(
+  const ok = await renameTagCmd.invoke(
     { from: tagCreator.value.from, to: value },
     `已重命名为「${value}」`,
   )
@@ -135,12 +142,12 @@ async function submitTag(value: string) {
 
 async function confirmDelete() {
   const tag = tagDelete.value.tag
-  const ok = await deleteTagCmd.run({ text: tag }, `已删除标签「${tag}」`)
+  const ok = await deleteTagCmd.invoke({ text: tag }, msg.success.fn.tagDeleted(tag))
   if (ok && activeTag.value === tag) activeTag.value = ''
 }
 
 function createTagFromMenu(text: string) {
-  void createTagCmd.run({ text }, `已新建标签「${text}」`)
+  void createTagCmd.invoke({ text }, msg.success.fn.tagCreated(text))
 }
 
 const keyword = ref('')
@@ -274,7 +281,7 @@ async function refresh() {
 
 function onMenuSelect(value: string | number) {
   menuOpen.value = false
-  if (value === 'refresh') void refreshListCmd.run()
+  if (value === 'refresh') void refreshListCmd.invoke()
   else if (value === 'preview') store.cyclePreview()
   else if (value === 'import-tags') openImport()
   else if (value === 'export-tags') openExport()
@@ -282,11 +289,8 @@ function onMenuSelect(value: string | number) {
 
 /* ---------- 标签导入 / 导出（T-51，原版 `zg()` 菜单 + `vg()` 确认框）---------- */
 
-// 确认框：原版是 `vg()` 的 CepModal，两条文案按模式切换
+// 确认框：原版是 `vg()` 的 CepModal，两条文案按模式切换（出处收进 msg.confirm.fn，页面不再自拼）
 const tagIo = ref({ visible: false, mode: 'import' as 'import' | 'export' })
-
-const IMPORT_TIP = '导入标签，会覆盖原来的标签及评分，是否继续？'
-const EXPORT_TIP = '导出标签，不包含字体文件，仅导出标签及评分，是否继续？'
 
 function openImport() {
   menuOpen.value = false
@@ -308,7 +312,10 @@ function openExport() {
 async function confirmTagIo() {
   const mode = tagIo.value.mode
   if (mode === 'import') {
-    const ok = await importTagsCmd.run({ onConfirm: async () => true }, '已导入标签')
+    const ok = await importTagsCmd.invoke(
+      { onConfirm: async () => true },
+      msg.success.text.tagsImported,
+    )
     // 导入是覆盖写，标签与评分都要重读
     if (ok) {
       await store.loadTags(true)
@@ -316,7 +323,7 @@ async function confirmTagIo() {
     }
     return
   }
-  await exportTagsCmd.run({ onConfirm: async () => true }, '已导出标签')
+  await exportTagsCmd.invoke({ onConfirm: async () => true }, msg.success.text.tagsExported)
 }
 
 /** 每个家族当前选中的字重下标 */
@@ -331,18 +338,18 @@ function currentWeight(family: string) {
  * 默认 0 会让「选了 Bold 再点这一行」退回 Regular，等于覆盖用户的选择。
  */
 function onRate(family: string, value: number) {
-  void rateFont.run({ family, value })
+  void rateFont.invoke({ family, value })
 }
 
 async function apply(font: FontItem, variantIndex = currentWeight(font.family)) {
   const weight = font.weights[variantIndex] ?? ''
-  const ok = await applyFont.run(
+  const ok = await applyFont.invoke(
     { font, variantIndex },
     `已应用 ${font.family}${weight ? ` · ${weight}` : ''}`,
   )
   if (ok) {
     weightIndex.value[font.family] = variantIndex
-    store.activeFamily = font.family
+    activeFamily.value = font.family
   }
 }
 </script>
@@ -432,7 +439,9 @@ async function apply(font: FontItem, variantIndex = currentWeight(font.family)) 
             </button>
           </div>
         </div>
-        <p v-if="tagsError" class="tags-error">{{ tagsError }}（标签读取失败，字体列表不受影响）</p>
+        <p v-if="tagsError" class="tags-error">
+          {{ `${tagsError}（标签读取失败，字体列表不受影响）` }}
+        </p>
         <div
           v-else
           ref="tagListRef"
@@ -462,12 +471,12 @@ async function apply(font: FontItem, variantIndex = currentWeight(font.family)) 
     </div>
 
     <p v-if="classificationDegraded" class="data-warning">
-      {{ classificationDegraded }}，分类筛选已禁用
+      {{ `${classificationDegraded}，分类筛选已禁用` }}
     </p>
 
     <!-- TD-01-4：评分读不到 ≠ 你没收藏过。同一句 data-warning 通道，不加新控件 -->
     <p v-if="starsError" class="data-warning">
-      {{ starsError }}：列表里的评分先一律按「未收藏」显示，不是你的评分丢了
+      {{ `${starsError}：列表里的评分先一律按「未收藏」显示，不是你的评分丢了` }}
     </p>
 
     <div v-if="error" class="state is-error">
@@ -475,7 +484,9 @@ async function apply(font: FontItem, variantIndex = currentWeight(font.family)) 
       <button class="retry" type="button" @click="refresh">重试</button>
     </div>
 
-    <div v-else-if="loading && !items.length" class="state">正在读取系统字体…</div>
+    <div v-else-if="loading && !items.length" class="state">
+      {{ '正在读取系统字体…' }}
+    </div>
 
     <div v-else-if="!visible.length" class="state">
       <EmptyState />
@@ -580,9 +591,9 @@ async function apply(font: FontItem, variantIndex = currentWeight(font.family)) 
       @ok="confirmDelete"
     >
       <p class="del-tip">
-        确定删除标签「{{ tagDelete.tag }}」吗？
+        {{ msg.confirm.fn.deleteTagConfirm(tagDelete.tag) }}
         <template v-if="tagDelete.count">
-          该标签下有 {{ tagDelete.count }} 个字体，删除后关联会一起消失。
+          {{ msg.confirm.fn.deleteTagHasFonts(String(tagDelete.count)) }}
         </template>
       </p>
     </CepModal>
@@ -596,7 +607,11 @@ async function apply(font: FontItem, variantIndex = currentWeight(font.family)) 
       @ok="confirmTagIo"
     >
       <p class="del-tip">
-        {{ tagIo.mode === 'import' ? IMPORT_TIP : EXPORT_TIP }}
+        {{
+          tagIo.mode === 'import'
+            ? msg.confirm.fn.importTagsConfirm()
+            : msg.confirm.fn.exportTagsConfirm()
+        }}
       </p>
     </CepModal>
   </PageShell>

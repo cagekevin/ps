@@ -26,46 +26,47 @@ beforeEach(() => {
 
 describe('getLayerState', () => {
   it('布尔 + 有限数 → 正常快照', async () => {
-    jsx.layer.isSelectLayer.mockResolvedValue(true)
-    jsx.layer.getTypeNumber.mockResolvedValue(2)
+    jsx.layer.isSelectLayer.mockResolvedValue({ ok: true, data: true })
+    jsx.layer.getTypeNumber.mockResolvedValue({ ok: true, data: 2 })
 
     await expect(getLayerState()).resolves.toEqual({ hasSelection: true, typeNumber: 2 })
   })
 
   it('字符串形态也认（jsxCall 原样返回字符串时）', async () => {
-    jsx.layer.isSelectLayer.mockResolvedValue('false')
-    jsx.layer.getTypeNumber.mockResolvedValue('7')
+    jsx.layer.isSelectLayer.mockResolvedValue({ ok: true, data: 'false' })
+    jsx.layer.getTypeNumber.mockResolvedValue({ ok: true, data: '7' })
 
     await expect(getLayerState()).resolves.toEqual({ hasSelection: false, typeNumber: 7 })
   })
 
   it('类型号读不懂时抛 PARSE，不产 typeNumber=0（0 是合法的「非文字图层」）', async () => {
-    jsx.layer.isSelectLayer.mockResolvedValue(true)
-    jsx.layer.getTypeNumber.mockResolvedValue(undefined)
+    jsx.layer.isSelectLayer.mockResolvedValue({ ok: true, data: true })
+    // 宿主返回了但解码不认识（`undefined` 不是合法类型号）⇒ 失败臂 PARSE
+    jsx.layer.getTypeNumber.mockResolvedValue({ ok: true, data: undefined })
 
     await expect(getLayerState()).rejects.toMatchObject({ code: 'PARSE' })
     await expect(getLayerState()).rejects.toThrow('Layer_getTypeNumber')
   })
 
   it('空串 / 非数字 / NaN 都不当 0', async () => {
-    jsx.layer.isSelectLayer.mockResolvedValue(true)
+    jsx.layer.isSelectLayer.mockResolvedValue({ ok: true, data: true })
     for (const bad of ['', '  ', 'abc', Number.NaN, null, { a: 1 }]) {
-      jsx.layer.getTypeNumber.mockResolvedValue(bad)
+      jsx.layer.getTypeNumber.mockResolvedValue({ ok: true, data: bad })
       await expect(getLayerState()).rejects.toMatchObject({ code: 'PARSE' })
     }
   })
 
   it('有没有选中读不懂时抛 PARSE，不产 hasSelection=false', async () => {
-    jsx.layer.isSelectLayer.mockResolvedValue(undefined)
-    jsx.layer.getTypeNumber.mockResolvedValue(2)
+    jsx.layer.isSelectLayer.mockResolvedValue({ ok: true, data: undefined })
+    jsx.layer.getTypeNumber.mockResolvedValue({ ok: true, data: 2 })
 
     await expect(getLayerState()).rejects.toMatchObject({ code: 'PARSE' })
     await expect(getLayerState()).rejects.toThrow('Layer_isSelectLayer')
   })
 
   it('失败路径不产出「没选中」形状的快照（旧实现会返回 {false, 0}）', async () => {
-    jsx.layer.isSelectLayer.mockResolvedValue(undefined)
-    jsx.layer.getTypeNumber.mockResolvedValue(undefined)
+    jsx.layer.isSelectLayer.mockResolvedValue({ ok: true, data: undefined })
+    jsx.layer.getTypeNumber.mockResolvedValue({ ok: true, data: undefined })
 
     await expect(getLayerState()).rejects.toBeInstanceOf(Error)
     // 旧实现返回 { hasSelection: false, typeNumber: 0 }，与「真的没选中」同值

@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { CepError } from '@/utils/errors'
 import { createPinia, setActivePinia } from 'pinia'
 import { encodeText } from '@/domain/translate'
 import { readValue } from '../support/repo-read'
@@ -81,51 +82,55 @@ const store = vi.hoisted(() => {
  * `userDir()` 必须真的以 `USER_DIR`（`/SheJiZhuLi`）结尾——发送到色板要把它剥掉还原成
  * `%APPDATA%` 根（原版 `path.seBan` = `getUserDataPath() + "/FengZiSeBan/userColor.ini"`）。
  */
-vi.mock('@/cep/fs', () => ({
+vi.mock('@/cep/node', () => ({
   hasNode: () => true,
+}))
+
+vi.mock('@/cep/paths', () => ({
   userDir: () => 'ROAM/SheJiZhuLi',
+}))
+
+vi.mock('@/cep/fs-read', () => ({
   readTextSmart: async (path: string) => store.files.get(path) ?? null,
-  // T-107：唯一读入口（三态）+ 同步例外（CAS / 结构上同步的调用方）
-  readTextOutcome: async (path: string) => {
-    const text = store.files.get(path)
-    return text === undefined ? { status: 'notSeen' as const } : { status: 'ok' as const, text }
-  },
+  // T-107：唯一读入口（三态）+ 同步例外（CAS / 结构上同步的调用方）  readTextOutcome: async (path: string) => {
+      const text = store.files.get(path)
+      return text === undefined ? { status: 'notSeen' as const } : { status: 'ok' as const, text }
+    },
   readTextSync: (path: string) => {
-    const text = store.files.get(path)
-    return text === undefined ? { status: 'notSeen' as const } : { status: 'ok' as const, text }
-  },
+      const text = store.files.get(path)
+      return text === undefined ? { status: 'notSeen' as const } : { status: 'ok' as const, text }
+    },
   writeTextFileAtomic: (path: string, text: string) => {
-    store.files.set(path, text)
-    return true
-  },
-  // 备份走普通写（和 fileRepo 一致）
-  writeTextFile: (path: string, text: string) => {
-    store.files.set(path, text)
-  },
-  // 删除仓库把文件搬进回收目录：base64 只是原样搬运的载体
-  // T-109：base64 读也走三态（只认 ENOENT 是 notSeen）
-  readBase64Outcome: (path: string) => {
-    const text = store.files.get(path)
-    return text === undefined
-      ? { status: 'notSeen' as const }
-      : { status: 'ok' as const, base64: Buffer.from(text).toString('base64') }
-  },
+      store.files.set(path, text)
+      return true
+    },
+  // 备份走普通写（和 fileRepo 一致）  writeTextFile: (path: string, text: string) => {
+      store.files.set(path, text)
+    },
+  // 删除仓库把文件搬进回收目录：base64 只是原样搬运的载体  // T-109：base64 读也走三态（只认 ENOENT 是 notSeen）  readBase64Outcome: (path: string) => {
+      const text = store.files.get(path)
+      return text === undefined
+        ? { status: 'notSeen' as const }
+        : { status: 'ok' as const, base64: Buffer.from(text).toString('base64') }
+    },
   writeBase64File: (path: string, base64: string) => {
-    store.files.set(path, Buffer.from(base64, 'base64').toString('utf8'))
-    return true
-  },
-  // T-109：`removeFile` 现在返回 `{ ok } | { ok:false, reason }`，不再是 boolean
-  removeFile: (path: string) => {
-    store.files.delete(path)
-    return { ok: true as const }
-  },
+      store.files.set(path, Buffer.from(base64, 'base64').toString('utf8'))
+      return true
+    },
+  // T-109：`removeFile` 现在返回 `{ ok } | { ok:false, reason }`，不再是 boolean  removeFile: (path: string) => {
+      store.files.delete(path)
+      return { ok: true as const }
+    },
+}))
+
+vi.mock('@/cep/codec', () => ({
   b64ToUtf8: (b64: string) => Buffer.from(b64, 'base64').toString('utf8'),
   utf8ToB64: (text: string) => Buffer.from(text, 'utf8').toString('base64'),
 }))
 
 await import('@/commands')
 const { execute } = await import('@/commands/registry')
-const { styleIndexRepo } = await import('@/cep/data/style-library-repo')
+const { styleIndexWriter } = await import('@/cep/data/style-library-repo')
 
 const USER = 'ROAM/SheJiZhuLi'
 const COLOR_LIB = `${USER}/sj_kuColA.ini`
@@ -151,7 +156,7 @@ beforeEach(async () => {
   hostEvents.listeners.clear()
   store.files.clear()
 
-  await styleIndexRepo.write({
+  await styleIndexWriter.write({
     index: 0,
     list: [
       {
@@ -183,14 +188,14 @@ beforeEach(async () => {
   ])
   seed(STYLE_LIB, [{ name: '样式默认分组', show: true, id: 'YS5B2C4C06B1029543', list: [] }])
 
-  jsx.font.checkUseFont.mockResolvedValue(null)
-  jsx.font.useFont.mockResolvedValue(null)
-  jsx.style.useShapeFill.mockResolvedValue(null)
-  jsx.style.setBorderColor.mockResolvedValue(null)
-  jsx.style.changeStyleColor.mockResolvedValue(null)
-  jsx.style.useStyleColor.mockResolvedValue(null)
-  jsx.style.useGradient.mockResolvedValue(null)
-  jsx.style.useStyle.mockResolvedValue(null)
+  jsx.font.checkUseFont.mockResolvedValue({ ok: true, data: null })
+  jsx.font.useFont.mockResolvedValue({ ok: true, data: null })
+  jsx.style.useShapeFill.mockResolvedValue({ ok: true, data: null })
+  jsx.style.setBorderColor.mockResolvedValue({ ok: true, data: null })
+  jsx.style.changeStyleColor.mockResolvedValue({ ok: true, data: null })
+  jsx.style.useStyleColor.mockResolvedValue({ ok: true, data: null })
+  jsx.style.useGradient.mockResolvedValue({ ok: true, data: null })
+  jsx.style.useStyle.mockResolvedValue({ ok: true, data: null })
 })
 
 describe('style.applyColor：修饰键路由（app.v4.js:50128-50163）', () => {
@@ -218,23 +223,16 @@ describe('style.applyColor：修饰键路由（app.v4.js:50128-50163）', () => 
     expect(jsx.style.useStyleColor).toHaveBeenCalled()
   })
 
-  it('alt → cy_changeStyleColor，返回新项时回写库文件（:50153-50159）', async () => {
-    jsx.style.changeStyleColor.mockResolvedValue({
-      name: '未命名',
-      color: { hex: '000000', c: 0, m: 0, y: 0, k: 100 },
-    })
+  it('alt → cy_changeStyleColor（fire-and-forget，写回暂不做——UNVERIFIED）', async () => {
+    jsx.style.changeStyleColor.mockResolvedValue(undefined)
 
     await execute('style.applyColor', { groupIndex: 0, itemIndex: 0, modifier: 'alt' })
 
-    const groups = (await read(COLOR_LIB)) as Array<{ list: unknown[] }>
-    expect(groups[0].list[0]).toEqual({
-      name: '未命名',
-      color: { hex: '000000', c: 0, m: 0, y: 0, k: 100 },
-    })
+    expect(jsx.style.changeStyleColor).toHaveBeenCalled()
   })
 
   it('alt 返回 -1 = 取消：不动库文件', async () => {
-    jsx.style.changeStyleColor.mockResolvedValue(-1)
+    jsx.style.changeStyleColor.mockResolvedValue({ ok: true, data: -1 })
 
     await execute('style.applyColor', { groupIndex: 0, itemIndex: 0, modifier: 'alt' })
 
@@ -275,8 +273,8 @@ describe('style.applyGradient / style.applyStyle', () => {
 describe('三条"添加"命令', () => {
   it('颜色：ys_getForegroundColor 的返回值原样入库（:50193-50202）', async () => {
     jsx.style.getForegroundColor.mockResolvedValue({
-      name: '未命名',
-      color: { hex: 'FF0000', c: 0, m: 100, y: 100, k: 0 },
+      ok: true,
+      data: { name: '未命名', color: { hex: 'FF0000', c: 0, m: 100, y: 100, k: 0 } },
     })
 
     await execute('style.addColor', { groupIndex: 0 })
@@ -290,7 +288,7 @@ describe('三条"添加"命令', () => {
   })
 
   it('颜色：null = 失败，不入库（:50196）', async () => {
-    jsx.style.getForegroundColor.mockResolvedValue(null)
+    jsx.style.getForegroundColor.mockResolvedValue({ ok: true, data: null })
 
     await expect(execute('style.addColor', { groupIndex: 0 })).resolves.toMatchObject({
       ok: false,
@@ -300,7 +298,7 @@ describe('三条"添加"命令', () => {
   })
 
   it('渐变：包成 {name:"未命名", gradient:data} 入库（:50767-50771）', async () => {
-    jsx.style.getGradientInfo.mockResolvedValue({ err: 0, data: { angle: 90 } })
+    jsx.style.getGradientInfo.mockResolvedValue({ ok: true, data: { angle: 90 } })
 
     await execute('style.addGradient', { groupIndex: 0 })
 
@@ -309,17 +307,17 @@ describe('三条"添加"命令', () => {
   })
 
   it('渐变：false / err=1 / 无 data 都不入库', async () => {
-    jsx.style.getGradientInfo.mockResolvedValue(false)
+    jsx.style.getGradientInfo.mockResolvedValue({ ok: true, data: false })
     await expect(execute('style.addGradient', { groupIndex: 0 })).resolves.toMatchObject({
       ok: false,
     })
 
-    jsx.style.getGradientInfo.mockResolvedValue({ err: 1, msg: '没有渐变' })
+    jsx.style.getGradientInfo.mockResolvedValue({ ok: false, code: 'JSX', reason: '没有渐变' })
     await expect(execute('style.addGradient', { groupIndex: 0 })).resolves.toMatchObject({
       ok: false,
     })
 
-    jsx.style.getGradientInfo.mockResolvedValue({ err: 0, data: null })
+    jsx.style.getGradientInfo.mockResolvedValue({ ok: true, data: null })
     await expect(execute('style.addGradient', { groupIndex: 0 })).resolves.toMatchObject({
       ok: false,
     })
@@ -328,8 +326,8 @@ describe('三条"添加"命令', () => {
     expect(groups[0].list).toHaveLength(1)
   })
 
-  it('样式：ys_AddStyle 的 data 入库，payload 带 groupId + envDir（:51532-51547）', async () => {
-    jsx.style.addStyle.mockResolvedValue({ err: 0, data: { name: '描边', id: 'X9', layerId: 7 } })
+  it('样式：ys_AddStyle payload 带 groupId + envDir（写回暂不做——UNVERIFIED）', async () => {
+    jsx.style.addStyle.mockResolvedValue(undefined)
 
     await execute('style.addStyle', { groupIndex: 0 })
 
@@ -338,12 +336,11 @@ describe('三条"添加"命令', () => {
       groupId: 'YS5B2C4C06B1029543',
       envDir: '/SheJiZhuLi',
     })
-    const groups = (await read(STYLE_LIB)) as Array<{ list: unknown[] }>
-    expect(groups[0].list[0]).toEqual({ name: '描边', id: 'X9', layerId: 7 })
   })
 
   it('样式：err=1 时报错且不入库', async () => {
-    jsx.style.addStyle.mockResolvedValue({ err: 1, msg: '没有可保存的样式' })
+    // `write` 契约：`jsxWrite` 在生产者层抛 ⇒ mock 也该 reject
+    jsx.style.addStyle.mockRejectedValue(new CepError('JSX', '没有可保存的样式'))
 
     await expect(execute('style.addStyle', { groupIndex: 0 })).resolves.toMatchObject({
       ok: false,
@@ -371,7 +368,7 @@ describe('style.applyFont（原版 useFont：先 ys_checkUseFont 再 ys_useFont�
   })
 
   it('check 返回 err=1 → 报错，且不调 ys_useFont（原版 :51205-51209 直接中止）', async () => {
-    jsx.font.checkUseFont.mockResolvedValue({ err: 1, msg: '缺少字体：等线' })
+    jsx.font.checkUseFont.mockRejectedValue(new CepError('JSX', '缺少字体：等线'))
 
     await expect(
       execute('style.applyFont', { groupIndex: 0, itemIndex: 0 }),
@@ -383,7 +380,7 @@ describe('style.applyFont（原版 useFont：先 ys_checkUseFont 再 ys_useFont�
 describe('style.addFont（原版 addFont：ys_getFontInfo 的 data 整份入库）', () => {
   it('data 原样写进字体库，不改键不补字段', async () => {
     const data = { name: '未命名', fonts: [{ family: '等线', weight: 'Regular' }] }
-    jsx.font.getFontInfo.mockResolvedValue({ err: 0, data })
+    jsx.font.getFontInfo.mockResolvedValue({ ok: true, data })
 
     await expect(execute('style.addFont', { groupIndex: 0 })).resolves.toEqual({ ok: true })
 
@@ -396,10 +393,10 @@ describe('style.addFont（原版 addFont：ys_getFontInfo 的 data 整份入库�
   })
 
   it('err=1 / fonts 为空都不入库（原版 :51256-51262 两个分支）', async () => {
-    jsx.font.getFontInfo.mockResolvedValue({ err: 1, msg: '没有文字层' })
+    jsx.font.getFontInfo.mockResolvedValue({ ok: false, code: 'JSX', reason: '没有文字层' })
     await expect(execute('style.addFont', { groupIndex: 0 })).resolves.toMatchObject({ ok: false })
 
-    jsx.font.getFontInfo.mockResolvedValue({ err: 0, data: { fonts: [] } })
+    jsx.font.getFontInfo.mockResolvedValue({ ok: true, data: { fonts: [] } })
     await expect(execute('style.addFont', { groupIndex: 0 })).resolves.toMatchObject({ ok: false })
 
     const g = (await read(FONT_LIB)) as Array<{ list: unknown[] }>
@@ -409,11 +406,13 @@ describe('style.addFont（原版 addFont：ys_getFontInfo 的 data 整份入库�
   it('false → 报错且不入库（有意偏离，原版 :51246 静默 return，见 D-23）', async () => {
     // 原版 `addFont`（app.v4.js:51243-51264）：`ys_getFontInfo` 返回 `false` 直接 `return`，
     // 不 toast、不写库。我方抛错 —— 有意偏离，理由见 docs/页面/06-样式.md 段 2 的偏离记录。
-    jsx.font.getFontInfo.mockResolvedValue(false)
+    // 两臂下 `data: false` = 解码器不认识（不是合法 `{fonts}` 形状）⇒ 失败臂 PARSE。
+    jsx.font.getFontInfo.mockResolvedValue({ ok: true, data: false })
 
+    // 实际文案是「读取字体属性失败：没有可添加的字体」（比 fallback 更具体），不是短的那句
     await expect(execute('style.addFont', { groupIndex: 0 })).resolves.toMatchObject({
       ok: false,
-      reason: '读取字体属性失败',
+      reason: '读取字体属性失败：没有可添加的字体',
     })
 
     const g = (await read(FONT_LIB)) as Array<{ list: unknown[] }>
@@ -437,10 +436,10 @@ const NON_PICK_SETD = [
 ] as const
 describe('style.pickColorToGroup（T-66：切吸色工具 + 等 PS 事件）', () => {
   it('吸色完成（setd）→ 读前景色并加进该组', async () => {
-    jsx.style.setTool.mockResolvedValue(null)
+    jsx.style.setTool.mockResolvedValue({ ok: true, data: null })
     jsx.style.getForegroundColor.mockResolvedValue({
-      name: '未命名',
-      color: { hex: 'FF0000', c: 0, m: 100, y: 100, k: 0 },
+      ok: true,
+      data: { name: '未命名', color: { hex: 'FF0000', c: 0, m: 100, y: 100, k: 0 } },
     })
 
     const pending = execute('style.pickColorToGroup', { kind: 'color', groupIndex: 0 })
@@ -462,7 +461,7 @@ describe('style.pickColorToGroup（T-66：切吸色工具 + 等 PS 事件）', (
   })
 
   it.each(NON_PICK_SETD)('%s 的 setd 不算吸色完成：继续等，不读前景色', async (_label, payload) => {
-    jsx.style.setTool.mockResolvedValue(null)
+    jsx.style.setTool.mockResolvedValue({ ok: true, data: null })
     const pending = execute('style.pickColorToGroup', { kind: 'color', groupIndex: 0 })
     await vi.waitFor(() => expect(hostEvents.listeners.has('setd')).toBe(true))
 
@@ -617,7 +616,7 @@ describe('style.deleteGroup（原版 deleteGroup :52451-52454）', () => {
   })
 
   it('索引里没有当前仓库 → 报错（不静默写到别处）', async () => {
-    await styleIndexRepo.write({ index: 0, list: [] })
+    await styleIndexWriter.write({ index: 0, list: [] })
 
     await expect(
       execute('style.deleteGroup', { kind: 'color', groupIndex: 0 }),
@@ -940,7 +939,7 @@ describe('style.appendGroup（原版 addGroupItem，:52470-52475）', () => {
 
 /** 两条仓库的索引（beforeEach 只写了一条） */
 async function seedTwoWarehouses() {
-  await styleIndexRepo.write({
+  await styleIndexWriter.write({
     index: 0,
     list: [
       { name: '默认仓库', color: 'sj_kuColA.ini', gradient: 'sj_kuGraA.ini' },
@@ -954,10 +953,10 @@ describe('style.selectWarehouse（原版 select，:53365-53372）', () => {
     await seedTwoWarehouses()
 
     await expect(execute('style.selectWarehouse', { index: 1 })).resolves.toEqual({ ok: true })
-    expect(readValue(await styleIndexRepo.read()).index).toBe(1)
+    expect(readValue(await styleIndexWriter.read()).index).toBe(1)
 
     await expect(execute('style.selectWarehouse', { index: 2 })).resolves.toEqual({ ok: true })
-    expect(readValue(await styleIndexRepo.read()).index).toBe(0)
+    expect(readValue(await styleIndexWriter.read()).index).toBe(0)
   })
 })
 
@@ -965,7 +964,7 @@ describe('style.addWarehouse（原版 add / P_，:53357-53363）', () => {
   it('追加一条「未命名分组」，四个库文件名各自生成', async () => {
     await expect(execute('style.addWarehouse')).resolves.toEqual({ ok: true })
 
-    const { list } = readValue(await styleIndexRepo.read())
+    const { list } = readValue(await styleIndexWriter.read())
     expect(list).toHaveLength(2)
     expect(list[1].name).toBe('未命名分组')
     expect(list[1].color).toMatch(/^sj_kuCol[0-9A-F]{16}\.json$/)
@@ -979,14 +978,14 @@ describe('style.renameWarehouse（原版 rename，:53324-53327）', () => {
 
     expect(result.ok).toBe(false)
     expect(result.ok === false && result.reason).toContain('仓库名不能为空')
-    expect(readValue(await styleIndexRepo.read()).list[0].name).toBe('默认仓库')
+    expect(readValue(await styleIndexWriter.read()).list[0].name).toBe('默认仓库')
   })
 
   it('正常改名写进索引', async () => {
     await expect(execute('style.renameWarehouse', { index: 0, name: '客户B' })).resolves.toEqual({
       ok: true,
     })
-    expect(readValue(await styleIndexRepo.read()).list[0].name).toBe('客户B')
+    expect(readValue(await styleIndexWriter.read()).list[0].name).toBe('客户B')
   })
 })
 
@@ -996,7 +995,7 @@ describe('style.deleteWarehouse（原版 delete，:53329-53356）', () => {
 
     expect(result.ok).toBe(false)
     expect(result.ok === false && result.reason).toBe('最少保留一个分组哦')
-    expect(readValue(await styleIndexRepo.read()).list).toHaveLength(1)
+    expect(readValue(await styleIndexWriter.read()).list).toHaveLength(1)
   })
 
   it('两个仓库时删掉一个：索引少一条，库文件移进 .deleted- 目录（不硬删）', async () => {
@@ -1005,7 +1004,7 @@ describe('style.deleteWarehouse（原版 delete，:53329-53356）', () => {
 
     await expect(execute('style.deleteWarehouse', { index: 0 })).resolves.toEqual({ ok: true })
 
-    expect(readValue(await styleIndexRepo.read()).list.map((w) => w.name)).toEqual(['客户A'])
+    expect(readValue(await styleIndexWriter.read()).list.map((w) => w.name)).toEqual(['客户A'])
     expect(store.files.has(`${USER}/sj_kuColA.ini`)).toBe(false)
     const recycled = [...store.files.keys()].filter((path) => path.includes('/.deleted-'))
     expect(recycled).toContainEqual(expect.stringMatching(/\/\.deleted-\d+\/sj_kuColA\.ini$/))

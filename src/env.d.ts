@@ -63,4 +63,12 @@ interface Window {
   cep?: { fs?: CepFs; util?: CepUtil }
   /** 日志导出的调试入口，由 `utils/logger.ts` 挂上去 */
   __pszDump?: () => string
+  /**
+   * JSONP 回调挂载点（`cep/http.ts` 的 `jsonp()`）：回调名运行时拼成 `__pszJsonp<base36><序号>`。
+   *
+   * 为什么是**模板字面量索引签名**而不是 `Record<string, unknown>` 转型（硬规则 20(a) 第 1 步）：
+   * 只放开这一个前缀，`window.任意拼写` 仍然过拼写检查；通用字符串索引签名会把全仓
+   * `window.xxx` 的拼写错误一起放行，比一处转型更坏。写进 `.d.ts` 之后调用处一行转型都不用写。
+   */
+  [key: `__pszJsonp${string}`]: ((payload: unknown) => void) | undefined
 }

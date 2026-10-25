@@ -5,15 +5,22 @@
 // 禁止：页面直接 import；写失败由仓库抛出，命令层不要吞
 
 import { DATA_FILES } from '@/cep/env'
-import { userDir } from '@/cep/fs'
+import { userDir } from '@/cep/paths'
 import {
   TRANSLATE_DAILY_LIMIT,
   type HierarchyFile,
   type QuickFontFile,
   type TranslateCounter,
 } from '@/domain/font-set-config'
-import { pick } from './pick'
-import type { Repo } from './types'
+import { decodeList } from '@/utils/decode'
+import { isString } from '@/utils/guards'
+import {
+  decodeHierarchyFile,
+  decodeQuickFontFile,
+  decodeTranslateCounter,
+} from '@/domain/font-set-config'
+import { dataRepo } from './data-repo'
+import type { Repo, RepoView } from './types'
 import { deepClone } from '@/utils/clone'
 
 export type {
@@ -148,9 +155,9 @@ const COUNTER_DEFAULTS: TranslateCounter = { num: 0, max: TRANSLATE_DAILY_LIMIT,
 const clone = deepClone
 
 /**
- * 生产者自己的默认值。`pick` 的 fallback 形参就是它，坏读时由 `fileRepo` 经
+ * 生产者自己的默认值。`dataRepo` 的 fallback 形参就是它，坏读时由 `fileRepo` 经
  * `RepoReadBad.fallback` 交给消费侧（T-102）——**消费侧不要直接调这里**，
- * 调了就是绕开仓库自己拼一份默认值（ADR-24）。保留导出只给 `pick` 与测试造坏读桩用。
+ * 调了就是绕开仓库自己拼一份默认值（ADR-24）。保留导出只给 `dataRepo` 与测试造坏读桩用。
  */
 export const fontExtraDefaults = {
   quickFont: (): QuickFontFile => clone(QUICK_FONT_DEFAULTS),
@@ -159,26 +166,45 @@ export const fontExtraDefaults = {
   history: (): string[] => [],
 }
 
-export const quickFontRepo: Repo<QuickFontFile> = pick(
+/** 历史记录是纯字符串数组：非数组 / 混进非字符串 → 整份不认识（不 filter，避免写回时丢条目） */
+const decodeFontHistory = (raw: unknown) => decodeList(raw, isString)
+
+const quickFontImpl: Repo<QuickFontFile> = dataRepo(
   () => `${userDir()}/${DATA_FILES.ztQuickFont}`,
   fontExtraDefaults.quickFont,
+  decodeQuickFontFile,
 )
 
-export const hierarchyRepo: Repo<HierarchyFile> = pick(
+const hierarchyImpl: Repo<HierarchyFile> = dataRepo(
   () => `${userDir()}/${DATA_FILES.ztHierarych}`,
   fontExtraDefaults.hierarchy,
+  decodeHierarchyFile,
 )
 
-export const translateCounterRepo: Repo<TranslateCounter> = pick(
+const translateCounterImpl: Repo<TranslateCounter> = dataRepo(
   () => `${userDir()}/${DATA_FILES.ztTranslate}`,
   fontExtraDefaults.counter,
+  decodeTranslateCounter,
 )
 
 /** 原版 `sj_ztglHistory.json`：最近使用的字体家族，最多 10 个 */
-export const fontHistoryRepo: Repo<string[]> = pick(
+const fontHistoryImpl: Repo<string[]> = dataRepo(
   () => `${userDir()}/${DATA_FILES.ztglHistory}`,
   fontExtraDefaults.history,
+  decodeFontHistory,
 )
+
+/** 只读视图（store 唯一能拿到的形状）：没有 write / update —— 调用不到 */
+export const quickFontRepo: RepoView<QuickFontFile> = quickFontImpl
+export const hierarchyRepo: RepoView<HierarchyFile> = hierarchyImpl
+export const translateCounterRepo: RepoView<TranslateCounter> = translateCounterImpl
+export const fontHistoryRepo: RepoView<string[]> = fontHistoryImpl
+
+/** 写侧句柄：只给 commands（fontSet 的写命令）与 cloud 同步用 */
+export const quickFontWriter: Repo<QuickFontFile> = quickFontImpl
+export const hierarchyWriter: Repo<HierarchyFile> = hierarchyImpl
+export const translateCounterWriter: Repo<TranslateCounter> = translateCounterImpl
+export const fontHistoryWriter: Repo<string[]> = fontHistoryImpl
 
 /** 原版 `Jv.getTime()`：日 + 年 + 月，不补零 */
 export function dayKey(date: Date = new Date()): string {

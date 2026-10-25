@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { msg } from '@/domain/messages'
 import { computed, onMounted, ref } from 'vue'
 import { storeToRefs } from 'pinia'
 import Icon from '@/components/Icon.vue'
@@ -121,38 +122,38 @@ useDismiss(
 
 function setColumns(columns: 2 | 3 | 4) {
   menuOpen.value = false
-  void displayCmd.run({ showNumber: columns })
+  void displayCmd.invoke({ showNumber: columns })
 }
 
 /** 不一致时点一下 = 统一开启（再点一次才全部关闭）；不能拿第一个区域的值取反 */
 function toggleIcon() {
   menuOpen.value = false
-  void displayCmd.run({ showIcon: iconMark.value !== '✓' })
+  void displayCmd.invoke({ showIcon: iconMark.value !== '✓' })
 }
 
 function toggleText() {
   menuOpen.value = false
-  void displayCmd.run({ showText: textMark.value !== '✓' })
+  void displayCmd.invoke({ showText: textMark.value !== '✓' })
 }
 
 function clearWorkspace() {
   menuOpen.value = false
-  void clearCmd.run({}, '已删除工作区')
+  void clearCmd.invoke({}, msg.success.text.workspaceDeleted)
 }
 
 function addBlock() {
   menuOpen.value = false
-  void addBlockCmd.run({ type: 'norow' }, '已新增区域')
+  void addBlockCmd.invoke({ type: 'norow' }, msg.success.text.regionAdded)
 }
 
 function removeBlock(blockId: number) {
-  void removeBlockCmd.run({ blockId }, '已删除区域')
+  void removeBlockCmd.invoke({ blockId }, msg.success.text.regionDeleted)
 }
 
 function toggleBlock(blockId: number) {
   const block = findBlock(blocks.value, blockId)
   if (!block) return
-  void setBlockCmd.run({
+  void setBlockCmd.invoke({
     blockId,
     type: block.type === 'row' ? 'norow' : 'row',
   })
@@ -171,7 +172,7 @@ function editBlock(blockId: number) {
 
 async function applyBlockSize() {
   const { blockId, width, height } = blockEdit.value
-  await setBlockCmd.run({
+  await setBlockCmd.invoke({
     blockId,
     width: width.trim(),
     height: height.trim(),
@@ -179,12 +180,12 @@ async function applyBlockSize() {
   blockEdit.value.visible = false
 }
 
-function run(blockId: number, item: FreePanelItem) {
-  void executeCmd.run({ blockId, btnId: item.btnId }, `已执行「${item.text}」`)
+function invoke(blockId: number, item: FreePanelItem) {
+  void executeCmd.invoke({ blockId, btnId: item.btnId }, msg.success.fn.itemExecuted(item.text))
 }
 
 function remove(blockId: number, item: FreePanelItem) {
-  void removeCmd.run({ blockId, btnId: item.btnId }, `已移除「${item.text}」`)
+  void removeCmd.invoke({ blockId, btnId: item.btnId }, msg.success.fn.itemRemoved(item.text))
 }
 
 // ---------- 拖拽排序（`am()` 机制，见 `composables/useLongPressDrag`）----------
@@ -261,7 +262,7 @@ async function endItemDrag(result: LongPressDragResult) {
   if (!source || !target || !result.dragged) return
   if (source.blockId === target.blockId && source.btnId === target.btnId) return
 
-  await reorderCmd.run({
+  await reorderCmd.invoke({
     fromBlockId: source.blockId,
     fromBtnId: source.btnId,
     toBlockId: target.blockId,
@@ -341,7 +342,7 @@ onMounted(() => {
         :key="block.id"
         :block="block"
         :removable-block="blocks.length > 1"
-        @execute="run"
+        @execute="invoke"
         @remove="remove"
         @remove-block="removeBlock"
         @toggle-block="toggleBlock"

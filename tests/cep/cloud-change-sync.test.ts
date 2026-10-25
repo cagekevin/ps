@@ -17,9 +17,9 @@ vi.mock('@/cep/cloud/setup', () => ({
 const { createSyncQueue } = await import('@/cloud/change-sync')
 const { CLOUD_SYNC_DEBOUNCE_MS } = await import('@/config/cloud')
 const { startCloudChangeSync, stopCloudChangeSync } = await import('@/cep/cloud/change-sync')
-const { actionIndexRepo, actionLibraryRepo } = await import('@/cep/data/actions')
-const { hierarchyRepo } = await import('@/cep/data/font-extra')
-const { starsRepo, tagsRepo } = await import('@/cep/data')
+const { actionIndexWriter, actionLibraryWriter } = await import('@/cep/data/actions')
+const { hierarchyWriter } = await import('@/cep/data/font-extra')
+const { starsWriter, tagsWriter } = await import('@/cep/data')
 const { patchFontSetSettings } = await import('@/cep/data/legacy-settings')
 const { cloudEntries } = await import('@/cep/cloud/entries')
 const { log } = await import('@/utils/logger')
@@ -48,12 +48,12 @@ beforeEach(async () => {
   holder.queue = queue
 
   // 先播种再启动：播种产生的写入不该被当成"用户改动"
-  await actionIndexRepo.write({
+  await actionIndexWriter.write({
     index: 0,
     list: [{ name: '默认仓库', fileName: 'sj_dz_test.json' }],
   })
-  await actionLibraryRepo.write([{ groupName: '修图', show: true, list: [] }])
-  await hierarchyRepo.write({ index: 0, list: [{ name: '常规', data: [92, 48, 36] }] })
+  await actionLibraryWriter.write([{ groupName: '修图', show: true, list: [] }])
+  await hierarchyWriter.write({ index: 0, list: [{ name: '常规', data: [92, 48, 36] }] })
 })
 
 afterEach(() => {
@@ -69,7 +69,7 @@ describe('repo 改动 → 只标脏，60 秒后才由队列发一次推送（ADR
   it('动作仓库索引改动 → 60 秒后推 action.library', async () => {
     startCloudChangeSync()
 
-    await actionIndexRepo.update((value) => {
+    await actionIndexWriter.update((value) => {
       value.list.push({ name: '新仓库', fileName: 'sj_dz_new.json' })
     })
 
@@ -84,7 +84,7 @@ describe('repo 改动 → 只标脏，60 秒后才由队列发一次推送（ADR
   it('动作仓库文件改动（分组/动作）→ 同一条 action.library', async () => {
     startCloudChangeSync()
 
-    await actionLibraryRepo.write([{ groupName: '新建文档', show: true, list: [] }])
+    await actionLibraryWriter.write([{ groupName: '新建文档', show: true, list: [] }])
     await vi.advanceTimersByTimeAsync(CLOUD_SYNC_DEBOUNCE_MS)
 
     expect(sync).toHaveBeenCalledTimes(1)
@@ -94,7 +94,7 @@ describe('repo 改动 → 只标脏，60 秒后才由队列发一次推送（ADR
   it('层级预设改动 → 推 font.hierarchy', async () => {
     startCloudChangeSync()
 
-    await hierarchyRepo.write({ index: 1, list: [{ name: '手机端', data: [72, 50, 28] }] })
+    await hierarchyWriter.write({ index: 1, list: [{ name: '手机端', data: [72, 50, 28] }] })
     await vi.advanceTimersByTimeAsync(CLOUD_SYNC_DEBOUNCE_MS)
 
     expect(sync).toHaveBeenCalledTimes(1)
@@ -104,11 +104,11 @@ describe('repo 改动 → 只标脏，60 秒后才由队列发一次推送（ADR
   it('触发点本身一个请求都不发（59 秒内改三次仍是零请求）', async () => {
     startCloudChangeSync()
 
-    await actionIndexRepo.update((value) => {
+    await actionIndexWriter.update((value) => {
       value.list.push({ name: '仓库二', fileName: 'sj_dz_two.json' })
     })
-    await hierarchyRepo.write({ index: 1, list: [{ name: '手机端', data: [72, 50, 28] }] })
-    await actionLibraryRepo.write([{ groupName: '批量', show: true, list: [] }])
+    await hierarchyWriter.write({ index: 1, list: [{ name: '手机端', data: [72, 50, 28] }] })
+    await actionLibraryWriter.write([{ groupName: '批量', show: true, list: [] }])
 
     await vi.advanceTimersByTimeAsync(CLOUD_SYNC_DEBOUNCE_MS - 1)
 
@@ -120,10 +120,10 @@ describe('repo 改动 → 只标脏，60 秒后才由队列发一次推送（ADR
   it('两类改动落在同一个静默期 → 合并成一次推送', async () => {
     startCloudChangeSync()
 
-    await actionIndexRepo.update((value) => {
+    await actionIndexWriter.update((value) => {
       value.list.push({ name: '新仓库', fileName: 'sj_dz_new.json' })
     })
-    await hierarchyRepo.write({ index: 1, list: [{ name: '手机端', data: [72, 50, 28] }] })
+    await hierarchyWriter.write({ index: 1, list: [{ name: '手机端', data: [72, 50, 28] }] })
     await vi.advanceTimersByTimeAsync(CLOUD_SYNC_DEBOUNCE_MS)
 
     expect(sync).toHaveBeenCalledTimes(1)
@@ -137,7 +137,7 @@ describe('repo 改动 → 只标脏，60 秒后才由队列发一次推送（ADR
   it('字体收藏改动 → 推 font.stars（TD-11-1）', async () => {
     startCloudChangeSync()
 
-    await starsRepo.write([{ name: 'MiSans', star: 5 }])
+    await starsWriter.write([{ name: 'MiSans', star: 5 }])
     await vi.advanceTimersByTimeAsync(CLOUD_SYNC_DEBOUNCE_MS)
 
     expect(sync).toHaveBeenCalledTimes(1)
@@ -147,7 +147,7 @@ describe('repo 改动 → 只标脏，60 秒后才由队列发一次推送（ADR
   it('字体标签改动 → 推 font.tags（TD-11-1）', async () => {
     startCloudChangeSync()
 
-    await tagsRepo.write([{ text: '标题', arr: [], xz: false }])
+    await tagsWriter.write([{ text: '标题', arr: [], xz: false }])
     await vi.advanceTimersByTimeAsync(CLOUD_SYNC_DEBOUNCE_MS)
 
     expect(sync).toHaveBeenCalledTimes(1)
@@ -172,11 +172,11 @@ describe('repo 改动 → 只标脏，60 秒后才由队列发一次推送（ADR
   it('注册表里每个 unit 都有自己的触发源，五个都能标脏', async () => {
     startCloudChangeSync()
 
-    await starsRepo.write([{ name: 'MiSans', star: 5 }])
-    await tagsRepo.write([{ text: '标题', arr: [], xz: false }])
+    await starsWriter.write([{ name: 'MiSans', star: 5 }])
+    await tagsWriter.write([{ text: '标题', arr: [], xz: false }])
     await patchFontSetSettings({ ztShowQuick: true })
-    await hierarchyRepo.write({ index: 1, list: [{ name: '手机端', data: [72, 50, 28] }] })
-    await actionIndexRepo.update((value) => {
+    await hierarchyWriter.write({ index: 1, list: [{ name: '手机端', data: [72, 50, 28] }] })
+    await actionIndexWriter.update((value) => {
       value.list.push({ name: '新仓库', fileName: 'sj_dz_new.json' })
     })
     await vi.advanceTimersByTimeAsync(CLOUD_SYNC_DEBOUNCE_MS)
@@ -191,7 +191,7 @@ describe('repo 改动 → 只标脏，60 秒后才由队列发一次推送（ADR
     startCloudChangeSync()
     stopCloudChangeSync()
 
-    await hierarchyRepo.write({ index: 1, list: [{ name: '手机端', data: [72, 50, 28] }] })
+    await hierarchyWriter.write({ index: 1, list: [{ name: '手机端', data: [72, 50, 28] }] })
     await vi.advanceTimersByTimeAsync(CLOUD_SYNC_DEBOUNCE_MS * 2)
 
     expect(sync).not.toHaveBeenCalled()

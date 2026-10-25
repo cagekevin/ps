@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { msg } from '@/domain/messages'
 import { list, type CommandGroup } from '@/commands'
 import { useCommand } from './useCommand'
 
@@ -15,8 +16,8 @@ const entries = list({ group: props.group }).map((meta) => ({
   runner: useCommand(meta.id),
 }))
 
-function run(item: (typeof entries)[number]) {
-  void item.runner.run(undefined, `已执行：${item.meta.title}`)
+function invoke(item: (typeof entries)[number]) {
+  void item.runner.invoke(undefined, msg.success.fn.commandExecuted(item.meta.title))
 }
 </script>
 
@@ -29,7 +30,7 @@ function run(item: (typeof entries)[number]) {
       type="button"
       :data-requires="item.meta.requires"
       :disabled="item.runner.disabled.value"
-      @click="run(item)"
+      @click="invoke(item)"
     >
       <span class="cmd-grid__title">{{ item.meta.title }}</span>
       <code class="cmd-grid__id">{{ item.meta.id }}</code>

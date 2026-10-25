@@ -17,11 +17,11 @@ docs/
   生成/                     脚本产物，别手改
   日志/                     YYYY-MM-DD-主题.md，平铺
   归档/                     作废/过期（暂空）
-../daily/架构日志/           技术债账本（债务.md + 区域轮次 + 任务索引），走 node scripts/debt.mjs
+../daily/架构日志/           技术债账本（债务.md = 待办 + 债务-归档.md = 已结 + 区域轮次 + 任务索引），走 node scripts/debt.mjs（6 命令）
 ```
 
 > **待办与债务不在 `docs/` 下**：2026-10-24 起搬到 `daily/架构日志/`
-> （`债务.md` = 债、唯一写入口 `node scripts/debt.mjs`；`00-任务-总索引.md` = 任务 `T-xx`）。
+> （`债务.md` = 待办债、`债务-归档.md` = 已结债，读写入口 `node scripts/debt.mjs`，校验 `debt.mjs check`；`00-任务-总索引.md` = 任务 `T-xx`）。
 > 原 `docs/状态/台账.md` 已删除。
 
 ## 二、为什么这么分
@@ -48,7 +48,7 @@ docs/
 按顺序问，第一个"是"就停：
 
 1. 是脚本生成的吗 → `生成/`（并且**不要手改**）
-2. 是待办/债务吗 → `../daily/架构日志/`（债走 `node scripts/debt.mjs add`，任务手改 `00-任务-总索引.md`）；
+2. 是待办/债务吗 → `../daily/架构日志/`（债走 `node scripts/debt.mjs add`，任务手改 `00-任务-总索引.md`）；结账 `resolve --cmd "…" --claim "…"（闸：真跑命令、claim 必须命中）
    是页面状态档位吗 → `状态/进度.md`
 3. 是某一页的验收或备注吗 → `页面/0N-<页面>.md`
 4. 是架构决策吗 → **`node scripts/adr.mjs add`**（落 `adr/`，不手写、不追加到别的文件）

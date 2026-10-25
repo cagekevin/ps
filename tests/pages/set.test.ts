@@ -28,7 +28,7 @@ const cmds = vi.hoisted(() => ({
 }))
 vi.mock('@/components/command/useCommand', () => ({
   useCommand: (id: string) => ({
-    run:
+    invoke:
       id === 'commonUse.setOption'
         ? cmds.setOption
         : id === 'commonUse.setShow'

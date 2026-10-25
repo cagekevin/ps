@@ -5,6 +5,7 @@
 
 import { resolveKuGroups } from './ku-format'
 import { isRecord } from '@/utils/guards'
+import { type Decoded } from '@/utils/decode'
 
 /** 四类库。顺序 = 页面 tab 顺序（原版 `switchval`，`app.v4.js:54590`） */
 export type KuKind = 'color' | 'gradient' | 'font' | 'style'
@@ -71,6 +72,16 @@ export function readStyleWarehouseIndex(raw: unknown): KuIndexRead {
   const index = typeof raw.index === 'number' && Number.isFinite(raw.index) ? raw.index : 0
   const safe = Math.min(Math.max(Math.trunc(index), 0), list.length - 1)
   return { value: { index: safe, list }, degraded: '' }
+}
+
+/**
+ * 读边界：样式库索引。容器先自己证一遍 —— `readStyleWarehouseIndex` 把"结构不认识"折成
+ * `defaultStyleIndex()`：那在"索引为空"时是对的，在"结构不认识"时会把坏文件当成新用户。
+ */
+export function decodeStyleWarehouseIndex(raw: unknown): Decoded<StyleWarehouseIndex> | null {
+  if (!isRecord(raw) || !Array.isArray(raw.list)) return null
+  const read = readStyleWarehouseIndex(raw)
+  return read.degraded ? { value: read.value, degraded: read.degraded } : { value: read.value }
 }
 
 /** 列表里显示的一项；`swatch` 是可直接塞进 `background` 的 CSS 值（颜色 / 渐变），没有就不画色块 */
@@ -221,6 +232,7 @@ function fontItem(raw: Record<string, unknown>): KuItem {
 
   item.fontPreview = {
     count: fonts.length,
+    // UNVERIFIED: `${size}点` 是用户可见单位标签还是内部格式待定；若是提示语应归 msg.*
     size: Number.isFinite(size) ? `${size}点` : '',
     color: fontColor(first.color),
     family: text(first.family),

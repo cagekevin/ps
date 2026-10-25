@@ -1,4 +1,5 @@
 <script setup lang="ts">
+import { msg } from '@/domain/messages'
 import { nextTick, ref, watch } from 'vue'
 import { useDismiss } from '@/composables/useDismiss'
 
@@ -14,7 +15,13 @@ const props = withDefaults(
     cancelText?: string
     hideCancel?: boolean
   }>(),
-  { title: '提示', width: 260, okText: '确定', cancelText: '取消', hideCancel: false },
+  {
+    title: msg.confirm.text.modalTitle,
+    width: 260,
+    okText: msg.confirm.text.modalOk,
+    cancelText: msg.confirm.text.modalCancel,
+    hideCancel: false,
+  },
 )
 
 const visible = defineModel<boolean>('visible', { default: false })
