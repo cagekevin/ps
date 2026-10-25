@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { adaptFreePanelItem } from '@/domain/free-panel-legacy'
 
 /**
- * TD-12-24：自由面板项是**用户数据**（`sj_appFreePanel.json`），形状不可信。
+ * 自由面板项是**用户数据**（`sj_appFreePanel.json`），形状不可信。
  *
  * 以前 `Number(option)` 会把 `'abc'` 算成 `NaN` 直接送进 jsx，`null`/`''` 悄悄变成 0——
  * 一个假数字带着"肯定没错"的类型跑到 PS 那一侧。现在在**入口当场拒绝**，

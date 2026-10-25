@@ -9,7 +9,7 @@ import { msg } from '@/domain/messages'
 import { log } from '@/utils/logger'
 
 /**
- * 一次 POST 的结果。**非 2xx 不抛**：状态码是"怎么重试/用户去做什么"的判据（TD-11-8 那套码
+ * 一次 POST 的结果。**非 2xx 不抛**：状态码是"怎么重试/用户去做什么"的判据（那套码
  * 由调用方按 401/403/429/其余分档），网络出口只报观测（ADR-0026 ②）。
  */
 export interface HttpTextResponse {

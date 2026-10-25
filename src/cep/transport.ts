@@ -24,7 +24,7 @@ let queue: Promise<unknown> = Promise.resolve()
  *
  * 队列放行看的是它，**不看我们自己的超时**：超时只代表"我们不等了"，
  * PS 侧那条脚本还在跑；此时放行下一条，两条会在 PS 里交错执行，
- * 注释里承诺的 FIFO 恰好最需要的时候破功（TD-13-2）。
+ * 注释里承诺的 FIFO 恰好最需要的时候破功。
  */
 let bridgeReturned: Promise<void> = Promise.resolve()
 
@@ -85,7 +85,7 @@ function runScript(
       if (settled) return
       settled = true
       // 只说「我们不等了」，不说「没做成」：PS 侧那条脚本可能还在跑、也可能已经执行完。
-      // 用独立 code 承载这个不确定性，文案层不许把它说成普通失败（TD-13-2）。
+      // 用独立 code 承载这个不确定性，文案层不许把它说成普通失败。
       reject(
         new CepError(
           'TIMEOUT_UNKNOWN',
@@ -232,7 +232,7 @@ async function jsxCall(
     parsed = JSON.parse(raw)
   } catch {
     // 非 JSON 且不是哨兵 = **读不懂**。以前这里 `return raw as unknown as T`，
-    // 把字符串当对象交给消费侧，形状错误一路流到业务（TD-12-9）
+    // 把字符串当对象交给消费侧，形状错误一路流到业务
     throw new CepError('PARSE', msg.ps.fn.resultNotJson(opts.label ?? fn, raw.slice(0, 80)))
   }
   // 只有"宿主明确返回了 err"才走失败臂

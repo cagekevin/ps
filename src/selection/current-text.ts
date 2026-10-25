@@ -56,7 +56,7 @@ export const textInfoRef = shallowRef<TextInfo | null>(null)
 export const textInfoError = ref('')
 
 /**
- * 快照可能是旧的（TD-13-6）。
+ * 快照可能是旧的。
  *
  * 与 `textInfoError` 分开：`error` 是「这次读失败了」，`stale` 是「宿主事件已经发生、
  * 但新属性迟迟没回来」——面板上还挂着上一层/上一次的值，和「选区没变所以值没变」

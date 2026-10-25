@@ -25,7 +25,7 @@ export const PREVIEW_LABEL: Record<PreviewMode, string> = {
 }
 
 /**
- * 家族名 → 中/英。**判据只有一处**：`domain/font-lang`（TD-12-26）。
+ * 家族名 → 中/英。**判据只有一处**：`domain/font-lang`。
  * 这里保留同名转发，是因为 `fontSet` 页的字体下拉已经在 import 它（页面轮之前不动那些文件）；
  * 转发不是第二份实现——规则本身不在这个文件里。
  */
@@ -47,7 +47,7 @@ export const useFontStore = defineStore('font', () => {
   const tagsError = ref('')
   const stars = ref<Record<string, number>>({})
   /**
-   * 星级读不到的原因（TD-01-4）。
+   * 星级读不到的原因。
    *
    * 与 `tagsError` 同一口径：读失败必须落到界面上一句话，不能让"评分全是 0"冒充
    * "你还没收藏过"。列表本身不受影响——评分是装饰，不因为读不到就不显示字体。

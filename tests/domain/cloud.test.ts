@@ -68,7 +68,7 @@ describe('cloud snapshot', () => {
   })
 
   it('缺 units → unreadable（不是"云端为空"）', () => {
-    // 网关回 `{ok:true}`（无 units）曾经被判成 null = 云端为空 → rev=1 覆盖云端（TD-11-5）
+    // 网关回 `{ok:true}`（无 units）曾经被判成 null = 云端为空 → rev=1 覆盖云端
     expect(normalizeCloudPayload({ ok: true })).toMatchObject({ status: 'unreadable' })
     expect(normalizeCloudPayload({ data: {} })).toMatchObject({ status: 'unreadable' })
     expect(normalizeCloudPayload('x')).toMatchObject({ status: 'unreadable' })

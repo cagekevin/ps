@@ -79,7 +79,7 @@ async function gate(): Promise<SyncOutcome | null> {
 }
 
 /**
- * 错误码 → 重试策略（TD-11-8）。**只有"重试方式不同"的码才进这张表**：
+ * 错误码 → 重试策略。**只有"重试方式不同"的码才进这张表**：
  * - 权限（401/403/登录页）：自己不会好 → 停手，等下一次触发点；
  * - 限流（429）：会好但要慢 → 直接按最长一档退避。
  * 其余失败（网络 / 超时 / 5xx / 写盘失败）走常规梯度，不进表——进了也是同一个值。
@@ -93,15 +93,15 @@ function retryPolicy(errorCode?: string): Pick<SyncOutcome, 'retry' | 'retryAfte
 }
 
 /**
- * 离线 sweep 的留痕是否已经写过（TD-11-14）。
+ * 离线 sweep 的留痕是否已经写过。
  *
- * 日志记**跃迁**不记心跳（TD-11-9）：离线持续一小时会按最大等待慢轮询十几轮，
+ * 日志记**跃迁**不记心跳：离线持续一小时会按最大等待慢轮询十几轮
  * 每轮都 warn 一遍同样的字，等于把 warn 降级成心跳。闸门放行时清零，下次离线重新留一句。
  */
 let offlineSweepWarned = false
 
 /**
- * 闸门挡下时的痕迹（TD-11-7 / TD-11-14）。
+ * 闸门挡下时的痕迹。
  *
  * **离线不算失败**（ADR-21：闸门返回 skip，不消耗退避），但它必须可观测：
  * 否则"离线期间本地改了没上去"与"全部已同步"在界面与日志里逐字相同。
@@ -109,9 +109,9 @@ let offlineSweepWarned = false
  * 用户能在设置页直接看到状态，写 5 条"待同步"只会让痕迹变得没用。
  *
  * sweep **不记 pending**：那时确实没有"哪一项被卡住"可指，塞进去会把「待推送 N 项」
- * 从"哪一项推失败了"变成噪音（TD-11-2）。但**必须留一句 warn**——上一版按
+ * 从"哪一项推失败了"变成噪音。但**必须留一句 warn**——上一版按
  * `units.length === 0` 早退，于是"离线 + 本轮是 sweep"既不记 pending 也不留日志，
- * 用户与开发者都无痕（TD-11-14）。sweep 与否看队列传下来的 `intent`，
+ * 用户与开发者都无痕。sweep 与否看队列传下来的 `intent`
  * 不看 `units` 长短：空数组是 sweep 的结果，不是判据。
  */
 function markSkipped(outcome: SyncOutcome, units: string[], intent: SyncIntent): void {
@@ -145,7 +145,7 @@ export const cloudSyncQueue = createSyncQueue({
     const result = await engine.pushUnits(intent === 'sweep' ? allSyncUnitIds() : units)
     return { ...result, ...retryPolicy(result.errorCode) }
   },
-  // 结局与异常都必须有接收者（TD-11-6）：以前这两个钩子全空转，失败只剩 attempts++
+  // 结局与异常都必须有接收者：以前这两个钩子全空转，失败只剩 attempts++
   onOutcome: reportSyncOutcome,
   onError: reportSyncError,
 })

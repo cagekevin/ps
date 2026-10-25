@@ -1,11 +1,11 @@
 // 是什么：测试用的**唯一**假文件系统 —— 装到 `window.require('fs')` 上，让真代码（`disk-write` / `fs`）跑在内存盘上
 // 替代了什么：31 个测试各自 `vi.mock('@/cep/fs-read', () => ({
-  createRequire,
-}))` 假**写原语** + 14 个测试各自手写的 `installRequire`
+//   createRequire,
+// }))` 假**写原语** + 14 个测试各自手写的 `installRequire`
 // 谁在用：所有需要落盘 / 注入读写失败的测试
 // 禁止：再 `vi.mock('@/cep/fs-read', () => ({
-  createRequire,
-}))` 去假**写原语** —— 写原语在 `src/cep/disk-write.ts`，
+//   createRequire,
+// }))` 去假**写原语** —— 写原语在 `src/cep/disk-write.ts`，
 //   mock `@/cep/fs` 拦不住它，而且会逼生产代码把原语留在 fs.ts（架构被测试绑架）。
 //   正确姿势：`installFakeFs()` 假**操作系统**，生产代码一行不改。
 //
@@ -37,7 +37,7 @@ export interface FakeDisk {
   corruptNextWrite: boolean
   /**
    * `n > 0` ⇒ 前 n 次读成功，第 n+1 次起抛 EACCES。
-   * 用来构造"异步读 ok、同步 CAS 比对读不到"（TD-09-24）：`rawUpdate` 先异步读、再同步比对。
+   * 用来构造"异步读 ok、同步 CAS 比对读不到"：`rawUpdate` 先异步读、再同步比对。
    */
   failReadAfter: number
   /** 装上假 OS（本用例内落盘/读盘都走它） */

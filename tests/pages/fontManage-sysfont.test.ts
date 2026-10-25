@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { FontItem } from '@/domain/font-item'
 
 /**
- * 字体管理页 · 系统字体读不到（TD-09-3）。
+ * 字体管理页 · 系统字体读不到。
  *
  * 用户视角的判据：**「读不到」与「没有」在页面上必须是两句不同的话**。
  * - 读盘失败 → 错误块（带原因）+「重试」

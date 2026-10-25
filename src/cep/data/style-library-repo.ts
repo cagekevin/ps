@@ -88,7 +88,7 @@ export interface StyleLibrarySnapshot {
 }
 
 /**
- * 索引读取 + 归一 + `degraded` 拼装（TD-09-16：原来这段在 `readStyleLibrary`、`usableIndex`、
+ * 索引读取 + 归一 + `degraded` 拼装（原来这段在 `readStyleLibrary`、`usableIndex`
  * `style-library-io.indexState` 三处各写一遍）。
  *
  * 契约：**读坏了也返回**（`value` 是归一后的结果，`degraded` 非空说明为什么不可信），

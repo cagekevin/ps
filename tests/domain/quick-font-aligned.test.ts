@@ -3,7 +3,7 @@ import { sortQuickFont, toQuickFont } from '@/domain/quick-font'
 import type { QuickFont } from '@/domain/font-set-config'
 
 /**
- * TD-12-27：三个平行数组的**长度契约**。
+ * 三个平行数组的**长度契约**。
  *
  * 以前没有契约：`asArray` 在缺字段时给 `[]`，`sortQuickFont` 按 zz 的下标去取 mz/hjm，
  * 取到 `undefined` 直接进 `string[]`，然后被 **JSON 写进用户的 `sj_fontSet.json`**

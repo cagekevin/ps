@@ -43,7 +43,7 @@ function serial<T>(task: () => Promise<T>): Promise<T> {
 }
 
 /**
- * HTTP 状态 → 错误码（TD-11-8）。**只分「重试策略」或「用户该做什么」不同的那些**：
+ * HTTP 状态 → 错误码。**只分「重试策略」或「用户该做什么」不同的那些**：
  * - 401/403：权限，自己不会好 → 不自动重试，用户去修 GAS 部署权限；
  * - 429：服务端要我们慢一点 → 可重试，但直接按最长一档退避；
  * - 其余（4xx/5xx/网络/超时）：一律 `CLOUD_NETWORK`——重试方式和用户动作都一样，再多一个码就是死码。
@@ -73,7 +73,7 @@ async function request(
   if (!url) throw new CloudError('CLOUD_NOT_CONFIGURED', msg.cloud.text.notConfigured)
 
   try {
-    // 网络出口只有一个：`cep/http.ts`（TD-13-3）。这里不再自己 `fetch`——
+    // 网络出口只有一个：`cep/http.ts`。这里不再自己 `fetch`——
     // 超时、abort、发不出去这几种情况都在那一层归一成 CepError('TIMEOUT' | 'NETWORK')。
     const response = await postText(
       url,
@@ -123,7 +123,7 @@ export async function pushSnapshot(snapshot: CloudSnapshot): Promise<void> {
 }
 
 /**
- * 拉云端快照。**三态**（TD-11-5）：网络/权限/非 JSON 仍然抛 `CloudError`（既有语义不变），
+ * 拉云端快照。**三态**：网络/权限/非 JSON 仍然抛 `CloudError`（既有语义不变）
  * 200 但结构不符返回 `{status:'unreadable'}` —— 由引擎决定"拒绝覆盖云端"，
  * 这里不替它判（ADR-0026 ②：原语只报观测）。
  */

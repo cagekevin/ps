@@ -5,12 +5,12 @@ import path from 'node:path'
 import { afterAll, beforeEach, describe, expect, it } from 'vitest'
 
 /**
- * 真机路径（`fileRepo`）下的样式库写盘与串行化 —— TD-09-29 的凭证 + TD-09-30 / TD-09-28 的反向对照。
+ * 真机路径（`fileRepo`）下的样式库写盘与串行化 —— 凭证 +反向对照。
  *
  * 为什么必须单开一个文件：其余 `style-library-*.test.ts` 把 `@/cep/fs` 整层 mock，**且** jsdom 下
  * `hasCep()` 为 `false` → `dataRepo()` 选 `memoryRepo`（它是实例本地 `enqueue`，不是全局 `runQueued`）。
  * 那等于连被测实现都换掉了：39 条用例全绿，却从没跑过 `fileRepo` —— 这正是「按构造绿 / 检测母体缺位」
- * （TD-09-29）。这里装真 `window.require`（node:fs）+ 真 `window.__adobe_cep__` → `hasCep()`=true
+ * 。这里装真 `window.require`（node:fs）+ 真 `window.__adobe_cep__` → `hasCep()`=true
  * → 走 `fileRepo`，测的是真代码 + 真磁盘 + 真全局写链；死锁会以「超时」直接暴露（不再假绿）。
  */
 const realRequire = createRequire(import.meta.url)
@@ -75,7 +75,7 @@ afterAll(() => {
 })
 
 /**
- * TD-09-30（母体）：`hasCep`=true → `fileRepo`。改前 `addKuGroup`/`selectWarehouse`/`deleteWarehouse`
+ * （母体）：`hasCep`=true → `fileRepo`。改前 `addKuGroup`/`selectWarehouse`/`deleteWarehouse`
  * 在 `runQueued` 里再调排队的 `styleIndexWriter.*` → 自锁，本组用例会**超时**（不是断言失败）。
  * 改成锁内 `*InLock` 后必须跑完并真落盘。超时 = 红。
  */
@@ -131,7 +131,7 @@ describe('TD-09-30：fileRepo 下编辑/切换/删除仓库不再自锁', () => 
 })
 
 /**
- * TD-09-29：`.kux` 导入**真的写盘**。整层 mock fs 的旧用例删掉原子写也不会红；这里走真 `node:fs`，
+ * `.kux` 导入**真的写盘**。整层 mock fs 的旧用例删掉原子写也不会红；这里走真 `node:fs`
  * 断言磁盘上确实多了一份 `sj_kuCol*.json` 且内容正确、且没有残留 `.tmp`。
  */
 describe('TD-09-29：.kux 导入对真磁盘写盘（fileRepo + node:fs）', () => {
@@ -161,7 +161,7 @@ describe('TD-09-29：.kux 导入对真磁盘写盘（fileRepo + node:fs）', () 
 })
 
 /**
- * TD-09-28：导入与日常编辑**排在同一条链**上。顺序执行时两者都要成功、互不吞掉对方的写；
+ * 导入与日常编辑**排在同一条链**上。顺序执行时两者都要成功、互不吞掉对方的写
  * 且导入走 `runQueued` 后与 `addKuGroup` 共用一条链（fan-in 见报告里的 grep），不会再各写各的。
  */
 describe('TD-09-28：导入与编辑共用一条写链（顺序执行都不丢）', () => {

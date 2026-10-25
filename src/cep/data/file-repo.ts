@@ -5,7 +5,7 @@
 //   ⇒ 这条我判「放弃强声明」：`fileRepo` 是**唯一实现**，不是唯一入口（TS 没有 package-private）。
 // **怎么用**：应用层（store / command / 页面）**不要直接调用**，一律 `import { dataRepo } from './data-repo'`。
 // **别这么写**：在 store / command / 页面里 `fileRepo(...)` —— 你跳过了环境选择，浏览器 dev 直接炸。
-// 替代了什么：`pick.ts` 的可选 `normalize` 参数（TD-03-5 / T-99-2）
+// 替代了什么：`pick.ts` 的可选 `normalize` 参数
 // 谁在用（**两具名例外 + 实现级用例**）：
 //   ① `data-repo.ts` —— 唯一构造器，环境选择在它那里；
 //   ② `swatch-repo.ts` —— **具名例外**：色板是**用户资产**，`dataRepo` 的内存兜底会把"读不到"
@@ -96,7 +96,7 @@ export function fileRepo<T>(
    * 整份覆盖 + 保留原文做备份/隔离。
    *
    * 与 `rawUpdate` 的区别：`rawUpdate` 在原文坏时**拒绝写**（D-42）；这里**照写**，
-   * 但把坏原文隔离到 `.corrupt-<ts>`（TD-09-21）。与 `write` 的区别：`write` 不读原文，
+   * 但把坏原文隔离到 `.corrupt-<ts>`。与 `write` 的区别：`write` 不读原文
    * `.bak` 无从谈起。T-112：读不到原文时**不许写** —— 整份覆盖会把旧内容抹平且没有第二份。
    */
   function rawOverwrite(value: T): void {

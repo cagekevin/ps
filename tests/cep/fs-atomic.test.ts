@@ -97,7 +97,7 @@ describe('writeDisk（原子写：tmp 名唯一 / 不留 tmp / 失败必抛）',
     const target = path.join(dir, 'sj_appFreePanel.json')
     behavior.failRename = true
 
-    // 失败必须**抛**（boolean 说不出为什么，调用方只能猜着退回普通写，TD-09-27）
+    // 失败必须**抛**（boolean 说不出为什么，调用方只能猜着退回普通写）
     await expect(writeDisk(target, '{"a":5}', { previous: null })).rejects.toThrow('EACCES')
     expect(fs.readdirSync(dir)).toEqual([])
   })

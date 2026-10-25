@@ -1,7 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 /**
- * TD-11-7：离线不算失败（ADR-21：闸门 skip 不消耗退避），但**必须可观测**。
+ * 离线不算失败（ADR-21：闸门 skip 不消耗退避），但**必须可观测**。
  *
  * 三条一起钉住，缺一条这条债就没还完：
  * ① 不消耗退避（skip 不改 attempts、不排退避重试）；
@@ -23,7 +23,7 @@ const feedback = vi.hoisted(() => ({ error: vi.fn(), warn: vi.fn(), info: vi.fn(
 
 vi.mock('@/cep/cloud/entries', () => ({ cloudEntries: [] }))
 vi.mock('@/cep/cloud/config', () => ({
-  // 名字跟生产者对齐（TD-11-10 正名）：mock 少一个导出会让被测代码拿到 undefined
+  // 名字跟生产者对齐：mock 少一个导出会让被测代码拿到 undefined
   isCloudUrlUsable: () => true,
   isAutoSyncEnabled: () => true,
 }))
@@ -85,7 +85,7 @@ describe('离线走闸门', () => {
     expect(queue.attempts()).toBe(0) // 没发请求 ⇒ 不吃退避额度
     expect(log.dump()).toContain('CLOUD_OFFLINE')
     expect(log.dump()).toContain('不消耗退避')
-    // 反向对照（TD-11-14）：有具体 unit 时不写 sweep 那句——两句不能互相顶替
+    // 反向对照：有具体 unit 时不写 sweep 那句——两句不能互相顶替
     expect(log.dump()).not.toContain('全量补偿同步没有执行')
 
     // 不弹 toast：后台行为不打断用户
@@ -104,7 +104,7 @@ describe('离线走闸门', () => {
     queue.requestSync('boot')
     await vi.advanceTimersByTimeAsync(0)
     expect(log.dump()).toContain('CLOUD_OFFLINE')
-    // TD-11-14：sweep 离线必须留下**自己的**可观察痕迹。旧实现按 `units.length === 0`
+    //sweep 离线必须留下**自己的**可观察痕迹。旧实现按 `units.length === 0`
     // 早退，只剩 reportSyncOutcome 那句通用的"本轮跳过"，看不出"这一轮是全量补偿没跑"
     expect(log.dump()).toContain('全量补偿同步没有执行')
 
@@ -123,10 +123,10 @@ describe('离线走闸门', () => {
   })
 
   /**
-   * TD-11-14 的第二半：留痕要能看见，但**不许变成心跳**。
+   * 第二半：留痕要能看见，但**不许变成心跳**。
    *
    * 离线会按最大等待慢轮询，一小时十几轮；每轮都 warn 一遍同样的字，等于把 warn 降级成
-   * 噪音（TD-11-9 的"记跃迁不记心跳"）。判据：离线连续两轮只留一句；恢复在线后再离线，
+   * 噪音（"记跃迁不记心跳"）。判据：离线连续两轮只留一句；恢复在线后再离线
    * 重新留一句（跃迁两头都要有）。
    */
   it('离线 sweep 的留痕只写跃迁：连续两轮一句，恢复后再离线重新一句', async () => {

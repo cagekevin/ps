@@ -76,7 +76,7 @@ export interface Repo<T> {
    * **整份覆盖 + 保留原文做备份/隔离**；失败抛。与另两个写的区别：
    * - `write` 不看原文（`previous` 恒 `null`）⇒ 拿不到原文就没有 `.bak`；
    * - `update` 在原文坏时**拒绝写**（D-42），而"整份替换"要的正是**读坏也写**、
-   *   但把坏原文隔离到 `.corrupt-<ts>`（TD-09-21，不让坏内容顶 `.bak`）。
+   *   但把坏原文隔离到 `.corrupt-<ts>`（不让坏内容顶 `.bak`）。
    * 不带 CAS（整份覆盖：调用方已决定完整内容，没有"读→改→写"的丢更新窗口）。
    *
    * 消费者：`swatch-repo.writeSwatchItems`（已迁）。

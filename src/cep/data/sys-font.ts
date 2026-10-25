@@ -23,7 +23,7 @@ export function mergeFontStars(list: FontItem[]): FontItem[] {
 }
 
 /**
- * SysFont2.json 的读取**观测**（TD-09-3）。
+ * SysFont2.json 的读取**观测**。
  *
  * 三态而不是 `FontItem[]`：空数组同时表示"文件不在（首次使用）""读不到""解析失败"，
  * 而这三件事用户看到的是三种不同结论——`[]` 一折，页面只会显示"没有系统字体"。
@@ -54,7 +54,7 @@ export function readSysFontFile(): SysFontRead {
   const abs = `${userDir()}/${DATA_FILES.sysFontList}`
 
   // 档 1 的唯一入口，**不折叠**：这个文件没有默认值 ——
-  // "文件不在"（还没生成过）与"读不到"是两种结论，拿 `[]` 顶上去就会显示"没有系统字体"（TD-09-3）
+  // "文件不在"（还没生成过）与"读不到"是两种结论，拿 `[]` 顶上去就会显示"没有系统字体"
   const outcome = readRepoFile(abs, decodeSysFont)
   if (outcome.kind === 'absent') return { status: 'none' }
   if (outcome.kind === 'bad') {

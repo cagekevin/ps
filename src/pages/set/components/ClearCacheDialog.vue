@@ -31,7 +31,7 @@ const limitOptions = [{ label: '未设置' }]
 function refresh() {
   try {
     const usage = dirUsage(userDir())
-    // 有文件读不到时 bytes 只是下限：必须让"这个数字不准"看得见（TD-09-25 之前少算了多少没人知道）
+    // 有文件读不到时 bytes 只是下限：必须让"这个数字不准"看得见（之前少算了多少没人知道）
     usageText.value = !usage
       ? '无法读取'
       : usage.skipped > 0

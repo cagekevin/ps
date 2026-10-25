@@ -2,7 +2,7 @@ import { createRequire } from 'node:module'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 /**
- * 1a · `fs.ts` 观测原语的三态契约（TD-09-22/23/24/27 的共同地基）。
+ * 1a · `fs.ts` 观测原语的三态契约（共同地基）。
  *
  * 判据只有三条，全部作用在**真假 FS**上（给真实实现装 `window.require`，不 mock `@/cep/fs`）：
  * 1. **只认 `ENOENT` 是"查不到"**：`EACCES` / `EBUSY` / `EISDIR` 一律进 `error` 并带原因；

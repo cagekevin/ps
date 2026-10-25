@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
 /**
- * TD-09-23：偏好文件**读不到**时不许拿默认值回写。
+ * 偏好文件**读不到**时不许拿默认值回写。
  *
  * 旧链路：`readTextSync` 把三态压成 `string | null` → `settings.ts` 的 `text ? … : {}`
  * 把"读不到"与"新装机没有偏好"当成同一件事 → 随后的 `persist` 把 `{}` 写回文件，

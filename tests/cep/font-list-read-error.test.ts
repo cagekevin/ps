@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 
 /**
- * TD-09-3 的接线：SysFont2.json 读不到时，`getFontList` 必须**抛错并带上原因**，
+ * 接线：SysFont2.json 读不到时，`getFontList` 必须**抛错并带上原因**
  * 而不是回一个空列表——空列表在页面上就是「没有找到匹配的字体」那句空态。
  */
 

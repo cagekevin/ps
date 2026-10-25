@@ -3,7 +3,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import type { CloudErrorCode } from '@/domain/cloud'
 
 /**
- * TD-12-23：8 个 `CLOUD_*` 码折成 2 个命令层码——**折掉的是码，不是信息**。
+ * 8 个 `CLOUD_*` 码折成 2 个命令层码——**折掉的是码，不是信息**。
  *
  * 判据（阶段单 §四点三五 第 3 条）：新码必须有消费点。命令层只有两个消费者按码分流
  * （取消不提示 / 未配置去填地址），其余码没有任何人按它做不同的事，再分就是死码。

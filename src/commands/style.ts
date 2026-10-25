@@ -103,7 +103,7 @@ async function pickColorToGroup(ctx: CommandContext, groupIndex: number): Promis
     await ctx.jsx.style.setTool('eyedropperTool')
 
     const result = await finished
-    // 用户在 PS 里切走选区 = 主动放弃，不是故障（TD-12-22）
+    // 用户在 PS 里切走选区 = 主动放弃，不是故障
     if (result === 'cancelled') throw new CepError('CANCELLED', msg.command.text.stylePickCancelled)
     if (result === 'timeout') throw new CepError('TIMEOUT', msg.command.text.stylePickTimeout)
   } finally {

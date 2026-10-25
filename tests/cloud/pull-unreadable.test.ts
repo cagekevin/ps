@@ -5,7 +5,7 @@ import { createCloudEngine } from '@/cloud/engine'
 import { pullSnapshot } from '@/cep/cloud/transport'
 
 /**
- * TD-11-5：**云端读不懂 ≠ 云端为空**。
+ * **云端读不懂 ≠ 云端为空**。
  *
  * 事故形态：网关回 200 但结构不符（`{"ok":true}` / 错误页 / 字段改名）→ 归一化以前返回 `null`
  * → 引擎判"云端是空的" → 用本地 rev=1 推上去，**云端那份被覆盖**，

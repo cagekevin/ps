@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { join, resolve } from 'node:path'
 
 /**
- * TD-17-14：产物守卫（`scripts/verify-dist.mjs`）的 `<script>` 属性判据。
+ * 产物守卫（`scripts/verify-dist.mjs`）的 `<script>` 属性判据。
  *
  * 起因：旧版用 `/<script[^>]*\bdefer\b/` 在整份 HTML 上找**子串**，于是
  * `<script data-note="defer" src="…">`（根本没有 defer 属性）也报「有 defer」；

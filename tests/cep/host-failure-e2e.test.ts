@@ -9,7 +9,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
  * 「用户能看见」= `CommandOutcome.reason`（`useCommand.invoke` 拿它 toast）/ `watchStateRef`（页面提示条下一轮接）；
  * 「日志有原因」= 落盘文件里能查到这条失败，且带得上 PS 侧给的原话。
  *
- * 三种失败对应 TD-13-2 / TD-13-4 / TD-13-5 的爆炸半径：
+ * 三种失败对应/爆炸半径：
  * ① jsx 抛错（ERR: 通道）② 永不回包（超时）③ 事件通道根本挂不上（订阅失败）。
  */
 const realRequire = createRequire(import.meta.url)

@@ -3,7 +3,7 @@ import { CepError } from '@/utils/errors'
 import { log } from '@/utils/logger'
 
 /**
- * TD-13-5：订阅失败不许被固化成「空订阅成功态」。
+ * 订阅失败不许被固化成「空订阅成功态」。
  *
  * 旧实现 `stopWatch = () => {}`：一次失败之后这个会话再也不会重试，
  * `selectionRef` 停在 EMPTY，`useCommand.disabled` 把按钮全灰，界面零提示。

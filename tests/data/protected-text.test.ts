@@ -1,7 +1,7 @@
 import { beforeEach, describe, expect, it } from 'vitest'
 
 /**
- * TD-09-19 / TD-16-1：仓库层**受保护的纯文本写入口**。
+ * /：仓库层**受保护的纯文本写入口**。
  *
  * 以前 `swatch.setRecentLimit` 直接 `writeTextFile('…/zuiJinShuLiang.txt')`：没有 tmp、非原子、
  * 没有 `.bak`。面板关在写中途 → 数量文件半截（原版读它时 parseInt 得到 NaN，最近色条数就乱了）。
@@ -27,45 +27,45 @@ beforeEach(() => {
 })
 
 describe('writeProtectedText', () => {
-  it('首次写（没有上一版）→ 不产生空备份，内容写对', async () => {
-    await writeProtectedText(target('zuiJinShuLiang.txt'), '20')
+  it('首次写（没有上一版）→ 不产生空备份，内容写对', () => {
+    writeProtectedText(target('zuiJinShuLiang.txt'), '20')
 
     expect(disk.files.get(target('zuiJinShuLiang.txt'))).toBe('20')
     expect(disk.files.has(`${target('zuiJinShuLiang.txt')}.bak`)).toBe(false)
   })
 
-  it('有上一版 → 先备份再替换（.bak = 上一版原文）', async () => {
+  it('有上一版 → 先备份再替换（.bak = 上一版原文）', () => {
     disk.files.set(target('zuiJinShuLiang.txt'), '12')
 
-    await writeProtectedText(target('zuiJinShuLiang.txt'), '20')
+    writeProtectedText(target('zuiJinShuLiang.txt'), '20')
 
     expect(disk.files.get(target('zuiJinShuLiang.txt'))).toBe('20')
     expect(disk.files.get(`${target('zuiJinShuLiang.txt')}.bak`)).toBe('12')
   })
 
-  it('原子写失败（rename 失败）→ 抛，目标文件一个字节都不动', async () => {
+  it('原子写失败（rename 失败）→ 抛，目标文件一个字节都不动', () => {
     disk.files.set(target('zuiJinShuLiang.txt'), '12')
-    disk.failWrite = 'EPERM: rename 失败'
+    disk.failRename = true
 
-    await expect(writeProtectedText(target('zuiJinShuLiang.txt'), '20')).rejects.toThrow(/EPERM/)
+    expect(() => writeProtectedText(target('zuiJinShuLiang.txt'), '20')).toThrow(/rename 失败/)
 
     expect(disk.files.get(target('zuiJinShuLiang.txt'))).toBe('12')
   })
 
-  it('备份失败 → 中止（不写本体，不留"看起来成功"）', async () => {
+  it('备份失败 → 中止（不写本体，不留"看起来成功"）', () => {
     disk.files.set(target('zuiJinShuLiang.txt'), '12')
     // 备份是第一次原子写，让它失败
     disk.failWrite = 'EACCES: 备份写不了'
 
-    await expect(writeProtectedText(target('zuiJinShuLiang.txt'), '20')).rejects.toThrow(/备份失败/)
+    expect(() => writeProtectedText(target('zuiJinShuLiang.txt'), '20')).toThrow(/EACCES/)
+    // 备份没落地、本体也没被替换 —— 目标仍是上一版原文
+    expect(disk.files.has(`${target('zuiJinShuLiang.txt')}.bak`)).toBe(false)
     expect(disk.files.get(target('zuiJinShuLiang.txt'))).toBe('12')
   })
 
-  it('写完回读不一致 → 抛（"写完能证明它没被破坏"）', async () => {
+  it('写完回读不一致 → 抛（"写完能证明它没被破坏"）', () => {
     disk.corruptNextWrite = true
 
-    await expect(writeProtectedText(target('zuiJinShuLiang.txt'), '20')).rejects.toThrow(
-      /回读不一致/,
-    )
+    expect(() => writeProtectedText(target('zuiJinShuLiang.txt'), '20')).toThrow(/回读不一致/)
   })
 })

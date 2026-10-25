@@ -121,7 +121,7 @@ export const fontSetCommands: Command<unknown>[] = [
 
         default:
           // 以前这里是 `axis === 'bg-h' ? 3 : 4` 的兜底：**枚举外任何值都当 bg-v 执行并报成功**
-          // ——拿"与背景垂直"去动用户文档，用户以为点的是别的对齐（TD-12-25）。
+          // ——拿"与背景垂直"去动用户文档，用户以为点的是别的对齐。
           // 不猜默认行为，直接拒绝并列出合法值。
           throw new CepError('PARSE', msg.command.fn.fontSetUnknownAlign(String(axis)))
       }
@@ -180,7 +180,7 @@ export const fontSetCommands: Command<unknown>[] = [
     kind: 'instant',
     async invoke(ctx, { config }) {
       // 缺配置以前是一句英文 TypeError（`Cannot read properties of undefined (reading 'padding')`），
-      // 用户看不出是哪一步坏了（TD-12-25 后半）
+      // 用户看不出是哪一步坏了
       if (!config || typeof config.padding !== 'string') {
         throw new CepError('PARSE', msg.command.text.fontSetButtonNoPadding)
       }

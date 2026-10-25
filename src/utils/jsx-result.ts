@@ -40,7 +40,7 @@ export function isJsxOkSentinel(raw: unknown): raw is 'ok' | 'OK' {
 /**
  * 宿主返回值 → 两臂。**唯一生产者**（`transport` 与命令层都只经过它）。
  *
- * 口径：只有 `err === 0` 是成功（TD-16-8）。`err` 不在 `{0, 1}` 内是**未知状态** ——
+ * 口径：只有 `err === 0` 是成功。`err` 不在 `{0, 1}` 内是**未知状态** ——
  * 一律失败并报出原值，不再当成功。
  */
 export function asJsxOutcome(raw: unknown): JsxOutcome<unknown> {

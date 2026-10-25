@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { log } from '@/utils/logger'
 
 /**
- * TD-13-6：事件来了、属性却没跟上 —— 快照冻结在上一层，必须说出来。
+ * 事件来了、属性却没跟上 —— 快照冻结在上一层，必须说出来。
  *
  * 判据只认「我们已经知道有事发生」这一刻：事件触发后 `STALE_AFTER_MS` 内没读到新属性
  * 才算旧。用户什么都不做的时候没有事件，因此不会误报（报警要能一直开着才有用）。

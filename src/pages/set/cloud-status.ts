@@ -41,7 +41,7 @@ const REASON_TEXT: Record<PendingReason, string> = {
 }
 
 /**
- * 错误码 → 更具体的说法（TD-11-8/11-12）。**有码时优先于桶**。
+ * 错误码 → 更具体的说法。**有码时优先于桶**。
  *
  * 为什么必须按码说：`reason` 是"用户该做什么"的粗分类，`network` 这一桶里混着
  * 权限（**不会**自动重试）和离线（会自动重试）——同一句"会在后台重试"对权限错是假的，
@@ -65,7 +65,7 @@ export interface CloudStatusView {
   /**
    * **本会话**里改了、还没到推送时间的条数（内存脏集合）。
    *
-   * 与 `failedText` 是**两个不同概念**，不许合并成一个"待同步"（TD-11-2）：
+   * 与 `failedText` 是**两个不同概念**，不许合并成一个"待同步"：
    * 这个数是正常的等待（60s 静默 / 5min 最大等待，到点自己就推），用户什么都不用做；
    * 那个数是**推失败过**的痕迹（落盘 `pending`），要等重试或要用户处理。
    * 两者不同源、可以同时出现且数字不同——文案必须让用户看出"这不是矛盾，是两件事"。
@@ -100,7 +100,7 @@ export function describeCloudStatus(input: {
   } else if (status.ledgerState.status === 'broken') {
     // T-114：坏台账**不许**说成"还没有同步记录"——用户会以为自己是新设备，
     // 然后点「上传」把云端覆盖掉。这里必须说清"读不到"和"已停止上传"。
-    // TD-11-12：这里原来写「自动同步和<上传>都已暂停」——「上传」在界面上**没有按钮**，
+    //这里原来写「自动同步和<上传>都已暂停」——「上传」在界面上**没有按钮**
     // 用户会去找一个不存在的东西。说的是自动上传这件事，就按自动上传写。
     notice = `本地同步记录读不到（${status.ledgerState.reason}）：自动上传已暂停，避免把云端覆盖掉。修好这个文件后重开面板，或点「从云端拉取」重新建立记录。`
   } else if (status.ledgerState.status === 'none') {
@@ -112,7 +112,7 @@ export function describeCloudStatus(input: {
   return {
     // T-114：坏台账不能显示"尚未同步"——那也是"从没同步过"的说法，会误导用户
     syncedText: status.ledgerState.status === 'broken' ? '读不到' : formatSyncedAt(status.syncedAt),
-    // 两个数各自写明出处：前者是"本会话还没到点"，后者是"历史没推上去"（TD-11-2）
+    // 两个数各自写明出处：前者是"本会话还没到点"，后者是"历史没推上去"
     queuedText:
       queuedUnits === 0
         ? '无'

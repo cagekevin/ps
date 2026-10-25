@@ -1,7 +1,7 @@
 import type { ProgressHandle, ProgressPort } from './types'
 
 /**
- * 缺字体提示的端口（TD-12-20）。
+ * 缺字体提示的端口。
  *
  * 命令发现字体缺失时只需要"说一声"，怎么显示归 UI：实现是 `stores/font-missing`，
  * 由 `main.ts` 装配。**命令层不许直接 import store**（ADR-16），所以走这一层。

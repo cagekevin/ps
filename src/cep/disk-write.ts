@@ -60,7 +60,7 @@ import { log } from '@/utils/logger'
 export interface BackupOptions {
   /**
    * 原文自己坏了（半截 JSON / 乱码）时，改存 `<文件>.corrupt-<ts>`，**不让坏内容顶 `.bak`**
-   * —— 顶着 `.bak` 会让人以为有退路，其实是坏字节（TD-09-21）。
+   * —— 顶着 `.bak` 会让人以为有退路，其实是坏字节。
    */
   quarantineOnCorrupt?: boolean
   /** 日志标签，默认 `repo` */
@@ -83,7 +83,7 @@ function backupOrQuarantine(target: string, previous: string, opts: BackupOption
 }
 
 /**
- * 备份文件本身也**必须原子**：半截 `.bak` 是假退路（与 TD-09-19 / TD-09-27 同一类）。
+ * 备份文件本身也**必须原子**：半截 `.bak` 是假退路（与同一类）。
  * 写失败即抛 —— 绝不在没有退路的情况下覆盖原件。
  */
 function writeBackupFile(path: string, text: string): void {
@@ -102,7 +102,7 @@ function writeBackupFile(path: string, text: string): void {
  */
 function compareSync(target: string, expected: string | null): 'same' | 'diff' | 'unknown' {
   const read = readTextSync(target)
-  // 读不到 ≠ 没人改过（TD-09-24）：旧实现读不到给 null，`expected` 也是 null 时
+  // 读不到 ≠ 没人改过：旧实现读不到给 null，`expected` 也是 null 时
   // `null === null` 判 'same'，于是权限错时并发守卫恒真、别的面板刚建的文件被覆盖。
   if (read.status === 'error') return 'unknown'
   const actual = read.status === 'ok' ? read.text : null
@@ -152,13 +152,13 @@ function writeCore(
     // 别人改过 → **抛 `CONFLICT`**，不写。返回一个字符串会被调用点丢掉（实测 12/13 丢掉），
     // 而 `rawUpdate` 需要靠这个判别码决定"重读重跑 mutator"，不能靠 reason 字符串比。
     if (compared === 'diff') throw new CepError('CONFLICT', path)
-    // 比不了（读不到原文 / 无 Node）→ **不写**：拿不到原文就没有"没被改过"的证据（TD-09-24）
+    // 比不了（读不到原文 / 无 Node）→ **不写**：拿不到原文就没有"没被改过"的证据
     if (compared === 'unknown') {
       throw new CepError('IO', msg.data.fn.fileCompareReadFailed(path))
     }
   }
 
-  // 原子写失败必须抛：退回普通写等于主动摘掉 rename 保护（TD-09-27）
+  // 原子写失败必须抛：退回普通写等于主动摘掉 rename 保护
   writeTextFileAtomic(path, text)
 
   if (opts.verifyReadBack) {
@@ -252,7 +252,7 @@ function atomicReplace(absPath: string, text: string): void {
  * 写 tmp → rename（内部，二进制版）。
  *
  * 为什么不能省：`writeFileSync` 直写目标，进程被杀 / 磁盘满就留半截文件 ——
- * 库文件（`sj_ku*` / `sj_dz*`）是用户资产里最贵的，半截 JSON 会让整库回退默认值（TD-09-15）。
+ * 库文件（`sj_ku*` / `sj_dz*`）是用户资产里最贵的，半截 JSON 会让整库回退默认值。
  * tmp 名 / 清理 / 错误归一与文本版**共用同一套**，不新建第二套。
  */
 function atomicReplaceBytes(absPath: string, bytes: string | Uint8Array): void {

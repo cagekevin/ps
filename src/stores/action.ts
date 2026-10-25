@@ -28,16 +28,16 @@ export const useActionStore = defineStore('action', () => {
   const listTypeColumns = ref(getPref('dzShowListType', 2) + 1)
 
   /**
-   * 列数投影的对外出口，**只读**（TD-03-3）。
+   * 列数投影的对外出口，**只读**。
    *
    * 导出 `computed` 而不是 `ref`：`storeToRefs` 对只读 getter 给的是 `ComputedRef`，
    * 页面写 `listType.value = …` 时 `vue-tsc` 直接报只读属性——判据有执行者，
-   * 不再靠"页面记得别赋值"这句注释（TD-03-2 那版只是约定，改回去测试照样绿）。
+   * 不再靠"页面记得别赋值"这句注释（那版只是约定，改回去测试照样绿）。
    */
   const listType = computed(() => listTypeColumns.value)
 
   /**
-   * 列数投影的**唯一写入口**（TD-03-2）。
+   * 列数投影的**唯一写入口**。
    *
    * 以前页面从 `storeToRefs` 拿到 `listType` 就直接 `.value = columns`——页面替 store
    * 决定投影怎么变，store 自己没有写入口，第二个页面要用时又会各写一遍。

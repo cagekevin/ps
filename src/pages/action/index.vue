@@ -402,7 +402,7 @@ useDismiss(
 async function chooseLayout(columns: 1 | 2 | 3) {
   layoutMenu.value = false
   const ok = await setListTypeCmd.invoke({ columns })
-  // 投影只经 store 的写入口改（TD-03-2）。`listType` 是 store 的只读 computed（TD-03-3）：
+  // 投影只经 store 的写入口改。`listType` 是 store 的只读 computed：
   // 写 `listType.value = …` 会被 vue-tsc 判 TS2540（read-only property），不靠这句注释守
   if (ok) store.setListType(columns)
 }

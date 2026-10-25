@@ -38,7 +38,7 @@ export async function getFontList(opts: { refresh?: boolean } = {}): Promise<Fon
   if (isJsxOkSentinel(data)) {
     const fromFile = readSysFontFile()
     if (fromFile.status === 'error') {
-      // TD-09-3：把**为什么**读不到带出去，别让页面只写"读不到系统字体"却查不到原因
+      //把**为什么**读不到带出去，别让页面只写"读不到系统字体"却查不到原因
       throw new CepError('IO', msg.data.fn.sysFontReadFailed(fromFile.reason))
     }
     if (fromFile.status === 'none' || !fromFile.list.length) {

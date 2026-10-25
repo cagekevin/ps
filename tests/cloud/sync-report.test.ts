@@ -12,7 +12,7 @@ let reportSyncOutcome: typeof import('@/cep/cloud/sync-report').reportSyncOutcom
 let resetSyncReport: typeof import('@/cep/cloud/sync-report').__resetSyncReportForTest
 
 /**
- * TD-11-6：后台同步的结局必须有接收者，并且**成功也要有痕迹——但只记跃迁**。
+ * 后台同步的结局必须有接收者，并且**成功也要有痕迹——但只记跃迁**。
  *
  * 判据（本轮定的，写进阶段单）：
  * - 失败：每次都记 warn，带**码 + 原因原文**（只有"失败了"三个字等于没记）；

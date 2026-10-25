@@ -68,7 +68,7 @@ describe('启动装配：启动补偿 + 可见性信号，没有定时器（ADR-
 
     await vi.advanceTimersByTimeAsync(1)
     expect(sync).toHaveBeenCalledTimes(1)
-    // 空数组 + intent='sweep'：全量，用哪些 unit 由队列的调用方决定（TD-11-14：不看长度反推）
+    // 空数组 + intent='sweep'：全量，用哪些 unit 由队列的调用方决定（不看长度反推）
     expect(sync).toHaveBeenCalledWith([], 'sweep')
   })
 

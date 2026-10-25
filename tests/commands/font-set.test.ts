@@ -79,7 +79,7 @@ const keeps = {
 beforeEach(() => {
   vi.clearAllMocks()
   __resetFontClipboardForTest()
-  // 缺字体提示已搬到 store（TD-12-20）：这里建一个 pinia，并接上与 main.ts 同形状的端口
+  // 缺字体提示已搬到 store：这里建一个 pinia，并接上与 main.ts 同形状的端口
   setActivePinia(createPinia())
   resetMissingFontPort()
   setMissingFontPort({ signal: (name) => useFontMissingStore().signal(name) })
@@ -103,7 +103,7 @@ describe('fontSet.align', () => {
   })
 
   /**
-   * TD-12-25：枚举外的 axis **不许猜默认行为**。
+   * 枚举外的 axis **不许猜默认行为**。
    * 以前 `axis === 'bg-h' ? 3 : 4` 让任何怪值都走"与背景垂直"并报成功——用户点了别的对齐，
    * 文档被按 bg-v 改了，界面还说成功。
    */

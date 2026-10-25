@@ -97,9 +97,9 @@ describe('异步域（runExclusiveAsync）', () => {
       return 'first'
     })
 
-    await expect(runExclusiveAsync('action-files', '动作库导入', async () => 'second')).rejects.toThrow(
-      /动作库导入还没完成/,
-    )
+    await expect(
+      runExclusiveAsync('action-files', '动作库导入', async () => 'second'),
+    ).rejects.toThrow(/动作库导入还没完成/)
 
     releaseFirst()
     await expect(firstRunning).resolves.toBe('first')
@@ -112,7 +112,9 @@ describe('异步域（runExclusiveAsync）', () => {
       }),
     ).rejects.toThrow('解析失败')
 
-    await expect(runExclusiveAsync('action-files', '动作库导入', async () => 'ok')).resolves.toBe('ok')
+    await expect(runExclusiveAsync('action-files', '动作库导入', async () => 'ok')).resolves.toBe(
+      'ok',
+    )
   })
 })
 

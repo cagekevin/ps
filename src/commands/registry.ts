@@ -131,7 +131,7 @@ async function runWith(
   const started = Date.now()
   try {
     // payload 来自命令网格 / 自由面板 / 快捷键，编译期只有 `unknown`；形状由各自的入口保证
-    // （`CommandPayloads` 是类型契约，自由面板那条还有运行时校验，见 TD-12-24）。
+    // （`CommandPayloads` 是类型契约，自由面板那条还有运行时校验）。
     // 这里不再写 `as never`：那会把"形状不确定"说成"确定"，让类型检查在这个口子上彻底失效。
     await command.invoke(context(selection, progress), payload)
     log.info('cmd', `${id} ${Date.now() - started}ms`)
@@ -139,7 +139,7 @@ async function runWith(
   } catch (e) {
     // 非 `CepError` 统一落 `INTERNAL`：失败臂 `code` 必填，不许"失败但没码"
     const code = e instanceof CepError ? e.code : 'INTERNAL'
-    // 用户自己取消不是失败（TD-12-22）——是否 cancelled 由 `CODE_REGISTRY` 一张表决定
+    // 用户自己取消不是失败——是否 cancelled 由 `CODE_REGISTRY` 一张表决定
     if (CODE_REGISTRY[code].cancelled) {
       log.info('cmd', `${id} 已被用户取消`)
       return { ok: 'cancelled' }
@@ -173,7 +173,7 @@ export async function execute(id: string, payload?: unknown): Promise<CommandOut
     selection = await refresh()
   } catch (e) {
     // 读不到选区 ≠ 没有选区：原因（INIT / TIMEOUT_UNKNOWN / PARSE…）必须原样带走，
-    // 以前 `.catch(() => null)` 把 code 和原文都丢了，用户只看到一句「读取选区失败」（TD-13-4）
+    // 以前 `.catch(() => null)` 把 code 和原文都丢了，用户只看到一句「读取选区失败」
     const reason = describeCepError(e)
     const code = e instanceof CepError ? e.code : 'INTERNAL'
     log.warn('cmd', `${id} 前置查询选区失败：${reason}`, e)

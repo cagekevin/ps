@@ -3,9 +3,10 @@ import { createRequire } from 'node:module'
 import os from 'node:os'
 import path from 'node:path'
 import { afterAll, beforeEach, describe, expect, it } from 'vitest'
+import { decodeList } from '@/utils/decode'
 
 /**
- * 真机装法下的 `fileRepo` —— 原子写与全局写链**有牙**的凭证（TD-09-38）。
+ * 真机装法下的 `fileRepo` —— 原子写与全局写链**有牙**的凭证。
  *
  * 为什么必须单开一个文件：jsdom 下 `hasCep()` 为 `false` → `dataRepo()` 选 `memoryRepo`，
  * 而 `memoryRepo` 自己就是同步赋值（没有 tmp、没有 rename、没有 `runQueued`）。
@@ -71,11 +72,9 @@ function installRealEnv(): void {
 // 只要在第一次 `repo.read()` / `repo.write()` 之前把环境装好即可。
 const { dataRepo } = await import('@/cep/data/data-repo')
 
-/** decode 必填（TD-03-5）：只认数字数组，别的一律 null = 形状不认识 */
-function decodeNumberList(raw: unknown): { value: number[] } | null {
-  if (!Array.isArray(raw)) return null
-  const list = raw.filter((item): item is number => typeof item === 'number')
-  return list.length === raw.length ? { value: list } : null
+/** decode 必填：只认数字数组；坏形状由 `decodeList` 说原因（不返 `null`） *
+function decodeNumberList(raw: unknown) {
+  return decodeList(raw, (item): item is number => typeof item === 'number')
 }
 
 /** 每个用例一份新的 `dataRepo()` 实例（实例自带缓存，不能跨用例共用） */
@@ -127,7 +126,7 @@ describe('fileRepo（真机装法：真 node:fs + 真 __adobe_cep__）', () => {
     // （抛在 `expect` 被调用之前）。判据不变：写失败必须抛、目标文件必须还是旧内容。
     expect(() => repo.write([2, 3, 4])).toThrow()
 
-    // 非原子直写会在抛错前把目标截成半截 —— 半截 JSON 会让整库读不回来（TD-09-15）
+    // 非原子直写会在抛错前把目标截成半截 —— 半截 JSON 会让整库读不回来
     expect(readTarget()).toBe(before)
     expect(fs.readdirSync(dir).filter((f) => f.endsWith('.tmp'))).toEqual([])
   }, 5000)

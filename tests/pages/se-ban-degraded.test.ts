@@ -3,7 +3,7 @@ import { flushPromises, mount } from '@vue/test-utils'
 import { createPinia, setActivePinia } from 'pinia'
 
 /**
- * TD-18-1：`/seBan` 必须把 store 的 `degraded` 说到用户眼前。
+ * `/seBan` 必须把 store 的 `degraded` 说到用户眼前。
  *
  * 改造前：store 有 `error`（两个数据文件都读不到）与 `degraded`（只坏一个 / 有条目认不出），
  * 而页面只渲染 `error` ⇒ 只坏一个时**一句提示都没有**，用户"存了 16 条显示 15 条"也查不出来。

@@ -21,7 +21,7 @@ const EMPTY: SelectionSnapshot = { hasSelection: false, typeNumber: 0 }
 export const selectionRef = shallowRef<SelectionSnapshot>(EMPTY)
 
 /**
- * 事件订阅的健康状态（TD-13-5）。
+ * 事件订阅的健康状态。
  *
  * `degraded` 不是「降级完成」，是「降级了、而且这件事有人知道」：按钮可用性会停在
  * 上一次查询的结果，只有命令执行前的查询还在兜。页面对着它显示提示条是下一轮的事，

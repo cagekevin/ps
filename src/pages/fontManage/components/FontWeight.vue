@@ -27,7 +27,7 @@ const previews = computed(() =>
 )
 
 /**
- * 字重预览用「A」还是「永」——判据委托 `domain/font-lang`（TD-12-26）。
+ * 字重预览用「A」还是「永」——判据委托 `domain/font-lang`。
  * 以前这里自己抄了一份正则：`°` 这类名字在预览里显示「A」，语言筛选却说它是中文。
  */
 const glyph = computed(() => (isAsciiFamily(props.font.family) ? 'A' : '永'))

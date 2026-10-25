@@ -10,7 +10,7 @@ import { hasNode, nodeRequire } from './node'
  * 目录占用（递归求和）；`bytes` 只算普通文件，不跟符号链接。
  *
  * `skipped` = 统计时读不到（`EPERM` / 被占用）而**少算**的文件数。它不是装饰：
- * 有值时 `bytes` 只是下限，UI 必须让用户看出"这个数字不准"（TD-09-25 之前是空 catch，少算了多少没人知道）。
+ * 有值时 `bytes` 只是下限，UI 必须让用户看出"这个数字不准"（之前是空 catch，少算了多少没人知道）。
  */
 export interface DirUsage {
   bytes: number

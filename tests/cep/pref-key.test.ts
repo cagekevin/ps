@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest'
 import { getPref, setPref, type PrefKey } from '@/cep/data/settings'
 
 /**
- * TD-10-12：偏好键是**有名字的类型**，不是 `Record<string, unknown>`。
+ * 偏好键是**有名字的类型**，不是 `Record<string, unknown>`。
  *
  * 这条债的验收靠 `typecheck`：拼错键名必须红。这里是运行期的一半——
  * 真按登记过的键读写，且默认值只在"键不存在"时生效（不是"值为假"时）。

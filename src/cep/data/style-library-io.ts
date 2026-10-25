@@ -32,7 +32,7 @@ import { CepError } from '@/utils/errors'
 import { msg } from '@/domain/messages'
 import { log } from '@/utils/logger'
 import { kuGuid, readIndexState, readKuFileText, styleIndexWriter } from './style-library-repo'
-// 与日常编辑共用同一批 sj_ku* 文件；没有队列了 —— 读改写是同步段，不可能交错（TD-09-28）
+// 与日常编辑共用同一批 sj_ku* 文件；没有队列了 —— 读改写是同步段，不可能交错
 import { isRecord } from '@/utils/guards'
 import { runExclusiveAsync } from './exclusive'
 
@@ -63,7 +63,7 @@ function parseOrThrow<T>(read: () => T): T {
 /**
  * 把被覆盖的原文件**存成可用的 `.bak`**；原文已经不可用时另存为 `.corrupt-<时间戳>`。
  *
- * 契约（TD-09-21）：**`.bak` = 可读的上一版**。旧实现只是"被覆盖前的磁盘原文" ——
+ * 契约：**`.bak` = 可读的上一版**。旧实现只是"被覆盖前的磁盘原文" ——
  * 原文自己坏了时 `.bak` 存的就是坏的，回滚看着成功、打开还是坏，等于没有退路。
  * 所以这里的判据不是"备份写成功"，而是"这份内容配叫备份"：
  * - 库文件（`sj_ku*`）先过 `isUsableJsonText`（`utils/json.ts`，全仓唯一一份判据）；
@@ -96,7 +96,7 @@ function backupOriginal(relative: string, path: string, base64: string): void {
     }
   }
 
-  // TD-09-22：`.bak` 写失败**必须中止**。旧实现把这个失败丢掉继续写本体 ——
+  //`.bak` 写失败**必须中止**。旧实现把这个失败丢掉继续写本体 ——
   // 结果是"导入报成功、原件被覆盖、`.bak` 不存在、日志一行都没有"（EISDIR 可复现）
   // 写不进去就抛（底层文案已含 `<path>.bak` 与原因）。不二次包装，理由同上。
   writeBase64File(`${path}.bak`, base64)

@@ -5,7 +5,7 @@ import { defineCommand } from './registry'
 import type { Command } from './types'
 
 /**
- * 引擎错误码 → 命令层码（TD-12-23）。
+ * 引擎错误码 → 命令层码。
  *
  * **只列"用户该做什么不同"的**（阶段单 §四点三五 第 3 条）。云同步有 8 个 `CLOUD_*` 码，
  * 但命令层只有两个消费者按码分流：`useCommand` 的「取消不提示」和设置页的「未配置去填地址」。

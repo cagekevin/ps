@@ -34,7 +34,7 @@ export interface SysFontFile {
  * 选中图层状态。
  *
  * 两个字段都只承载**读成功**的值：`getLayerState` 在读不懂时抛 `PARSE`，不产出
- * 「hasSelection=false / typeNumber=0」这种和「真的没有选中」同值的快照（TD-13-9）。
+ * 「hasSelection=false / typeNumber=0」这种和「真的没有选中」同值的快照。
  */
 export interface LayerState {
   hasSelection: boolean

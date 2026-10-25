@@ -5,7 +5,7 @@ import { matchFilter } from '@/domain/font-filter'
 import type { Classification } from '@/domain/classification'
 
 /**
- * TD-12-26：字体「算中文还是英文」在全系统**只能有一个判据**。
+ * 字体「算中文还是英文」在全系统**只能有一个判据**。
  *
  * 改前有三份实现、两套规则：
  *   · stores/font.ts 与 FontWeight.vue 用 ASCII 字面集（原版 `app.v4.js:47561` 的 `Ax`）

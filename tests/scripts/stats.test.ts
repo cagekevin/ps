@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 
 /**
- * TD-17-5：`stats.mjs` 的**计数口径**自检。
+ * `stats.mjs` 的**计数口径**自检。
  *
  * 为什么需要它：`stats:check` 只比对「文档值 == 脚本算值」——`compute()` 自己算错时
  * **两边一致、照样绿**。所以口径必须用「已知答案的夹具」钉住，而不是靠文档与脚本互相背书。

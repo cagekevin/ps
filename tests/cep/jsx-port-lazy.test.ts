@@ -3,7 +3,7 @@ import { jsx } from '@/cep/jsx'
 import { log } from '@/utils/logger'
 
 /**
- * TD-13-7：jsx 端口的环境判据必须在**调用点**，不能是模块求值期快照。
+ * jsx 端口的环境判据必须在**调用点**，不能是模块求值期快照。
  *
  * 判据只有一份（`hasCep`，与 `transport.runScript` 同一个函数），才不会出现
  * 「transport 说得清、jsx 端口已经落定到 mock」两套真相。反例很贵：mock 每个函数

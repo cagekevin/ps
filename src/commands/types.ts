@@ -39,7 +39,7 @@ export interface ProgressPort {
 export interface CommandContext {
   selection: SelectionSnapshot
   /**
-   * **没有 `settings` 字段**（TD-10-12 删掉的）。
+   * **没有 `settings` 字段**（删掉的）。
    *
    * 原来这里是一个 `Record<string, unknown>`：40+ 个偏好键没有任何键名约束，
    * 拼错一个字母既不报错也不崩，只是"这个设置永远不生效"。而且它当时**零个消费者**——

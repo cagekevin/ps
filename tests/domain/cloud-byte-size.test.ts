@@ -2,7 +2,7 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { buildSnapshot, fileByteSize, type SyncUnit } from '@/domain/cloud'
 
 /**
- * TD-12-28：`fileByteSize` 说的是**字节数**，不是字符数。
+ * `fileByteSize` 说的是**字节数**，不是字符数。
  *
  * 旧实现 `catch { return data.length }`：TextEncoder 一旦不可用，中文的"字节数"就变成
  * 字符数（差三倍），而这个值会作为 `size` 写进同步快照——**静默的错**，谁也不知道。

@@ -148,7 +148,7 @@ describe('旧自造 key 的别名表', () => {
  * 每个 key 喂一份**形状合法**的 option。
  *
  * 以前这里一律喂 `null`：`Number(null)` 算出 0 也能通过，于是"形状不合法"被掩盖了。
- * TD-12-24 之后数字位必须是真数字，闸门要审的是"映射指向的命令是否存在"，
+ * 之后数字位必须是真数字，闸门要审的是"映射指向的命令是否存在"
  * 所以喂合法样本，别让校验挡住闸门本身（校验自己有专门用例：`free-panel-legacy-reject`）。
  */
 const SAMPLE_OPTION: Record<string, unknown> = {

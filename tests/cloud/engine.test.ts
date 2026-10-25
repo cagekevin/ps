@@ -52,7 +52,7 @@ function toUnit(payload: UnitPayload): SyncUnit {
 }
 
 /**
- * pull 的 `ok` 三态。TD-11-5 之后 `pull()` 不再返回裸 view / null，
+ * pull 的 `ok` 三态。之后 `pull()` 不再返回裸 view / null
  * 所以这里把"造一份云端快照"封成 outcome，用例侧写法不变。
  */
 function cloudView(units: Record<string, SyncUnit>, rev = 3): CloudPullOutcome {
@@ -127,7 +127,7 @@ describe('cloud engine', () => {
       pending: { record: pendingRecord, list: pendingList, clear: pendingClear },
       entries: [
         // `watch` 是 engine 用不到的触发源声明（订阅归 `cep/cloud/change-sync.ts`），
-        // 但 `SyncUnitAdapter` 里它是必填：漏声明 = 新增同步项静默不同步（TD-11-1）
+        // 但 `SyncUnitAdapter` 里它是必填：漏声明 = 新增同步项静默不同步
         { id: 'font.stars', schema: 1, read: readA, write: writeA, watch: () => () => {} },
         { id: 'font.tags', schema: 1, read: readB, write: writeB, watch: () => () => {} },
       ],
@@ -290,7 +290,7 @@ describe('cloud engine', () => {
   })
 
   /**
-   * TD-11-6：基线写盘失败不许伪装成"内容一致、已是最新"。
+   * 基线写盘失败不许伪装成"内容一致、已是最新"。
    *
    * 以前 `refreshBaseline()` 里的 `ledger.write` 没包 try（同一调用在推送路径上包了）：
    * 抛出去冒到队列的 catch → 没人接 → 既不 log 也不留痕，用户只看到"上次同步时间不动"。
@@ -494,7 +494,7 @@ describe('cloud engine', () => {
   })
 
   /**
-   * TD-11-8：失败痕迹要带得上"到底哪一类失败"。
+   * 失败痕迹要带得上"到底哪一类失败"。
    *
    * 只记 `network` 的结果：日志与状态里 401/403/429/超时逐字相同，
    * 用户按"网络失败，会在后台重试"去等一个**永远不会自己好**的权限错。

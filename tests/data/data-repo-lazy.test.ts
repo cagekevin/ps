@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest'
 import { isRecord } from '@/utils/guards'
+import { shapeFail, type DecodeFail, type Decoded } from '@/utils/decode'
 
 /**
  * T-113：`dataRepo()` 必须**在第一次使用时**才定实现，不许在模块加载时定死。
@@ -36,9 +37,11 @@ interface Shape {
   a: number
 }
 
-/** 与 `data/*.ts` 一样：decode 是必填参数，形状不认识就 null（不是 `as`） */
-function decodeShape(raw: unknown): { value: Shape } | null {
-  return isRecord(raw) && typeof raw.a === 'number' ? { value: { a: raw.a } } : null
+/** 与 `data/*.ts` 一样：decode 是必填参数，形状不认识要说出原因（不是 `as`、也不是 `null`） */
+function decodeShape(raw: unknown): Decoded<Shape> | DecodeFail {
+  if (!isRecord(raw)) return shapeFail('', 'object', raw)
+  if (typeof raw.a !== 'number') return shapeFail('a', 'number', raw.a)
+  return { value: { a: raw.a } }
 }
 
 /** 模块顶层建仓库 = `data/*.ts` 的真实写法 */

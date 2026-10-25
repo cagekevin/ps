@@ -1,5 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { isRecord } from '@/utils/guards'
+import { decodeList } from '@/utils/decode'
 import { ERR_PREFIX } from '@/utils/errors'
 
 /**
@@ -46,11 +47,13 @@ beforeEach(() => {
   env.cep = true
 })
 
-/** decode 必填（TD-03-5）：只认 `Row[]`，条目必须有字符串 name */
-function decodeRows(raw: unknown): { value: Row[] } | null {
-  if (!Array.isArray(raw)) return null
-  const rows = raw.filter((x): x is Row => isRecord(x) && typeof x.name === 'string')
-  return rows.length === raw.length ? { value: rows } : null
+/** decode 必填：只认 `Row[]`，条目必须有字符串 name；坏形状要说出原因，不能返 `null` *
+function isRow(raw: unknown): raw is Row {
+  return isRecord(raw) && typeof raw.name === 'string'
+}
+
+function decodeRows(raw: unknown) {
+  return decodeList(raw, isRow)
 }
 
 function createRepo() {
@@ -62,17 +65,17 @@ function createRepo() {
 }
 
 describe('fileRepo 读', () => {
-  it('文件不存在时返回 fallback，且不算 degraded（首次使用是正常状态）', async () => {
-    const read = await createRepo().read()
+  it('文件不存在时返回 fallback，且不算 degraded（首次使用是正常状态）', () => {
+    const read = createRepo().read()
     const value = readValue(read)
     const degraded = read.reason
     expect(value).toEqual([])
     expect(degraded).toBeUndefined()
   })
 
-  it('内容损坏时报坏因、不交出 fallback（坏读没有 value）', async () => {
+  it('内容损坏时报坏因、不交出 fallback（坏读没有 value）', () => {
     disk.files.set(PATH, '{oops')
-    const read = await createRepo().read()
+    const read = createRepo().read()
     const degraded = read.reason
     // 旧断言是 `value` 等于 fallback `[]`；4a96f63 的 src/cep/data/types.ts 把 `value`
     // 从失败臂上删了，同一个意图变成「业务根本拿不到值」
@@ -80,9 +83,9 @@ describe('fileRepo 读', () => {
     expect(degraded).toBeTruthy()
   })
 
-  it('合法 JSON 原样返回', async () => {
+  it('合法 JSON 原样返回', () => {
     disk.files.set(PATH, JSON.stringify([{ name: 'MiSans', star: 3 }]))
-    const read = await createRepo().read()
+    const read = createRepo().read()
     const value = readValue(read)
     const degraded = read.reason
     expect(value).toEqual([{ name: 'MiSans', star: 3 }])
@@ -91,113 +94,111 @@ describe('fileRepo 读', () => {
 })
 
 describe('fileRepo 写', () => {
-  it('写失败必须抛，不许吞掉', async () => {
+  it('写失败必须抛，不许吞掉', () => {
     disk.failWrite = true
-    await expect(createRepo().write([{ name: 'A' }])).rejects.toThrow()
+    expect(() => createRepo().write([{ name: 'A' }])).toThrow()
   })
 
   /**
-   * TD-09-24：CAS 比对**读不到**原文时不许当"没人改过"。
+   * CAS 比对**读不到**原文时不许当"没人改过"。
    *
    * 旧实现 `readTextSync(target) === expected`：读不到给 `null`，`expected` 也是 `null`
    * （读的那一刻文件还不存在）时 `null === null` 判 'same'，并发守卫恒真 ——
    * 别的面板刚建的文件就被覆盖。现在读不到 → `unknown` → **不写、抛**。
    */
-  it('CAS 比对读不到原文 → 不写、抛（不把"读不到"当"没改过"）', async () => {
+  it('CAS 比对读不到原文 → 不写、抛（不把"读不到"当"没改过"）', () => {
     const original = JSON.stringify([{ name: 'A', star: 1 }])
     disk.files.set(PATH, original)
     // 读入口正常（读得到内容），但落盘前的**同步比对读**失败 —— 正是权限错时的真实组合
     disk.failReadAfter = 1
 
-    await expect(
+    expect(() =>
       createRepo().update((list) => {
         list.push({ name: 'B' })
       }),
-    ).rejects.toThrow('比对读不到原文')
+    ).toThrow('比对读不到原文')
     expect(disk.files.get(PATH)).toBe(original)
   })
 
-  it('写之前把原文备份成 .bak', async () => {
+  it('写之前把原文备份成 .bak', () => {
     disk.files.set(PATH, JSON.stringify([{ name: 'A', star: 1 }]))
-    await createRepo().update((list) => {
+    createRepo().update((list) => {
       list.push({ name: 'B', star: 2 })
     })
     expect(disk.files.get(`${PATH}.bak`)).toBe(JSON.stringify([{ name: 'A', star: 1 }]))
   })
 
-  it('内容损坏时 update 拒绝写，原文件不动（D-42）', async () => {
+  it('内容损坏时 update 拒绝写，原文件不动（D-42）', () => {
     disk.files.set(PATH, '{oops')
-    await expect(
+    expect(() =>
       createRepo().update((list) => {
         list.push({ name: 'B' })
       }),
-    ).rejects.toThrow('拒绝覆盖写')
+    ).toThrow('拒绝覆盖写')
     expect(disk.files.get(PATH)).toBe('{oops')
   })
 
-  it('读取失败时 update 拒绝写，不拿默认值覆盖（D-42）', async () => {
+  it('读取失败时 update 拒绝写，不拿默认值覆盖（D-42）', () => {
     disk.files.set(PATH, JSON.stringify([{ name: 'A' }]))
     disk.failRead = true
-    await expect(
+    expect(() =>
       createRepo().update((list) => {
         list.push({ name: 'B' })
       }),
-    ).rejects.toThrow('拒绝覆盖写')
+    ).toThrow('拒绝覆盖写')
     expect(disk.files.get(PATH)).toBe(JSON.stringify([{ name: 'A' }]))
   })
 
-  it('首次写不生成 .bak（没有原文可备份）', async () => {
-    await createRepo().write([{ name: 'A' }])
+  it('首次写不生成 .bak（没有原文可备份）', () => {
+    createRepo().write([{ name: 'A' }])
     expect(disk.files.has(`${PATH}.bak`)).toBe(false)
   })
 })
 
-describe('fileRepo 并发', () => {
-  it('并发 10 次 update 不丢更新（每个文件一条串行队列）', async () => {
+describe('fileRepo 连续调用', () => {
+  it('连续 10 次 update 不丢更新（读改写是不可打断的同步段）', () => {
     const repo = createRepo()
-    await Promise.all(
-      Array.from({ length: 10 }, (_, index) =>
-        repo.update((list) => {
-          list.push({ name: `f${index}`, star: 1 })
-        }),
-      ),
-    )
-    const value = readValue(await repo.read())
+    for (let index = 0; index < 10; index++) {
+      repo.update((list) => {
+        list.push({ name: `f${index}`, star: 1 })
+      })
+    }
+    const value = readValue(repo.read())
     expect(value).toHaveLength(10)
     expect(new Set(value.map((row) => row.name)).size).toBe(10)
   })
 
-  it('前一次写失败不影响后续（队列不中断）', async () => {
+  it('前一次写失败不影响后续', () => {
     const repo = createRepo()
     disk.failWrite = true
-    await expect(repo.write([{ name: 'bad' }])).rejects.toThrow()
+    expect(() => repo.write([{ name: 'bad' }])).toThrow()
 
     disk.failWrite = false
-    await repo.write([{ name: 'ok' }])
-    const value = readValue(await repo.read())
+    repo.write([{ name: 'ok' }])
+    const value = readValue(repo.read())
     expect(value).toEqual([{ name: 'ok' }])
   })
 })
 
 describe('fileRepo onChange', () => {
-  it('写成功后通知，取消订阅后不再通知', async () => {
+  it('写成功后通知，取消订阅后不再通知', () => {
     const repo = createRepo()
     const seen: Row[][] = []
     const off = repo.onChange((value) => seen.push(value))
 
-    await repo.write([{ name: 'A' }])
+    repo.write([{ name: 'A' }])
     expect(seen).toHaveLength(1)
 
     off()
-    await repo.write([{ name: 'B' }])
+    repo.write([{ name: 'B' }])
     expect(seen).toHaveLength(1)
   })
 
-  it('读不触发通知', async () => {
+  it('读不触发通知', () => {
     const repo = createRepo()
     const seen: Row[][] = []
     repo.onChange((value) => seen.push(value))
-    await repo.read()
+    repo.read()
     expect(seen).toHaveLength(0)
   })
 })
@@ -207,24 +208,22 @@ describe('memoryRepo（经唯一构造器 + 无 CEP）', () => {
     env.cep = false
   })
 
-  it('update 串行且可读回', async () => {
+  it('update 连续执行且可读回', () => {
     const repo = dataRepo<Row[]>(
       () => '/mem/rows.json',
       () => [],
       decodeRows,
     )
-    await Promise.all(
-      Array.from({ length: 5 }, (_, index) =>
-        repo.update((list) => {
-          list.push({ name: `m${index}` })
-        }),
-      ),
-    )
-    const value = readValue(await repo.read())
+    for (let index = 0; index < 5; index++) {
+      repo.update((list) => {
+        list.push({ name: `m${index}` })
+      })
+    }
+    const value = readValue(repo.read())
     expect(value).toHaveLength(5)
   })
 
-  it('写成功触发 onChange', async () => {
+  it('写成功触发 onChange', () => {
     const repo = dataRepo<Row[]>(
       () => '/mem/rows.json',
       () => [],
@@ -232,7 +231,7 @@ describe('memoryRepo（经唯一构造器 + 无 CEP）', () => {
     )
     const seen: Row[][] = []
     repo.onChange((value) => seen.push(value))
-    await repo.write([{ name: 'A' }])
+    repo.write([{ name: 'A' }])
     expect(seen).toEqual([[{ name: 'A' }]])
   })
 })

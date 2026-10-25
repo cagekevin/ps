@@ -36,7 +36,7 @@ export const PREFS_VERSION = 1
 
 let cache: Record<string, unknown> | null = null
 /**
- * 读失败的原因；非空 = **本次会话禁止写回**（TD-09-23）。
+ * 读失败的原因；非空 = **本次会话禁止写回**。
  *
  * 读不到时内存里给默认值，UI 照旧能用；但一旦把这份默认值写回去，用户原有偏好就没了 ——
  * 所以"读不到"与"新装机没有偏好"必须分开：后者可以写，前者不许写。
@@ -88,7 +88,7 @@ function loadAll(): Record<string, unknown> {
   if (read.ok) {
     cache = read.value
   } else {
-    // 读不到 / 坏文件 ⇒ 给 UI 默认值，但**本次会话禁止写回**（TD-09-23）：
+    // 读不到 / 坏文件 ⇒ 给 UI 默认值，但**本次会话禁止写回**：
     // 拿默认值写回去 = 用户原有偏好没了。
     readFailure = read.reason
     cache = {}
@@ -130,7 +130,7 @@ function persistSync(all: Record<string, unknown>) {
       return
     }
     const target = filePath()
-    // 原子写失败就报错：旧实现退回普通写，等于把 rename 保护摘掉（TD-09-27）
+    // 原子写失败就报错：旧实现退回普通写，等于把 rename 保护摘掉
     // 偏好文件是覆盖写、无 `.bak` 概念（`previous: null`）
     try {
       writeDiskSync(target, text, { previous: null })
@@ -172,7 +172,7 @@ function persist(all: Record<string, unknown>) {
 }
 
 /**
- * 界面偏好键的**唯一清单**（TD-10-12）。
+ * 界面偏好键的**唯一清单**。
  *
  * 以前 `getPref(key: string)`：拼错一个字母不报错、不崩，只是"这个设置项永远不生效"——
  * 最贵的一类 bug（页面明明设了，重启就回默认）。现在 key 是联合类型，

@@ -24,7 +24,7 @@ function preview(value: unknown): string {
 }
 
 /**
- * option 必须是**有限数**（TD-12-24）。
+ * option 必须是**有限数**。
  *
  * 以前这里是 `Number(option)`：`'abc'` → `NaN` 直接进 jsx，`null`/`''` → `0` 悄悄变成
  * "第 0 档"。自由面板项是**用户数据**，形状不可信——在入口当场拒绝，

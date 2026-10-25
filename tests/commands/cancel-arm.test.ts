@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 
 /**
- * TD-12-22：`CommandOutcome.ok === 'cancelled'` 这条臂必须**真的有产出、也真的有消费**。
+ * `CommandOutcome.ok === 'cancelled'` 这条臂必须**真的有产出、也真的有消费**。
  *
  * 以前它是死码：全仓没有一处产出，于是"用户点了取消"被写成 PARSE（吸色）/ NETWORK（云同步），
  * `useCommand` 拿它当失败弹出来——用户自己按的「取消」，界面回他一句故障。

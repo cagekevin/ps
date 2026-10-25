@@ -8,7 +8,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 let log: typeof import('@/utils/logger').log
 
 /**
- * TD-11-8：待同步痕迹要带得上**具体错误码**，不能只有 5 个粗桶。
+ * 待同步痕迹要带得上**具体错误码**，不能只有 5 个粗桶。
  *
  * 为什么不是多加几个 `reason`：`reason` 是"用户该做什么"的粗分类（页面按它选文案），
  * 错误码是"技术上到底怎么了"（日志、后续按码处理）。两者维度不同；

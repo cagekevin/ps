@@ -3,7 +3,7 @@ import { createPinia, setActivePinia } from 'pinia'
 import type { CloudStatus } from '@/cloud/types'
 
 /**
- * TD-11-9：后台同步失败之后，**设置页的状态要被推着刷新**。
+ * 后台同步失败之后，**设置页的状态要被推着刷新**。
  *
  * 以前只有三条 refresh 时机（挂载 / 拉取成功 / 切开关），5 秒定时器只刷内存脏数——
  * 痕迹写在盘上，用户看不见，"没同步成功"那句永远不出现，关掉重开才有。

@@ -4,6 +4,7 @@ import path from 'node:path'
 import { Buffer } from 'node:buffer'
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { isRecord } from '@/utils/guards'
+import { shapeFail, type DecodeFail, type Decoded } from '@/utils/decode'
 
 /**
  * 跨进程写（D-26 CAS）+ 坏读拒绝覆盖（D-42）的**行为证据**。
@@ -51,11 +52,15 @@ function writeFromOtherProcess(value: Doc): void {
   fs.writeFileSync(FILE(), JSON.stringify(value), 'utf8')
 }
 
-/** decode 必填（TD-03-5）：只认 `{ list: string[] }` */
-function decodeDoc(raw: unknown): { value: Doc } | null {
-  if (!isRecord(raw) || !Array.isArray(raw.list)) return null
-  const list = raw.list.filter((x): x is string => typeof x === 'string')
-  return list.length === raw.list.length ? { value: { list } } : null
+/** decode 必填：只认 `{ list: string[] }`；坏形状要说出原因，不能返 `null` *
+function decodeDoc(raw: unknown): Decoded<Doc> | DecodeFail {
+  if (!isRecord(raw)) return shapeFail('', 'object', raw)
+  const rawList = raw.list
+  if (!Array.isArray(rawList)) return shapeFail('list', 'array', rawList)
+  const list = rawList.filter((x): x is string => typeof x === 'string')
+  return list.length === rawList.length
+    ? { value: { list } }
+    : { fail: 'badItem', count: rawList.length }
 }
 
 function createRepo(opts: { retries?: number } = {}) {

@@ -54,7 +54,7 @@ const root = ref<HTMLElement | null>(null)
 const menuOpen = ref(false)
 
 /**
- * 菜单左缘 clamp（TD-05-5）。
+ * 菜单左缘 clamp。
  *
  * 菜单是 `position:absolute; right:var(--sp-1); min-width:132px`：窄面板（宽 < 134）时左缘变负，
  * 被父容器 `overflow` 裁掉一块 —— 用户**点不到**最左边那列勾选。

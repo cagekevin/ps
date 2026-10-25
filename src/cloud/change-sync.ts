@@ -29,7 +29,7 @@ export interface SyncOutcome {
    *
    * 权限错（401/403）不会自己好：按退避重试只是每 15 分钟往日志里写一遍同样的错，
    * 用户永远等不到成功。这类失败置 false = 停手，等下一次触发点（新的改动 / 手动 / 变可见）。
-   * 判据见 TD-11-8：每个新错误码要么改重试策略、要么改用户该做什么，否则不该分。
+   * 判据每个新错误码要么改重试策略、要么改用户该做什么，否则不该分。
    */
   retry?: boolean
   /** 下次重试至少等这么久（服务端明确要求"慢点"时用）；与退避梯度取大 */
@@ -39,7 +39,7 @@ export interface SyncOutcome {
 /**
  * 本轮同步的**意图**：`sweep` = 所有 unit 过一遍（启动补偿 / 变可见），`dirty` = 只推这一批。
  *
- * 为什么必须是显式参数（TD-11-14）：`units` 为空只是 sweep 的**结果**，不是判据。
+ * 为什么必须是显式参数：`units` 为空只是 sweep 的**结果**，不是判据。
  * 消费侧一旦拿 `units.length === 0` 反推 sweep，空集的其他来历（还没有具体 unit、
  * 闸门挡下时根本没跑）就会被当成同一种事——`setup.ts` 的 `markSkipped` 就是这么在
  * 离线时静默掉的：既不记 pending 也不留日志。
@@ -50,7 +50,7 @@ export interface SyncQueueDeps {
   /**
    * 真正干活的一次同步。
    *
-   * `intent` 是本轮的**判据**（TD-11-14）：`'sweep'` 时 `units` 是空数组（全量），
+   * `intent` 是本轮的**判据**：`'sweep'` 时 `units` 是空数组（全量）
    * `'dirty'` 时 `units` 就是这一批脏项。**不许**用 `units.length` 反推意图。
    */
   sync: (units: string[], intent: SyncIntent) => Promise<SyncOutcome>
@@ -67,7 +67,7 @@ export interface SyncQueue {
   /**
    * 立即排一次**全量 sweep**：不看脏集，所有 unit 都过一遍（启动补偿 / 变可见）。
    *
-   * 与"有脏就推"分开是必须的：sweep 的意图不能被"脏集恰好非空"改写成"只推脏集"（TD-11-4）。
+   * 与"有脏就推"分开是必须的：sweep 的意图不能被"脏集恰好非空"改写成"只推脏集"。
    */
   requestSync(reason: string): void
   /** 有脏就立刻推，没脏什么都不做（变隐藏：页面随时可能被销毁） */
@@ -112,7 +112,7 @@ export function createSyncQueue(deps: SyncQueueDeps): SyncQueue {
    * 有人要过一次**全量 sweep**（启动补偿 / 变可见）：下一轮按"全部 unit"跑，不看脏集。
    *
    * 以前没有这个字段，sweep 靠"脏集恰好为空"反推（`deps.sync([])`），于是启动 30 秒内
-   * 只要改过任一 unit，补偿就退化成"只推那一个"（TD-11-4）。触发意图必须显式存下来。
+   * 只要改过任一 unit，补偿就退化成"只推那一个"。触发意图必须显式存下来。
    */
   let sweepRequested = false
   /** 一次同步在飞（pull→push 全程） */
@@ -164,7 +164,7 @@ export function createSyncQueue(deps: SyncQueueDeps): SyncQueue {
   async function execute(): Promise<void> {
     if (stopped || running) return
     running = true
-    // 本轮意图先取走：sweep 要的是"全部 unit 过一遍"，与脏集有没有东西无关（TD-11-4）
+    // 本轮意图先取走：sweep 要的是"全部 unit 过一遍"，与脏集有没有东西无关
     const sweeping = sweepRequested
     sweepRequested = false
     /** 本轮开始时已经脏的：sweep 成功后只清这一批，期间新脏的必须留着 */
@@ -210,7 +210,7 @@ export function createSyncQueue(deps: SyncQueueDeps): SyncQueue {
         // 被闸门挡下则按最大等待做一次慢轮询——用户把自动同步打开后就自己恢复，不用等下一次改动。
         const delay = skipped ? maxWaitMs : Math.max(nextDelay(), retryAt - Date.now())
         // `skipped` 必须进条件：启动/变可见的 sweep 脏集为空、又不进退避，
-        // 旧写法这一轮跳过之后就再也不排了——离线一小时等于彻底静默（TD-11-7）
+        // 旧写法这一轮跳过之后就再也不排了——离线一小时等于彻底静默
         // `sweepRequested` 同理：还没兑现的 sweep 不能因为"本轮脏集为空"就丢掉
         if (!parked && (dirty.size > 0 || retryAt > Date.now() || skipped || sweepRequested))
           schedule(delay)

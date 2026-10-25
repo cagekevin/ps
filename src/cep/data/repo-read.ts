@@ -32,7 +32,7 @@ import type { RepoRead } from './types'
  * 对**有默认值**的数据文件（动作库、色板、分类）这是对的 —— 首次使用就是空数据。
  * 但对**没有默认值**的文件（同步台账、系统字体列表），"文件不在"是**另一个结论**
  * （还没有同步过 / 还没生成过）。拿默认值顶上去会把"读不到"和"没有"混成一件事
- * （T-114 / TD-09-3 的原始症状）。需要两臂的调用方用 `foldAbsent` 折。
+ * （T-114 原始症状）。需要两臂的调用方用 `foldAbsent` 折。
  */
 export type RepoFileOutcome<T> =
   | { kind: 'ok'; value: T; text: string; degraded?: string }

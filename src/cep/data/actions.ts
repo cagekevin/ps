@@ -149,7 +149,7 @@ export function deleteWarehouse(index: number): void {
 
     if (hasNode()) {
       // 删不掉会抛（错误里带完整路径与原因）：旧实现丢返回值，磁盘上旧 sj_dz*.json 还在
-      // 而用户以为仓库已删（TD-09-26）。**先删文件、成功后才改索引** —— 反过来的话
+      // 而用户以为仓库已删。**先删文件、成功后才改索引** —— 反过来的话
       // 删失败就留下"索引说没有、磁盘还有"的孤儿。
       removeFile(`${userDir()}/${target.fileName}`)
     }

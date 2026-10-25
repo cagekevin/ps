@@ -66,7 +66,7 @@ export interface PendingChange {
   at: number
   reason: PendingReason
   /**
-   * 具体错误码（如 `CLOUD_PERMISSION` / `CLOUD_OFFLINE` / `CLOUD_RATE_LIMITED`，TD-11-8）。
+   * 具体错误码（如 `CLOUD_PERMISSION` / `CLOUD_OFFLINE` / `CLOUD_RATE_LIMITED`）。
    *
    * 为什么不直接多几个 `reason` 桶：`reason` 是"用户该做什么"的粗分类，页面按它选文案；
    * 错误码是"技术上到底怎么了"，给日志与后续按码做不同处理用。两者维度不同，

@@ -6,12 +6,12 @@ import { createRequire } from 'node:module'
 import ts from 'typescript'
 
 /**
- * TD-09-38：`src/cep/data` 里**每一个写盘的数据模块**，都必须被至少一条「真机装法」的用例覆盖 ——
+ * `src/cep/data` 里**每一个写盘的数据模块**，都必须被至少一条「真机装法」的用例覆盖 ——
  * 差集就是缺口，**漏一个就红**。
  *
  * 病（今晚最狠的一条）：`src/cep/data` 的写路径测试长期是**假绿**。jsdom 下 `hasCep()` 为 `false`
  * → `dataRepo()` 选 `memoryRepo`（它有自己的 `enqueue`，不是全局写链）⇒ 连被测实现都不是 `fileRepo`。
- * 于是 `runQueued` 自锁（TD-09-30）、原子写被删（TD-09-27）全都不红。`style-library-real-fs.test.ts`
+ * 于是 `runQueued` 自锁、原子写被删全都不红。`style-library-real-fs.test.ts`
  * 与 `fs-atomic.test.ts` 各自修好了一处，但那是**个案，不是判据**：下一个 repo 照样可以只写内存版用例。
  *
  * 为什么是静态判据而不是运行期判据：判"这条用例有没有真的走 fileRepo"需要跨进程覆盖统计，
@@ -50,7 +50,7 @@ import ts from 'typescript'
  *   · 基线里有缺口里没有的 ⇒ **红**（已经补上了用例却没收紧基线 —— 基线不许变成永久豁免）。
  *
  * 基线是**扫描器自己写出来的**（`TD0938_UPDATE=1 npx vitest run tests/scripts/data-repo-realfs.test.ts`），
- * 不是手写名单：它记的是"当前还没覆盖的旧账"（债号 TD-09-38），只会往下走。
+ * 不是手写名单：它记的是"当前还没覆盖的旧账"，只会往下走。
  */
 
 const REPO_ROOT = resolve(__dirname, '../..')

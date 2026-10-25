@@ -34,15 +34,15 @@ beforeEach(() => {
   setActivePinia(createPinia())
   localStorage.clear()
   vi.clearAllMocks()
-  meta.readFontTags.mockReturnValue([])
-  meta.readFontStars.mockReturnValue({ ok: true, stars: {} })
+  meta.readFontTags.mockReturnValue({ ok: true, value: [] })
+  meta.readFontStars.mockReturnValue({ ok: true, value: {} })
   repos.tags.onChange.mockReturnValue(() => {})
   repos.stars.onChange.mockReturnValue(() => {})
 })
 
 describe('标签读取', () => {
   it('loadTags 成功填充，未强制时不重复请求', async () => {
-    meta.readFontTags.mockReturnValue([tag('收藏')])
+    meta.readFontTags.mockReturnValue({ ok: true, value: [tag('收藏')] })
     const store = useFontStore()
 
     await store.loadTags()
@@ -53,7 +53,7 @@ describe('标签读取', () => {
   })
 
   it('loadTags(true) 强制重读（仓库变更后的刷新路径）', async () => {
-    meta.readFontTags.mockReturnValue([tag('收藏')])
+    meta.readFontTags.mockReturnValue({ ok: true, value: [tag('收藏')] })
     const store = useFontStore()
 
     await store.loadTags()
@@ -62,7 +62,7 @@ describe('标签读取', () => {
   })
 
   it('读取失败写进 tagsError，不抛', async () => {
-    meta.readFontTags.mockRejectedValue(new Error('读不到文件'))
+    meta.readFontTags.mockReturnValue({ ok: false, reason: '读不到文件', fallback: [] })
     const store = useFontStore()
 
     await store.loadTags()
@@ -70,8 +70,8 @@ describe('标签读取', () => {
   })
 
   it('重试成功会清掉上一次的 tagsError', async () => {
-    meta.readFontTags.mockRejectedValueOnce(new Error('读不到文件'))
-    meta.readFontTags.mockReturnValue([tag('收藏')])
+    meta.readFontTags.mockReturnValueOnce({ ok: false, reason: '读不到文件', fallback: [] })
+    meta.readFontTags.mockReturnValue({ ok: true, value: [tag('收藏')] })
     const store = useFontStore()
 
     await store.loadTags()
@@ -85,7 +85,7 @@ describe('标签读取', () => {
 
 describe('星级读取', () => {
   it('loadStars 填充映射', async () => {
-    meta.readFontStars.mockReturnValue({ ok: true, stars: { MiSans: 3 } })
+    meta.readFontStars.mockReturnValue({ ok: true, value: { MiSans: 3 } })
     const store = useFontStore()
 
     await store.loadStars()
@@ -94,11 +94,15 @@ describe('星级读取', () => {
   })
 
   /**
-   * TD-01-4：读不到时**不许**只留一个空映射就走。
+   * 读不到时**不许**只留一个空映射就走。
    * 空映射在页面上等于"你还没收藏过"——那是用户的结论，不是我们的故障。
    */
   it('读不到星级：starsError 带原因，stars 为空但界面能说出"读不到"', async () => {
-    meta.readFontStars.mockReturnValue({ ok: false, stars: {}, reason: 'EPERM: 拒绝访问' })
+    meta.readFontStars.mockReturnValue({
+      ok: false,
+      reason: 'EPERM: 拒绝访问',
+      fallback: {},
+    })
     const store = useFontStore()
 
     await store.loadStars()
@@ -107,8 +111,10 @@ describe('星级读取', () => {
     expect(store.starsError).toContain('EPERM')
   })
 
-  it('读取抛错也不外抛，同样落到 starsError', async () => {
-    meta.readFontStars.mockRejectedValue(new Error('权限不足'))
+  it('读取同步抛错也不外抛，同样落到 starsError', async () => {
+    meta.readFontStars.mockImplementation(() => {
+      throw new Error('权限不足')
+    })
     const store = useFontStore()
 
     await store.loadStars()
@@ -143,7 +149,7 @@ describe('数据变更订阅（放最后：bindFontData 只生效一次）', () 
     expect(repos.tags.onChange).toHaveBeenCalledTimes(1)
     expect(repos.stars.onChange).toHaveBeenCalledTimes(1)
 
-    meta.readFontTags.mockReturnValue([tag('新标签')])
+    meta.readFontTags.mockReturnValue({ ok: true, value: [tag('新标签')] })
     const store = useFontStore()
 
     const onChange = repos.tags.onChange.mock.calls[0][0] as () => void

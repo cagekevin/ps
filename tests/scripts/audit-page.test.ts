@@ -3,7 +3,7 @@ import { execFileSync } from 'node:child_process'
 import { resolve } from 'node:path'
 
 /**
- * TD-17-4 / TD-17-14：`audit-page.mjs` 从「孤岛脚本」变成**被钉住的工具**。
+ * /：`audit-page.mjs` 从「孤岛脚本」变成**被钉住的工具**。
  *
  * 判据只有两条，正好对应它此前的两个毛病：
  *   ① 数据在库时要真能跑（不是"写了没人跑"）；

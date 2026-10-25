@@ -45,7 +45,7 @@ bindFreePanelData()
 bindFontSetData()
 installCommonUseSource(commonUseRepo)
 bindRenameData()
-// 云同步：后台结局跃迁时让设置页的状态往上走（TD-11-9，页面不必自己轮询盘）
+// 云同步：后台结局跃迁时让设置页的状态往上走（页面不必自己轮询盘）
 bindCloudData()
 // 色板投影：本面板的命令写完文件（onChange）与别处写完发的 app event 都汇到这里重读。
 // 两个进程都会绑上——主面板那份是空转（多读三个小文件），换来"换入口时不会漏绑"。
@@ -64,7 +64,7 @@ setProgressPort({
   },
 })
 
-// 命令发现字体缺失时只经端口说一声，弹窗归页面（TD-12-20：状态搬出 domain）
+// 命令发现字体缺失时只经端口说一声，弹窗归页面（状态搬出 domain）
 setMissingFontPort({
   signal: (name) => useFontMissingStore().signal(name),
 })

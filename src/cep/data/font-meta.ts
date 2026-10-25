@@ -30,7 +30,7 @@ export function readFontTags(): RepoRead<FontTag[]> {
  *
  * 返回 `RepoRead` 而不是「值 + 可忽略的 `ok` 字段」：`{}` 同时表示"一个都没收藏"和"读不到"，
  * 而这两件事用户看到的是两种完全不同的结论（前者是他的数据，后者是我们的故障）。
- * 判别联合让失败**在类型上取不到值**，吞不掉（TD-01-4 / ADR-14 / ADR-0026 ②）。
+ * 判别联合让失败**在类型上取不到值**，吞不掉（ADR-14 ADR-0026 ②）。
  */
 export function readFontStars(): RepoRead<Record<string, number>> {
   const read = starsRepo.read()

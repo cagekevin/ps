@@ -24,7 +24,7 @@ export function usableCategories(data: Classification) {
 }
 
 /**
- * 字体语言：**委托 `font-lang` 的唯一判据**（TD-12-26）。
+ * 字体语言：**委托 `font-lang` 的唯一判据**。
  *
  * 以前这里写 `/[\u4e00-\u9fa5]/` 并注释"与 familyLang 同规则"——两句话都不是事实：
  * 规则不同（一个查汉字、一个查 ASCII 集），`°` 这种名字在预览里算英文、在筛选里算中文。

@@ -1,5 +1,5 @@
 // 是什么：读边界的解码契约（`Decoded` / `Decoder`）与两个通用容器解码（`decodeIndexed` / `decodeList`）
-// 替代了什么：`data/pick.ts` 的可选 `normalize` —— 12/13 个仓库因此把 `JSON.parse` 的结果直接当 `T`（TD-03-5 / T-99-2）
+// 替代了什么：`data/pick.ts` 的可选 `normalize` —— 12/13 个仓库因此把 `JSON.parse` 的结果直接当 `T`
 // 谁在用：`src/domain/*.ts` 里 13 个 `decode*` 与 `src/cep/data/file-repo.ts` 的必填 `decode` 参数
 // 禁止：不 import `@/cep/**`（domain 与 cep/data 都要能用）；decode 里**不许补默认值**，缺字段必须留痕
 //
@@ -37,7 +37,7 @@
 //    （坏形状 → `ok:false`、好形状 → `ok:true`），否则"永远返回 null"的判据也能通过。
 //
 // ── 别这么写（这几条正是被这一刀拆掉的旧写法）──────────────────────────────────
-// ✗ `JSON.parse(text) as T` / `parsed as FooFile` —— 形状的第二份真相（TD-03-5）
+// ✗ `JSON.parse(text) as T` / `parsed as FooFile` —— 形状的第二份真相
 // ✗ 自己写 `Array.isArray(raw.list) && raw.list.every(isItem)` —— 已有一份，用 `decodeIndexed`
 // ✗ `catch` 里返回 `fallback`、给缺失字段补 `?? 0` / `?? []` —— 静默兜底，坏文件在界面上看不见
 // ✗ `filter` 掉坏条目再把剩下的返回 —— 下次写回磁盘就丢条目（数据丢失）；要拒就整份 `null`

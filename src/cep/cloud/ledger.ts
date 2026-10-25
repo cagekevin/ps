@@ -82,7 +82,7 @@ export function writeCloudLedger(ledger: CloudLedgerRecord): void {
   const text = JSON.stringify(ledger)
   try {
     const target = path()
-    // 原子写失败必须抛：退回普通写等于摘掉 rename 保护（TD-09-27），台账写坏会污染同步判定
+    // 原子写失败必须抛：退回普通写等于摘掉 rename 保护，台账写坏会污染同步判定
     // 台账是覆盖写、无 `.bak` 概念（`previous: null`）
     try {
       writeDiskSync(target, text, { previous: null })

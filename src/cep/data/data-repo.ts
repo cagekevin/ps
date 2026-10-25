@@ -1,5 +1,5 @@
 // 是什么：**仓库的唯一构造器**（按环境选实现 + 强制 decode）＋ 它的两个实现件的选择规则
-// 替代了什么：`pick.ts`（已删）—— 它的 `normalize` 曾是可选参数，12/13 个仓库因此把 `JSON.parse` 的结果直接当 `T`（TD-03-5 / T-99-2）
+// 替代了什么：`pick.ts`（已删）—— 它的 `normalize` 曾是可选参数，12/13 个仓库因此把 `JSON.parse` 的结果直接当 `T`
 // 谁在用：`src/cep/data` 下 13 个仓库定义（actions / common-use / font-extra / free-panel / index / legacy-settings / rename / style-library-repo）
 //
 // ── 唯一性声明（写清楚，别让人以为是假的）──────────────────────────────────────

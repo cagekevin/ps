@@ -40,7 +40,7 @@ export interface CloudEngine {
 }
 
 /**
- * "云端读不懂"的唯一处置（TD-11-5）：**拒绝写云端**。
+ * "云端读不懂"的唯一处置：**拒绝写云端**。
  *
  * 为什么不退一步当"云端为空"继续推：那样 rev 从 1 起算，用户看到的是**一次成功同步**，
  * 而云端原来那份已经被覆盖掉了 —— 不可恢复。宁可这次不同步、把原因交上去。
@@ -114,7 +114,7 @@ function errorResult(error: unknown): { error: string; errorCode: string } {
 }
 
 /**
- * 记一条"网络类"待同步痕迹，并带上具体错误码（TD-11-8）。
+ * 记一条"网络类"待同步痕迹，并带上具体错误码。
  *
  * 为什么要码：`pending` 只有 5 个 reason 桶，"网络失败"里混着限流/权限/超时，
  * 日志和状态里看不出该做什么。码只在给得出的时候带，老调用处/老痕迹的写法不变。
@@ -203,7 +203,7 @@ export function createCloudEngine(deps: CloudDeps): CloudEngine {
     } catch (error) {
       return { ok: false, count: 0, ...errorResult(error) }
     }
-    // TD-11-5：读不懂 ≠ 云端为空。后者会以 rev=1 覆盖云端
+    //读不懂 ≠ 云端为空。后者会以 rev=1 覆盖云端
     if (pulled.status === 'unreadable') {
       return { ok: false, count: 0, ...cloudUnreadable(pulled.reason) }
     }
@@ -278,7 +278,7 @@ export function createCloudEngine(deps: CloudDeps): CloudEngine {
     } catch (error) {
       return { ok: false, count: 0, hasCloud: false, ...errorResult(error) }
     }
-    // TD-11-5：读不懂不许说成"云端没有数据"（用户会以为云端真的是空的）
+    //读不懂不许说成"云端没有数据"（用户会以为云端真的是空的）
     if (pulled.status === 'unreadable') {
       return { ok: false, count: 0, hasCloud: false, ...cloudUnreadable(pulled.reason) }
     }
@@ -424,7 +424,7 @@ export function createCloudEngine(deps: CloudDeps): CloudEngine {
       recordNetworkPending(deps.pending, ready, error)
       return { ok: false, count: 0, pushed: [], pending: ready, ...errorResult(error) }
     }
-    // TD-11-5：读不懂就**不推**。旧版这里 `cloud?.units ?? {}` 把"读不懂"折成"云端空"，
+    //读不懂就**不推**。旧版这里 `cloud?.units ?? {}` 把"读不懂"折成"云端空"
     // 于是每个改过的 unit 都判成"云端没有"直接推上去
     if (pulled.status === 'unreadable') {
       deps.pending.record(ready, 'conflict')
@@ -469,7 +469,7 @@ export function createCloudEngine(deps: CloudDeps): CloudEngine {
     }
 
     if (changed.length === 0) {
-      // 写基线失败必须变成"这一轮没成功"，不能装作"内容一致、已是最新"（TD-11-6）：
+      // 写基线失败必须变成"这一轮没成功"，不能装作"内容一致、已是最新"：
       // 基线没推进，下次本地真改了就会算出假冲突，而用户看不到任何原因。
       try {
         refreshBaseline()

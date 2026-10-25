@@ -62,7 +62,7 @@ export interface SyncUnitAdapter {
   /**
    * 这个同步项的**本地触发源**：仓库写成功后回调 `markDirty()`，返回取消订阅。
    *
-   * 必填是判据，不是形式（TD-11-1）：触发源原先手列在 `cep/cloud/change-sync.ts`，
+   * 必填是判据，不是形式：触发源原先手列在 `cep/cloud/change-sync.ts`
    * 与同步项注册地（`cep/cloud/entries/index.ts`）分成两处，5 个 unit 只订了 2 个 ——
    * 少的三个改了不标脏、不自动同步、也不报错。并到 adapter 上之后，
    * **漏声明 = `npm run typecheck` 不过**，新增同步项不可能再静默漏订阅。
@@ -145,7 +145,7 @@ export function contentHash(value: unknown): string {
 }
 
 /**
- * 文本的**UTF-8 字节数**（TD-12-28）。
+ * 文本的**UTF-8 字节数**。
  *
  * 以前是 `try { TextEncoder… } catch { data.length }`：兜底那句把**字符数当字节数**，
  * 一个汉字 3 字节却只记 1，同步快照里的 `size` 从此偏小且无人知道（潜伏型）。
@@ -225,7 +225,7 @@ function normalizeUnit(raw: unknown): SyncUnit | null {
 /**
  * 云端快照读取的**三态**（与 `LedgerRead` 同形：观测，不是结论）。
  *
- * 为什么必须三态（TD-11-5）：两态（`| null`）里"读不懂"与"没有"同值，
+ * 为什么必须三态：两态（`| null`）里"读不懂"与"没有"同值
  * 引擎据此判"云端是空的"，用本地 rev=1 把云端覆盖掉 —— 用户看到的是一次**成功**同步。
  * 网关回 200 但结构不符（错误页 / `{ok:true}` / 字段改名）恰恰走这条路。
  *
@@ -271,7 +271,7 @@ export function normalizeCloudPayload(raw: unknown): CloudPullOutcome {
 
   if (!candidate.units || typeof candidate.units !== 'object' || Array.isArray(candidate.units)) {
     // 这里以前 return null = "云端是空的"。`{ok:true}` 这类回包正好落进来，
-    // 于是引擎拿 rev=1 覆盖云端（TD-11-5）。
+    // 于是引擎拿 rev=1 覆盖云端。
     return {
       status: 'unreadable',
       reason: `回包没有 units，且没明说"没有"（${describeShape(raw)}）`,

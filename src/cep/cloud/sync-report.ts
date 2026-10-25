@@ -1,6 +1,6 @@
 // 是什么：后台同步的**结局 → 日志**唯一出口（成功 / 跳过 / 失败 / 抛错四条路都在这里落一句）
 // 唯一入口：cep/cloud/setup.ts 建队列时把本文件接到 onOutcome / onError 上
-// 替代了什么：以前队列的 outcome 根本没人接（`deps.onOutcome?.()` 空转），失败只剩 attempts++（TD-11-6）
+// 替代了什么：以前队列的 outcome 根本没人接（`deps.onOutcome?.()` 空转），失败只剩 attempts++
 // 谁在用：src/cep/cloud/setup.ts
 // 禁止：这里不重试、不改状态、不弹提示——后台行为默认不打断用户（用户没按按钮就只记不弹）
 
@@ -19,7 +19,7 @@ import type { SyncOutcome } from '@/cloud/change-sync'
 let lastSignature = ''
 
 /**
- * 结局变化的订阅者（TD-11-9）。
+ * 结局变化的订阅者。
  *
  * 为什么需要它：痕迹写在盘上，而设置页只在挂载/手动拉取后读一次盘、5 秒定时器只刷内存脏数——
  * 后台推送失败期间页面开着，"没同步成功"那句永远不出现，关掉重开才有。

@@ -4,7 +4,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import type { FontItem } from '@/domain/font-item'
 
 /**
- * 字体管理页 · 星级读不到（TD-01-4）。
+ * 字体管理页 · 星级读不到。
  *
  * 用户视角的判据：**「读不到」与「未收藏」在页面上必须是两句不同的话**。
  * 病根在数据层把失败折成 `{}`——一折，页面上就只剩"评分 0"，跟用户自己的数据没区别。
@@ -12,7 +12,7 @@ import type { FontItem } from '@/domain/font-item'
 
 const reads = vi.hoisted(() => ({
   getFontList: vi.fn(),
-  readFontTags: vi.fn(async () => []),
+  readFontTags: vi.fn(() => ({ ok: true, value: [] })),
   readFontStars: vi.fn(),
 }))
 
@@ -66,8 +66,8 @@ beforeEach(() => {
   pinia = createPinia()
   setActivePinia(pinia)
   vi.clearAllMocks()
-  reads.readFontTags.mockReturnValue([])
-  reads.readFontStars.mockReturnValue({ ok: true, stars: {} })
+  reads.readFontTags.mockReturnValue({ ok: true, value: [] })
+  reads.readFontStars.mockReturnValue({ ok: true, value: {} })
   reads.getFontList.mockResolvedValue([font('MiSans')])
   class NoopObserver {
     observe() {}
@@ -79,7 +79,11 @@ beforeEach(() => {
 
 describe('字体管理页 · 星级读不到（TD-01-4）', () => {
   it('星级读不到时页面上出现「读取不到星级文件」，并且说明 0 不代表没收藏', async () => {
-    reads.readFontStars.mockReturnValue({ ok: false, stars: {}, reason: 'EPERM: 拒绝访问' })
+    reads.readFontStars.mockReturnValue({
+      ok: false,
+      reason: 'EPERM: 拒绝访问',
+      fallback: {},
+    })
 
     const text = (await mountPage()).text()
 
@@ -88,7 +92,7 @@ describe('字体管理页 · 星级读不到（TD-01-4）', () => {
   })
 
   it('星级读得到时不出这句话（不许把正常状态也说成故障）', async () => {
-    reads.readFontStars.mockReturnValue({ ok: true, stars: { MiSans: 3 } })
+    reads.readFontStars.mockReturnValue({ ok: true, value: { MiSans: 3 } })
 
     const text = (await mountPage()).text()
 

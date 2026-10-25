@@ -4,7 +4,7 @@ import { log } from '@/utils/logger'
 import type { Command } from '@/commands/types'
 
 /**
- * TD-13-4：选区查询失败的原因与 code 不许被 `.catch(() => null)` 吞掉。
+ * 选区查询失败的原因与 code 不许被 `.catch(() => null)` 吞掉。
  *
  * 两件事各自钉一条：
  * ① `requires: layer/textLayer` 的命令失败时，用户看到的是**真实原因**（带 code），

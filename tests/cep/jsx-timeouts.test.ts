@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest'
 
 /**
- * TD-09-5 / TD-13-1：jsx 超时**按语义分三档、只有一份常量**。
+ * /：jsx 超时**按语义分三档、只有一份常量**。
  *
  * 以前 `READ/WRITE/LONG` 在 font / style / commonUse 各定义一遍（font 写 20s、commonUse 写 60s），
  * 其余 6 个域裸数字。这里钉两件事：

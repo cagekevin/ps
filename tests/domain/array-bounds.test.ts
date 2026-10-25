@@ -11,7 +11,7 @@ import {
 import type { RenamePreset } from '@/domain/rename'
 
 /**
- * TD-12-21：domain 里"裸数组取值"的**边界**。
+ * domain 里"裸数组取值"的**边界**。
  *
  * 判据不是"加一堆 `?? 默认值`"，而是每条取值都要能回答：越界时会发生什么，谁保证它不可达。
  * 结论分两类，两类都在这里钉住：

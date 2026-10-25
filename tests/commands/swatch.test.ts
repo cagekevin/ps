@@ -26,8 +26,7 @@ vi.mock('@/cep/node', async () => {
   const pathMod = await import('node:path')
   const bufferMod = await import('node:buffer')
 
-  const enoent = (p: string) =>
-    Object.assign(new Error(`ENOENT: ${p}`), { code: 'ENOENT' })
+  const enoent = (p: string) => Object.assign(new Error(`ENOENT: ${p}`), { code: 'ENOENT' })
 
   const fakeFs = () => ({
     mkdirSync: () => undefined,
@@ -56,7 +55,13 @@ vi.mock('@/cep/node', async () => {
   return {
     hasNode: () => true,
     nodeRequire: (id: string) =>
-      id === 'fs' ? fakeFs() : id === 'path' ? pathMod.default : id === 'buffer' ? bufferMod : undefined,
+      id === 'fs'
+        ? fakeFs()
+        : id === 'path'
+          ? pathMod.default
+          : id === 'buffer'
+            ? bufferMod
+            : undefined,
     toPosix: (p: string) => p,
   }
 })

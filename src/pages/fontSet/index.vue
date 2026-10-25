@@ -64,7 +64,7 @@ const feedback = useFeedbackStore()
 const settings = reactive<FontSetSettings>(deepClone(FONT_SET_DEFAULTS))
 const fonts = ref<FontItem[]>([])
 
-// 缺字体提示：状态在 store（domain 零框架，TD-12-20），命令经端口置位
+// 缺字体提示：状态在 store（domain 零框架），命令经端口置位
 const fontMissing = useFontMissingStore()
 const { missingFont } = storeToRefs(fontMissing)
 

@@ -87,7 +87,7 @@ function parseArrayText(text: string | null, note: string): KuGroupsSource {
   try {
     const parsed: unknown = JSON.parse(text)
     if (!Array.isArray(parsed)) return { groups: null, note: `${note}：内层不是数组` }
-    // 同 `resolveKuGroups` 的 groups 分支：内层数组的每一项也必须是对象（TD-12-21）
+    // 同 `resolveKuGroups` 的 groups 分支：内层数组的每一项也必须是对象
     // 「数组 + 逐条证明」只有一份实现：`guards.isArrayOf`（原来这里手写 `parsed.every(isGroupRecord)`）
     if (!isArrayOf(parsed, isRecord)) {
       return { groups: null, note: `${note}：内层数组里有非对象项` }

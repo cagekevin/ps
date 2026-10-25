@@ -5,7 +5,7 @@ import { tmpdir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 
 /**
- * TD-17-13：样式守卫（`scripts/style-guard.mjs`）的三条**结构型**判据：
+ * 样式守卫（`scripts/style-guard.mjs`）的三条**结构型**判据：
  * 负 margin（含长写/多值）· transition 裸时长 · 裸类名撞名。
  *
  * 起因：旧版负 margin 只认 `margin:\s*-`，于是 `margin-left:-9px`（盘上真有）与
@@ -113,7 +113,7 @@ describe('style-guard · 裸类名撞名', () => {
 })
 
 /**
- * TD-17-16：静默失败检查的判据从"文本里出现这个名字"改成"名字作为**代码**被用上"。
+ * 静默失败检查的判据从"文本里出现这个名字"改成"名字作为**代码**被用上"。
  *
  * 旧判据是 `vueText.includes(名字)`：`.vue` 里写一行 `// TODO: tagsError` 就算"已渲染" ——
  * 注释骗过守卫。这里同时钉住两件事：

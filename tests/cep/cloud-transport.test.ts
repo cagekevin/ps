@@ -63,7 +63,7 @@ describe('cloud transport', () => {
   })
 
   /**
-   * TD-11-5：网关回 200 但**结构不符**时，`pull` 必须报"读不懂"，
+   * 网关回 200 但**结构不符**时，`pull` 必须报"读不懂"
    * 不能报"云端是空的"（后者会让引擎以 rev=1 覆盖云端）。
    */
   it('pull_data 回 {"ok":true}（无 units）→ unreadable，不是 empty', async () => {
@@ -83,7 +83,7 @@ describe('cloud transport', () => {
   })
 
   /**
-   * TD-11-8：HTTP 状态必须分开到"重试策略或用户动作不同"的粒度。
+   * HTTP 状态必须分开到"重试策略或用户动作不同"的粒度。
    * 判据（每一条都在这里有用例兜住）：
    * - 401/403 → 权限（不会自己好，别劝重试）→ `CLOUD_PERMISSION`
    * - 429 → 限流（可以好，但要慢）→ `CLOUD_RATE_LIMITED`
@@ -111,7 +111,7 @@ describe('cloud transport', () => {
   })
 
   /**
-   * TD-13-3：网络出口从"transport 里裸 fetch"换成 `cep/http.postText` 之后，
+   * 网络出口从"transport 里裸 fetch"换成 `cep/http.postText` 之后
    * **码与重试语义必须和 11-8 一字不变**。下面两条钉住换出口时最容易漂的两种：
    * 超时（以前自己 abort，现在由 http 层抛 TIMEOUT）与"发不出去"（fetch reject）。
    */
@@ -162,7 +162,7 @@ describe('cloud transport', () => {
     expect(fetchMock).toHaveBeenCalledTimes(1)
 
     releaseFirst(response('{"ok":true}'))
-    // 这份回包本身没有 units（TD-11-5 之后是 unreadable）——本用例只关心"排队"，
+    // 这份回包本身没有 units（之后是 unreadable）——本用例只关心"排队"
     // 所以断言三态而不是 null
     await expect(first).resolves.toMatchObject({ status: 'unreadable' })
     await expect(second).resolves.toMatchObject({ status: 'unreadable' })

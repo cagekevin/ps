@@ -18,7 +18,7 @@ import { writeProtectedText } from './protected-text'
 import type { Repo, RepoRead } from './types'
 import { shapeFail, type DecodeFail, type Decoded } from '@/utils/decode'
 
-// 写队列已删：`Repo<T>` 全同步 ⇒ 读改写是不可打断的同步段，不需要排队（TD-09-18 的"只留一条链"变成"没有链"）
+// 写队列已删：`Repo<T>` 全同步 ⇒ 读改写是不可打断的同步段，不需要排队（"只留一条链"变成"没有链"）
 /**
  * 色板目录名。原版 `sf.js:11` 的 `g_FN.muLu = "/FengZiSeBan"`，挂在 `getUserDataPath()`（`%APPDATA%`）下。
  * 注意它**不在** `USER_DIR`（`/SheJiZhuLi`）里面 —— 原版 `path.seBan` =
@@ -122,7 +122,7 @@ function swatchRepo(path: string): Repo<unknown[]> {
 /**
  * 写色板全文：旧内容进 `.bak`（原文坏了改存 `.corrupt-*`）、原子写、写不进去抛、成功后 emit。
  *
- * T-112（读不到不许写）与 TD-09-21（坏原文隔离）由 `file-repo.rawOverwrite` 保证 ——
+ * T-112（读不到不许写）与（坏原文隔离）由 `file-repo.rawOverwrite` 保证 ——
  * 调用方不必自己读原文，也不许在原文坏时退回普通写。
  */
 export function writeSwatchItems(path: string, items: unknown[]): void {
@@ -240,7 +240,7 @@ export function appendCustomItem(item: unknown): { added: boolean } {
  * "最近使用"的语义该保新。用户可见差异只在"把数量调小"这一个动作上。
  */
 export function setRecentLimit(limit: number): void {
-  // 受保护的纯文本写：备份 + 原子写 + 回读校验（TD-09-19 / TD-16-1）。
+  // 受保护的纯文本写：备份 + 原子写 + 回读校验。
   // 这句以前是裸 `writeTextFile`：无 tmp、非原子、无备份——面板关在写中途就留下半截数字文件。
   writeProtectedText(recentLimitPath(), String(limit))
 
