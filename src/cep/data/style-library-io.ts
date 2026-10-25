@@ -85,17 +85,9 @@ function backupOriginal(relative: string, path: string, base64: string): void {
     }
     if (!isUsableJsonText(text)) {
       const quarantine = `${path}.corrupt-${Date.now()}`
-      try {
-        writeBase64File(quarantine, base64)
-      } catch (e) {
-        throw new CepError(
-          'IO',
-          msg.data.fn.noOriginalNoBackupAbortImport(
-            relative,
-            e instanceof Error ? e.message : String(e),
-          ),
-        )
-      }
+      // 写不进去就抛（底层文案已含 `<path>.corrupt-*` 与原因）。
+      // **不在这里再包一层** —— 包了就是"备份失败：x.corrupt（写入失败：x.corrupt（EACCES））"。
+      writeBase64File(quarantine, base64)
       log.warn(
         'style',
         `原文不是可用的库文件，已另存为 ${relative}.corrupt-*（不写 .bak，免得把坏内容当备份）`,
@@ -106,17 +98,8 @@ function backupOriginal(relative: string, path: string, base64: string): void {
 
   // TD-09-22：`.bak` 写失败**必须中止**。旧实现把这个失败丢掉继续写本体 ——
   // 结果是"导入报成功、原件被覆盖、`.bak` 不存在、日志一行都没有"（EISDIR 可复现）
-  try {
-    writeBase64File(`${path}.bak`, base64)
-  } catch (e) {
-    throw new CepError(
-      'IO',
-      msg.data.fn.backupOriginalFailedAbortImport(
-        relative,
-        e instanceof Error ? e.message : String(e),
-      ),
-    )
-  }
+  // 写不进去就抛（底层文案已含 `<path>.bak` 与原因）。不二次包装，理由同上。
+  writeBase64File(`${path}.bak`, base64)
 }
 
 /**
@@ -134,14 +117,8 @@ function writeKuFile(relative: string, base64: string): boolean {
     throw new CepError('IO', msg.data.fn.readOriginalFailedAbortImport(relative, read.reason))
   }
   if (read.status === 'ok') backupOriginal(relative, path, read.base64)
-  try {
-    writeBase64File(path, base64)
-  } catch (e) {
-    throw new CepError(
-      'IO',
-      msg.data.fn.writeFileFailed(relative, e instanceof Error ? e.message : String(e)),
-    )
-  }
+  // 写不进去就抛（底层文案已含完整路径与原因）。不二次包装。
+  writeBase64File(path, base64)
   return read.status === 'ok'
 }
 

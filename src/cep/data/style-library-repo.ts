@@ -554,19 +554,9 @@ function copyToRecycle(relative: string, recycleDir: string): boolean {
     return false
   }
   if (read.status === 'notSeen') return false
-  // 复制失败必须抛：**没有退路就不许往下删原件**（`.bak` / 回收目录是唯一退路）
-  try {
-    writeBase64File(`${recycleDir}/${relative}`, read.base64)
-  } catch (e) {
-    throw new CepError(
-      'IO',
-      msg.data.fn.recycleCopyFailed(
-        recycleDir,
-        relative,
-        e instanceof Error ? e.message : String(e),
-      ),
-    )
-  }
+  // 复制失败必须抛：**没有退路就不许往下删原件**（`.bak` / 回收目录是唯一退路）。
+  // 底层文案已含目标路径（就在 recycleDir 下）与原因，不再二次包装。
+  writeBase64File(`${recycleDir}/${relative}`, read.base64)
   return true
 }
 

@@ -441,8 +441,8 @@ export const msg: Msg = {
       // legacy-settings.ts
       unknownSettingKeys: (keys: string) => `不认识的常用页设置键：${keys}`,
       // protected-text.ts
-      backupFailedAbortWrite: (path: string, reason: string) =>
-        `${path} 备份失败，已中止写入：${reason}`,
+      // 备份/写入失败统一由 `disk-write` 的 `fileWriteFailed` 出（含完整路径与原因）；
+      // owner 层不再各写一句 —— 两处都写就是同一句话套两遍。
       protectedWriteFailed: (path: string, reason: string) => `${path} 写入失败：${reason}`,
       protectedReadBackMismatch: (path: string) => `${path} 写入后回读不一致，已按失败处理`,
       // settings.ts
@@ -450,14 +450,11 @@ export const msg: Msg = {
         `偏好文件读不到，本次不保存偏好（避免默认值覆盖原文件）：${reason}`,
       prefWriteFailed: (reason: string) => `偏好写入失败：${reason}`,
       // style-library-io.ts
-      noOriginalNoBackupAbortImport: (relative: string, reason: string) =>
-        `原文不可用且无法留存副本，已中止导入：${relative}（${reason}）`,
-      backupOriginalFailedAbortImport: (relative: string, reason: string) =>
-        `备份原文件失败，已中止导入：${relative}（${reason}）`,
+      // 写盘失败（含备份 / 隔离副本 / 库文件本体）统一由 `disk-write` 的 `fileWriteFailed` 出：
+      // 它的文案已含完整路径（`.bak` / `.corrupt-*` 都在路径里）与原因。
+      // 在这里再包一层会变成「备份失败：x.bak（写入失败：x.bak（EACCES））」—— 同一句话套两遍。
       readOriginalFailedAbortImport: (relative: string, reason: string) =>
         `读取原文件失败，已中止导入：${relative}（${reason}）`,
-      writeFileFailed: (relative: string, reason: string) =>
-        `写入文件失败：${relative}（${reason}）`,
       warehouseIndexUnusable: (degraded: string) => `仓库索引不可用：${degraded}`,
       indexReadFailedAbortReplace: (reason: string) =>
         `索引读不到，已中止替换（没有 .bak 的替换等于没有退路）：${reason}`,
@@ -486,8 +483,7 @@ export const msg: Msg = {
       libFileWriteFailed: (kind: string, fileName: string, reason: string) =>
         `${kind} 库文件写入失败：${fileName}（${reason}）`,
       warehouseMissing: (index: string) => `仓库 ${index} 不存在`,
-      recycleCopyFailed: (recycleDir: string, relative: string, reason: string) =>
-        `复制到回收目录失败：${recycleDir}/${relative}（${reason}）`,
+      // 复制到回收目录失败由 `disk-write` 的 `fileWriteFailed` 出（含目标路径与原因）
       // swatch-repo.ts
       swatchUserDirMismatch: (userDir: string, dir: string) =>
         `用户数据目录不以 ${userDir} 结尾，色板路径算不出来：${dir}`,

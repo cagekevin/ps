@@ -87,16 +87,10 @@ function backupOrQuarantine(target: string, previous: string, opts: BackupOption
  * 写失败即抛 —— 绝不在没有退路的情况下覆盖原件。
  */
 function writeBackupFile(path: string, text: string): void {
-  try {
-    writeTextFileAtomic(path, text)
-  } catch (e) {
-    // 换一句更具体的话：备份写不进去 = "没有退路"，比通用"写入失败"更该让人停手。
-    // **不是吞**：原错误被包进新错误的 message 里，照旧往上抛。
-    throw new CepError(
-      'IO',
-      msg.data.fn.backupFailedAbortWrite(path, e instanceof Error ? e.message : String(e)),
-    )
-  }
+  // **不包**：`writeTextFileAtomic` 抛的已经是完整一句「写入失败：<path>（原因）」，
+  // 路径里就写着 `.bak`。再包一层会把同一句话套两遍（"备份失败：x.bak（写入失败：x.bak（EACCES））"）。
+  // 文案只在一处产生 —— 上层要看"是哪一步"，看调用栈/日志，不靠把句子套起来。
+  writeTextFileAtomic(path, text)
 }
 
 /**
