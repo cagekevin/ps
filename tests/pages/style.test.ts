@@ -195,29 +195,34 @@ beforeEach(() => {
   repo.moveItemTo.mockResolvedValue(undefined)
   repo.moveGroupTo.mockResolvedValue(undefined)
   // 命令层与 store 都会读索引；不返回真索引会走"读失败"分支，渲染不出库
-  repo.indexRepo.read.mockResolvedValue({
+  repo.indexRepo.read.mockReturnValue({
     ok: true,
     value: { index: 0, list: [{ name: '我的样式仓库' }] },
   })
 })
 
 describe('样式页三态', () => {
-  it('加载态：读完之前显示正在读取', async () => {
-    let release: (value: StyleLibrarySnapshot) => void = () => {}
-    repo.read.mockReturnValue(new Promise((resolve) => (release = resolve)))
+  /**
+   * **加载态不存在了** —— 这不是"没做好"，是它不再存在。
+   *
+   * `readStyleLibrary()` 随 `Repo<T>` 一起同步化（写原语是 `renameSync`，读没有理由异步），
+   * 所以 `loading: true → false` 发生在同一个 tick 内，页面观察不到中间态。
+   * 三态在**成功路径**上收敛成两态：空 / 有内容。
+   *
+   * 保留这条断言是为了钉住"它确实同步"，而不是删掉当没发生过。
+   */
+  it('同步读 ⇒ 挂载后立刻是"读完了"，没有可观察的中间态', async () => {
+    repo.read.mockReturnValue(snapshot())
 
     const wrapper = mountPage()
     await flushPromises()
 
-    expect(wrapper.find('.style-loading').exists()).toBe(true)
-
-    release(snapshot())
-    await flushPromises()
     expect(wrapper.find('.style-loading').exists()).toBe(false)
+    expect(wrapper.text()).toContain('四个库都还是空的')
   })
 
   it('空库：四个库都没分组时显示空态，并保留仓库名', async () => {
-    repo.read.mockResolvedValue(snapshot())
+    repo.read.mockReturnValue(snapshot())
 
     const wrapper = mountPage()
     await flushPromises()
@@ -228,7 +233,7 @@ describe('样式页三态', () => {
 
   it('单库空态：按库给一句「该放什么」的文案（T-64）', async () => {
     setPref('styleShowTab', [true, true, true, true])
-    repo.read.mockResolvedValue(snapshot({ font: [{ name: '等线字组', show: true, items: [] }] }))
+    repo.read.mockReturnValue(snapshot({ font: [{ name: '等线字组', show: true, items: [] }] }))
 
     const wrapper = mountPage()
     await flushPromises()
@@ -253,7 +258,7 @@ describe('样式页三态', () => {
   })
 
   it('读失败：降级信息（文件损坏）也算失败，不拿空库冒充"没有内容"', async () => {
-    repo.read.mockResolvedValue(snapshot({}, 'sj_kuCol1.ini 读取失败'))
+    repo.read.mockReturnValue(snapshot({}, 'sj_kuCol1.ini 读取失败'))
 
     const wrapper = mountPage()
     await flushPromises()
@@ -269,7 +274,7 @@ describe('样式页三态', () => {
     await flushPromises()
     expect(wrapper.find('.style-error').exists()).toBe(true)
 
-    repo.read.mockResolvedValue(
+    repo.read.mockReturnValue(
       snapshot({
         color: [{ name: '灰白', show: true, items: [{ name: '未命名', swatch: '#302F34' }] }],
       }),
@@ -283,7 +288,7 @@ describe('样式页三态', () => {
   })
 
   it('四 tab：默认只显示颜色库，切到渐变后渲染渐变库', async () => {
-    repo.read.mockResolvedValue(
+    repo.read.mockReturnValue(
       snapshot({
         color: [{ name: '灰白', show: true, items: [{ name: '未命名' }] }],
         gradient: [{ name: '渐变默认分组', show: true, items: [{ name: '未命名' }] }],
@@ -306,7 +311,7 @@ describe('样式页三态', () => {
 describe('样式页第 2 段：应用 / 添加经 useCommand 接线', () => {
   /** 颜色库一组两项；命令层从磁盘读原件，这里给原始项 */
   function seedColor() {
-    repo.read.mockResolvedValue(
+    repo.read.mockReturnValue(
       snapshot({
         color: [
           {
@@ -406,7 +411,7 @@ describe('样式页第 2 段：应用 / 添加经 useCommand 接线', () => {
 describe('四库分派：点字体项 / 点字体组"+" 不能落到样式库', () => {
   /** 字体库一组一项 + 磁盘上的原始项（命令层从磁盘取原件） */
   function seedFont() {
-    repo.read.mockResolvedValue(
+    repo.read.mockReturnValue(
       snapshot({
         font: [
           {
@@ -487,7 +492,7 @@ describe('四库分派：点字体项 / 点字体组"+" 不能落到样式库', 
   })
 
   it('样式库项仍走 style.applyStyle（分派没改错库）', async () => {
-    repo.read.mockResolvedValue(
+    repo.read.mockReturnValue(
       snapshot({
         style: [{ name: '样式默认分组', show: true, items: [{ name: '描边', thumb: 'X1.png' }] }],
       }),
@@ -509,7 +514,7 @@ describe('四库分派：点字体项 / 点字体组"+" 不能落到样式库', 
 
 describe('组头：ctrl+点击「仅显示该组」与折叠都写库（原版 changeGroupShowStatus :52415-52435）', () => {
   function seedTwoGroups() {
-    repo.read.mockResolvedValue(
+    repo.read.mockReturnValue(
       snapshot({
         color: [
           { name: '灰白', show: true, items: [{ name: '未命名', swatch: '#302F34' }] },
@@ -544,7 +549,7 @@ describe('组头：ctrl+点击「仅显示该组」与折叠都写库（原版 c
   })
 
   it('展开态直接取库里的 show：show=false 的组只渲染组头，不渲染项', async () => {
-    repo.read.mockResolvedValue(
+    repo.read.mockReturnValue(
       snapshot({
         color: [{ name: '灰白', show: false, items: [{ name: '未命名', swatch: '#302F34' }] }],
       }),
@@ -573,7 +578,7 @@ describe('底栏四个「添加×分组」（原版 :49776-49832 → addGroup :5
   }
 
   it('六个按钮都不再禁用；导入 / 导出各弹 2 项菜单（契约 §3.5）', async () => {
-    repo.read.mockResolvedValue(snapshot())
+    repo.read.mockReturnValue(snapshot())
 
     const page = mountPageInBody()
     await flushPromises()
@@ -604,7 +609,7 @@ describe('底栏四个「添加×分组」（原版 :49776-49832 → addGroup :5
   })
 
   it('点「添加字体分组」→ 弹输入框 → 提交后 style.addGroup 追加到末尾（不带 afterIndex）', async () => {
-    repo.read.mockResolvedValue(snapshot({ font: [{ name: '等线字组', show: true, items: [] }] }))
+    repo.read.mockReturnValue(snapshot({ font: [{ name: '等线字组', show: true, items: [] }] }))
 
     const page = mountPageInBody()
     await flushPromises()
@@ -629,7 +634,7 @@ describe('底栏四个「添加×分组」（原版 :49776-49832 → addGroup :5
 describe('四类库的项尺寸互不相同（原版四个 scoped 段，不是一套皮肤）', () => {
   /** 每个库各一组一项，用来断言 section 上的库类名 */
   function seedAll() {
-    repo.read.mockResolvedValue({
+    repo.read.mockReturnValue({
       index: { index: 0, list: [{ name: 'W' }] },
       libraries: {
         color: [{ name: '灰白', show: true, items: [{ name: '未命名', swatch: '#302F34' }] }],
@@ -714,7 +719,7 @@ describe('四类库的项尺寸互不相同（原版四个 scoped 段，不是�
   })
 
   it('图片型渐变渲染 <img>，src 指向 <userDir>/Gradient/<fileName>', async () => {
-    repo.read.mockResolvedValue({
+    repo.read.mockReturnValue({
       index: { index: 0, list: [{ name: 'W' }] },
       libraries: {
         color: [],
@@ -739,7 +744,7 @@ describe('四类库的项尺寸互不相同（原版四个 scoped 段，不是�
 
 describe('仓库条（原版 warehouse 组件 data-v-47b7c6cb，清单 #71 #72 #73）', () => {
   it('点行展开下拉，列出索引里的全部仓库，当前仓库带勾', async () => {
-    repo.read.mockResolvedValue({
+    repo.read.mockReturnValue({
       index: { index: 1, list: [{ name: '默认仓库' }, { name: '客户A' }] },
       libraries: libraries(),
       degraded: '',
@@ -768,7 +773,7 @@ describe('仓库条（原版 warehouse 组件 data-v-47b7c6cb，清单 #71 #72 #
   })
 
   it('再点一次收起', async () => {
-    repo.read.mockResolvedValue(snapshot())
+    repo.read.mockReturnValue(snapshot())
 
     const wrapper = mountPage()
     await flushPromises()
@@ -785,7 +790,7 @@ describe('仓库条（原版 warehouse 组件 data-v-47b7c6cb，清单 #71 #72 #
 
 describe('字体库 / 样式库的项内容（清单 #22 #24 #26）', () => {
   it('字体项：渲染 字体数 / N点 / 中文字 / 色点，预览字体取 fonts[0].family', async () => {
-    repo.read.mockResolvedValue({
+    repo.read.mockReturnValue({
       index: { index: 0, list: [{ name: 'W' }] },
       libraries: libraries({
         font: [
@@ -826,7 +831,7 @@ describe('字体库 / 样式库的项内容（清单 #22 #24 #26）', () => {
   })
 
   it('字体项：color 为 null 时没有色点（不补默认色）', async () => {
-    repo.read.mockResolvedValue({
+    repo.read.mockReturnValue({
       index: { index: 0, list: [{ name: 'W' }] },
       libraries: libraries({
         font: [
@@ -862,7 +867,7 @@ describe('字体库 / 样式库的项内容（清单 #22 #24 #26）', () => {
   })
 
   it('样式项：缩略图 src 指向 <userDir>/kuStyle/<id>.png', async () => {
-    repo.read.mockResolvedValue({
+    repo.read.mockReturnValue({
       index: { index: 0, list: [{ name: 'W' }] },
       libraries: libraries({
         style: [{ name: '样式默认分组', show: true, items: [{ name: '描边', thumb: 'X1.png' }] }],
@@ -881,7 +886,7 @@ describe('字体库 / 样式库的项内容（清单 #22 #24 #26）', () => {
   })
 
   it('样式项：缩略图加载失败就不再画 <img>，只留深色底（不显示碎图标）', async () => {
-    repo.read.mockResolvedValue({
+    repo.read.mockReturnValue({
       index: { index: 0, list: [{ name: 'W' }] },
       libraries: libraries({
         style: [{ name: '样式默认分组', show: true, items: [{ name: '描边', thumb: 'X1.png' }] }],
@@ -903,7 +908,7 @@ describe('字体库 / 样式库的项内容（清单 #22 #24 #26）', () => {
   })
 
   it('样式项：没有 id 就不渲染 <img>（不猜文件名）', async () => {
-    repo.read.mockResolvedValue({
+    repo.read.mockReturnValue({
       index: { index: 0, list: [{ name: 'W' }] },
       libraries: libraries({
         style: [{ name: '样式默认分组', show: true, items: [{ name: '描边' }] }],
@@ -923,7 +928,7 @@ describe('字体库 / 样式库的项内容（清单 #22 #24 #26）', () => {
 
 describe('项 hover 浮层（T-60）', () => {
   function seedHover() {
-    repo.read.mockResolvedValue({
+    repo.read.mockReturnValue({
       index: { index: 0, list: [{ name: 'W' }] },
       libraries: {
         color: [
@@ -1019,7 +1024,7 @@ describe('样式页右键菜单（清单 #31-51：四库各不一样）', () => 
   }
 
   function seedColorGroup() {
-    repo.read.mockResolvedValue(
+    repo.read.mockReturnValue(
       snapshot({
         color: [{ name: '灰白', show: true, items: [{ name: '未命名', swatch: '#302F34' }] }],
       }),
@@ -1028,7 +1033,7 @@ describe('样式页右键菜单（清单 #31-51：四库各不一样）', () => 
 
   /** 四库各一组一项：菜单内容与项的形状无关，只要能渲染出组头与项 */
   function seedAllLibs() {
-    repo.read.mockResolvedValue(
+    repo.read.mockReturnValue(
       snapshot({
         color: [{ name: '灰白', show: true, items: [{ name: '未命名', swatch: '#302F34' }] }],
         gradient: [
@@ -1601,7 +1606,7 @@ describe('样式页第 5 段：仓库下拉', () => {
   }
 
   it('点下拉行 → 写索引（切仓库）+ 重读四库 + 关下拉', async () => {
-    repo.read.mockResolvedValue(twoWarehouses())
+    repo.read.mockReturnValue(twoWarehouses())
     const page = mountWithConfirm()
     await flushPromises()
     await openDrop(page)
@@ -1617,7 +1622,7 @@ describe('样式页第 5 段：仓库下拉', () => {
   })
 
   it('hover 出「重命名」→ 变输入框 → 回车提交写索引 name', async () => {
-    repo.read.mockResolvedValue(twoWarehouses())
+    repo.read.mockReturnValue(twoWarehouses())
     const page = mountWithConfirm()
     await flushPromises()
     await openDrop(page)
@@ -1646,7 +1651,7 @@ describe('样式页第 5 段：仓库下拉', () => {
   })
 
   it('空名回车 → 不写索引，提示「仓库名不能为空」（有意偏离：原版不校验）', async () => {
-    repo.read.mockResolvedValue(twoWarehouses())
+    repo.read.mockReturnValue(twoWarehouses())
     const page = mountWithConfirm()
     await flushPromises()
     await openDrop(page)
@@ -1666,7 +1671,7 @@ describe('样式页第 5 段：仓库下拉', () => {
   })
 
   it('只剩一个仓库 → 不删、不弹确认，tips「最少保留一个分组哦」（原版 f_delete :53978-53987）', async () => {
-    repo.read.mockResolvedValue(twoWarehouses(['唯一仓库']))
+    repo.read.mockReturnValue(twoWarehouses(['唯一仓库']))
     const page = mountWithConfirm()
     await flushPromises()
     await openDrop(page)
@@ -1683,7 +1688,7 @@ describe('样式页第 5 段：仓库下拉', () => {
   })
 
   it('两个仓库时删：二次确认后才写索引（确认文案写明文件进回收目录）', async () => {
-    repo.read.mockResolvedValue(twoWarehouses())
+    repo.read.mockReturnValue(twoWarehouses())
     const page = mountWithConfirm()
     await flushPromises()
     await openDrop(page)
@@ -1705,7 +1710,7 @@ describe('样式页第 5 段：仓库下拉', () => {
 
   it('「创建新分组」→ 新建仓库后直接进入编辑态（原版 f_add :53968-53974）', async () => {
     repo.read.mockResolvedValueOnce(twoWarehouses())
-    repo.read.mockResolvedValue(twoWarehouses(['默认仓库', '客户A', '未命名分组']))
+    repo.read.mockReturnValue(twoWarehouses(['默认仓库', '客户A', '未命名分组']))
     const page = mountWithConfirm()
     await flushPromises()
     await openDrop(page)
@@ -1720,7 +1725,7 @@ describe('样式页第 5 段：仓库下拉', () => {
   })
 
   it('点空白收起（用 useDismiss，不新造全局状态）', async () => {
-    repo.read.mockResolvedValue(twoWarehouses())
+    repo.read.mockReturnValue(twoWarehouses())
     const page = mountWithConfirm()
     await flushPromises()
     await openDrop(page)
@@ -1888,7 +1893,7 @@ describe('样式页拖拽排序', () => {
   })
 
   it('拖拽提示：颜色库内容区带 shift/alt/ctrl 说明，样式库挂在组容器上（原版 :49955 / :51316）', async () => {
-    repo.read.mockResolvedValue(
+    repo.read.mockReturnValue(
       snapshot({
         color: [{ name: '组一', show: true, items: [{ name: 'c00' }] }],
         style: [{ name: '样式组', show: true, items: [{ name: 's0' }] }],
