@@ -11,31 +11,59 @@ const fsMock = vi.hoisted(() => ({
   files: new Map<string, string>(),
 }))
 
-vi.mock('@/cep/fs-read', () => ({
-  USER_DIR: '/SheJiZhuLi',
-  readTextOutcome: async (p: string) => {
-      const text = fsMock.files.get(p)
-      return text === undefined ? { status: 'notSeen' as const } : { status: 'ok' as const, text }
+/**
+ * 假 fs **挂在 `@/cep/node` 这一层** —— 写原语已搬到 `@/cep/disk-write`，
+ * 挂在 `@/cep/fs-read` 上等于写路径完全没被拦（`disk-write` 走真 `nodeRequire('fs')`）。
+ *
+ * `userDir()` 必须以 `USER_DIR`（`/SheJiZhuLi`）**结尾** —— `swatch-repo.dataRoot()`
+ * 靠 `slice(0, -USER_DIR.length)` 还原 `%APPDATA%`，不以它结尾会直接抛。
+ */
+vi.mock('@/cep/node', async () => {
+  const pathMod = await import('node:path')
+  const bufferMod = await import('node:buffer')
+  const enoent = (p: string) => Object.assign(new Error(`ENOENT: ${p}`), { code: 'ENOENT' })
+
+  const fakeFs = () => ({
+    mkdirSync: () => undefined,
+    writeFileSync: (p: string, data: string | Uint8Array) => {
+      fsMock.files.set(p, String(data))
     },
-  readTextSync: (p: string) => {
-      const text = fsMock.files.get(p)
-      return text === undefined ? { status: 'notSeen' as const } : { status: 'ok' as const, text }
+    renameSync: (from: string, to: string) => {
+      const data = fsMock.files.get(from)
+      if (data === undefined) throw enoent(from)
+      fsMock.files.set(to, data)
+      fsMock.files.delete(from)
     },
-  writeTextFile: (p: string, text: string) => {
-      fsMock.files.set(p, text)
+    unlinkSync: (p: string) => {
+      if (!fsMock.files.has(p)) throw enoent(p)
+      fsMock.files.delete(p)
     },
-  writeTextFileAtomic: (p: string, text: string) => {
-      fsMock.files.set(p, text)
-      return { status: 'ok' as const }
+    readFileSync: (p: string) => {
+      const data = fsMock.files.get(p)
+      if (data === undefined) throw enoent(p)
+      return data
     },
-}))
+    readdirSync: () => [],
+    // 故意**不提供** `existsSync`：实现若回退成"先判存在"，这里会立刻炸（T-108）
+  })
+
+  return {
+    hasNode: () => true,
+    nodeRequire: (id: string) =>
+      id === 'fs'
+        ? fakeFs()
+        : id === 'path'
+          ? pathMod.default
+          : id === 'buffer'
+            ? bufferMod
+            : undefined,
+    toPosix: (p: string) => p,
+  }
+})
 
 vi.mock('@/cep/paths', () => ({
-  userDir: () => '/user',
-}))
-
-vi.mock('@/cep/node', () => ({
-  hasNode: () => true,
+  // 以 `USER_DIR` 结尾，`dataRoot()` 才能还原出 `%APPDATA%`（= `/ROAM`）
+  userDir: () => '/ROAM/SheJiZhuLi',
 }))
 
 vi.mock('@/cep/events', () => ({
@@ -45,7 +73,9 @@ vi.mock('@/cep/events', () => ({
 
 const { writeSwatchItems } = await import('@/cep/data/swatch-repo')
 
-const PATH = '/user/userColor.ini'
+// 色板文件在 `%APPDATA%/FengZiSeBan/` 下（`SWATCH_DIR`），不在 `USER_DIR` 里 ——
+// 以前写成 `/user/userColor.ini`，与 `swatchFilePath()` 算出来的路径根本不是同一个文件。
+const PATH = '/ROAM/FengZiSeBan/userColor.ini'
 const baks = () => [...fsMock.files.keys()].filter((k) => k.endsWith('.bak'))
 const corrupts = () => [...fsMock.files.keys()].filter((k) => k.includes('.corrupt-'))
 
