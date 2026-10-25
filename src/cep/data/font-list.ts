@@ -22,7 +22,7 @@ export async function getFontList(opts: { refresh?: boolean } = {}): Promise<Fon
   await initJsx()
 
   if (!opts.refresh) {
-    const cached = await readSysFontFile()
+    const cached = readSysFontFile()
     // 只有"读到了且非空"才算命中缓存；读不到继续往下走，让 PS 重建一次
     if (cached.status === 'ok' && cached.list.length) return cached.list
   }
@@ -36,7 +36,7 @@ export async function getFontList(opts: { refresh?: boolean } = {}): Promise<Fon
 
   // 哨兵判据只有一份：`utils/jsx-result.isJsxOkSentinel`（不许在调用点再写 `'ok' || 'OK'`）
   if (isJsxOkSentinel(data)) {
-    const fromFile = await readSysFontFile()
+    const fromFile = readSysFontFile()
     if (fromFile.status === 'error') {
       // TD-09-3：把**为什么**读不到带出去，别让页面只写"读不到系统字体"却查不到原因
       throw new CepError('IO', msg.data.fn.sysFontReadFailed(fromFile.reason))
@@ -54,5 +54,5 @@ export async function getFontList(opts: { refresh?: boolean } = {}): Promise<Fon
   if (!list.length) {
     throw new CepError('PARSE', msg.data.fn.sysFontUnrecognized(String(data).slice(0, 120)))
   }
-  return await mergeFontStars(list)
+  return mergeFontStars(list)
 }

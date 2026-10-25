@@ -19,7 +19,7 @@ export const useFreePanelStore = defineStore('freePanel', () => {
   const degraded = ref('')
 
   async function load() {
-    const read = await freePanelRepo.read()
+    const read = freePanelRepo.read()
     degraded.value = read.reason ?? ''
     // **故意不用 `read.fallback`**（T-104 逐处判过，这处不是 F 类）：生产者的默认值
     // `createEmptyFreePanel()` 带**一个** `norow` 区域（`domain/free-panel.ts:56-76`），

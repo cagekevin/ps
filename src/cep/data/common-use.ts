@@ -60,12 +60,12 @@ export interface EnsureResult {
  * 为什么不照抄官方：官方父类拿 `readToObject()` 当空对象、构造函数里 `keys(r).length === 0` 就
  * `updata()`（`app.8565afb8.js` 模块 `4058`），于是**文件坏了会被默认值覆盖**——那是 P0 丢数据。
  */
-export async function ensureCommonUseFile(): Promise<EnsureResult> {
+export function ensureCommonUseFile(): EnsureResult {
   if (!hasCep()) {
     // 无 CEP（浏览器 / jsdom）：内存仓库没有"文件不存在"这个概念，按"进程内首次"算
     if (memoryEnsured) return { created: false }
     memoryEnsured = true
-    await base.write(createCommonUseSeed())
+    base.write(createCommonUseSeed())
     return { created: true }
   }
 
@@ -75,7 +75,7 @@ export async function ensureCommonUseFile(): Promise<EnsureResult> {
 
   // 查不到 = 首次使用，写种子（`requireExisting` 在这条路上是"文件确实没有"，不是"读不出"）
   if (outcome.kind === 'absent') {
-    await base.write(createCommonUseSeed())
+    base.write(createCommonUseSeed())
     return { created: true }
   }
 
@@ -122,7 +122,7 @@ function requireItems(file: unknown): CommonUseItem[] {
  * 排序：**复用** `domain/reorder.applyListDrop`（原版拖拽四分支的落点计算，`:37786-37796`），
  * 不在这里另写一份下标运算。`position` 是"插在目标前/后"。
  */
-async function move(from: number, to: number, position: DropPosition): Promise<CommonUseFile> {
+function move(from: number, to: number, position: DropPosition): CommonUseFile {
   return base.update((file) => {
     const items = requireItems(file)
     applyListDrop(items, from, to, position)
@@ -131,7 +131,7 @@ async function move(from: number, to: number, position: DropPosition): Promise<C
 }
 
 /** 显隐：只改这一项的 `isShow`，不动顺序 */
-async function setShow(id: string, show: boolean): Promise<CommonUseFile> {
+function setShow(id: string, show: boolean): CommonUseFile {
   return base.update((file) => {
     const items = requireItems(file)
     const index = findCommonUseIndex(items, id)
@@ -145,7 +145,7 @@ async function setShow(id: string, show: boolean): Promise<CommonUseFile> {
  * 恢复默认（官方 `resetConfig()`：全清 + 重新 push 种子 + 整份 `updata`，`:11101-11108`）。
  * **只换 `info`，文件顶层的未知键原样保留**——官方也写这个文件，整份替换等于删他的字段。
  */
-async function resetAll(): Promise<CommonUseFile> {
+function resetAll(): CommonUseFile {
   return base.update((file) => {
     const items = requireItems(file)
     // 官方 `resetConfig()`：`splice(0, length)` 后 `push(...configReset())`（`:11105-11106`），原地换内容

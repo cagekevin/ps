@@ -2,8 +2,8 @@ import type { FontTag } from '@/cep/types'
 import { starsRepo, tagsRepo } from './index'
 
 /** 读字体标签（我的标签那一排）；坏文件的默认值取仓库自己的 `fallback`（空列表），坏因由 `fileRepo` 记 */
-export async function readFontTags(): Promise<FontTag[]> {
-  const read = await tagsRepo.read()
+export function readFontTags(): FontTag[] {
+  const read = tagsRepo.read()
   const raw = read.ok ? read.value : read.fallback
   return raw
     .filter((item) => typeof item.text === 'string')
@@ -30,8 +30,8 @@ export interface FontStarsRead {
 }
 
 /** 读星级：{ 家族名: 1~3 }；读不到时 `ok:false` + 原因，不伪装成空表 */
-export async function readFontStars(): Promise<FontStarsRead> {
-  const read = await starsRepo.read()
+export function readFontStars(): FontStarsRead {
+  const read = starsRepo.read()
   if (!read.ok) return { ok: false, stars: {}, reason: read.reason }
 
   const map: Record<string, number> = {}

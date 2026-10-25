@@ -57,13 +57,14 @@ export const useFontSetStore = defineStore('fontSet', () => {
   })
 
   async function load() {
-    const [settingsRead, quickRead, hierarchyRead, counterRead, historyRead] = await Promise.all([
+    // 五个读全是同步的 ⇒ 不需要 `Promise.all`（它只对 Promise 有意义）
+    const [settingsRead, quickRead, hierarchyRead, counterRead, historyRead] = [
       readFontSetSettings(),
       quickFontRepo.read(),
       hierarchyRepo.read(),
       translateCounterRepo.read(),
       fontHistoryRepo.read(),
-    ])
+    ]
 
     // 坏设置文件：默认值由数据层给（`legacySettingsRepo` 的 fallback `{}` 经同一处归一出），
     // store 只转发，不再自己调 `mergeFontSetSettings({})`（ADR-24）

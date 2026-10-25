@@ -8,7 +8,7 @@
 import { b64ToUtf8, utf8ToB64 } from '@/cep/codec'
 import { readBase64File, readExternalText } from '@/cep/fs-read'
 import { userDir } from '@/cep/paths'
-import { removeFile, writeBase64File, writeDisk } from '@/cep/disk-write'
+import { removeFile, writeBase64File, writeDiskSync } from '@/cep/disk-write'
 import { isKuLibraryFileName } from '@/domain/ku-format'
 import { isUsableJsonText } from '@/utils/json'
 import {
@@ -32,9 +32,9 @@ import { CepError } from '@/utils/errors'
 import { msg } from '@/domain/messages'
 import { log } from '@/utils/logger'
 import { kuGuid, readIndexState, readKuFileText, styleIndexWriter } from './style-library-repo'
-// 与日常编辑共用 data/write-queue 的唯一串行链（TD-09-28）
-import { runQueued } from './write-queue'
+// 与日常编辑共用同一批 sj_ku* 文件；没有队列了 —— 读改写是同步段，不可能交错（TD-09-28）
 import { isRecord } from '@/utils/guards'
+import { runExclusiveAsync } from './exclusive'
 
 /** 进度回调：只报"正在做什么"，不猜百分比（仓库数量差异太大） */
 export type KuIoProgress = (detail: string) => void
@@ -50,7 +50,7 @@ export interface KuImportResult {
   recycleDir: string
 }
 
-// `indexPath()` 已不需要：索引的读/备份/写全在 `styleIndexWriter.overwriteInLock` 里。
+// `indexPath()` 已不需要：索引的读/备份/写全在 `styleIndexWriter.overwrite` 里。
 
 function parseOrThrow<T>(read: () => T): T {
   try {
@@ -218,9 +218,9 @@ function currentIndex(): StyleWarehouseIndex {
   return value
 }
 
-export async function kuArchiveDefaultName(current: boolean): Promise<string> {
+export function kuArchiveDefaultName(current: boolean): string {
   if (!current) return '全部仓库.kux'
-  const index = await currentIndex()
+  const index = currentIndex()
   const name = index.list[index.index]?.name
   // UNVERIFIED: 契约 §3.5 只给了单库默认名（`<仓库名>-<库名>预设.<ext>`），没有 `.kux` 当前仓库的默认名；
   // 这里沿用动作页的 `<仓库名>.kux` 口径（依赖契约 §3.5 的命名规则 + 动作页现有实现）
@@ -234,54 +234,52 @@ export async function kuArchiveDefaultName(current: boolean): Promise<string> {
  * 库载荷直接取磁盘文件字节的 base64（契约 §2.5 第 2 点：容器层不做内容变换）；
  * 读不到的文件写布尔 `false`，不省略（§2.5 第 3 点）。
  */
-export async function exportKuArchive(
+export function exportKuArchive(
   current: boolean,
   targetPath: string,
   onProgress?: KuIoProgress,
-): Promise<void> {
-  // 与导入/编辑同一条链：导出一边读索引一边读库文件，串行化后拿到一致的快照（TD-09-28）
-  return runQueued(async () => {
-    const index = await currentIndex()
-    const list = current ? [index.list[index.index]].filter(Boolean) : index.list
-    if (!list.length) throw new CepError('PARSE', msg.data.text.noExportableWarehouse)
+): void {
+  // 整段是一个同步段：读索引 + 读库文件 + 原子写导出包，中间不可能被导入/编辑插进来
+  const index = currentIndex()
+  const list = current ? [index.list[index.index]].filter(Boolean) : index.list
+  if (!list.length) throw new CepError('PARSE', msg.data.text.noExportableWarehouse)
 
-    const store: StyleWarehouseIndex = current
-      ? { ...index, index: 0, list: [{ ...list[0] }] }
-      : index
+  const store: StyleWarehouseIndex = current
+    ? { ...index, index: 0, list: [{ ...list[0] }] }
+    : index
 
-    const arrFileData: KuFileEntry[] = []
-    let done = 0
+  const arrFileData: KuFileEntry[] = []
+  let done = 0
 
-    for (const warehouse of list) {
-      for (const kind of KU_CONTAINER_ORDER) {
-        const fileName = fileNameOf(warehouse, kind)
-        if (!fileName) continue
-        // 契约 §2.5：`data` 不是字符串时就是布尔 `false`，语义是"这个文件当时读不到"。
-        // 所以这里**有意**把 `notSeen` 与 `error` 合成都写成 `false`（导出格式要求的形状）
-        const read = readBase64File(`${userDir()}/${fileName}`)
-        if (read.status === 'error') log.warn('style', `导出：${fileName} 读不到`, read.reason)
-        arrFileData.push({ name: fileName, data: read.status === 'ok' ? read.base64 : false })
-      }
-
-      // UNVERIFIED: 契约 §3.4 只写“4 个库文件 + 旁路图”，实测样本 A 没有旁路图；
-      // 这里按「每个仓库先 4 个库文件、再该仓库的旁路图」落，顺序未在真实样本上核对
-      for (const name of await sidecarNamesOfWarehouse(warehouse)) {
-        // 同上：契约 §2.5 要求 `false` 表示"读不到"，这里有意把两态合成 `false`
-        const sidecar = readBase64File(`${userDir()}/${name}`)
-        if (sidecar.status === 'error') log.warn('style', `导出：${name} 读不到`, sidecar.reason)
-        arrFileData.push({ name, data: sidecar.status === 'ok' ? sidecar.base64 : false })
-      }
-
-      done += 1
-      onProgress?.(msg.data.fn.warehousesReadProgress(String(done), String(list.length)))
+  for (const warehouse of list) {
+    for (const kind of KU_CONTAINER_ORDER) {
+      const fileName = fileNameOf(warehouse, kind)
+      if (!fileName) continue
+      // 契约 §2.5：`data` 不是字符串时就是布尔 `false`，语义是"这个文件当时读不到"。
+      // 所以这里**有意**把 `notSeen` 与 `error` 合成都写成 `false`（导出格式要求的形状）
+      const read = readBase64File(`${userDir()}/${fileName}`)
+      if (read.status === 'error') log.warn('style', `导出：${fileName} 读不到`, read.reason)
+      arrFileData.push({ name: fileName, data: read.status === 'ok' ? read.base64 : false })
     }
 
-    // 一条都读不到就不是"导出了一个空仓库"，而是索引/磁盘不对：宁可失败也不产出空壳文件
-    if (!arrFileData.length) throw new CepError('PARSE', msg.data.text.noExportableLibFile)
+    // UNVERIFIED: 契约 §3.4 只写“4 个库文件 + 旁路图”，实测样本 A 没有旁路图；
+    // 这里按「每个仓库先 4 个库文件、再该仓库的旁路图」落，顺序未在真实样本上核对
+    for (const name of sidecarNamesOfWarehouse(warehouse)) {
+      // 同上：契约 §2.5 要求 `false` 表示"读不到"，这里有意把两态合成 `false`
+      const sidecar = readBase64File(`${userDir()}/${name}`)
+      if (sidecar.status === 'error') log.warn('style', `导出：${name} 读不到`, sidecar.reason)
+      arrFileData.push({ name, data: sidecar.status === 'ok' ? sidecar.base64 : false })
+    }
 
-    // 导出包是**新文件**，无 `.bak` 概念（`previous: null`）；走唯一落盘入口（原子写）
-    await writeDisk(targetPath, encodeKuContainer({ arrFileData, store }), { previous: null })
-  })
+    done += 1
+    onProgress?.(msg.data.fn.warehousesReadProgress(String(done), String(list.length)))
+  }
+
+  // 一条都读不到就不是"导出了一个空仓库"，而是索引/磁盘不对：宁可失败也不产出空壳文件
+  if (!arrFileData.length) throw new CepError('PARSE', msg.data.text.noExportableLibFile)
+
+  // 导出包是**新文件**，无 `.bak` 概念（`previous: null`）；走唯一落盘入口（原子写）
+  writeDiskSync(targetPath, encodeKuContainer({ arrFileData, store }), { previous: null })
 }
 
 /** 把替换掉的旧文件移进回收目录（与 `deleteWarehouse` 同一个 `.deleted-<时间戳>` 约定，可整目录拷回） */
@@ -328,7 +326,7 @@ function filesOfIndex(index: StyleWarehouseIndex): string[] {
       const fileName = fileNameOf(warehouse, kind)
       if (fileName) names.push(fileName)
     }
-    names.push(...(sidecarNamesOfWarehouse(warehouse)))
+    names.push(...sidecarNamesOfWarehouse(warehouse))
   }
   return [...new Set(names)]
 }
@@ -342,83 +340,91 @@ function filesOfIndex(index: StyleWarehouseIndex): string[] {
  *
  * 两条路径都先给内层文件发新 id（`replaceFileName`，契约 §5.2 第 3 点），否则会覆盖本地同名文件。
  */
-export async function importKuArchive(
+export function importKuArchive(
   append: boolean,
   sourcePath: string,
   onProgress?: KuIoProgress,
 ): Promise<KuImportResult> {
-  // 导入写的是与日常编辑同一批 sj_ku* 文件：整段独占一条写链，
-  // 否则导入途中拖拽分组 → 两条读改写交错 → 后写覆盖先写（TD-09-28）。
-  // 锁内索引读写一律走 *InLock（不自排自，TD-09-30）。
-  return runQueued(async () => {
+  // 长事务互斥（`ku-files` 域）：读用户文件是真 await，中间能让出 macrotask，
+  // 第二次触发会插进来写同一批 `sj_ku*` ⇒ 索引与实际文件对不上。
+  return runExclusiveAsync('ku-files', '样式库导入', async () => {
+    // **唯一需要 async 的地方**：读用户对话框选的文件（无 Node 时走 jsx 回退，物理上不可能同步）。
+    // 拿到文本立刻转交同步写段 —— 写段里写 `await` 是语法错误，所以「读 → 改 → 写」不可能被打断。
     const read = await readExternalText(sourcePath)
     // T-107：导入前读不到就不许继续。两种不 ok 这里同果（都抛同一句），文案不变
     if (read.status !== 'ok') throw new CepError('IO', msg.data.text.readImportFileFailed)
-    const text = read.text
-
-    onProgress?.('解析导入文件')
-    const imported = parseOrThrow(() => parseKuContainer(text))
-    validateContainer(imported)
-
-    const remapped = parseOrThrow(() => remapKuContainer(imported, kuGuid, CODEC))
-    validateContainer(remapped)
-
-    // 覆盖导入允许索引已损坏：它本来就要整份替换，且替换前会留 `.bak`；追加导入必须能读懂原索引
-    const before = append ? await currentIndex() : (await readIndexState()).value
-    const oldFiles = append ? [] : await filesOfIndex(before)
-    const nextIndex = readStyleWarehouseIndex(remapped.store).value
-
-    const written: string[] = []
-    const created: string[] = []
-    try {
-      for (const entry of remapped.arrFileData) {
-        if (typeof entry.data !== 'string') continue
-        if (!writeKuFile(entry.name, entry.data)) created.push(entry.name)
-        written.push(entry.name)
-        onProgress?.(
-          msg.data.fn.filesWrittenProgress(
-            String(written.length),
-            String(remapped.arrFileData.length),
-          ),
-        )
-      }
-
-      if (append) {
-        await styleIndexWriter.update((value) => {
-          const current = readStyleWarehouseIndex(value).value
-          const list = [...current.list, ...nextIndex.list]
-          // 与 action-archive 同口径：追加后选中最后一个新仓库。
-          // UNVERIFIED: 原版样式页 importAdd 是否也这样切，未实测（契约 §3.4 只写了写盘顺序）
-          return { ...value, index: list.length - 1, list }
-        })
-      } else {
-        // 整份替换索引：`overwriteInLock` = 读原文 → `.bak` → 原子写 → emit，且**在锁内**。
-        // 以前这里自己 `readExternalText` + `backupOrQuarantine` + `writeInLock` 三步 ——
-        // 那是上层在做底层的事（T-112 的"读不到就中止"由 `overwrite` 的 D-42 拒绝覆盖保证）。
-        await styleIndexWriter.overwrite(nextIndex)
-      }
-    } catch (e) {
-      // 只回滚这次新建的文件：被覆盖的原件还在原位（`.bak` 是它的上一版）
-      for (const name of created) {
-        const removed = removeFile(`${userDir()}/${name}`)
-        // 回滚删不掉只留下孤儿，但必须留下来历（旧实现丢掉返回值，删没删掉没人知道）
-        if (!removed.ok)
-          log.warn('style', `回滚：删新建文件失败（留下孤儿）：${name}`, removed.reason)
-      }
-      throw e
-    }
-
-    const recycleDir = append ? '' : `${userDir()}/.deleted-${Date.now()}`
-    if (recycleDir) {
-      const keep = new Set(remapped.arrFileData.map((entry) => entry.name))
-      const moved = moveToRecycle(oldFiles, keep, recycleDir)
-      log.info('style', '覆盖导入完成', { recycleDir, moved })
-    }
-
-    return {
-      warehouses: append ? before.list.length + nextIndex.list.length : nextIndex.list.length,
-      files: written.length,
-      recycleDir,
-    }
+    return importKuFromText(append, read.text, onProgress)
   })
+}
+
+/** 同步写段：解析 → 写库文件 → 写索引 → 回收旧文件。整段不可打断。 */
+function importKuFromText(
+  append: boolean,
+  text: string,
+  onProgress?: KuIoProgress,
+): KuImportResult {
+  onProgress?.('解析导入文件')
+  const imported = parseOrThrow(() => parseKuContainer(text))
+  validateContainer(imported)
+
+  const remapped = parseOrThrow(() => remapKuContainer(imported, kuGuid, CODEC))
+  validateContainer(remapped)
+
+  // 覆盖导入允许索引已损坏：它本来就要整份替换，且替换前会留 `.bak`；追加导入必须能读懂原索引
+  const before = append ? currentIndex() : readIndexState().value
+  const oldFiles = append ? [] : filesOfIndex(before)
+  const nextIndex = readStyleWarehouseIndex(remapped.store).value
+
+  const written: string[] = []
+  const created: string[] = []
+  try {
+    for (const entry of remapped.arrFileData) {
+      if (typeof entry.data !== 'string') continue
+      if (!writeKuFile(entry.name, entry.data)) created.push(entry.name)
+      written.push(entry.name)
+      onProgress?.(
+        msg.data.fn.filesWrittenProgress(
+          String(written.length),
+          String(remapped.arrFileData.length),
+        ),
+      )
+    }
+
+    if (append) {
+      styleIndexWriter.update((value) => {
+        const current = readStyleWarehouseIndex(value).value
+        const list = [...current.list, ...nextIndex.list]
+        // 与 action-archive 同口径：追加后选中最后一个新仓库。
+        // UNVERIFIED: 原版样式页 importAdd 是否也这样切，未实测（契约 §3.4 只写了写盘顺序）
+        return { ...value, index: list.length - 1, list }
+      })
+    } else {
+      // 整份替换索引：`overwrite` = 读原文 → `.bak` → 原子写 → emit。
+      // 以前这里自己 `readExternalText` + `backupOrQuarantine` + 裸写三步 ——
+      // 那是上层在做底层的事（T-112 的"读不到就中止"由 `overwrite` 的 D-42 拒绝覆盖保证）。
+      styleIndexWriter.overwrite(nextIndex)
+    }
+  } catch (e) {
+    // 只回滚这次新建的文件：被覆盖的原件还在原位（`.bak` 是它的上一版）
+    for (const name of created) {
+      const removed = removeFile(`${userDir()}/${name}`)
+      // 回滚删不掉只留下孤儿，但必须留下来历（旧实现丢掉返回值，删没删掉没人知道）
+      if (!removed.ok)
+        log.warn('style', `回滚：删新建文件失败（留下孤儿）：${name}`, removed.reason)
+    }
+    throw e
+  }
+
+  const recycleDir = append ? '' : `${userDir()}/.deleted-${Date.now()}`
+  if (recycleDir) {
+    const keep = new Set(remapped.arrFileData.map((entry) => entry.name))
+    const moved = moveToRecycle(oldFiles, keep, recycleDir)
+    log.info('style', '覆盖导入完成', { recycleDir, moved })
+  }
+
+  return {
+    warehouses: append ? before.list.length + nextIndex.list.length : nextIndex.list.length,
+    files: written.length,
+    recycleDir,
+  }
 }

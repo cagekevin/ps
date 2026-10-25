@@ -110,8 +110,8 @@ export function mergeFontSetSettings(
   }
 }
 
-export async function readFontSetSettings(): Promise<RepoRead<FontSetSettings>> {
-  const read = await legacySettingsRepo.read()
+export function readFontSetSettings(): RepoRead<FontSetSettings> {
+  const read = legacySettingsRepo.read()
   // 坏文件的默认值由 `legacySettingsRepo` 的 fallback `{}` 经**同一条**归一产生，
   // 消费侧直接取 `fallback`，不再自己调 `mergeFontSetSettings({})`（ADR-24）
   if (!read.ok)
@@ -123,7 +123,7 @@ export async function readFontSetSettings(): Promise<RepoRead<FontSetSettings>> 
  * 云同步专用：文件必须真实存在。
  * 缺文件时页面可以显示默认值，但同步不能把默认值当成用户数据上传。
  */
-export async function readFontSetSettingsForSync(): Promise<FontSetSettings> {
+export function readFontSetSettingsForSync(): FontSetSettings {
   // 云同步要的是"真实存在且可读" ⇒ 用档 1 的**未折叠**结论（不拿默认值顶）
   const outcome = readRepoFile(`${userDir()}/${DATA_FILES.ztSet}`, decodeSettingsRecord)
   // T-116：四种坏法都中止，但原因必须分开报 ——
@@ -142,10 +142,8 @@ export async function readFontSetSettingsForSync(): Promise<FontSetSettings> {
 }
 
 /** 只改动本页字段，其余键原样写回 */
-export async function patchFontSetSettings(
-  patch: Partial<FontSetSettings>,
-): Promise<FontSetSettings> {
-  const next = await legacySettingsImpl.update((all) => {
+export function patchFontSetSettings(patch: Partial<FontSetSettings>): FontSetSettings {
+  const next = legacySettingsImpl.update((all) => {
     Object.assign(all, patch)
   })
   return mergeFontSetSettings(next)
@@ -212,8 +210,8 @@ function pickCommonUseOptions(all: Record<string, unknown>): Partial<CommonUseOp
 }
 
 /** 读常用页那 8 个键；文件里没有的键**不补默认值**（缺 = 官方默认，由面板决定） */
-export async function readCommonUseOptions(): Promise<RepoRead<Partial<CommonUseOptions>>> {
-  const read = await legacySettingsRepo.read()
+export function readCommonUseOptions(): RepoRead<Partial<CommonUseOptions>> {
+  const read = legacySettingsRepo.read()
   if (!read.ok) {
     return { ok: false, reason: read.reason, fallback: pickCommonUseOptions(read.fallback) }
   }
@@ -224,16 +222,16 @@ export async function readCommonUseOptions(): Promise<RepoRead<Partial<CommonUse
  * 只写这 8 个键；其余键（原面板还有几十个）原样保留。
  * 未知键直接拒绝——写进去就是污染别人的设置文件。
  */
-export async function updateCommonUseOptions(
+export function updateCommonUseOptions(
   patch: Partial<CommonUseOptions>,
-): Promise<Partial<CommonUseOptions>> {
+): Partial<CommonUseOptions> {
   const unknown = Object.keys(patch).filter(
     (key) => !COMMON_USE_SETTING_KEYS.includes(key as CommonUseSettingKey),
   )
   if (unknown.length) {
     throw new CepError('PARSE', msg.data.fn.unknownSettingKeys(unknown.join('、')))
   }
-  const next = await legacySettingsImpl.update((all) => {
+  const next = legacySettingsImpl.update((all) => {
     assignDeep(all, patch as Record<string, unknown>)
   })
   const picked: Partial<CommonUseOptions> = {}

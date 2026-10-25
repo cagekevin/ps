@@ -38,7 +38,7 @@ export const useStyleLibraryStore = defineStore('styleLibrary', () => {
     loading.value = true
     error.value = ''
     try {
-      const snapshot = await readStyleLibrary()
+      const snapshot = readStyleLibrary()
       warehouses.value = snapshot.index.list
       activeIndex.value = snapshot.index.index
       libraries.value = snapshot.libraries

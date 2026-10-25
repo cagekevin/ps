@@ -69,7 +69,12 @@ export function readRepoFile<T>(target: string, decode: Decoder<T>): RepoFileOut
 
   if (outcome.status === 'error') {
     log.error('repo', `${target} 读取失败`, outcome.reason)
-    return { kind: 'bad', why: 'readError', reason: msg.data.fn.readFailed(outcome.reason), text: null }
+    return {
+      kind: 'bad',
+      why: 'readError',
+      reason: msg.data.fn.readFailed(outcome.reason),
+      text: null,
+    }
   }
 
   if (outcome.status === 'notSeen') return { kind: 'absent', text: null }

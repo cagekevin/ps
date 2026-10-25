@@ -111,7 +111,7 @@ function emit(value: FreePanelFile): void {
  * 改：mutator 看到的是带 showText 的值（命令层照常读写），落盘时剥键。
  */
 
-/** 读后把会话态贴回返回值（`read` 与 `readInLock` 共用一份，别抄两遍） */
+/** 读后把会话态贴回返回值 */
 function prepareRead(result: RepoRead<FreePanelFile>): RepoRead<FreePanelFile> {
   // 坏文件不给 fallback（判别联合里取不到 value）：没有块可挂会话态，原样返回，坏因在 reason 里
   if (!result.ok) return result
@@ -122,7 +122,7 @@ function prepareRead(result: RepoRead<FreePanelFile>): RepoRead<FreePanelFile> {
   return result
 }
 
-/** 把命令层的 mutator 包成"看得到会话态、落盘剥键"的底层 mutator（`update` / `updateInLock` 共用） */
+/** 把命令层的 mutator 包成"看得到会话态、落盘剥键"的底层 mutator */
 function wrapMutator(
   mutator: (value: FreePanelFile) => FreePanelFile | void,
 ): (file: FreePanelFile) => FreePanelFile {
@@ -146,13 +146,10 @@ function wrapMutator(
 
 /**
  * 落盘剥 `showText` → 调底层写 → 回填会话态 → 通知。
- * **四个写方法（`write` / `writeInLock` / `overwrite` / `overwriteInLock`）共用这一份** ——
- * `showText` 是会话态、不落盘（ADR-05），四条写路都要走同一条剥/回填序列。
+ * **两个写方法（`write` / `overwrite`）共用这一份** ——
+ * `showText` 是会话态、不落盘（ADR-05），两条写路都要走同一条剥/回填序列。
  */
-function persistStripped(
-  value: FreePanelFile,
-  writeToBase: (onDisk: FreePanelFile) => void,
-): void {
+function persistStripped(value: FreePanelFile, writeToBase: (onDisk: FreePanelFile) => void): void {
   const onDisk = deepClone(value)
   captureShowText(onDisk.obj.list)
   writeToBase(onDisk)

@@ -14,8 +14,8 @@ import { readFontStars } from './font-meta'
  * 星级读不到时**不动列表**（评分按 0 显示），但读不到这件事由 `useFontStore.loadStars`
  * 单独报给用户——列表能不能显示和评分读不读得到是两件事，不能因为后者失败让列表空掉。
  */
-export async function mergeFontStars(list: FontItem[]): Promise<FontItem[]> {
-  const read = await readFontStars()
+export function mergeFontStars(list: FontItem[]): FontItem[] {
+  const read = readFontStars()
   if (!read.ok || !Object.keys(read.stars).length) return list
   return list.map((f) => ({ ...f, star: read.stars[f.family] ?? 0 }))
 }
@@ -46,7 +46,7 @@ function decodeSysFont(raw: unknown): Decoded<unknown[]> | DecodeFail | null {
 }
 
 /** 读 SysFont2.json；浏览器没有 userDir，按"文件不在"处理（不是失败） */
-export async function readSysFontFile(): Promise<SysFontRead> {
+export function readSysFontFile(): SysFontRead {
   if (!hasCep()) return { status: 'none' }
   const abs = `${userDir()}/${DATA_FILES.sysFontList}`
 
@@ -61,10 +61,8 @@ export async function readSysFontFile(): Promise<SysFontRead> {
     return {
       status: 'error',
       reason:
-        outcome.why === 'readError'
-          ? outcome.reason
-          : '内容读不懂（不是合法 JSON 或结构不符）',
+        outcome.why === 'readError' ? outcome.reason : '内容读不懂（不是合法 JSON 或结构不符）',
     }
   }
-  return { status: 'ok', list: await mergeFontStars(normalizeFontList(outcome.value)) }
+  return { status: 'ok', list: mergeFontStars(normalizeFontList(outcome.value)) }
 }

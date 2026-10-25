@@ -118,7 +118,7 @@ async function pickColorToGroup(ctx: CommandContext, groupIndex: number): Promis
   // 原版 `:50196` 判 `a != null`：两臂下 `data` 为空（null/undefined）就是"没读到"，不是空项
   if (outcome.data === null || outcome.data === undefined)
     throw new CepError('JSX', msg.command.text.styleReadForegroundFailed)
-  await addKuItem('color', groupIndex, outcome.data)
+  addKuItem('color', groupIndex, outcome.data)
 }
 
 /** 把 jsx 两臂归一成"成功 / 失败 + 原因"；调用方只判 ok 与 data */
@@ -139,7 +139,7 @@ export const styleCommands: Command<unknown>[] = [
     kind: 'instant',
     async invoke(ctx, { groupIndex, itemIndex, modifier }) {
       // 发的是**磁盘上的原始项**：视图模型 KuItem 丢了未知键
-      const item = await readKuItem('color', groupIndex, itemIndex)
+      const item = readKuItem('color', groupIndex, itemIndex)
 
       switch (modifier) {
         case 'ctrl':
@@ -167,7 +167,7 @@ export const styleCommands: Command<unknown>[] = [
     requires: 'layer',
     kind: 'instant',
     async invoke(ctx, { groupIndex, itemIndex }) {
-      const item = await readKuItem('gradient', groupIndex, itemIndex)
+      const item = readKuItem('gradient', groupIndex, itemIndex)
       // 原版 `:50791` 发的是 `t.gradient`，不是整个项
       const gradient = item.gradient
       if (!gradient) throw new CepError('PARSE', msg.command.text.styleNoGradientPayload)
@@ -185,7 +185,7 @@ export const styleCommands: Command<unknown>[] = [
       // 原版 `useFont`（`app.v4.js:51200-51215`）：整项 `JSON.stringify` → `Xv` 编码 →
       // `ys_checkUseFont`，`err == 1` 就 `$msg.showErr` 中止，否则 `ys_useFont`。
       // 编码与两步顺序照 `commands/fontSet.ts` 的 `fontSet.pasteFont`，不另造形状。
-      const item = await readKuItem('font', groupIndex, itemIndex)
+      const item = readKuItem('font', groupIndex, itemIndex)
       const payload = encodeText(JSON.stringify(item))
       await ctx.jsx.font.checkUseFont(payload)
       await ctx.jsx.font.useFont(payload)
@@ -200,8 +200,8 @@ export const styleCommands: Command<unknown>[] = [
     kind: 'instant',
     async invoke(ctx, { groupIndex, itemIndex }) {
       // 原版 `:51509-51511`：深拷贝项 + groupId 后整条发给 jsxbin
-      const item = await readKuItem('style', groupIndex, itemIndex)
-      const groupId = await readKuGroupId('style', groupIndex)
+      const item = readKuItem('style', groupIndex, itemIndex)
+      const groupId = readKuGroupId('style', groupIndex)
       await ctx.jsx.style.useStyle(item, groupId)
     },
   }),
@@ -222,7 +222,7 @@ export const styleCommands: Command<unknown>[] = [
         )
       if (outcome.data === null || outcome.data === undefined)
         throw new CepError('JSX', msg.command.text.styleReadForegroundFailed)
-      await addKuItem('color', groupIndex, outcome.data)
+      addKuItem('color', groupIndex, outcome.data)
     },
   }),
 
@@ -248,7 +248,7 @@ export const styleCommands: Command<unknown>[] = [
       if (result.data === null || result.data === undefined) {
         throw new CepError('JSX', msg.command.text.styleReadGradientEmpty)
       }
-      await addKuItem('gradient', groupIndex, {
+      addKuItem('gradient', groupIndex, {
         name: '未命名',
         gradient: result.data,
       })
@@ -262,7 +262,7 @@ export const styleCommands: Command<unknown>[] = [
     requires: 'layer',
     kind: 'instant',
     async invoke(ctx, { groupIndex }) {
-      const groupId = await readKuGroupId('style', groupIndex)
+      const groupId = readKuGroupId('style', groupIndex)
 
       // 原版 `:51532-51536` 发 { delArr, groupId, envDir: "/SheJiZhuLi" }。
       // `delArr` 来自 `kuStyle/ls_ysDelete.json`（`getDeleteStyleId`，`:53071-53093`）——
@@ -317,7 +317,7 @@ export const styleCommands: Command<unknown>[] = [
       if (!data || !Array.isArray(data.fonts) || data.fonts.length === 0) {
         throw new CepError('PARSE', msg.command.text.styleReadFontAttrEmpty)
       }
-      await addKuItem('font', groupIndex, data)
+      addKuItem('font', groupIndex, data)
     },
   }),
 
@@ -330,7 +330,7 @@ export const styleCommands: Command<unknown>[] = [
     requires: 'none',
     kind: 'instant',
     async invoke(_ctx, { kind, name, afterIndex }) {
-      await addKuGroup(kind, name, afterIndex)
+      addKuGroup(kind, name, afterIndex)
     },
   }),
 
@@ -343,7 +343,7 @@ export const styleCommands: Command<unknown>[] = [
     async invoke(_ctx, { kind, group }) {
       // 原版 `addGroupItem(t)`（`:52470-52475`）：整份 push + `updata()`，不校验、不补字段。
       // 色板面板「发送到设计助理」发的就是 `{name, show: true, list: [...]}`（`sf.js:434-443`）。
-      await appendKuGroup(kind, group)
+      appendKuGroup(kind, group)
     },
   }),
 
@@ -354,7 +354,7 @@ export const styleCommands: Command<unknown>[] = [
     requires: 'none',
     kind: 'instant',
     async invoke(_ctx, { kind, groupIndex, name }) {
-      await renameKuGroup(kind, groupIndex, name)
+      renameKuGroup(kind, groupIndex, name)
     },
   }),
 
@@ -366,7 +366,7 @@ export const styleCommands: Command<unknown>[] = [
     kind: 'instant',
     async invoke(_ctx, { kind, groupIndex }) {
       // 原版 `:52451-52454`：删空后补一个「<库名>默认分组」，所以删完永远还有一组
-      await deleteKuGroup(kind, groupIndex)
+      deleteKuGroup(kind, groupIndex)
     },
   }),
 
@@ -378,7 +378,7 @@ export const styleCommands: Command<unknown>[] = [
     kind: 'instant',
     async invoke(_ctx, { kind, groupIndex, only }) {
       // `only` 是"只显示这一组"（原版 showOnlyGroup），不是"设成显示"——别当布尔值用
-      await setKuGroupShow(kind, groupIndex, only === true)
+      setKuGroupShow(kind, groupIndex, only === true)
     },
   }),
 
@@ -390,7 +390,7 @@ export const styleCommands: Command<unknown>[] = [
     kind: 'instant',
     async invoke(_ctx, { kind, groupIndex, item }) {
       // 项由调用方给（复制粘贴 / 色板回收 / 从别组搬）；命令不造项、不补字段
-      await addKuItem(kind, groupIndex, item)
+      addKuItem(kind, groupIndex, item)
     },
   }),
 
@@ -401,7 +401,7 @@ export const styleCommands: Command<unknown>[] = [
     requires: 'none',
     kind: 'instant',
     async invoke(_ctx, { kind, groupIndex, itemIndex, name }) {
-      await renameKuItem(kind, groupIndex, itemIndex, name)
+      renameKuItem(kind, groupIndex, itemIndex, name)
     },
   }),
 
@@ -412,7 +412,7 @@ export const styleCommands: Command<unknown>[] = [
     requires: 'none',
     kind: 'instant',
     async invoke(_ctx, { kind, groupIndex, itemIndex }) {
-      await deleteKuItem(kind, groupIndex, itemIndex)
+      deleteKuItem(kind, groupIndex, itemIndex)
     },
   }),
 
@@ -424,7 +424,7 @@ export const styleCommands: Command<unknown>[] = [
     kind: 'instant',
     async invoke(_ctx, { kind, groupIndex, itemIndex, direction }) {
       // 原版只有拖拽（`app.v4.js:50040-50070`），没有上下移菜单；这里按同一 splice 语义挪一格
-      await moveKuItem(kind, groupIndex, itemIndex, direction)
+      moveKuItem(kind, groupIndex, itemIndex, direction)
     },
   }),
 
@@ -438,7 +438,7 @@ export const styleCommands: Command<unknown>[] = [
       // 原版 `drag` 的 `Callback`（`app.v4.js:50052-50069`）：跨组 / 同组向后 / 同组向前
       // 三种情况由 `position`（那个布尔）决定插前还是插后，四分支在 `domain/reorder.ts`。
       // 一次调用一次写盘：拖拽过程中页面不调它，只在 `mouseup` 后调一次。
-      await moveKuItemTo(kind, {
+      moveKuItemTo(kind, {
         from: { group: fromGroup, index: fromIndex },
         to: { group: toGroup, index: toIndex },
         position,
@@ -455,7 +455,7 @@ export const styleCommands: Command<unknown>[] = [
     async invoke(_ctx, { kind, from, to, position }) {
       // 原版 `dragColorWrap` 的 `Callback`（`app.v4.js:50094-50111`）；被拖组会顺带折叠，
       // 与原版 `before()` + 同一次 `updata()` 落盘的结果一致（见 repo 里的注释）
-      await moveKuGroupTo(kind, from, to, position)
+      moveKuGroupTo(kind, from, to, position)
     },
   }),
 
@@ -467,7 +467,7 @@ export const styleCommands: Command<unknown>[] = [
     kind: 'instant',
     async invoke(_ctx, { kind, groupIndex, itemIndex }) {
       // 原版 `:50349-50355`：把 `[item]` 写成色板文件全文（整份替换，不是追加），再发 app event 通知色板面板。
-      await sendKuItemToSwatch(kind, groupIndex, itemIndex)
+      sendKuItemToSwatch(kind, groupIndex, itemIndex)
       notifySwatchChanged()
     },
   }),
@@ -480,7 +480,7 @@ export const styleCommands: Command<unknown>[] = [
     kind: 'instant',
     async invoke(_ctx, { kind, groupIndex, itemIndex }) {
       // 原版 `:50356-50364`：读回 seBan 数组 → push 该项 → 写回（与上一条的"整份替换"相反）
-      await appendKuItemToSwatch(kind, groupIndex, itemIndex)
+      appendKuItemToSwatch(kind, groupIndex, itemIndex)
       notifySwatchChanged()
     },
   }),
@@ -493,7 +493,7 @@ export const styleCommands: Command<unknown>[] = [
     kind: 'instant',
     async invoke(_ctx, { kind, groupIndex }) {
       // 原版 `:50260-50268`：`write(seBan, JSON.stringify(list))`——整组**替换**色板，不是追加
-      await sendKuGroupToSwatch(kind, groupIndex)
+      sendKuGroupToSwatch(kind, groupIndex)
       notifySwatchChanged()
     },
   }),
@@ -506,7 +506,7 @@ export const styleCommands: Command<unknown>[] = [
     kind: 'instant',
     async invoke(_ctx, { kind, groupIndex }) {
       // 原版 `:50269-50290`：读回 → 逐项 push 该组 `list` → 写回
-      await appendKuGroupToSwatch(kind, groupIndex)
+      appendKuGroupToSwatch(kind, groupIndex)
       notifySwatchChanged()
     },
   }),
@@ -523,7 +523,7 @@ export const styleCommands: Command<unknown>[] = [
     kind: 'instant',
     async invoke(_ctx, { index }) {
       // 原版 `select(t)`（`:53365-53372`）：越界归 0，然后 `updata()` 落盘
-      await selectWarehouse(index)
+      selectWarehouse(index)
     },
   }),
 
@@ -535,7 +535,7 @@ export const styleCommands: Command<unknown>[] = [
     kind: 'instant',
     async invoke() {
       // 原版 `add()`（`:53357-53363`）：追加一条「未命名分组」+ 四个库文件名
-      await addWarehouse()
+      addWarehouse()
     },
   }),
 
@@ -547,7 +547,7 @@ export const styleCommands: Command<unknown>[] = [
     kind: 'instant',
     async invoke(_ctx, { index, name }) {
       // 原版 `rename(t, e)`（`:53324-53327`）；空名在 repo 层被拒（有意偏离，见那里的注释）
-      await renameWarehouse(index, name)
+      renameWarehouse(index, name)
     },
   }),
 
@@ -560,7 +560,7 @@ export const styleCommands: Command<unknown>[] = [
     async invoke(_ctx, { index }) {
       // 原版 `delete(t)`（`:53329-53356`）直接删磁盘文件；这里移进 `<用户目录>/.deleted-<时间戳>/`
       // （有意偏离，可恢复），回收目录由 repo 写进日志
-      await deleteWarehouse(index)
+      deleteWarehouse(index)
     },
   }),
 
@@ -608,11 +608,11 @@ export const styleCommands: Command<unknown>[] = [
     requires: 'none',
     kind: 'long',
     async invoke(ctx) {
-      const defaultName = await kuArchiveDefaultName(false)
+      const defaultName = kuArchiveDefaultName(false)
       const path = saveFile('导出所有仓库', ['kux'], defaultName)
       if (!path) throw new CepError('PARSE', msg.command.text.actionCancelled)
 
-      await exportKuArchive(false, path, (detail) => ctx.progress.update(undefined, detail))
+      exportKuArchive(false, path, (detail) => ctx.progress.update(undefined, detail))
     },
   }),
 
@@ -623,11 +623,11 @@ export const styleCommands: Command<unknown>[] = [
     requires: 'none',
     kind: 'long',
     async invoke(ctx) {
-      const defaultName = await kuArchiveDefaultName(true)
+      const defaultName = kuArchiveDefaultName(true)
       const path = saveFile('导出当前仓库', ['kux'], defaultName)
       if (!path) throw new CepError('PARSE', msg.command.text.actionCancelled)
 
-      await exportKuArchive(true, path, (detail) => ctx.progress.update(undefined, detail))
+      exportKuArchive(true, path, (detail) => ctx.progress.update(undefined, detail))
     },
   }),
 ]

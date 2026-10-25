@@ -90,7 +90,7 @@ export const swatchCommands: Command<unknown>[] = [
       if (fgOutcome.data === null || fgOutcome.data === undefined)
         throw new CepError('JSX', msg.command.text.styleReadForegroundFailed)
 
-      const { added } = await appendCustomItem(fgOutcome.data)
+      const { added } = appendCustomItem(fgOutcome.data)
       // 官方命中 hex 时**静默不加**，只把已有色块闪三下（`sf.js:346-364`）。
       // 闪色块是 UI（刀3），命令层不能静默 → 抛带原因的错误，由 useCommand 弹出来。
       if (!added) throw new CepError('PARSE', msg.command.text.swatchColorAlreadyIn)
@@ -125,7 +125,7 @@ export const swatchCommands: Command<unknown>[] = [
       if (limit < 0 || limit > 15) {
         throw new CepError('PARSE', msg.command.text.swatchRecentCountInvalid)
       }
-      await setRecentLimit(limit)
+      setRecentLimit(limit)
     },
   }),
 
@@ -159,7 +159,7 @@ export const swatchCommands: Command<unknown>[] = [
 
       // 官方 `faSongDaoZhuLi`（`sf.js:426-460`）：`{ name: zuMing, show: true, list: GetColorArray() }`
       // → 交给主面板 `addGroupItem`。**不碰盘**（官方那段写文件的代码是注释掉的，`:446-457`）。
-      const list = await readCustomItems()
+      const list = readCustomItems()
       const group = { name: groupName, show: true, list }
 
       // 落点走本地命令（`style.appendGroup` = 官方 `addGroupItem`，`app.v4.js:52470-52475`），
@@ -271,7 +271,7 @@ export const swatchCommands: Command<unknown>[] = [
  * 判据与 `/commonUse` 同一口径：只有显式 `false` 才算关，缺键按开。
  */
 async function readAutoFillColor(): Promise<boolean> {
-  const read = await readCommonUseOptions()
+  const read = readCommonUseOptions()
   const options = read.ok ? read.value : read.fallback
   if (!read.ok) {
     // ADR-14 扩展一：降级必须留信号。读坏了按官方默认（开）继续，但要让

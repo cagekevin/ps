@@ -17,7 +17,7 @@ import { readRepoFile } from './repo-read'
 import { writeProtectedText } from './protected-text'
 import type { Repo, RepoRead } from './types'
 
-/** 写队列搬到了 `data/write-queue.ts`（TD-09-18：数据层只留一条链） */
+// 写队列已删：`Repo<T>` 全同步 ⇒ 读改写是不可打断的同步段，不需要排队（TD-09-18 的"只留一条链"变成"没有链"）
 /**
  * 色板目录名。原版 `sf.js:11` 的 `g_FN.muLu = "/FengZiSeBan"`，挂在 `getUserDataPath()`（`%APPDATA%`）下。
  * 注意它**不在** `USER_DIR`（`/SheJiZhuLi`）里面 —— 原版 `path.seBan` =
@@ -121,9 +121,8 @@ function swatchRepo(path: string): Repo<unknown[]> {
 /**
  * 写色板全文：旧内容进 `.bak`（原文坏了改存 `.corrupt-*`）、原子写、写不进去抛、成功后 emit。
  *
- * `overwriteInLock`（不排队）：本函数的 6 个调用方全在 `runQueued` 任务体里
- * （`appendCustomItem` / `setRecentLimit` / `style-library-repo` 的四个"发到色板"），
- * 再排一次队会自锁。T-112（读不到不许写）与 TD-09-21（坏原文隔离）由 `file-repo.rawOverwrite` 保证。
+ * T-112（读不到不许写）与 TD-09-21（坏原文隔离）由 `file-repo.rawOverwrite` 保证 ——
+ * 调用方不必自己读原文，也不许在原文坏时退回普通写。
  */
 export function writeSwatchItems(path: string, items: unknown[]): void {
   swatchRepo(path).overwrite(items)
@@ -178,7 +177,11 @@ export function readRecentLimit(): RepoRead<number> {
   // 这个文件是 `.txt`（纯文本整数，不是 JSON）⇒ 走纯文本档；数据文件才走 `readRepoFile`
   const read = readOwnFileText(recentLimitPath())
   if (read.status === 'error') {
-    return { ok: false, reason: msg.data.fn.swatchReadFailed(recentLimitPath(), read.reason), fallback: DEFAULT_RECENT_LIMIT }
+    return {
+      ok: false,
+      reason: msg.data.fn.swatchReadFailed(recentLimitPath(), read.reason),
+      fallback: DEFAULT_RECENT_LIMIT,
+    }
   }
   if (read.status === 'notSeen') return { ok: true, value: DEFAULT_RECENT_LIMIT }
 
@@ -186,7 +189,9 @@ export function readRecentLimit(): RepoRead<number> {
   return {
     ok: true,
     value:
-      Number.isFinite(value) && value > 0 && value <= RECENT_LIMIT_MAX ? value : DEFAULT_RECENT_LIMIT,
+      Number.isFinite(value) && value > 0 && value <= RECENT_LIMIT_MAX
+        ? value
+        : DEFAULT_RECENT_LIMIT,
   }
 }
 

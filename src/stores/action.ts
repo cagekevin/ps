@@ -52,7 +52,7 @@ export const useActionStore = defineStore('action', () => {
   const degraded = ref('')
 
   async function load() {
-    const index = await actionIndexRepo.read()
+    const index = actionIndexRepo.read()
     // 坏索引没有 value（判别联合）：显式回退到生产者自己的默认索引，并把"当前显示的是默认仓库"
     // 同时写进提示与日志——不许静默拿默认值冒充用户的仓库（T-101-1 / T-101-2）
     const indexValue = index.ok ? index.value : defaultActionIndex()
@@ -67,7 +67,7 @@ export const useActionStore = defineStore('action', () => {
     }
     selectActionFile(indexFile)
 
-    const library = await actionLibraryRepo.read()
+    const library = actionLibraryRepo.read()
     // 坏库的默认值取生产者给的 `fallback`（`actionLibraryRepo` 构造时传的 `() => []`，`actions.ts:75-79`），
     // 消费侧不另写一份空数组（T-104 / ADR-24）
     groups.value = library.ok ? library.value : library.fallback

@@ -93,7 +93,7 @@ export function fileRepo<T>(
   }
 
   /**
-   * 整份覆盖 + 保留原文做备份/隔离（`overwrite` / `overwriteInLock` 共用这一份）。
+   * 整份覆盖 + 保留原文做备份/隔离。
    *
    * 与 `rawUpdate` 的区别：`rawUpdate` 在原文坏时**拒绝写**（D-42）；这里**照写**，
    * 但把坏原文隔离到 `.corrupt-<ts>`（TD-09-21）。与 `write` 的区别：`write` 不读原文，
@@ -111,7 +111,7 @@ export function fileRepo<T>(
     emit(value)
   }
 
-  /** 不排队的读：给锁内调用方用（`readInLock`）。写是原子 rename，读不会看到半截 */
+  /** 读一次：写是原子 rename，读到的要么旧值要么新值，不会看到半截 */
   function rawRead(): RepoRead<T> {
     const { read } = readRaw()
     return read

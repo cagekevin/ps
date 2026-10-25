@@ -69,7 +69,7 @@ export const useFontStore = defineStore('font', () => {
 
   async function loadStars() {
     try {
-      const read = await readFontStars()
+      const read = readFontStars()
       stars.value = read.stars
       starsError.value = read.ok ? '' : msg.data.fn.starsReadFailed(read.reason ?? '原因未知')
       if (!read.ok) log.warn('font', '星级读不到：界面显示"读不到"，不是"未收藏"', read.reason)
@@ -85,7 +85,7 @@ export const useFontStore = defineStore('font', () => {
     if (!force && tags.value.length) return
     tagsError.value = ''
     try {
-      tags.value = await readFontTags()
+      tags.value = readFontTags()
     } catch (e) {
       tagsError.value = describeCepError(e)
     }

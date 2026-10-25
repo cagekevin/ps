@@ -44,7 +44,7 @@ let cache: Record<string, unknown> | null = null
 let readFailure = ''
 let readFailureReported = false
 let timer: ReturnType<typeof setTimeout> | null = null
-let writeQueue: Promise<void> = Promise.resolve()
+
 const errorListeners = new Set<(message: string) => void>()
 
 function notifyError(e: unknown) {
@@ -147,26 +147,28 @@ function persistSync(all: Record<string, unknown>) {
 
 function persist(all: Record<string, unknown>) {
   const text = JSON.stringify(all)
-  writeQueue = writeQueue.then(() => {
-    if (refuseIfReadFailed()) return
-    try {
-      if (!hasCep()) {
-        localStorage.setItem(LS_KEY, text)
-        return
-      }
-      const target = filePath()
-      try {
-        writeDiskSync(target, text, { previous: null })
-      } catch (error) {
-        throw new CepError(
-          'IO',
-          msg.data.fn.prefWriteFailed(error instanceof Error ? error.message : String(error)),
-        )
-      }
-    } catch (e) {
-      notifyError(e)
+  // 同步落盘：没有 `.then` 的"延后一拍"。以前那条 `writeQueue` 是自建的第二条链
+  // （`write-queue.ts` 头写着「不许自己再造一条链」，它造了），而任务体本来就是同步的
+  // ⇒ 那层 `.then` 只把写延后一拍，从没起过并发保护作用。
+  if (refuseIfReadFailed()) return
+  try {
+    if (!hasCep()) {
+      localStorage.setItem(LS_KEY, text)
+      return
     }
-  })
+    const target = filePath()
+    try {
+      writeDiskSync(target, text, { previous: null })
+    } catch (error) {
+      throw new CepError(
+        'IO',
+        msg.data.fn.prefWriteFailed(error instanceof Error ? error.message : String(error)),
+      )
+    }
+  } catch (e) {
+    // 失败必须让用户看见（`notifyError` 走统一 toast），不是吞掉
+    notifyError(e)
+  }
 }
 
 /**

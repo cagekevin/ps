@@ -9,6 +9,7 @@ import { msg } from '@/domain/messages'
 import { log } from '@/utils/logger'
 import { actionIndexWriter, currentWarehouseFile, selectActionFile } from './actions'
 import type { RepoRead } from './types'
+import { runExclusiveAsync } from './exclusive'
 
 /**
  * 动作仓库 .dzx 导入导出。
@@ -79,8 +80,8 @@ function requireIndex(
   return read.value
 }
 
-export async function archiveDefaultName(current: boolean): Promise<string> {
-  const index = requireIndex(await actionIndexWriter.read(), '导出')
+export function archiveDefaultName(current: boolean): string {
+  const index = requireIndex(actionIndexWriter.read(), '导出')
   const list = current ? [index.list[index.index]].filter(Boolean) : index.list
   if (!list.length) throw new CepError('PARSE', msg.data.text.noExportableWarehouse)
   return current ? `${list[0].name}.dzx` : '全部仓库.dzx'
@@ -115,11 +116,14 @@ export function exportActionArchive(current: boolean, targetPath: string): void 
  * 拿到文本立刻转交同步写段 —— 写段里写 `await` 是**语法错误**，
  * 所以「读 → 改 → 写」在结构上不可能被打断。
  */
-export async function importActionArchive(append: boolean, sourcePath: string): Promise<void> {
-  const read = await readExternalText(sourcePath)
-  // T-107：导入前读不到就不许继续。两种不 ok 这里同果（都抛同一句），文案不变
-  if (read.status !== 'ok') throw new CepError('IO', msg.data.text.readImportFileFailed)
-  importArchiveFromText(append, read.text)
+export function importActionArchive(append: boolean, sourcePath: string): Promise<void> {
+  // 长事务互斥（`action-files` 域）：读用户文件是真 await，第二次触发会插进来写同一批 `sj_dz*`
+  return runExclusiveAsync('action-files', '动作库导入', async () => {
+    const read = await readExternalText(sourcePath)
+    // T-107：导入前读不到就不许继续。两种不 ok 这里同果（都抛同一句），文案不变
+    if (read.status !== 'ok') throw new CepError('IO', msg.data.text.readImportFileFailed)
+    importArchiveFromText(append, read.text)
+  })
 }
 
 /** 同步写段：解析 → 写各库文件 → 写索引 → 清理旧文件。整段不可打断。 */

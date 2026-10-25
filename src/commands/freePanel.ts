@@ -56,7 +56,7 @@ export const freePanelCommands: Command<unknown>[] = [
     async invoke(ctx, { blockId, items }) {
       if (!items.length) throw new CepError('PARSE', msg.command.text.freePanelNothingToAdd)
 
-      await ctx.data.freePanel.update((file) => {
+      ctx.data.freePanel.update((file) => {
         const next = normalizeFreePanel(file)
         const block = findBlock(next.obj.list, blockId)
         if (!block) throw new CepError('PARSE', msg.command.text.freePanelRegionMissing)
@@ -95,7 +95,7 @@ export const freePanelCommands: Command<unknown>[] = [
     requires: 'none',
     kind: 'instant',
     async invoke(ctx, { blockId, btnId }) {
-      await ctx.data.freePanel.update((file) => {
+      ctx.data.freePanel.update((file) => {
         const next = normalizeFreePanel(file)
         const block = findBlock(next.obj.list, blockId)
         if (!block) throw new CepError('PARSE', msg.command.text.freePanelRegionMissing)
@@ -114,7 +114,7 @@ export const freePanelCommands: Command<unknown>[] = [
     requires: 'none',
     kind: 'instant',
     async invoke(ctx, { fromBlockId, fromBtnId, toBlockId, toBtnId, position }) {
-      await ctx.data.freePanel.update((file) => {
+      ctx.data.freePanel.update((file) => {
         const next = normalizeFreePanel(file)
         const source = findBlock(next.obj.list, fromBlockId)
         const target = findBlock(next.obj.list, toBlockId)
@@ -159,7 +159,7 @@ export const freePanelCommands: Command<unknown>[] = [
     requires: 'none',
     kind: 'instant',
     async invoke(ctx, { showNumber, showIcon, showText }) {
-      await ctx.data.freePanel.update((file) => {
+      ctx.data.freePanel.update((file) => {
         const next = normalizeFreePanel(file)
         walkBlocks(next.obj.list, (block) => {
           if (showNumber !== undefined) block.showNumber = showNumber
@@ -178,7 +178,7 @@ export const freePanelCommands: Command<unknown>[] = [
     requires: 'none',
     kind: 'instant',
     async invoke(ctx) {
-      await ctx.data.freePanel.update((file) => {
+      ctx.data.freePanel.update((file) => {
         // D-38：清空**不**复位 uid。旧 id 一旦被复用，按 id 存的会话态（showText）
         // 和任何外部引用都会串到新工作区上；原版 uid 是单调计数器，复位不是它的语义。
         // 新工作区直接拿 preserved+1，连"保留一个 id=1 的 block"这种复用也一并避开。
@@ -198,7 +198,7 @@ export const freePanelCommands: Command<unknown>[] = [
     requires: 'none',
     kind: 'instant',
     async invoke(ctx, { parentId, type }) {
-      await ctx.data.freePanel.update((file) => {
+      ctx.data.freePanel.update((file) => {
         const next = normalizeFreePanel(file)
         const block = {
           // D-39：取 max(id)+1，不是 uid += 1
@@ -234,7 +234,7 @@ export const freePanelCommands: Command<unknown>[] = [
     requires: 'none',
     kind: 'instant',
     async invoke(ctx, { blockId }) {
-      await ctx.data.freePanel.update((file) => {
+      ctx.data.freePanel.update((file) => {
         const next = normalizeFreePanel(file)
 
         const remove = (blocks: typeof next.obj.list): boolean => {
@@ -277,7 +277,7 @@ export const freePanelCommands: Command<unknown>[] = [
     requires: 'none',
     kind: 'instant',
     async invoke(ctx, { blockId, type, width, height }) {
-      await ctx.data.freePanel.update((file) => {
+      ctx.data.freePanel.update((file) => {
         const next = normalizeFreePanel(file)
         const block = findBlock(next.obj.list, blockId)
         if (!block) throw new CepError('PARSE', msg.command.text.freePanelRegionMissing)
@@ -296,7 +296,7 @@ export const freePanelCommands: Command<unknown>[] = [
     requires: 'none',
     kind: 'instant',
     async invoke(ctx, { blockId, btnId }) {
-      const read = await ctx.data.freePanel.read()
+      const read = ctx.data.freePanel.read()
       // 读边界（`data/free-panel.ts` 的 normalize）已经归一过，这里不再归一第二次。
       // 坏文件必须说"文件坏了"：以前拿 fallback 空面板继续找，报的是"自由面板项不存在"（T-101-1）
       if (!read.ok) {

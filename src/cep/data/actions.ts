@@ -20,6 +20,7 @@ import type { Repo, RepoView } from './types'
 import { deepClone } from '@/utils/clone'
 import { CepError } from '@/utils/errors'
 import { msg } from '@/domain/messages'
+import { runExclusive } from './exclusive'
 
 /**
  * 动作库仓库。结构与原版源码一致（`app.v4.js:6552-6659`），不是猜的：
@@ -114,9 +115,9 @@ function newWarehouseFile(): string {
 }
 
 /** 新建仓库：只加索引，仓库文件等首次写入时创建（原版 wh.add 6598-6603） */
-export async function addWarehouse(name = '未命名分组'): Promise<number> {
+export function addWarehouse(name = '未命名分组'): number {
   let index = -1
-  await actionIndexImpl.update((value) => {
+  actionIndexImpl.update((value) => {
     value.list.push({ name, fileName: newWarehouseFile() })
     index = value.list.length - 1
   })
@@ -124,8 +125,8 @@ export async function addWarehouse(name = '未命名分组'): Promise<number> {
 }
 
 /** 重命名仓库：只改 name，不动 fileName（原版 wh.rename 6576-6579） */
-export async function renameWarehouse(index: number, name: string): Promise<void> {
-  await actionIndexImpl.update((value) => {
+export function renameWarehouse(index: number, name: string): void {
+  actionIndexImpl.update((value) => {
     const target = value.list[index]
     if (!target) throw new Error('仓库不存在')
     target.name = name
@@ -133,35 +134,38 @@ export async function renameWarehouse(index: number, name: string): Promise<void
 }
 
 /** 删除仓库：删文件 → 改索引；删当前项时 index=0（原版 wh.delete 6580-6596） */
-export async function deleteWarehouse(index: number): Promise<void> {
-  const read = await actionIndexRepo.read()
-  // 坏索引没有 value（判别联合）：不先判这一行，下面两句会分别说成「至少保留一个仓库」
-  // 和「仓库不存在」——把"文件坏了"说成"你没有仓库"（T-101-1 / T-101-2）
-  if (!read.ok) {
-    throw new CepError('IO', msg.data.fn.actionIndexCorruptDeleteAbort(read.reason))
-  }
-  if (read.value.list.length <= 1) throw new Error('至少保留一个仓库')
-  const target = read.value.list[index]
-  if (!target) throw new Error('仓库不存在')
+export function deleteWarehouse(index: number): void {
+  // 长事务互斥（`action-files` 域）：与「导入」写同一批 `sj_dz*`，两者不许同时进行
+  return runExclusive('action-files', '动作库删除', () => {
+    const read = actionIndexRepo.read()
+    // 坏索引没有 value（判别联合）：不先判这一行，下面两句会分别说成「至少保留一个仓库」
+    // 和「仓库不存在」——把"文件坏了"说成"你没有仓库"（T-101-1 / T-101-2）
+    if (!read.ok) {
+      throw new CepError('IO', msg.data.fn.actionIndexCorruptDeleteAbort(read.reason))
+    }
+    if (read.value.list.length <= 1) throw new Error('至少保留一个仓库')
+    const target = read.value.list[index]
+    if (!target) throw new Error('仓库不存在')
 
-  if (hasNode()) {
-    // 删不掉要说出来：旧实现丢返回值，磁盘上旧 sj_dz*.json 还在而用户以为仓库已删（TD-09-26）
-    const removed = removeFile(`${userDir()}/${target.fileName}`)
-    if (!removed.ok)
-      throw new CepError('IO', msg.data.fn.warehouseDeleteFailed(target.fileName, removed.reason))
-  }
+    if (hasNode()) {
+      // 删不掉要说出来：旧实现丢返回值，磁盘上旧 sj_dz*.json 还在而用户以为仓库已删（TD-09-26）
+      const removed = removeFile(`${userDir()}/${target.fileName}`)
+      if (!removed.ok)
+        throw new CepError('IO', msg.data.fn.warehouseDeleteFailed(target.fileName, removed.reason))
+    }
 
-  await actionIndexImpl.update((value) => {
-    value.list.splice(index, 1)
-    if (index < value.index) value.index -= 1
-    else if (index === value.index) value.index = 0
-    selectActionFile(currentWarehouseFile(value))
+    actionIndexImpl.update((value) => {
+      value.list.splice(index, 1)
+      if (index < value.index) value.index -= 1
+      else if (index === value.index) value.index = 0
+      selectActionFile(currentWarehouseFile(value))
+    })
   })
 }
 
 /** 切换仓库：改索引并切当前文件（原版 wh.select 6605-6612） */
-export async function selectWarehouse(index: number): Promise<void> {
-  await actionIndexImpl.update((value) => {
+export function selectWarehouse(index: number): void {
+  actionIndexImpl.update((value) => {
     if (!value.list[index]) throw new Error('仓库不存在')
     value.index = index
     selectActionFile(currentWarehouseFile(value))

@@ -31,10 +31,10 @@ import { dataRepo } from './data-repo'
 import { repoAt } from './repo-at'
 // 写队列与色板文件原语都在 `swatch-repo`（依赖方向只能是 `style-library-repo → swatch-repo`）
 import { readSwatchItems, swatchFilePath, writeSwatchItems } from './swatch-repo'
-import { runQueued } from './write-queue'
 import type { Repo, RepoView } from './types'
 import { isRecord } from '@/utils/guards'
 import { fileNameOf } from '@/domain/style-library'
+import { runExclusive } from './exclusive'
 
 /**
  * 索引仓库。读走 `fileRepo`（失败带 `degraded`，不抛）。
@@ -64,7 +64,7 @@ export interface KuLibraryRead {
  * 所以仍走 `domain/ku-format.ts` 的三形态分派；`data` 是布尔 `false` 的条目在那里被跳过。
  * 文件名来自索引（可能是 `.ini` 也可能是 `.json`，**扩展名不代表格式**，契约 §2.2）。
  */
-export async function readKuLibrary(kind: KuKind, fileName: string): Promise<KuLibraryRead> {
+export function readKuLibrary(kind: KuKind, fileName: string): KuLibraryRead {
   if (!fileName) return { groups: [], note: '' }
 
   const read = readOwnFileText(`${userDir()}/${fileName}`)
@@ -98,8 +98,7 @@ export function readIndexState(): {
   value: StyleWarehouseIndex
   degraded: string
 } {
-  // 锁内的读：本函数会在 `runQueued` 任务体里被调用（`updateKuGroups`/仓库事务），
-  // 再走排队的 `read()` 会把队列排在自己后面 → 自锁（write-queue.ts:6）。读不排队是安全的（原子写）。
+  // 一次同步读：没有队列，不存在"排在自己后面"这回事
   const stored = styleIndexImpl.read()
   // 坏索引没有 value：用仓库自己的 fallback 继续归一，坏因拼进 degraded
   const parsed = readStyleWarehouseIndex(stored.ok ? stored.value : defaultStyleIndex())
@@ -115,15 +114,15 @@ export function readIndexState(): {
  * 只读当前仓库：原版 `initData` 也是 `getCurrentColorPath()` 那四个（`app.v4.js:53392-53407`），
  * 切仓库要写索引，属于第 2 段。
  */
-export async function readStyleLibrary(): Promise<StyleLibrarySnapshot> {
-  const state = await readIndexState()
+export function readStyleLibrary(): StyleLibrarySnapshot {
+  const state = readIndexState()
   const current = state.value.list[state.value.index]
 
   const libraries = {} as Record<KuKind, KuGroup[]>
   const notes: string[] = []
 
   for (const kind of KU_KINDS) {
-    const read = await readKuLibrary(kind, fileNameOf(current, kind))
+    const read = readKuLibrary(kind, fileNameOf(current, kind))
     libraries[kind] = read.groups
     if (read.note) notes.push(read.note)
   }
@@ -137,7 +136,7 @@ export async function readStyleLibrary(): Promise<StyleLibrarySnapshot> {
 
 /** 当前仓库某个库的绝对路径；**读**用它（索引里没登记文件名就等于没这个库，不许猜路径） */
 function currentLibPath(kind: KuKind): string {
-  // 锁内读（在 send* 的 runQueued 任务体里被调用）：走 readInLock 避免自锁
+  // 读索引，取当前仓库这一类的库文件名
   const stored = styleIndexImpl.read()
   // 「索引文件坏了」≠「这个仓库没登记库文件名」：不分开说，用户会以为是自己没建过库（T-101-1）
   if (!stored.ok) {
@@ -192,12 +191,12 @@ function readRawGroups(kind: KuKind): { path: string; groups: KuRawGroup[] } {
  * 视图模型 `KuItem` 只留了展示用的字段，会把样式项的 PS 效果载荷丢掉（契约 §6.1 #1a）。
  * 所以这里从磁盘取原件，深拷贝后再交给调用方。
  */
-export async function readKuItem(
+export function readKuItem(
   kind: KuKind,
   groupIndex: number,
   itemIndex: number,
-): Promise<Record<string, unknown>> {
-  const { groups } = await readRawGroups(kind)
+): Record<string, unknown> {
+  const { groups } = readRawGroups(kind)
   return structuredClone(itemAt(groups, groupIndex, itemIndex))
 }
 
@@ -208,8 +207,8 @@ export async function readKuItem(
  * `ps_ysBtnUseStyle` 与 `ys_AddStyle` 的 `groupId` 都来自它（`:51510` / `:51531`）。
  * 拿不到就抛：组 id 缺失时把空串发给 jsxbin，等于让 PS 去猜，不许。
  */
-export async function readKuGroupId(kind: KuKind, groupIndex: number): Promise<string> {
-  const { groups } = await readRawGroups(kind)
+export function readKuGroupId(kind: KuKind, groupIndex: number): string {
+  const { groups } = readRawGroups(kind)
   const id = groupAt(groups, groupIndex).id
   if (typeof id !== 'string' || !id)
     throw new CepError('PARSE', msg.data.fn.groupNoId(String(groupIndex)))
@@ -325,8 +324,8 @@ interface KuFileTarget {
  * 索引读坏了就抛：索引不存在是首次使用（正常，会补登记），索引**存在但读不懂**则是损坏，
  * 这时写下去会把用户的仓库列表换成默认值（原件虽留在 `.bak`，但用户不该承担这个）。
  */
-async function resolveKuFile(kind: KuKind): Promise<KuFileTarget> {
-  const index = await usableIndex()
+function resolveKuFile(kind: KuKind): KuFileTarget {
+  const index = usableIndex()
 
   const warehouse = index.list[index.index]
   if (!warehouse) throw new CepError('PARSE', msg.data.text.warehouseIndexNoCurrent)
@@ -352,15 +351,15 @@ async function resolveKuFile(kind: KuKind): Promise<KuFileTarget> {
  * 读不到文件 = 首次使用，按空数组处理（原版 `readToArray` 同语义，`:72714-72742`）；
  * 读到但不是 JSON 数组 = 损坏，抛错而不是覆盖（覆盖会丢用户数据）。
  */
-async function updateKuGroups(kind: KuKind, mutate: (groups: KuRawGroup[]) => void): Promise<void> {
-  const target = await resolveKuFile(kind)
+function updateKuGroups(kind: KuKind, mutate: (groups: KuRawGroup[]) => void): void {
+  const target = resolveKuFile(kind)
 
   // 走 `repoAt`（唯一「按路径取 Repo」入口）：解码 / `.bak` / 原子写 / **onChange** 都归 Repo。
   // 以前这里手写了「读原文 → `.bak` → 原子写」，是 `Repo` 的第二份实现，且**没有 onChange**
   // ⇒ store 收不到"库变了" ⇒ 页面只能每次命令后手工 `load()`。
   const repo = repoAt<KuRawGroup[]>(target.path, () => [], decodeKuGroups)
 
-  const read = await repo.read()
+  const read = repo.read()
   // T-112：**读不到 ≠ 首次使用**。读不到时既不知道旧内容、也写不出 `.bak`，继续写回等于
   // 把一份读不到的库文件换成空数组。`notSeen`（文件本来不存在）才是"首次使用按空处理"。
   if (!read.ok) {
@@ -379,12 +378,12 @@ async function updateKuGroups(kind: KuKind, mutate: (groups: KuRawGroup[]) => vo
   if (JSON.stringify(groups) === before) return
 
   // `.overwrite` = 读原文做 `.bak` → 原子写 → **emit(新值)**：三个语义都在 Repo 里
-  await repo.overwrite(groups)
+  repo.overwrite(groups)
 
   if (target.isNew) {
     // 库文件已经落盘才登记索引：反过来会让索引指向一个不存在的文件
-    // 锁内写（updateKuGroups 的调用方都已 runQueued）：用 updateInLock 保留 CAS，又不自排自
-    await styleIndexImpl.update((value) => {
+    // 用 `update`（带 CAS）：跨进程仍可能被另一面板改过，比对失败会重读重跑
+    styleIndexImpl.update((value) => {
       const current = readStyleWarehouseIndex(value).value
       const warehouse = current.list[current.index]
       if (!warehouse) throw new CepError('PARSE', msg.data.text.warehouseIndexNoCurrent)
@@ -421,10 +420,10 @@ function createWarehouse(name: string): StyleWarehouse {
  * 原版判的是 `t < 0 || t > list.length`，`t == list.length` 会漏过去、指向一个不存在的仓库；
  * 这里按 `[0, list.length - 1]` 判（**有意偏离**，只是把那个漏判补上）。
  */
-export async function selectWarehouse(index: number): Promise<void> {
-  await usableIndex()
-  // `styleIndexRepo.update` 自己已排队 + 原子 + CAS；外面再套 runQueued = 自己排自己 → 自锁（TD-09-30）
-  await styleIndexImpl.update((value) => {
+export function selectWarehouse(index: number): void {
+  usableIndex()
+  // `update` 自带原子写 + CAS，不需要外层再包一层
+  styleIndexImpl.update((value) => {
     const current = readStyleWarehouseIndex(value).value
     const valid = Number.isInteger(index) && index >= 0 && index < current.list.length
     return { ...value, index: valid ? index : 0, list: current.list }
@@ -432,10 +431,10 @@ export async function selectWarehouse(index: number): Promise<void> {
 }
 
 /** 新建仓库。原版 `add()`（`:53357-53363`）：`list.push(P_("未命名分组"))`，名字就是「未命名分组」 */
-export async function addWarehouse(): Promise<void> {
-  await usableIndex()
-  // 同 selectWarehouse：`update` 自己已排队，别再套
-  await styleIndexImpl.update((value) => {
+export function addWarehouse(): void {
+  usableIndex()
+  // 同 selectWarehouse：`update` 自带原子写 + CAS
+  styleIndexImpl.update((value) => {
     const current = readStyleWarehouseIndex(value).value
     const list = [...current.list, createWarehouse('未命名分组')]
     return { ...value, index: current.index, list }
@@ -448,13 +447,13 @@ export async function addWarehouse(): Promise<void> {
  * **有意偏离**：原版不校验空名，空名会让仓库条整行变成空白（名字没了、下拉里也认不出是哪条），
  * 所以空名直接抛，不写入。
  */
-export async function renameWarehouse(index: number, name: string): Promise<void> {
+export function renameWarehouse(index: number, name: string): void {
   const warehouseName = name.trim()
   if (!warehouseName) throw new CepError('PARSE', msg.data.text.warehouseNameRequired)
 
-  await usableIndex()
-  // 同 selectWarehouse：`update` 自己已排队，别再套
-  await styleIndexImpl.update((value) => {
+  usableIndex()
+  // 同 selectWarehouse：`update` 自带原子写 + CAS
+  styleIndexImpl.update((value) => {
     const current = readStyleWarehouseIndex(value).value
     const warehouse = current.list[index]
     if (!warehouse) throw new CepError('PARSE', msg.data.fn.warehouseMissing(String(index)))
@@ -570,14 +569,16 @@ function copyToRecycle(relative: string, recycleDir: string): boolean {
  *
  * `index` 修正照抄 `:53348-53353`：被删项在当前项之前则 `-1`，等于当前项则归 `0`。
  */
-export async function deleteWarehouse(index: number): Promise<WarehouseDeleteResult> {
+export function deleteWarehouse(index: number): WarehouseDeleteResult {
   // 没有 Node 就移不了文件（索引写本身也会抛 NO_NODE），先拦在门口，别只删索引不搬文件
   if (!hasNode()) throw new CepError('NO_NODE', msg.data.text.nodeUnavailableRecycle)
 
-  // 整段（复制旧文件 → 改索引 → 删原件）独占一条写链：导入/编辑不能插进中间，
-  // 否则会出现"索引已删、旧文件还在"或反向的半态。锁内索引读写走 *InLock（不自排自，TD-09-30）
-  return runQueued(async () => {
-    const current = await usableIndex()
+  // 长事务互斥（`ku-files` 域）：搬文件 + 改索引 + 删原件是一个整体，
+  // 与「导入」写同一批 `sj_ku*`，两者不许同时进行
+  return runExclusive('ku-files', '样式库删除', () => {
+    // 整段（复制旧文件 → 改索引 → 删原件）是一个**同步段**：导入/编辑不可能插进中间，
+    // 否则会出现"索引已删、旧文件还在"或反向的半态。
+    const current = usableIndex()
     const warehouse = current.list[index]
     if (!warehouse) throw new CepError('PARSE', msg.data.fn.warehouseMissing(String(index)))
     // 原版只在页面层拦「最少保留一个分组哦」（`f_delete`，`:53978-53987`），这里再拦一道：
@@ -586,11 +587,11 @@ export async function deleteWarehouse(index: number): Promise<WarehouseDeleteRes
 
     const recycleDir = `${userDir()}/.deleted-${Date.now()}`
     const moved: string[] = []
-    for (const relative of await warehouseFiles(warehouse)) {
-      if (await copyToRecycle(relative, recycleDir)) moved.push(relative)
+    for (const relative of warehouseFiles(warehouse)) {
+      if (copyToRecycle(relative, recycleDir)) moved.push(relative)
     }
 
-    await styleIndexImpl.update((value) => {
+    styleIndexImpl.update((value) => {
       const next = readStyleWarehouseIndex(value).value
       next.list.splice(index, 1)
       if (index < next.index) next.index -= 1
@@ -621,20 +622,18 @@ export async function deleteWarehouse(index: number): Promise<WarehouseDeleteRes
  * 与 `action.addGroup` 同一口径：空名抛错，不替调用方编默认名
  * （原版只在 `name === undefined` 时补「未命名分组」，`:52439-52441`）。
  */
-export async function addKuGroup(kind: KuKind, name: string, afterIndex?: number): Promise<void> {
+export function addKuGroup(kind: KuKind, name: string, afterIndex?: number): void {
   const groupName = name.trim()
   if (!groupName) throw new CepError('PARSE', msg.data.text.groupNameRequired)
 
-  return runQueued(() =>
-    updateKuGroups(kind, (groups) => {
-      const next = createKuGroup(kind, groupName)
-      if (typeof afterIndex === 'number' && afterIndex >= 0 && afterIndex + 1 < groups.length) {
-        groups.splice(afterIndex + 1, 0, next)
-      } else {
-        groups.push(next)
-      }
-    }),
-  )
+  return updateKuGroups(kind, (groups) => {
+    const next = createKuGroup(kind, groupName)
+    if (typeof afterIndex === 'number' && afterIndex >= 0 && afterIndex + 1 < groups.length) {
+      groups.splice(afterIndex + 1, 0, next)
+    } else {
+      groups.push(next)
+    }
+  })
 }
 
 /**
@@ -651,44 +650,38 @@ export async function addKuGroup(kind: KuKind, name: string, afterIndex?: number
  * 唯一的结构校验是"必须是非空对象"：不是对象时 `JSON.stringify` 会写出 `null`，
  * 库文件从此读不回组。字段一律不认、不改写（ADR-23/24：消费者只转发）。
  */
-export async function appendKuGroup(kind: KuKind, group: unknown): Promise<void> {
+export function appendKuGroup(kind: KuKind, group: unknown): void {
   // `async` 不是装饰：参数校验必须变成 **rejected promise**，不能同步 throw ——
   // 调用方（`executeInherited` / `style.appendGroup`）只会 `.catch`，同步抛会漏出调用链。
   if (!group || typeof group !== 'object' || Array.isArray(group)) {
     throw new CepError('PARSE', msg.data.text.groupMustBeObject)
   }
 
-  return runQueued(() =>
-    updateKuGroups(kind, (groups) => {
-      groups.push(group as KuRawGroup)
-    }),
-  )
+  return updateKuGroups(kind, (groups) => {
+    groups.push(group as KuRawGroup)
+  })
 }
 
 /** 重命名分组。原版 `renameGroup(name, index)`（`:52456-52459`）：不查重，直接改名 */
-export async function renameKuGroup(kind: KuKind, groupIndex: number, name: string): Promise<void> {
+export function renameKuGroup(kind: KuKind, groupIndex: number, name: string): void {
   const groupName = name.trim()
   if (!groupName) throw new CepError('PARSE', msg.data.text.groupNameRequired)
 
-  return runQueued(() =>
-    updateKuGroups(kind, (groups) => {
-      groupAt(groups, groupIndex).name = groupName
-    }),
-  )
+  return updateKuGroups(kind, (groups) => {
+    groupAt(groups, groupIndex).name = groupName
+  })
 }
 
 /**
  * 删除分组。原版 `deleteGroup(index)`（`:52451-52454`）：删完为空就补一个「<库名>默认分组」，
  * 所以库永远至少有一个组（样式库的组还带新生成的 `id`）。
  */
-export function deleteKuGroup(kind: KuKind, groupIndex: number): Promise<void> {
-  return runQueued(() =>
-    updateKuGroups(kind, (groups) => {
-      groupAt(groups, groupIndex)
-      groups.splice(groupIndex, 1)
-      if (groups.length === 0) groups.push(createKuGroup(kind, defaultKuGroupName(kind)))
-    }),
-  )
+export function deleteKuGroup(kind: KuKind, groupIndex: number): void {
+  return updateKuGroups(kind, (groups) => {
+    groupAt(groups, groupIndex)
+    groups.splice(groupIndex, 1)
+    if (groups.length === 0) groups.push(createKuGroup(kind, defaultKuGroupName(kind)))
+  })
 }
 
 /**
@@ -696,73 +689,65 @@ export function deleteKuGroup(kind: KuKind, groupIndex: number): Promise<void> {
  * `showOnly === true` → 只显示这一组（`showOnlyGroup` `:52420-52435`），否则取反。
  * `showOnlyGroup` 的边界照抄：本来只显示这一组时，再点一次是把它关掉（不是保持）。
  */
-export function setKuGroupShow(kind: KuKind, groupIndex: number, showOnly: boolean): Promise<void> {
-  return runQueued(() =>
-    updateKuGroups(kind, (groups) => {
-      groupAt(groups, groupIndex)
-      if (!showOnly) {
-        const group = groups[groupIndex]
-        group.show = group.show !== true
-        return
-      }
+export function setKuGroupShow(kind: KuKind, groupIndex: number, showOnly: boolean): void {
+  return updateKuGroups(kind, (groups) => {
+    groupAt(groups, groupIndex)
+    if (!showOnly) {
+      const group = groups[groupIndex]
+      group.show = group.show !== true
+      return
+    }
 
-      let shownIndex = -1
-      let shownCount = 0
-      for (let i = 0; i < groups.length; i++) {
-        if (groups[i]?.show === true) {
-          shownIndex = i
-          shownCount++
-        }
+    let shownIndex = -1
+    let shownCount = 0
+    for (let i = 0; i < groups.length; i++) {
+      if (groups[i]?.show === true) {
+        shownIndex = i
+        shownCount++
       }
-      for (let i = 0; i < groups.length; i++) {
-        groups[i].show = i === groupIndex && (shownIndex !== i || shownCount !== 1)
-      }
-    }),
-  )
+    }
+    for (let i = 0; i < groups.length; i++) {
+      groups[i].show = i === groupIndex && (shownIndex !== i || shownCount !== 1)
+    }
+  })
 }
 
 /**
  * 追加一项。原版 `addItem(groupIndex, item)`（`:52482-52489`）：项必须是对象，否则不写。
  * 项本身按开放结构处理（契约 §7 第 8 条）：不认字段、不补键，原样写进 `list`。
  */
-export async function addKuItem(kind: KuKind, groupIndex: number, item: unknown): Promise<void> {
+export function addKuItem(kind: KuKind, groupIndex: number, item: unknown): void {
   if (!item || typeof item !== 'object' || Array.isArray(item)) {
     throw new CepError('PARSE', msg.data.text.itemMustBeObject)
   }
 
-  return runQueued(() =>
-    updateKuGroups(kind, (groups) => {
-      itemList(groupAt(groups, groupIndex), groupIndex).push(item)
-    }),
-  )
+  return updateKuGroups(kind, (groups) => {
+    itemList(groupAt(groups, groupIndex), groupIndex).push(item)
+  })
 }
 
 /** 重命名项。原版 `renameItem(name, groupIndex, itemIndex)`（`:52496-52499`）：只改 `name` */
-export async function renameKuItem(
+export function renameKuItem(
   kind: KuKind,
   groupIndex: number,
   itemIndex: number,
   name: string,
-): Promise<void> {
+): void {
   const itemName = name.trim()
   if (!itemName) throw new CepError('PARSE', msg.data.text.nameRequired)
 
-  return runQueued(() =>
-    updateKuGroups(kind, (groups) => {
-      itemAt(groups, groupIndex, itemIndex).name = itemName
-    }),
-  )
+  return updateKuGroups(kind, (groups) => {
+    itemAt(groups, groupIndex, itemIndex).name = itemName
+  })
 }
 
 /** 删除一项。原版 `deleteItem(groupIndex, itemIndex)`（`:52477-52480`） */
-export function deleteKuItem(kind: KuKind, groupIndex: number, itemIndex: number): Promise<void> {
-  return runQueued(() =>
-    updateKuGroups(kind, (groups) => {
-      const list = itemList(groupAt(groups, groupIndex), groupIndex)
-      itemAt(groups, groupIndex, itemIndex)
-      list.splice(itemIndex, 1)
-    }),
-  )
+export function deleteKuItem(kind: KuKind, groupIndex: number, itemIndex: number): void {
+  return updateKuGroups(kind, (groups) => {
+    const list = itemList(groupAt(groups, groupIndex), groupIndex)
+    itemAt(groups, groupIndex, itemIndex)
+    list.splice(itemIndex, 1)
+  })
 }
 
 /**
@@ -772,23 +757,21 @@ export function deleteKuItem(kind: KuKind, groupIndex: number, itemIndex: number
  * PS 侧可能改写颜色（如把可编辑色转成不可编辑），原版用返回值覆盖本地那一项。
  * 返回值结构未实测，所以这里**只接受对象**：不是对象就抛，不猜字段、不合并。
  */
-export async function replaceKuItem(
+export function replaceKuItem(
   kind: KuKind,
   groupIndex: number,
   itemIndex: number,
   item: unknown,
-): Promise<void> {
+): void {
   if (!item || typeof item !== 'object' || Array.isArray(item)) {
     throw new CepError('PARSE', msg.data.text.changeColorNotObject)
   }
 
-  return runQueued(() =>
-    updateKuGroups(kind, (groups) => {
-      const list = itemList(groupAt(groups, groupIndex), groupIndex)
-      if (!list[itemIndex]) throw new CepError('PARSE', msg.data.fn.itemMissing(String(itemIndex)))
-      list[itemIndex] = item
-    }),
-  )
+  return updateKuGroups(kind, (groups) => {
+    const list = itemList(groupAt(groups, groupIndex), groupIndex)
+    if (!list[itemIndex]) throw new CepError('PARSE', msg.data.fn.itemMissing(String(itemIndex)))
+    list[itemIndex] = item
+  })
 }
 
 /**
@@ -803,20 +786,18 @@ export function moveKuItem(
   groupIndex: number,
   itemIndex: number,
   direction: 'up' | 'down',
-): Promise<void> {
-  return runQueued(() =>
-    updateKuGroups(kind, (groups) => {
-      const list = itemList(groupAt(groups, groupIndex), groupIndex)
-      itemAt(groups, groupIndex, itemIndex)
+): void {
+  return updateKuGroups(kind, (groups) => {
+    const list = itemList(groupAt(groups, groupIndex), groupIndex)
+    itemAt(groups, groupIndex, itemIndex)
 
-      const to = itemIndex + (direction === 'up' ? -1 : 1)
-      if (to < 0 || to >= list.length) {
-        throw new CepError('PARSE', direction === 'up' ? '已经是第一项' : '已经是最后一项')
-      }
-      const [item] = list.splice(itemIndex, 1)
-      list.splice(to, 0, item)
-    }),
-  )
+    const to = itemIndex + (direction === 'up' ? -1 : 1)
+    if (to < 0 || to >= list.length) {
+      throw new CepError('PARSE', direction === 'up' ? '已经是第一项' : '已经是最后一项')
+    }
+    const [item] = list.splice(itemIndex, 1)
+    list.splice(to, 0, item)
+  })
 }
 
 /**
@@ -826,13 +807,11 @@ export function moveKuItem(
  * **一次调用 = 一次落盘**：整条走 `enqueue` + `updateKuGroups`（一次读 → 一次改 → 一次写 + 一次 `.bak`）。
  * 拖拽过程中页面不许调它，只在 `mouseup` 后调一次（原版也是 `Callback` 里才 `updata()`）。
  */
-export function moveKuItemTo(kind: KuKind, move: DropMove): Promise<void> {
-  return runQueued(() =>
-    updateKuGroups(kind, (groups) => {
-      const lists = groups.map((group, index) => itemList(group, index))
-      applyItemDrop(lists, move)
-    }),
-  )
+export function moveKuItemTo(kind: KuKind, move: DropMove): void {
+  return updateKuGroups(kind, (groups) => {
+    const lists = groups.map((group, index) => itemList(group, index))
+    applyItemDrop(lists, move)
+  })
 }
 
 /**
@@ -847,14 +826,12 @@ export function moveKuGroupTo(
   from: number,
   to: number,
   position: DropPosition,
-): Promise<void> {
-  return runQueued(() =>
-    updateKuGroups(kind, (groups) => {
-      const moved = applyListDrop(groups, from, to, position)
-      if (moved < 0) return
-      groups[moved].show = false
-    }),
-  )
+): void {
+  return updateKuGroups(kind, (groups) => {
+    const moved = applyListDrop(groups, from, to, position)
+    if (moved < 0) return
+    groups[moved].show = false
+  })
 }
 
 /**
@@ -871,11 +848,7 @@ export function moveKuGroupTo(
  * 另外色板面板读这个文件时会不会挑剔项字段（非颜色项塞进去会怎样），也**未验**。
  * 下面三条色板命令同一缺口，不再重复标注。
  */
-export function sendKuItemToSwatch(
-  kind: KuKind,
-  groupIndex: number,
-  itemIndex: number,
-): void {
+export function sendKuItemToSwatch(kind: KuKind, groupIndex: number, itemIndex: number): void {
   const { groups } = readRawGroups(kind)
   const item = itemAt(groups, groupIndex, itemIndex)
   writeSwatchItems(swatchFilePath(), [item])
@@ -884,11 +857,7 @@ export function sendKuItemToSwatch(
 /**
  * 追加到色板（项）。原版 `:50356-50364`：`readToArray(seBan)` → `push(该项)` → `write` → tips「追加成功」。
  */
-export function appendKuItemToSwatch(
-  kind: KuKind,
-  groupIndex: number,
-  itemIndex: number,
-): void {
+export function appendKuItemToSwatch(kind: KuKind, groupIndex: number, itemIndex: number): void {
   const { groups } = readRawGroups(kind)
   const item = itemAt(groups, groupIndex, itemIndex)
   const path = swatchFilePath()

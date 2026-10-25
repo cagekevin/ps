@@ -82,7 +82,7 @@ export function emptyClassification(): Classification {
   return { categories: [], presets: {}, commercials: [] }
 }
 
-export async function getClassification(): Promise<RepoRead<Classification>> {
+export function getClassification(): RepoRead<Classification> {
   // dev：浏览器里没有真实文件，用 MOCK 才能开发 UI
   if (!hasCep()) return { ok: true, value: MOCK }
 

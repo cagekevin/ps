@@ -22,7 +22,7 @@ export const useRenameStore = defineStore('rename', () => {
     loading.value = true
     error.value = ''
     try {
-      const read = await renameRepo.read()
+      const read = renameRepo.read()
       // 坏文件没有 value：回退到生产者自己的默认预设（`renameRepo` 的 fallback 就是它），
       // 与改前"坏文件 → fallback 种子"逐字一致；坏因进 `degraded` 让页面提示
       preset.value = read.ok ? read.value : seedPreset()

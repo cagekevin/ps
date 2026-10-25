@@ -44,7 +44,7 @@ export const renameCommands: Command<unknown>[] = [
       if (message) throw new CepError('PARSE', message)
 
       // 原版先 addHistory(表达式) 再执行（:57230），历史因此包含失败的那些——保持一致
-      await renameWriter.update((preset) => pushHistory(preset, expression))
+      renameWriter.update((preset) => pushHistory(preset, expression))
       await ctx.jsx.rename.batchName(expression, filterChildren)
     },
   }),
@@ -70,7 +70,7 @@ export const renameCommands: Command<unknown>[] = [
     requires: 'none',
     kind: 'instant',
     async invoke(_ctx, { index }) {
-      await renameWriter.update((preset) => toggleGroupAt(preset, index))
+      renameWriter.update((preset) => toggleGroupAt(preset, index))
     },
   }),
 
@@ -81,7 +81,7 @@ export const renameCommands: Command<unknown>[] = [
     requires: 'none',
     kind: 'instant',
     async invoke(_ctx, { name, afterIndex }) {
-      await renameWriter.update((preset) => addGroupAt(preset, name, afterIndex))
+      renameWriter.update((preset) => addGroupAt(preset, name, afterIndex))
     },
   }),
 
@@ -92,7 +92,7 @@ export const renameCommands: Command<unknown>[] = [
     requires: 'none',
     kind: 'instant',
     async invoke(_ctx, { index, name }) {
-      await renameWriter.update((preset) => renameGroupAt(preset, index, name))
+      renameWriter.update((preset) => renameGroupAt(preset, index, name))
     },
   }),
 
@@ -103,7 +103,7 @@ export const renameCommands: Command<unknown>[] = [
     requires: 'none',
     kind: 'instant',
     async invoke(_ctx, { index }) {
-      await renameWriter.update((preset) => deleteGroupAt(preset, index))
+      renameWriter.update((preset) => deleteGroupAt(preset, index))
     },
   }),
 
@@ -114,7 +114,7 @@ export const renameCommands: Command<unknown>[] = [
     requires: 'none',
     kind: 'instant',
     async invoke(_ctx, { groupIndex, text }) {
-      await renameWriter.update((preset) => addItemAt(preset, groupIndex, text))
+      renameWriter.update((preset) => addItemAt(preset, groupIndex, text))
     },
   }),
 
@@ -125,7 +125,7 @@ export const renameCommands: Command<unknown>[] = [
     requires: 'none',
     kind: 'instant',
     async invoke(_ctx, { groupIndex, itemIndex, text }) {
-      await renameWriter.update((preset) => changeItemAt(preset, groupIndex, itemIndex, text))
+      renameWriter.update((preset) => changeItemAt(preset, groupIndex, itemIndex, text))
     },
   }),
 
@@ -136,7 +136,7 @@ export const renameCommands: Command<unknown>[] = [
     requires: 'none',
     kind: 'instant',
     async invoke(_ctx, { groupIndex, itemIndex }) {
-      await renameWriter.update((preset) => deleteItemAt(preset, groupIndex, itemIndex))
+      renameWriter.update((preset) => deleteItemAt(preset, groupIndex, itemIndex))
     },
   }),
 
@@ -147,7 +147,7 @@ export const renameCommands: Command<unknown>[] = [
     requires: 'none',
     kind: 'instant',
     async invoke(_ctx, { from, to, position }) {
-      await renameWriter.update((preset) => {
+      renameWriter.update((preset) => {
         if (from === to) return
         // 台账 T-67 判据④：第 0 组（最近使用）固定，不参与排序
         if (from < 1 || to < 1)
@@ -167,7 +167,7 @@ export const renameCommands: Command<unknown>[] = [
     requires: 'none',
     kind: 'instant',
     async invoke(_ctx, { fromGroup, fromIndex, toGroup, toIndex, position }) {
-      await renameWriter.update((preset) => {
+      renameWriter.update((preset) => {
         // 台账 T-67 判据④：源组和落点组都不能是第 0 组。
         // UNVERIFIED: 判据只点名「第 0 组不可拖」，没有逐字说项拖拽的源/落点。
         if (fromGroup === 0 || toGroup === 0) {
@@ -192,7 +192,7 @@ export const renameCommands: Command<unknown>[] = [
     requires: 'none',
     kind: 'instant',
     async invoke() {
-      const read = await renameWriter.read()
+      const read = renameWriter.read()
       if (!read.ok) throw new CepError('IO', read.reason)
 
       // 原版 saveFile("导出", ["cmm"], "重命名.cmm", "设计助理导出文件")（:57020）
@@ -225,7 +225,7 @@ export const renameCommands: Command<unknown>[] = [
       const text = read.text
 
       // JSON 优先、旧格式 `<z>`/`<>` 兜底，见 domain/rename.ts 的 parsePreset（原版 :57036-57045）
-      await renameWriter.write(parsePreset(text))
+      renameWriter.write(parsePreset(text))
     },
   }),
 ]

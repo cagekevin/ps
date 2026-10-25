@@ -424,6 +424,8 @@ export const msg: Msg = {
       fileNotExistsRefuseWrite: (target: string) => `${target} 不存在，拒绝写入`,
       fileLockedByOtherPanel: (target: string, retries: string) =>
         `${target} 正被其他面板修改，写入已放弃（重试 ${retries} 次）`,
+      // exclusive.ts：长事务互斥（同一批文件不许两个事务同时改）
+      exclusiveBusy: (what: string) => `${what}还没完成，请等它结束再试`,
       // font-list.ts
       sysFontReadFailed: (reason: string) => `读不到系统字体：${reason}（SysFont2.json）`,
       sysFontUnrecognized: (data: string) => `ztgl_initSystemList 返回了无法识别的数据：${data}`,

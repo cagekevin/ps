@@ -61,7 +61,7 @@ async function requireFontApplied(action: () => Promise<void>, name: string): Pr
 async function rememberFamily(family?: string): Promise<void> {
   if (!family) return
   try {
-    await fontHistoryWriter.update((list) => {
+    fontHistoryWriter.update((list) => {
       const next = [family, ...list.filter((item) => item !== family)]
       list.splice(0, list.length, ...next.slice(0, 10))
     })
@@ -149,7 +149,7 @@ export const fontSetCommands: Command<unknown>[] = [
       const text = value.trim()
       if (!text) throw new CepError('PARSE', msg.command.text.fontSetEmptyInput)
 
-      const settingsRead = await readFontSetSettings()
+      const settingsRead = readFontSetSettings()
       // 坏设置文件 → 数据层不再给 fallback：照常跑等于拿默认 `ztDistributionFilter`
       // 去动用户的文档，用户以为用的是自己的设置（T-101-1）
       if (!settingsRead.ok) {
@@ -258,7 +258,7 @@ export const fontSetCommands: Command<unknown>[] = [
     async invoke(ctx, payload) {
       // 计数器坏了按 0 次继续（清单 §二：对用户有利、不写盘）。这个值决定**是否放行翻译**，
       // 是判断不是渲染，所以默认值也不在消费侧拼：取坏读臂的 `fallback`（仓库自己给的），坏因自己落日志
-      const counterRead = await translateCounterWriter.read()
+      const counterRead = translateCounterWriter.read()
       if (!counterRead.ok) {
         log.warn('fontSet.translate', `翻译计数读取失败，本次按 0 次处理：${counterRead.reason}`)
       }
@@ -312,7 +312,7 @@ export const fontSetCommands: Command<unknown>[] = [
 
       await ctx.jsx.font.setTranslateText(list, payload.replace)
 
-      await translateCounterWriter.update((raw) => {
+      translateCounterWriter.update((raw) => {
         const next = normalizeCounter(raw, dayKey())
         next.num += 1
         raw.num = next.num
@@ -467,7 +467,7 @@ export const fontSetCommands: Command<unknown>[] = [
     requires: 'none',
     kind: 'instant',
     async invoke(_ctx, { patch }) {
-      await patchFontSetSettings(patch)
+      patchFontSetSettings(patch)
     },
   }),
 
@@ -493,7 +493,7 @@ export const fontSetCommands: Command<unknown>[] = [
       }
 
       if (payload.action === 'select') {
-        await quickFontWriter.update((file) => {
+        quickFontWriter.update((file) => {
           const index = payload.index ?? 0
           if (index < 0 || index >= file.list.length) {
             throw new CepError('PARSE', msg.command.text.fontSetSwitchFailed)
@@ -504,7 +504,7 @@ export const fontSetCommands: Command<unknown>[] = [
       }
 
       if (payload.action === 'delete') {
-        await quickFontWriter.update((file) => {
+        quickFontWriter.update((file) => {
           const index = payload.index ?? 0
           if (index < 0 || index >= file.list.length)
             throw new CepError('PARSE', msg.command.text.fontSetDeleteError)
@@ -529,7 +529,7 @@ export const fontSetCommands: Command<unknown>[] = [
       const hit = list.find((item) => item.family === family)
       if (!hit) throw new CepError('PARSE', msg.command.text.fontSetFindFontInfoFailed)
 
-      await quickFontWriter.update((file) => {
+      quickFontWriter.update((file) => {
         const blocked = canAddQuickFont(file.list, family)
         if (blocked) throw new CepError('PARSE', blocked)
 
@@ -550,7 +550,7 @@ export const fontSetCommands: Command<unknown>[] = [
       if (action === 'select') {
         if (typeof index !== 'number')
           throw new CepError('PARSE', msg.command.text.fontSetSwitchFailed)
-        await hierarchyWriter.update((file) => {
+        hierarchyWriter.update((file) => {
           if (index < 0 || index >= file.list.length)
             throw new CepError('PARSE', msg.command.text.fontSetSwitchFailed)
           file.index = index
@@ -562,7 +562,7 @@ export const fontSetCommands: Command<unknown>[] = [
         if (!name?.trim())
           throw new CepError('PARSE', msg.command.text.fontSetHierarchyNameRequired)
         const next = requireLevels(levels ?? [])
-        await hierarchyWriter.update((file) => {
+        hierarchyWriter.update((file) => {
           file.list.push({ name: name.trim(), data: [...next] })
         })
         return
@@ -572,7 +572,7 @@ export const fontSetCommands: Command<unknown>[] = [
         if (!name?.trim()) throw new CepError('PARSE', msg.command.text.fontSetNewNameRequired)
         if (typeof index !== 'number')
           throw new CepError('PARSE', msg.command.text.fontSetRenameIndexWrong)
-        await hierarchyWriter.update((file) => {
+        hierarchyWriter.update((file) => {
           const preset = file.list[index]
           if (!preset) throw new CepError('PARSE', msg.command.text.fontSetRenameIndexWrong)
           preset.name = name.trim()
@@ -581,7 +581,7 @@ export const fontSetCommands: Command<unknown>[] = [
       }
 
       if (action === 'delete') {
-        await hierarchyWriter.update((file) => {
+        hierarchyWriter.update((file) => {
           const target = index ?? file.index
           if (target < 0 || target >= file.list.length)
             throw new CepError('PARSE', msg.command.text.fontSetDeleteIndexWrong)
@@ -595,7 +595,7 @@ export const fontSetCommands: Command<unknown>[] = [
 
       // save：用当前 6 级字号覆盖当前预设
       const next = requireLevels(levels ?? [])
-      await hierarchyWriter.update((file) => {
+      hierarchyWriter.update((file) => {
         const preset = file.list[file.index]
         if (!preset) throw new CepError('PARSE', msg.command.text.fontSetPresetMissing)
         preset.data = [...next]

@@ -142,7 +142,7 @@ export const fontCommands: Command<unknown>[] = [
     requires: 'none',
     kind: 'instant',
     async invoke(ctx, { family, value }) {
-      await ctx.data.stars.update((list) => {
+      ctx.data.stars.update((list) => {
         const normalized = list
           .filter((item) => typeof item.name === 'string')
           .map((item) => ({ name: item.name as string, star: Number(item.star) || 0 }))
@@ -169,7 +169,7 @@ export const fontCommands: Command<unknown>[] = [
     async invoke(ctx, { text }) {
       if (!text.trim()) throw new CepError('PARSE', msg.command.text.fontTagRequired)
 
-      await ctx.data.tags.update((list) => {
+      ctx.data.tags.update((list) => {
         if (list.some((item) => item.text === text)) {
           throw new CepError('PARSE', msg.command.fn.fontTagExists(text))
         }
@@ -185,7 +185,7 @@ export const fontCommands: Command<unknown>[] = [
     requires: 'none',
     kind: 'instant',
     async invoke(ctx, { from, to }) {
-      await ctx.data.tags.update((list) => {
+      ctx.data.tags.update((list) => {
         const tag = list.find((item) => item.text === from)
         if (!tag) throw new CepError('PARSE', msg.command.fn.fontTagMissing(from))
         if (list.some((item) => item.text === to && item.text !== from)) {
@@ -203,7 +203,7 @@ export const fontCommands: Command<unknown>[] = [
     requires: 'none',
     kind: 'instant',
     async invoke(ctx, { text }) {
-      await ctx.data.tags.update((list) => list.filter((item) => item.text !== text))
+      ctx.data.tags.update((list) => list.filter((item) => item.text !== text))
     },
   }),
 
@@ -214,7 +214,7 @@ export const fontCommands: Command<unknown>[] = [
     requires: 'none',
     kind: 'instant',
     async invoke(ctx, { tagText, family }) {
-      await ctx.data.tags.update((list) => {
+      ctx.data.tags.update((list) => {
         const tag = list.find((item) => item.text === tagText)
         if (!tag) throw new CepError('PARSE', msg.command.fn.fontTagMissing(tagText))
 
@@ -286,8 +286,8 @@ export const fontCommands: Command<unknown>[] = [
         throw new CepError('PARSE', msg.command.text.actionCancelled)
 
       // 覆盖写：repo 内部先落 `.bak` 再写
-      await ctx.data.tags.update(() => parsed.tags)
-      if (parsed.stars) await ctx.data.stars.update(() => parsed.stars as RawStar[])
+      ctx.data.tags.update(() => parsed.tags)
+      if (parsed.stars) ctx.data.stars.update(() => parsed.stars as RawStar[])
     },
   }),
 
@@ -313,9 +313,9 @@ export const fontCommands: Command<unknown>[] = [
       // 取消文件对话框 = 取消导出，不写盘（与 `action.exportWarehouse` 同口径）
       if (!path) throw new CepError('PARSE', msg.command.text.actionCancelled)
 
-      const tagRead = await ctx.data.tags.read()
+      const tagRead = ctx.data.tags.read()
       if (!tagRead.ok) throw new CepError('IO', msg.command.fn.fontTagReadFailed(tagRead.reason))
-      const starRead = await ctx.data.stars.read()
+      const starRead = ctx.data.stars.read()
       if (!starRead.ok) throw new CepError('IO', msg.command.fn.fontStarReadFailed(starRead.reason))
 
       const payload: TagImportFile = { tags: tagRead.value, stars: starRead.value }
