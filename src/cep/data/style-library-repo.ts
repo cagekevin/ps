@@ -554,9 +554,18 @@ function copyToRecycle(relative: string, recycleDir: string): boolean {
     return false
   }
   if (read.status === 'notSeen') return false
-  const copied = writeBase64File(`${recycleDir}/${relative}`, read.base64)
-  if (copied.status === 'error') {
-    throw new CepError('IO', msg.data.fn.recycleCopyFailed(recycleDir, relative, copied.reason))
+  // 复制失败必须抛：**没有退路就不许往下删原件**（`.bak` / 回收目录是唯一退路）
+  try {
+    writeBase64File(`${recycleDir}/${relative}`, read.base64)
+  } catch (e) {
+    throw new CepError(
+      'IO',
+      msg.data.fn.recycleCopyFailed(
+        recycleDir,
+        relative,
+        e instanceof Error ? e.message : String(e),
+      ),
+    )
   }
   return true
 }
@@ -600,13 +609,16 @@ export function deleteWarehouse(index: number): WarehouseDeleteResult {
       return { ...value, index: next.index, list: next.list }
     })
 
-    // 索引已经不再引用这些文件，删不掉只会留下孤儿文件 —— 记下来报给调用方，不抛
+    // 索引已经不再引用这些文件，删不掉只会留下孤儿文件 —— 记下来报给调用方，不抛。
+    // **这是"收尾清理"不是"写"**：索引已写成功，为删不掉旧文件而回滚反而更糟。
     const failed: string[] = []
     for (const relative of moved) {
-      const removed = removeFile(`${userDir()}/${relative}`)
-      // 删不掉要说出来：T-109 之前这里靠 existsSync，EPERM 会被谎报成删成功
-      if (!removed.ok) {
-        log.warn('style', `删除仓库：旧文件删不掉：${relative}`, removed.reason)
+      try {
+        removeFile(`${userDir()}/${relative}`)
+      } catch (e) {
+        // 删不掉要说出来：T-109 之前这里靠 existsSync，EPERM 会被谎报成删成功。
+        // 现在它是活的：抛出来 → 落日志 + 进 `failed` 返回值（调用方拿得到）。
+        log.warn('style', `删除仓库：旧文件删不掉：${relative}`, e)
         failed.push(relative)
       }
     }

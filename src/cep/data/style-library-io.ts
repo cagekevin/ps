@@ -85,9 +85,16 @@ function backupOriginal(relative: string, path: string, base64: string): void {
     }
     if (!isUsableJsonText(text)) {
       const quarantine = `${path}.corrupt-${Date.now()}`
-      const kept = writeBase64File(quarantine, base64)
-      if (kept.status === 'error') {
-        throw new CepError('IO', msg.data.fn.noOriginalNoBackupAbortImport(relative, kept.reason))
+      try {
+        writeBase64File(quarantine, base64)
+      } catch (e) {
+        throw new CepError(
+          'IO',
+          msg.data.fn.noOriginalNoBackupAbortImport(
+            relative,
+            e instanceof Error ? e.message : String(e),
+          ),
+        )
       }
       log.warn(
         'style',
@@ -99,9 +106,16 @@ function backupOriginal(relative: string, path: string, base64: string): void {
 
   // TD-09-22：`.bak` 写失败**必须中止**。旧实现把这个失败丢掉继续写本体 ——
   // 结果是"导入报成功、原件被覆盖、`.bak` 不存在、日志一行都没有"（EISDIR 可复现）
-  const backedUp = writeBase64File(`${path}.bak`, base64)
-  if (backedUp.status === 'error') {
-    throw new CepError('IO', msg.data.fn.backupOriginalFailedAbortImport(relative, backedUp.reason))
+  try {
+    writeBase64File(`${path}.bak`, base64)
+  } catch (e) {
+    throw new CepError(
+      'IO',
+      msg.data.fn.backupOriginalFailedAbortImport(
+        relative,
+        e instanceof Error ? e.message : String(e),
+      ),
+    )
   }
 }
 
@@ -120,9 +134,13 @@ function writeKuFile(relative: string, base64: string): boolean {
     throw new CepError('IO', msg.data.fn.readOriginalFailedAbortImport(relative, read.reason))
   }
   if (read.status === 'ok') backupOriginal(relative, path, read.base64)
-  const written = writeBase64File(path, base64)
-  if (written.status === 'error') {
-    throw new CepError('IO', msg.data.fn.writeFileFailed(relative, written.reason))
+  try {
+    writeBase64File(path, base64)
+  } catch (e) {
+    throw new CepError(
+      'IO',
+      msg.data.fn.writeFileFailed(relative, e instanceof Error ? e.message : String(e)),
+    )
   }
   return read.status === 'ok'
 }
@@ -294,26 +312,21 @@ function moveToRecycle(names: readonly string[], keep: ReadonlySet<string>, dir:
       continue
     }
     if (read.status === 'notSeen') continue
+    // 两段各自窄 catch，各说各的话 —— 合并成一个大 catch 会把"复制失败"和"删不掉"说成同一句
     try {
-      const copied = writeBase64File(`${dir}/${name}`, read.base64)
-      if (copied.status === 'error') {
-        // 复制失败就**不能删原件**：删了就等于原件没了、回收目录里也没有
-        log.warn(
-          'style',
-          `替换导入：旧文件没复制进回收目录（原件保留原位）：${name}`,
-          copied.reason,
-        )
-        continue
-      }
-      const removed = removeFile(`${userDir()}/${name}`)
-      if (!removed.ok) {
-        log.warn('style', `替换导入：旧文件已复制但删不掉（留下孤儿）：${name}`, removed.reason)
-        continue
-      }
-      moved.push(name)
+      writeBase64File(`${dir}/${name}`, read.base64)
     } catch (e) {
-      log.warn('style', `替换导入：旧文件没能移进回收目录：${name}`, e)
+      // 复制失败就**不能删原件**：删了就等于原件没了、回收目录里也没有
+      log.warn('style', `替换导入：旧文件没复制进回收目录（原件保留原位）：${name}`, e)
+      continue
     }
+    try {
+      removeFile(`${userDir()}/${name}`)
+    } catch (e) {
+      log.warn('style', `替换导入：旧文件已复制但删不掉（留下孤儿）：${name}`, e)
+      continue
+    }
+    moved.push(name)
   }
   return moved
 }
@@ -407,11 +420,14 @@ function importKuFromText(
   } catch (e) {
     // 只回滚这次新建的文件：被覆盖的原件还在原位（`.bak` 是它的上一版）
     for (const name of created) {
-      const removed = removeFile(`${userDir()}/${name}`)
-      // 回滚删不掉只留下孤儿，但必须留下来历（旧实现丢掉返回值，删没删掉没人知道）
-      if (!removed.ok)
-        log.warn('style', `回滚：删新建文件失败（留下孤儿）：${name}`, removed.reason)
+      try {
+        removeFile(`${userDir()}/${name}`)
+      } catch (err) {
+        // 回滚删不掉只留下孤儿，但必须留下来历（旧实现丢掉返回值，删没删掉没人知道）
+        log.warn('style', `回滚：删新建文件失败（留下孤儿）：${name}`, err)
+      }
     }
+    // 原始失败照旧往上抛：回滚是清理，不是"把失败变成成功"
     throw e
   }
 

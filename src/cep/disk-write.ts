@@ -13,25 +13,22 @@
 import { hasNode, nodeRequire } from './node'
 import { classifyFsError, readTextAsync, readTextSync } from './fs-read'
 
-/**
- * 写结果（**观测**，与 `TextRead` 同形）：`ok` = 内容已落盘；`error` + `reason` = 没写进去。
- *
- * 为什么不再是 `boolean`：`false` 说不出"为什么"，于是调用点只能二选一 ——
- * 要么当成功继续（导入报成功、原件已覆盖），要么退回普通写把原子保证摘掉（TD-09-27）。
- * 有 `reason` 才能"失败就抛"，把原因一路带到用户面前。
- */
-export type WriteOutcome = { status: 'ok' } | { status: 'error'; reason: string }
-
-/** 删除结果：成功（删掉了，或本来就不在） / 失败 + 原因 */
-export type RemoveOutcome = { ok: true } | { ok: false; reason: string }
+// ── 写结果：**没有结果类型**（ADR-0014：写不可降级必须抛） ─────────────────────────
+//
+// 这里曾经有三个结果类型（`WriteOutcome{status}` / `RemoveOutcome{ok}` /
+// `'written' | 'conflict'` 裸字符串），同一个"写一次盘"三套语法。
+// 最要命的是 `'written' | 'conflict'`：`conflict` = **写根本没发生**，却是一个
+// **可以被整个丢弃的返回值** —— 实测 13 个调用点里 12 个不判，写失败静默溜走。
+//
+// 现在四个写入口全部返回 `void`：成功就正常返回，失败一律 `throw`。
+// 没有返回值可判 ⇒ 没有"忘了判"这条路。唯一需要分辨冲突的是 `file-repo.rawUpdate`
+// 的重试，它 catch `code === 'CONFLICT'`（判别码，不是字符串比较）。
 
 /** Node 系统错误归一成写失败的 reason（`ENOENT` 在写入语境 = 路径不存在） */
-function classifyWriteError(e: unknown): { status: 'error'; reason: string } {
+function writeFailureReason(e: unknown): string {
   const classified = classifyFsError(e)
-  if (classified.status === 'notSeen') {
-    return { status: 'error', reason: 'ENOENT（写入时路径不存在）' }
-  }
-  return classified
+  if (classified.status === 'notSeen') return 'ENOENT（写入时路径不存在）'
+  return classified.reason
 }
 
 let tmpSeq = 0
@@ -90,9 +87,15 @@ function backupOrQuarantine(target: string, previous: string, opts: BackupOption
  * 写失败即抛 —— 绝不在没有退路的情况下覆盖原件。
  */
 function writeBackupFile(path: string, text: string): void {
-  const written = writeTextFileAtomic(path, text)
-  if (written.status === 'error') {
-    throw new CepError('IO', msg.data.fn.backupFailedAbortWrite(path, written.reason))
+  try {
+    writeTextFileAtomic(path, text)
+  } catch (e) {
+    // 换一句更具体的话：备份写不进去 = "没有退路"，比通用"写入失败"更该让人停手。
+    // **不是吞**：原错误被包进新错误的 message 里，照旧往上抛。
+    throw new CepError(
+      'IO',
+      msg.data.fn.backupFailedAbortWrite(path, e instanceof Error ? e.message : String(e)),
+    )
   }
 }
 
@@ -118,7 +121,10 @@ export interface DiskWriteOptions extends BackupOptions {
    * 调用方已经读过原文时传进来，省一次读。
    */
   previous?: string | null
-  /** CAS：传了就要比对，`'conflict'` 表示磁盘原文已不是它（别人改过），本次不写 */
+  /**
+   * CAS：传了就要比对。磁盘原文已不是它（别人改过）⇒ **抛 `CepError('CONFLICT')` 且不写**。
+   * 调用方要重试就 catch 这个码（`file-repo.rawUpdate` 就是这么做的），不许比字符串。
+   */
   expected?: string | null
   /** 写完回读比对，证明"确实写对了"（比"尽力写对"强一档） */
   verifyReadBack?: boolean
@@ -144,13 +150,14 @@ function writeCore(
   text: string,
   previous: string | null,
   opts: DiskWriteOptions,
-): 'written' | 'conflict' {
+): void {
   if (previous !== null) backupOrQuarantine(path, previous, opts)
 
   if (opts.expected !== undefined) {
     const compared = compareSync(path, opts.expected)
-    // 别人改过 → 放弃这次写（原语义：让上层丢更新而不是覆盖）
-    if (compared === 'diff') return 'conflict'
+    // 别人改过 → **抛 `CONFLICT`**，不写。返回一个字符串会被调用点丢掉（实测 12/13 丢掉），
+    // 而 `rawUpdate` 需要靠这个判别码决定"重读重跑 mutator"，不能靠 reason 字符串比。
+    if (compared === 'diff') throw new CepError('CONFLICT', path)
     // 比不了（读不到原文 / 无 Node）→ **不写**：拿不到原文就没有"没被改过"的证据（TD-09-24）
     if (compared === 'unknown') {
       throw new CepError('IO', msg.data.fn.fileCompareReadFailed(path))
@@ -158,10 +165,7 @@ function writeCore(
   }
 
   // 原子写失败必须抛：退回普通写等于主动摘掉 rename 保护（TD-09-27）
-  const written = writeTextFileAtomic(path, text)
-  if (written.status === 'error') {
-    throw new CepError('IO', msg.data.fn.fileWriteFailed(path, written.reason))
-  }
+  writeTextFileAtomic(path, text)
 
   if (opts.verifyReadBack) {
     const after = readTextSync(path)
@@ -174,19 +178,19 @@ function writeCore(
       throw new CepError('IO', msg.data.fn.protectedReadBackMismatch(path))
     }
   }
-
-  return 'written'
 }
 
 /**
- * **唯一异步落盘入口**。绝大多数调用方用这个。
- * 与 `writeDiskSync` 的差别只有"怎么读原文"：这里用 async 读，那里用同步读。
+ * **唯一异步落盘入口**（给"读原文本身就得异步"的调用方：用户选的外部路径）。
+ *
+ * 与 `writeDiskSync` 的差别只有"怎么读原文"。两者都**返回 `void`，失败抛**
+ * （ADR-0014 写不可降级）—— 没有返回值可丢，也就没有"忘了判"。
  */
 export async function writeDisk(
   path: string,
   text: string,
   opts: DiskWriteOptions = {},
-): Promise<'written' | 'conflict'> {
+): Promise<void> {
   let previous = opts.previous
   if (previous === undefined) {
     const before = await readTextAsync(path)
@@ -203,11 +207,7 @@ export async function writeDisk(
  * **唯一同步落盘入口**。给同步函数用（`settings` 偏好、`cloud/ledger` 台账、`log-file` 日志、
  * `system` 快捷键脚本）。
  */
-export function writeDiskSync(
-  path: string,
-  text: string,
-  opts: DiskWriteOptions = {},
-): 'written' | 'conflict' {
+export function writeDiskSync(path: string, text: string, opts: DiskWriteOptions = {}): void {
   let previous = opts.previous
   if (previous === undefined) {
     const before = readTextSync(path)
@@ -273,14 +273,13 @@ function atomicReplaceBytes(absPath: string, bytes: string | Uint8Array): void {
   }
 }
 
-/** 原子写文本（内部）：失败返回 `{status:'error'}`，调用方必须抛/中止（TD-09-27） */
-function writeTextFileAtomic(absPath: string, text: string): WriteOutcome {
-  if (!hasNode()) return { status: 'error', reason: 'Node 不可用（--enable-nodejs 未开）' }
+/** 原子写文本（内部）：**失败直接抛**（ADR-0014 写不可降级） */
+function writeTextFileAtomic(absPath: string, text: string): void {
+  if (!hasNode()) throw new CepError('NO_NODE', 'Node 不可用（--enable-nodejs 未开）')
   try {
     atomicReplace(absPath, text)
-    return { status: 'ok' }
   } catch (e) {
-    return classifyWriteError(e)
+    throw new CepError('IO', msg.data.fn.fileWriteFailed(absPath, writeFailureReason(e)))
   }
 }
 
@@ -290,14 +289,13 @@ function writeTextFileAtomic(absPath: string, text: string): WriteOutcome {
  * 写出的字节与直写完全一致（同一个 `buffer.from(base64,'base64')`），
  * 只是落到目标前多一次 rename。
  */
-export function writeBase64File(absPath: string, base64: string): WriteOutcome {
-  if (!hasNode()) return { status: 'error', reason: 'Node 不可用（--enable-nodejs 未开）' }
+export function writeBase64File(absPath: string, base64: string): void {
+  if (!hasNode()) throw new CepError('NO_NODE', 'Node 不可用（--enable-nodejs 未开）')
   try {
     const buffer = nodeRequire('buffer').Buffer
     atomicReplaceBytes(absPath, buffer.from(base64, 'base64'))
-    return { status: 'ok' }
   } catch (e) {
-    return classifyWriteError(e)
+    throw new CepError('IO', msg.data.fn.fileWriteFailed(absPath, writeFailureReason(e)))
   }
 }
 
@@ -308,13 +306,14 @@ export function writeBase64File(absPath: string, base64: string): WriteOutcome {
  * 但"不在"只能由 `ENOENT` 证明 —— **不许用 `existsSync`**：它对"存在但 stat 不到"（权限）
  * 也返回 `false`，会把 `EPERM` 谎报成删成功，调用方据此以为旧文件已清走（T-109）。
  */
-export function removeFile(absPath: string): RemoveOutcome {
-  if (!hasNode()) return { ok: false, reason: 'Node 不可用（--enable-nodejs 未开）' }
+export function removeFile(absPath: string): void {
+  if (!hasNode()) throw new CepError('NO_NODE', 'Node 不可用（--enable-nodejs 未开）')
   try {
     nodeRequire('fs').unlinkSync(absPath)
-    return { ok: true }
   } catch (e) {
     const classified = classifyFsError(e)
-    return classified.status === 'notSeen' ? { ok: true } : { ok: false, reason: classified.reason }
+    // `ENOENT` = 这个路径上本来就没有文件 ⇒ 目标已达成，不算失败
+    if (classified.status === 'notSeen') return
+    throw new CepError('IO', msg.data.fn.fileRemoveFailed(absPath, classified.reason))
   }
 }

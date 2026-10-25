@@ -35,6 +35,8 @@ export const CODE_REGISTRY: Record<CepErrorCode, CodeEntry> = {
   PARSE: { toast: true },
   INIT: { prefix: 'Photoshop 脚本初始化失败', toast: true },
   IO: { toast: true },
+  /** 落盘前 CAS 比对失败（另一面板改过，本次未写）。正常会被 `rawUpdate` 重试掉，不该到用户 */
+  CONFLICT: { prefix: '文件已被其他面板改过，本次未写入', toast: true },
   NETWORK: { toast: true },
   NO_SELECTION: { toast: true },
   /** 字体缺失：页面弹下载确认，`useCommand` 不自动 toast */

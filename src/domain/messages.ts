@@ -402,12 +402,11 @@ export const msg: Msg = {
       actionIndexCorruptAbort: (reason: string, action: string) =>
         `动作库索引文件损坏（${reason}），${action}已中止：磁盘上的仓库文件没动`,
       readWarehouseFailed: (fileName: string) => `读取仓库失败：${fileName}`,
-      writeWarehouseFailed: (name: string, reason: string) => `写入仓库失败：${name}（${reason}）`,
+      // 写/删的失败文案统一由 `disk-write` 的 `fileWriteFailed` / `fileRemoveFailed` 出
+      // （它们带完整路径与原因）。owner 层不再各写一句 —— 那是同一件事的第二份文案。
       // actions.ts
       actionIndexCorruptDeleteAbort: (reason: string) =>
         `动作库索引文件损坏（${reason}），删除已中止`,
-      warehouseDeleteFailed: (fileName: string, reason: string) =>
-        `仓库文件删除失败：${fileName}（${reason}）`,
       // common-use.ts
       commonUseReadFailedRefuseWrite: (file: string) => `${file} 读取失败，拒绝写入`,
       commonUseNotJsonRefuse: (file: string) => `${file} 内容不是合法 JSON，拒绝覆盖`,
@@ -417,6 +416,8 @@ export const msg: Msg = {
       // file-repo.ts
       fileCompareReadFailed: (target: string) => `落盘前比对读不到原文，已中止写入：${target}`,
       fileWriteFailed: (target: string, reason: string) => `写入失败：${target}（${reason}）`,
+      // disk-write.ts：removeFile 失败（`ENOENT` 不算失败，已被它自己放过）
+      fileRemoveFailed: (target: string, reason: string) => `删除失败：${target}（${reason}）`,
       fileReadFailedAbortWrite: (target: string, reason: string) =>
         `${target} 读不到，已中止写入（${reason}）`,
       fileReadReasonRefuseOverwrite: (target: string, reason: string) =>

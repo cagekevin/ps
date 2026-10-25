@@ -80,16 +80,16 @@ export function fileRepo<T>(
     previous: string | null,
     expected?: string | null,
     quarantine = false,
-  ): boolean {
+  ): void {
     // **同步**落盘：原语本来就是 `renameSync`；异步只多一个 microtask 边界，
     // 而那正是 D-26 丢更新的窗口。
-    const result = writeDiskSync(resolvePath(), JSON.stringify(value), {
+    // 失败一律抛（含 CAS 冲突 ⇒ `CONFLICT`），本函数没有返回值可丢。
+    writeDiskSync(resolvePath(), JSON.stringify(value), {
       // `backup` 关掉时不写 `.bak`：显式传 `null` 表示"没有原文"
       previous: backup ? previous : null,
       quarantineOnCorrupt: quarantine,
       expected,
     })
-    return result === 'written'
   }
 
   /**
@@ -142,17 +142,20 @@ export function fileRepo<T>(
       const next = (result === undefined ? read.value : result) as T
 
       // D-26：读 → 改 的窗口里，另一个面板（独立面板）可能已经写过。
-      // 落盘前同步比对；不一致就丢掉本轮结果、在新值上重跑 mutator。
-      const written = persist(next, text, text)
-      if (!written) {
+      // 落盘前同步比对；不一致时 `writeDiskSync` 抛 `CONFLICT` 且**不写**，我们在新值上重跑 mutator。
+      try {
+        persist(next, text, text)
+      } catch (e) {
+        // **只接「CAS 冲突」这一种** —— 它不是失败，是"该重跑"。
+        // 其余（IO 错 / 无 Node）一律往上抛：那是真失败，不许在这里变成"再试一次"。
+        if (!(e instanceof CepError && e.code === 'CONFLICT')) throw e
         attempts += 1
         if (attempts > retries) {
           throw new CepError('IO', msg.data.fn.fileLockedByOtherPanel(target, String(retries)))
         }
         log.warn('repo', `${target} 被其他面板改过，重试 ${attempts}/${retries}`)
-        // **不再退避等待**：整段同步，本进程内不可能有第二个写插进来；
+        // 不退避等待：整段同步，本进程内不可能有第二个写插进来；
         // 跨进程窗口只剩「读 → 比对」几条指令，立刻重试就是最优解。
-        // 加 sleep 要把这段重新变成 async，等于把刚关掉的窗口再打开。
         continue
       }
 

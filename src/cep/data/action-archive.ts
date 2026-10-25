@@ -54,10 +54,15 @@ function validateImported(file: DzxFile): void {
 
 function removeAll(fileNames: string[]): void {
   for (const name of fileNames) {
-    // 删除失败只留下孤儿文件，不回滚已成功的索引——但**必须记下来**（旧实现的 catch 是死代码：
-    // `removeFile` 从不抛，返回值却被丢掉，删没删掉没人知道，TD-09-26）
-    const removed = removeFile(pathOf(name))
-    if (!removed.ok) log.warn('action', `清理旧仓库文件失败（留下孤儿）：${name}`, removed.reason)
+    try {
+      removeFile(pathOf(name))
+    } catch (e) {
+      // 这是**收尾清理**：索引已经写成功了，删不掉旧文件只留下孤儿，不回滚索引。
+      // 但**必须记下来** —— 旧实现里这段判断是死代码（`removeFile` 从不抛、返回值却被丢掉），
+      // 删没删掉没人知道（TD-09-26）。现在它是活的：抛出来 → 落日志。
+      // 已知缺口：孤儿文件在 UI 上不可见（只这一条日志），见 35 号 §3.2。
+      log.warn('action', `清理旧仓库文件失败（留下孤儿）：${name}`, e)
+    }
   }
 }
 
@@ -148,10 +153,9 @@ function importArchiveFromText(append: boolean, text: string): void {
   const written: string[] = []
   try {
     for (const entry of imported.arrFileData) {
-      const outcome = writeBase64File(pathOf(entry.name), entry.data)
-      if (outcome.status === 'error') {
-        throw new CepError('IO', msg.data.fn.writeWarehouseFailed(entry.name, outcome.reason))
-      }
+      // 写失败直接抛（错误信息里带完整路径与原因）；抛之前 `written` 只记成功的，
+      // 下面的 catch 用它回滚 —— 这是"只回滚自己写成功的"，不是吞。
+      writeBase64File(pathOf(entry.name), entry.data)
       written.push(entry.name)
     }
 

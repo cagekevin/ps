@@ -148,10 +148,10 @@ export function deleteWarehouse(index: number): void {
     if (!target) throw new Error('仓库不存在')
 
     if (hasNode()) {
-      // 删不掉要说出来：旧实现丢返回值，磁盘上旧 sj_dz*.json 还在而用户以为仓库已删（TD-09-26）
-      const removed = removeFile(`${userDir()}/${target.fileName}`)
-      if (!removed.ok)
-        throw new CepError('IO', msg.data.fn.warehouseDeleteFailed(target.fileName, removed.reason))
+      // 删不掉会抛（错误里带完整路径与原因）：旧实现丢返回值，磁盘上旧 sj_dz*.json 还在
+      // 而用户以为仓库已删（TD-09-26）。**先删文件、成功后才改索引** —— 反过来的话
+      // 删失败就留下"索引说没有、磁盘还有"的孤儿。
+      removeFile(`${userDir()}/${target.fileName}`)
     }
 
     actionIndexImpl.update((value) => {
