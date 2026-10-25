@@ -12,15 +12,12 @@ import { userDir } from '@/cep/paths'
 import { CepError } from '@/utils/errors'
 import { msg } from '@/domain/messages'
 import { isUnknownArray } from '@/utils/guards'
-import { log } from '@/utils/logger'
 import { repoAt } from './repo-at'
 import { readRepoFile } from './repo-read'
-import { writeProtectedTextNow } from './protected-text'
-import type { Repo } from './types'
-import { runQueued } from './write-queue'
+import { writeProtectedText } from './protected-text'
+import type { Repo, RepoRead } from './types'
 
 /** 写队列搬到了 `data/write-queue.ts`（TD-09-18：数据层只留一条链） */
-export { runQueued } from './write-queue'
 /**
  * 色板目录名。原版 `sf.js:11` 的 `g_FN.muLu = "/FengZiSeBan"`，挂在 `getUserDataPath()`（`%APPDATA%`）下。
  * 注意它**不在** `USER_DIR`（`/SheJiZhuLi`）里面 —— 原版 `path.seBan` =
@@ -71,20 +68,21 @@ export function recentLimitPath(): string {
  * **有意偏离**：原版 `readToArray` 连 JSON 坏掉也吞成 `[]`，然后 `write` 覆盖回去 ——
  * 用户的色板会被一次追加抹平。这里坏文件直接抛，宁可这次操作失败。
  */
-export async function readSwatchItems(path: string): Promise<unknown[]> {
+export function readSwatchItems(path: string): RepoRead<unknown[]> {
   const outcome = readRepoFile(path, decodeSwatchArray)
-  if (outcome.kind === 'ok') return outcome.value
-  if (outcome.kind === 'absent') return []
-  // 空文件 = 空数组（原版 `readToArray` 同语义）。它进 `notJson`（空串 parse 失败），
-  // 但零字节不是坏文件，所以单独放行。
-  if (outcome.text === '') return []
+  if (outcome.kind === 'ok') return { ok: true, value: outcome.value }
+  if (outcome.kind === 'absent') return { ok: true, value: [] }
+  // 空文件 = 空数组（原版 `readToArray` 同语义）：零字节不是坏文件
+  if (outcome.text === '') return { ok: true, value: [] }
   // T-112：读不到时**不许**返回 `[]`——调用方会把追加后的内容整份写回，等于把一份读不到的
-  // 色板抹平。只有 `absent`（还没有色板文件）才是"空数组"。
+  // 色板抹平。`ok:false` 分支上没有 `.value`，调用方**必须**显式处理（抛或提示），吞不掉。
   if (outcome.why === 'readError') {
-    throw new CepError('IO', msg.data.fn.swatchReadFailed(path, outcome.reason))
+    return { ok: false, reason: msg.data.fn.swatchReadFailed(path, outcome.reason), fallback: [] }
   }
-  if (outcome.why === 'notJson') throw new CepError('PARSE', msg.data.fn.swatchNotJson(path))
-  throw new CepError('PARSE', msg.data.fn.swatchRootNotArray(path))
+  if (outcome.why === 'notJson') {
+    return { ok: false, reason: msg.data.fn.swatchNotJson(path), fallback: [] }
+  }
+  return { ok: false, reason: msg.data.fn.swatchRootNotArray(path), fallback: [] }
 }
 
 /**
@@ -127,8 +125,8 @@ function swatchRepo(path: string): Repo<unknown[]> {
  * （`appendCustomItem` / `setRecentLimit` / `style-library-repo` 的四个"发到色板"），
  * 再排一次队会自锁。T-112（读不到不许写）与 TD-09-21（坏原文隔离）由 `file-repo.rawOverwrite` 保证。
  */
-export async function writeSwatchItems(path: string, items: unknown[]): Promise<void> {
-  await swatchRepo(path).overwrite(items)
+export function writeSwatchItems(path: string, items: unknown[]): void {
+  swatchRepo(path).overwrite(items)
 }
 
 // ---------- 变更通知（本地写成功后重读投影） ----------
@@ -156,12 +154,12 @@ export const DEFAULT_RECENT_LIMIT = 10
 export const RECENT_LIMIT_MAX = 15
 
 /** 读自定义色数组（`userColor.ini`） */
-export function readCustomItems(): Promise<unknown[]> {
+export function readCustomItems(): RepoRead<unknown[]> {
   return readSwatchItems(swatchFilePath())
 }
 
 /** 读最近色数组（`vecently.ini`） */
-export function readRecentItems(): Promise<unknown[]> {
+export function readRecentItems(): RepoRead<unknown[]> {
   return readSwatchItems(recentFilePath())
 }
 
@@ -176,19 +174,20 @@ export function readRecentItems(): Promise<unknown[]> {
  * 读失败（`EPERM` / `EBUSY`）按默认值处理并落日志：这是**偏好级**数据（丢了只影响
  * "保留几条"），不该让整个面板读不出来。数据文件（色板本身）的读失败仍然抛。
  */
-export async function readRecentLimit(): Promise<number> {
+export function readRecentLimit(): RepoRead<number> {
   // 这个文件是 `.txt`（纯文本整数，不是 JSON）⇒ 走纯文本档；数据文件才走 `readRepoFile`
   const read = readOwnFileText(recentLimitPath())
   if (read.status === 'error') {
-    log.warn('swatch', '最近色数量读不到，按默认值处理', read.reason)
-    return DEFAULT_RECENT_LIMIT
+    return { ok: false, reason: msg.data.fn.swatchReadFailed(recentLimitPath(), read.reason), fallback: DEFAULT_RECENT_LIMIT }
   }
-  if (read.status === 'notSeen') return DEFAULT_RECENT_LIMIT
+  if (read.status === 'notSeen') return { ok: true, value: DEFAULT_RECENT_LIMIT }
 
   const value = parseInt(read.text, 10)
-  return Number.isFinite(value) && value > 0 && value <= RECENT_LIMIT_MAX
-    ? value
-    : DEFAULT_RECENT_LIMIT
+  return {
+    ok: true,
+    value:
+      Number.isFinite(value) && value > 0 && value <= RECENT_LIMIT_MAX ? value : DEFAULT_RECENT_LIMIT,
+  }
 }
 
 /** 颜色项的 `hex`；不是颜色项返回空串（调用方决定要不要抛） */
@@ -206,20 +205,22 @@ function itemHex(item: unknown): string {
  * 原版 `TianJiaDaoWenJian`（`sf.js:341-373`）：命中 `hex` → **不添加**，只把已有色块闪三下。
  * 返回 `{ added }` 让调用方决定提示；去重在**同一条队列槽内**做完，两次连点不会加两条。
  */
-export function appendCustomItem(item: unknown): Promise<{ added: boolean }> {
-  return runQueued(async () => {
-    const hex = itemHex(item)
-    // 官方在这里会对 `undefined.color` 直接抛 TypeError；我们抛带原因的错误
-    if (!hex) throw new CepError('PARSE', msg.data.text.swatchNotColorItem)
+export function appendCustomItem(item: unknown): { added: boolean } {
+  const hex = itemHex(item)
+  // 官方在这里会对 `undefined.color` 直接抛 TypeError；我们抛带原因的错误
+  if (!hex) throw new CepError('PARSE', msg.data.text.swatchNotColorItem)
 
-    const path = swatchFilePath()
-    const items = await readSwatchItems(path)
-    if (items.some((existing) => itemHex(existing) === hex)) return { added: false }
+  // 「读 → 判重 → 写」是一个同步段：两次连点不可能插进来加两条
+  const path = swatchFilePath()
+  const read = readSwatchItems(path)
+  // T-112：读不到就不许写回 —— 否则一次追加会把整份读不到的色板抹平
+  if (!read.ok) throw new CepError('IO', read.reason)
+  const items = read.value
+  if (items.some((existing) => itemHex(existing) === hex)) return { added: false }
 
-    items.push(item)
-    await writeSwatchItems(path, items)
-    return { added: true }
-  })
+  items.push(item)
+  writeSwatchItems(path, items)
+  return { added: true }
 }
 
 /**
@@ -232,19 +233,20 @@ export function appendCustomItem(item: unknown): Promise<{ added: boolean }> {
  * `splice(0, 1)`（删最前、保最新）方向相反。这里统一成**删最前、保最新**：
  * "最近使用"的语义该保新。用户可见差异只在"把数量调小"这一个动作上。
  */
-export function setRecentLimit(limit: number): Promise<void> {
-  return runQueued(async () => {
-    // 受保护的纯文本写：备份 + 原子写 + 回读校验（TD-09-19 / TD-16-1）。
-    // 这句以前是裸 `writeTextFile`：无 tmp、非原子、无备份——面板关在写中途就留下半截数字文件。
-    await writeProtectedTextNow(recentLimitPath(), String(limit))
+export function setRecentLimit(limit: number): void {
+  // 受保护的纯文本写：备份 + 原子写 + 回读校验（TD-09-19 / TD-16-1）。
+  // 这句以前是裸 `writeTextFile`：无 tmp、非原子、无备份——面板关在写中途就留下半截数字文件。
+  writeProtectedText(recentLimitPath(), String(limit))
 
-    const items = await readSwatchItems(recentFilePath())
-    if (items.length <= limit) {
-      // 数量文件已经变了，投影要跟着变；色板本身没动，不重写
-      emitChange()
-      return
-    }
-    // `writeSwatchItems` 内部会 emitChange
-    await writeSwatchItems(recentFilePath(), items.slice(items.length - limit))
-  })
+  // 「写数量 → 读色板 → 裁剪 → 写回」是一个同步段
+  const read = readSwatchItems(recentFilePath())
+  if (!read.ok) throw new CepError('IO', read.reason)
+  const items = read.value
+  if (items.length <= limit) {
+    // 数量文件已经变了，投影要跟着变；色板本身没动，不重写
+    emitChange()
+    return
+  }
+  // `writeSwatchItems` 内部会 emitChange
+  writeSwatchItems(recentFilePath(), items.slice(items.length - limit))
 }

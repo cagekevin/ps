@@ -94,13 +94,13 @@ export interface StyleLibrarySnapshot {
  * 契约：**读坏了也返回**（`value` 是归一后的结果，`degraded` 非空说明为什么不可信），
  * 由调用方决定"照常用 + 提示"还是"中止写入"——两种策略的判据都在调用方，不在这里。
  */
-export async function readIndexState(): Promise<{
+export function readIndexState(): {
   value: StyleWarehouseIndex
   degraded: string
-}> {
+} {
   // 锁内的读：本函数会在 `runQueued` 任务体里被调用（`updateKuGroups`/仓库事务），
   // 再走排队的 `read()` 会把队列排在自己后面 → 自锁（write-queue.ts:6）。读不排队是安全的（原子写）。
-  const stored = await styleIndexImpl.read()
+  const stored = styleIndexImpl.read()
   // 坏索引没有 value：用仓库自己的 fallback 继续归一，坏因拼进 degraded
   const parsed = readStyleWarehouseIndex(stored.ok ? stored.value : defaultStyleIndex())
   return {
@@ -136,9 +136,9 @@ export async function readStyleLibrary(): Promise<StyleLibrarySnapshot> {
 }
 
 /** 当前仓库某个库的绝对路径；**读**用它（索引里没登记文件名就等于没这个库，不许猜路径） */
-async function currentLibPath(kind: KuKind): Promise<string> {
+function currentLibPath(kind: KuKind): string {
   // 锁内读（在 send* 的 runQueued 任务体里被调用）：走 readInLock 避免自锁
-  const stored = await styleIndexImpl.read()
+  const stored = styleIndexImpl.read()
   // 「索引文件坏了」≠「这个仓库没登记库文件名」：不分开说，用户会以为是自己没建过库（T-101-1）
   if (!stored.ok) {
     throw new CepError('IO', msg.data.fn.warehouseIndexCorruptAbort(stored.reason))
@@ -156,7 +156,7 @@ async function currentLibPath(kind: KuKind): Promise<string> {
 }
 
 /** 读任意一个库文件的原文（导出用：`.kux` 要按索引里的文件名逐个读，不只是当前仓库） */
-export async function readKuFileText(fileName: string): Promise<string | null> {
+export function readKuFileText(fileName: string): string | null {
   if (!fileName) return null
   if (/[\\/]/.test(fileName)) throw new CepError('PARSE', msg.data.fn.libFileNameInvalid(fileName))
   const read = readOwnFileText(`${userDir()}/${fileName}`)
@@ -167,8 +167,8 @@ export async function readKuFileText(fileName: string): Promise<string | null> {
 }
 
 /** 读库文件里的原始组数组；读不到一律抛（不猜、不补默认） */
-async function readRawGroups(kind: KuKind): Promise<{ path: string; groups: KuRawGroup[] }> {
-  const path = await currentLibPath(kind)
+function readRawGroups(kind: KuKind): { path: string; groups: KuRawGroup[] } {
+  const path = currentLibPath(kind)
   const read = readOwnFileText(path)
   // T-107：两种不 ok 这里同果（都抛）。文案本来就写的是"读不到"，对两种都成立，不改
   if (read.status !== 'ok') throw new CepError('IO', msg.data.fn.libFileReadFailed(kind, path))
@@ -304,8 +304,8 @@ function itemAt(groups: KuRawGroup[], groupIndex: number, itemIndex: number): Ku
  * 这时 `fileRepo.update` 会把默认值写回去，用户的仓库列表就被默认值顶掉了
  * （原件虽在 `.bak`，但用户不该承担这个）。所以这类一律抛。
  */
-async function usableIndex(): Promise<StyleWarehouseIndex> {
-  const state = await readIndexState()
+function usableIndex(): StyleWarehouseIndex {
+  const state = readIndexState()
   if (state.degraded)
     throw new CepError('PARSE', msg.data.fn.warehouseIndexUnusableAbortWrite(state.degraded))
   return state.value
@@ -477,7 +477,7 @@ export interface WarehouseDeleteResult {
  * 读不到 / 不是数组 = 这个库没有可枚举的图片，**不抛**：枚举失败只会留下孤儿文件，不会丢数据，
  * 而删仓库这件事本身不该被一个读不动的库文件卡住。
  */
-async function groupsOfFile(fileName: string | undefined): Promise<Record<string, unknown>[]> {
+function groupsOfFile(fileName: string | undefined): Record<string, unknown>[] {
   if (!fileName) return []
   const read = readOwnFileText(`${userDir()}/${fileName}`)
   // 这里的合并是**有意的**（上面注释：删仓库不该被一个读不动的库文件卡住），不是欠账。
@@ -507,7 +507,7 @@ async function groupsOfFile(fileName: string | undefined): Promise<Record<string
  * 原版还会清 `kuStyleTempInfo` 里该组的待删样式清单（`clearDeleteStyleId`，`:53061-53069`）；
  * 那个临时文件本项目不写（库文件格式契约 §4.4），所以这里没有这一步。
  */
-async function warehouseFiles(warehouse: StyleWarehouse): Promise<string[]> {
+function warehouseFiles(warehouse: StyleWarehouse): string[] {
   const files: string[] = []
 
   for (const kind of KU_KINDS) {
@@ -515,7 +515,7 @@ async function warehouseFiles(warehouse: StyleWarehouse): Promise<string[]> {
     if (fileName) files.push(fileName)
   }
 
-  for (const group of await groupsOfFile(fileNameOf(warehouse, 'style'))) {
+  for (const group of groupsOfFile(fileNameOf(warehouse, 'style'))) {
     // 组的 `.psd` 与项的 `.png` 是两条独立清单（原版先 `deleteItemFile(list)` 再删组的 psd），
     // 组没有 id 时项的缩略图照样要算进来
     if (typeof group.id === 'string' && group.id) files.push(`kuStyle/${group.id}.psd`)
@@ -527,7 +527,7 @@ async function warehouseFiles(warehouse: StyleWarehouse): Promise<string[]> {
     }
   }
 
-  for (const group of await groupsOfFile(fileNameOf(warehouse, 'gradient'))) {
+  for (const group of groupsOfFile(fileNameOf(warehouse, 'gradient'))) {
     const list = Array.isArray(group.list) ? group.list : []
     for (const item of list) {
       if (!isRecord(item)) continue
@@ -545,7 +545,7 @@ async function warehouseFiles(warehouse: StyleWarehouse): Promise<string[]> {
  * 把一个文件**复制**进回收目录。不存在 = 没东西可移（原版 `delete` 对不存在的路径也是静默返回）。
  * 复制失败抛：这一步在写索引之前，抛出去时索引与原件都还没动。
  */
-async function copyToRecycle(relative: string, recycleDir: string): Promise<boolean> {
+function copyToRecycle(relative: string, recycleDir: string): boolean {
   const read = readBase64File(`${userDir()}/${relative}`)
   // T-109：读不到 ≠ 没有。返回 `false` 只表示"没东西可移"——原件不会被删，留在原位。
   // 读不到也走这条（不抛）：抛会中止整次删仓库，而留下的只是一个孤儿文件
@@ -875,12 +875,10 @@ export function sendKuItemToSwatch(
   kind: KuKind,
   groupIndex: number,
   itemIndex: number,
-): Promise<void> {
-  return runQueued(async () => {
-    const { groups } = await readRawGroups(kind)
-    const item = itemAt(groups, groupIndex, itemIndex)
-    await writeSwatchItems(swatchFilePath(), [item])
-  })
+): void {
+  const { groups } = readRawGroups(kind)
+  const item = itemAt(groups, groupIndex, itemIndex)
+  writeSwatchItems(swatchFilePath(), [item])
 }
 
 /**
@@ -890,39 +888,37 @@ export function appendKuItemToSwatch(
   kind: KuKind,
   groupIndex: number,
   itemIndex: number,
-): Promise<void> {
-  return runQueued(async () => {
-    const { groups } = await readRawGroups(kind)
-    const item = itemAt(groups, groupIndex, itemIndex)
-    const path = swatchFilePath()
+): void {
+  const { groups } = readRawGroups(kind)
+  const item = itemAt(groups, groupIndex, itemIndex)
+  const path = swatchFilePath()
 
-    const items = await readSwatchItems(path)
-    items.push(item)
-    await writeSwatchItems(path, items)
-  })
+  const read = readSwatchItems(path)
+  if (!read.ok) throw new CepError('IO', read.reason)
+  const items = read.value
+  items.push(item)
+  writeSwatchItems(path, items)
 }
 
 /**
  * 发送到色板（整组）。原版 `:50260-50268`：
  * `write(path.seBan, JSON.stringify(data.info[index].list))` —— **整份替换**，不是逐项追加。
  */
-export function sendKuGroupToSwatch(kind: KuKind, groupIndex: number): Promise<void> {
-  return runQueued(async () => {
-    const { groups } = await readRawGroups(kind)
-    const list = itemList(groupAt(groups, groupIndex), groupIndex)
-    await writeSwatchItems(swatchFilePath(), list)
-  })
+export function sendKuGroupToSwatch(kind: KuKind, groupIndex: number): void {
+  const { groups } = readRawGroups(kind)
+  const list = itemList(groupAt(groups, groupIndex), groupIndex)
+  writeSwatchItems(swatchFilePath(), list)
 }
 
 /** 追加到色板（整组）。原版 `:50269-50290`：读回 → 逐项 push 该组 `list` → 写回 */
-export function appendKuGroupToSwatch(kind: KuKind, groupIndex: number): Promise<void> {
-  return runQueued(async () => {
-    const { groups } = await readRawGroups(kind)
-    const list = itemList(groupAt(groups, groupIndex), groupIndex)
-    const path = swatchFilePath()
+export function appendKuGroupToSwatch(kind: KuKind, groupIndex: number): void {
+  const { groups } = readRawGroups(kind)
+  const list = itemList(groupAt(groups, groupIndex), groupIndex)
+  const path = swatchFilePath()
 
-    const items = await readSwatchItems(path)
-    for (const item of list) items.push(item)
-    await writeSwatchItems(path, items)
-  })
+  const read = readSwatchItems(path)
+  if (!read.ok) throw new CepError('IO', read.reason)
+  const items = read.value
+  for (const item of list) items.push(item)
+  writeSwatchItems(path, items)
 }

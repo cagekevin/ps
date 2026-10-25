@@ -162,11 +162,11 @@ function sidecarNamesOf(kind: 'style' | 'gradient', groups: readonly KuRawGroup[
 }
 
 /** 一个仓库的旁路图清单。库文件读不懂就跳过：只会少带图片，不会导出坏数据 */
-async function sidecarNamesOfWarehouse(warehouse: StyleWarehouse): Promise<string[]> {
+function sidecarNamesOfWarehouse(warehouse: StyleWarehouse): string[] {
   const names: string[] = []
 
   for (const kind of ['style', 'gradient'] as const) {
-    const text = await readKuFileText(fileNameOf(warehouse, kind))
+    const text = readKuFileText(fileNameOf(warehouse, kind))
     if (!text) continue
     try {
       names.push(...sidecarNamesOf(kind, parseKuGroups(text)))
@@ -212,8 +212,8 @@ function validateContainer(file: KuContainerFile): void {
  * 可写前提下的索引：索引读不懂就抛。
  * 覆盖导入例外（它本来就要整份替换，且替换前会留 `.bak`），见 `importKuArchive`。
  */
-async function currentIndex(): Promise<StyleWarehouseIndex> {
-  const { value, degraded } = await readIndexState()
+function currentIndex(): StyleWarehouseIndex {
+  const { value, degraded } = readIndexState()
   if (degraded) throw new CepError('PARSE', msg.data.fn.warehouseIndexUnusable(degraded))
   return value
 }
@@ -321,14 +321,14 @@ function moveToRecycle(names: readonly string[], keep: ReadonlySet<string>, dir:
 }
 
 /** 旧索引引用的全部文件（四个库 + 旁路图），用于替换导入后的清理 */
-async function filesOfIndex(index: StyleWarehouseIndex): Promise<string[]> {
+function filesOfIndex(index: StyleWarehouseIndex): string[] {
   const names: string[] = []
   for (const warehouse of index.list) {
     for (const kind of KU_CONTAINER_ORDER) {
       const fileName = fileNameOf(warehouse, kind)
       if (fileName) names.push(fileName)
     }
-    names.push(...(await sidecarNamesOfWarehouse(warehouse)))
+    names.push(...(sidecarNamesOfWarehouse(warehouse)))
   }
   return [...new Set(names)]
 }

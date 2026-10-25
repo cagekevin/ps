@@ -92,22 +92,6 @@ function convert(raw: unknown[]): SwatchConvertResult {
   return { items, skipped }
 }
 
-/**
- * 把一次读包成"成 / 败"两臂。
- *
- * 不用 `Promise.allSettled`：`src` 的 `lib` 是 ES2019（`tsconfig.json`），没有它；
- * 也不能为此放宽 tsconfig —— 那会让别的 ES2020+ 语法静默进 CEP（ADR 口径同硬规则 20）。
- */
-type Settled<T> = { ok: true; value: T } | { ok: false; reason: unknown }
-
-async function settle<T>(task: Promise<T>): Promise<Settled<T>> {
-  try {
-    return { ok: true, value: await task }
-  } catch (e) {
-    return { ok: false, reason: e }
-  }
-}
-
 export const useSwatchStore = defineStore('swatch', () => {
   /** 自定义色（`userColor.ini`，原版 `#div_ZiDingYi`） */
   const custom = ref<SwatchItem[]>([])
@@ -135,12 +119,14 @@ export const useSwatchStore = defineStore('swatch', () => {
     degraded.value = ''
 
     try {
-      // 三个文件各自读：任何一个读坏都不该把另外两个也拖成空
-      const [customRead, recentRead, limitRead] = await Promise.all([
-        settle(readCustomItems()),
-        settle(readRecentItems()),
-        settle(readRecentLimit()),
-      ])
+      // 三个文件各自读：任何一个读坏都不该把另外两个也拖成空。
+      // 仓库读返回判别联合（`ok:false` 上没有 `.value`），**没有 try/catch 可吞** ——
+      // 读失败必须走下面的 notes 让用户看见。
+      const [customRead, recentRead, limitRead] = [
+        readCustomItems(),
+        readRecentItems(),
+        readRecentLimit(),
+      ]
 
       const notes: string[] = []
 
@@ -176,10 +162,11 @@ export const useSwatchStore = defineStore('swatch', () => {
       // 每次 load 开头都清空，读全了就是空串 ⇒ 页面不显示任何提示。
       degraded.value = reason ? `${reason}；可点"重试"重新读取（文件被改动或权限恢复后即恢复）` : ''
       if (notes.length) log.warn('swatch', '色板读取有降级', notes)
-    } catch (e) {
-      error.value = describeCepError(e)
-      log.error('swatch', '读取色板失败', e)
     } finally {
+      // **只有 `finally`，没有 `catch`**：
+      // 读失败已经由判别联合走 `notes`（用户看得见），所以这里没有"读失败"可接。
+      // 真抛出来的只可能是编程错误 —— 把它变成一句"读取失败"文案就是**把 bug 伪装成数据问题**。
+      // 让它往上抛（`useCommand` 统一报），`finally` 只负责把 spinner 复位。
       loading.value = false
     }
   }

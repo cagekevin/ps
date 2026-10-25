@@ -1,14 +1,13 @@
 import { readBase64File, readExternalText } from '@/cep/fs-read'
 import { userDir } from '@/cep/paths'
 import { removeFile, writeBase64File } from '@/cep/disk-write'
-import { writeDisk } from '@/cep/disk-write'
+import { writeDiskSync } from '@/cep/disk-write'
 import type { ActionWarehouseIndex } from '@/domain/action'
 import { decodeDzx, encodeDzx, remapDzxFileNames, type DzxFile } from '@/domain/action-dzx'
 import { CepError } from '@/utils/errors'
 import { msg } from '@/domain/messages'
 import { log } from '@/utils/logger'
 import { actionIndexWriter, currentWarehouseFile, selectActionFile } from './actions'
-import { runQueued } from './write-queue'
 import type { RepoRead } from './types'
 
 /**
@@ -87,77 +86,81 @@ export async function archiveDefaultName(current: boolean): Promise<string> {
   return current ? `${list[0].name}.dzx` : '全部仓库.dzx'
 }
 
-export function exportActionArchive(current: boolean, targetPath: string): Promise<void> {
-  return runQueued(async () => {
-    // 锁内读：走不排队的 readInLock，避免 runQueued 套 runQueued 自锁（write-queue.ts:6 / TD-09-30）
-    const index = requireIndex(await actionIndexWriter.read(), '导出')
-    const list = current ? [index.list[index.index]].filter(Boolean) : index.list
-    if (!list.length) throw new CepError('PARSE', msg.data.text.noExportableWarehouse)
+export function exportActionArchive(current: boolean, targetPath: string): void {
+  // 整段是同步段：读索引 → 读各库文件 → 原子写导出包
+  const index = requireIndex(actionIndexWriter.read(), '导出')
+  const list = current ? [index.list[index.index]].filter(Boolean) : index.list
+  if (!list.length) throw new CepError('PARSE', msg.data.text.noExportableWarehouse)
 
-    const arrFileData = list.map((item) => {
-      const read = readBase64File(pathOf(item.fileName))
-      // T-109：导出前读不到就不许导出。两种不 ok 这里同果（都抛同一句），文案不变
-      if (read.status !== 'ok')
-        throw new CepError('IO', msg.data.fn.readWarehouseFailed(item.fileName))
-      return { name: item.fileName, data: read.base64 }
-    })
-
-    const store: ActionWarehouseIndex = current
-      ? { ...index, index: 0, list: [{ ...list[0] }] }
-      : index
-
-    // 导出包是**新文件**，无 `.bak` 概念（`previous: null`）；走唯一落盘入口（原子写）
-    await writeDisk(targetPath, encodeDzx({ arrFileData, store }), { previous: null })
+  const arrFileData = list.map((item) => {
+    const read = readBase64File(pathOf(item.fileName))
+    // T-109：导出前读不到就不许导出。两种不 ok 这里同果（都抛同一句），文案不变
+    if (read.status !== 'ok')
+      throw new CepError('IO', msg.data.fn.readWarehouseFailed(item.fileName))
+    return { name: item.fileName, data: read.base64 }
   })
+
+  const store: ActionWarehouseIndex = current
+    ? { ...index, index: 0, list: [{ ...list[0] }] }
+    : index
+
+  // 导出包是**新文件**，无 `.bak` 概念（`previous: null`）；走唯一落盘入口（原子写）
+  writeDiskSync(targetPath, encodeDzx({ arrFileData, store }), { previous: null })
 }
 
-export function importActionArchive(append: boolean, sourcePath: string): Promise<void> {
-  return runQueued(async () => {
-    const read = await readExternalText(sourcePath)
-    // T-107：导入前读不到就不许继续。两种不 ok 这里同果（都抛同一句），文案不变
-    if (read.status !== 'ok') throw new CepError('IO', msg.data.text.readImportFileFailed)
-    const text = read.text
+/**
+ * 导入 `.dzx`。
+ *
+ * **唯一需要 async 的地方**：读用户对话框选的文件（无 Node 时走 jsx 回退，物理上不可能同步）。
+ * 拿到文本立刻转交同步写段 —— 写段里写 `await` 是**语法错误**，
+ * 所以「读 → 改 → 写」在结构上不可能被打断。
+ */
+export async function importActionArchive(append: boolean, sourcePath: string): Promise<void> {
+  const read = await readExternalText(sourcePath)
+  // T-107：导入前读不到就不许继续。两种不 ok 这里同果（都抛同一句），文案不变
+  if (read.status !== 'ok') throw new CepError('IO', msg.data.text.readImportFileFailed)
+  importArchiveFromText(append, read.text)
+}
 
-    let imported: DzxFile
-    try {
-      imported = remapDzxFileNames(decodeDzx(text))
-      validateImported(imported)
-    } catch (e) {
-      if (e instanceof CepError) throw e
-      throw new CepError('PARSE', e instanceof Error ? e.message : '导入文件结构不正确')
-    }
+/** 同步写段：解析 → 写各库文件 → 写索引 → 清理旧文件。整段不可打断。 */
+function importArchiveFromText(append: boolean, text: string): void {
+  let imported: DzxFile
+  try {
+    imported = remapDzxFileNames(decodeDzx(text))
+    validateImported(imported)
+  } catch (e) {
+    if (e instanceof CepError) throw e
+    throw new CepError('PARSE', e instanceof Error ? e.message : '导入文件结构不正确')
+  }
 
-    // 任何写之前先确认索引是真实数据：坏索引时下面的 next.list 会基于 fallback 算出来
-    // 锁内读：readInLock（不自排自，TD-09-30）
-    const current = requireIndex(await actionIndexWriter.read(), '导入')
-    const nextList = append ? [...current.list, ...imported.store.list] : imported.store.list
-    const next: ActionWarehouseIndex = {
-      index: append ? nextList.length - 1 : 0,
-      list: nextList,
-    }
+  // 任何写之前先确认索引是真实数据：坏索引时下面的 next.list 会基于 fallback 算出来
+  const current = requireIndex(actionIndexWriter.read(), '导入')
+  const nextList = append ? [...current.list, ...imported.store.list] : imported.store.list
+  const next: ActionWarehouseIndex = {
+    index: append ? nextList.length - 1 : 0,
+    list: nextList,
+  }
 
-    const written: string[] = []
-    try {
-      for (const entry of imported.arrFileData) {
-        const outcome = writeBase64File(pathOf(entry.name), entry.data)
-        if (outcome.status === 'error') {
-          throw new CepError('IO', msg.data.fn.writeWarehouseFailed(entry.name, outcome.reason))
-        }
-        written.push(entry.name)
+  const written: string[] = []
+  try {
+    for (const entry of imported.arrFileData) {
+      const outcome = writeBase64File(pathOf(entry.name), entry.data)
+      if (outcome.status === 'error') {
+        throw new CepError('IO', msg.data.fn.writeWarehouseFailed(entry.name, outcome.reason))
       }
-
-      // 已在全局写锁内：再排队会自锁（writeInLock 的注释写了这一条）
-      await actionIndexWriter.write(next)
-    } catch (e) {
-      removeAll(written)
-      throw e
+      written.push(entry.name)
     }
 
-    selectActionFile(currentWarehouseFile(next))
+    actionIndexWriter.write(next)
+  } catch (e) {
+    removeAll(written)
+    throw e
+  }
 
-    if (!append) {
-      const keep = new Set(next.list.map((item) => item.fileName))
-      removeAll(current.list.map((item) => item.fileName).filter((name) => !keep.has(name)))
-    }
-  })
+  selectActionFile(currentWarehouseFile(next))
+
+  if (!append) {
+    const keep = new Set(next.list.map((item) => item.fileName))
+    removeAll(current.list.map((item) => item.fileName).filter((name) => !keep.has(name)))
+  }
 }
