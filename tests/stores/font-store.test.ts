@@ -34,15 +34,15 @@ beforeEach(() => {
   setActivePinia(createPinia())
   localStorage.clear()
   vi.clearAllMocks()
-  meta.readFontTags.mockResolvedValue([])
-  meta.readFontStars.mockResolvedValue({ ok: true, stars: {} })
+  meta.readFontTags.mockReturnValue([])
+  meta.readFontStars.mockReturnValue({ ok: true, stars: {} })
   repos.tags.onChange.mockReturnValue(() => {})
   repos.stars.onChange.mockReturnValue(() => {})
 })
 
 describe('标签读取', () => {
   it('loadTags 成功填充，未强制时不重复请求', async () => {
-    meta.readFontTags.mockResolvedValue([tag('收藏')])
+    meta.readFontTags.mockReturnValue([tag('收藏')])
     const store = useFontStore()
 
     await store.loadTags()
@@ -53,7 +53,7 @@ describe('标签读取', () => {
   })
 
   it('loadTags(true) 强制重读（仓库变更后的刷新路径）', async () => {
-    meta.readFontTags.mockResolvedValue([tag('收藏')])
+    meta.readFontTags.mockReturnValue([tag('收藏')])
     const store = useFontStore()
 
     await store.loadTags()
@@ -71,7 +71,7 @@ describe('标签读取', () => {
 
   it('重试成功会清掉上一次的 tagsError', async () => {
     meta.readFontTags.mockRejectedValueOnce(new Error('读不到文件'))
-    meta.readFontTags.mockResolvedValue([tag('收藏')])
+    meta.readFontTags.mockReturnValue([tag('收藏')])
     const store = useFontStore()
 
     await store.loadTags()
@@ -85,7 +85,7 @@ describe('标签读取', () => {
 
 describe('星级读取', () => {
   it('loadStars 填充映射', async () => {
-    meta.readFontStars.mockResolvedValue({ ok: true, stars: { MiSans: 3 } })
+    meta.readFontStars.mockReturnValue({ ok: true, stars: { MiSans: 3 } })
     const store = useFontStore()
 
     await store.loadStars()
@@ -98,7 +98,7 @@ describe('星级读取', () => {
    * 空映射在页面上等于"你还没收藏过"——那是用户的结论，不是我们的故障。
    */
   it('读不到星级：starsError 带原因，stars 为空但界面能说出"读不到"', async () => {
-    meta.readFontStars.mockResolvedValue({ ok: false, stars: {}, reason: 'EPERM: 拒绝访问' })
+    meta.readFontStars.mockReturnValue({ ok: false, stars: {}, reason: 'EPERM: 拒绝访问' })
     const store = useFontStore()
 
     await store.loadStars()
@@ -143,7 +143,7 @@ describe('数据变更订阅（放最后：bindFontData 只生效一次）', () 
     expect(repos.tags.onChange).toHaveBeenCalledTimes(1)
     expect(repos.stars.onChange).toHaveBeenCalledTimes(1)
 
-    meta.readFontTags.mockResolvedValue([tag('新标签')])
+    meta.readFontTags.mockReturnValue([tag('新标签')])
     const store = useFontStore()
 
     const onChange = repos.tags.onChange.mock.calls[0][0] as () => void

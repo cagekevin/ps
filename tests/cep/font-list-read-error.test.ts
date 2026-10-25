@@ -19,7 +19,7 @@ vi.mock('@/cep/paths', () => ({
 }))
 vi.mock('@/cep/data/sys-font', () => ({
   readSysFontFile: sys.readSysFontFile,
-  mergeFontStars: async (list: unknown[]) => list,
+  mergeFontStars: (list: unknown[]) => list,
 }))
 vi.mock('@/cep/jsx', () => ({
   jsx: {
@@ -33,21 +33,21 @@ const { getFontList } = await import('@/cep/data/font-list')
 
 describe('getFontList 遇到读不到', () => {
   it('SysFont2.json 读不到 → 抛 IO 且带上原因（页面据此显示"读不到"）', async () => {
-    sys.readSysFontFile.mockResolvedValue({ status: 'error', reason: 'EACCES: 拒绝访问' })
+    sys.readSysFontFile.mockReturnValue({ status: 'error', reason: 'EACCES: 拒绝访问' })
 
     await expect(getFontList({ refresh: true })).rejects.toMatchObject({ code: 'IO' })
     await expect(getFontList({ refresh: true })).rejects.toThrow('读不到系统字体：EACCES')
   })
 
   it('文件不在 / 内容为空 → 抛 PARSE，同样不是空列表', async () => {
-    sys.readSysFontFile.mockResolvedValue({ status: 'none' })
+    sys.readSysFontFile.mockReturnValue({ status: 'none' })
 
     await expect(getFontList({ refresh: true })).rejects.toMatchObject({ code: 'PARSE' })
   })
 
   it('缓存命中时不再问 PS（读到且非空才算命中）', async () => {
     const cached = [{ family: 'MiSans', weights: [], names: [], postScriptNames: [], star: 0 }]
-    sys.readSysFontFile.mockResolvedValue({ status: 'ok', list: cached })
+    sys.readSysFontFile.mockReturnValue({ status: 'ok', list: cached })
 
     await expect(getFontList()).resolves.toEqual(cached)
   })

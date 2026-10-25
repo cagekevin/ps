@@ -66,8 +66,8 @@ beforeEach(() => {
   pinia = createPinia()
   setActivePinia(pinia)
   vi.clearAllMocks()
-  reads.readFontTags.mockResolvedValue([])
-  reads.readFontStars.mockResolvedValue({ ok: true, stars: {} })
+  reads.readFontTags.mockReturnValue([])
+  reads.readFontStars.mockReturnValue({ ok: true, stars: {} })
   reads.getFontList.mockResolvedValue([font('MiSans')])
   class NoopObserver {
     observe() {}
@@ -79,7 +79,7 @@ beforeEach(() => {
 
 describe('字体管理页 · 星级读不到（TD-01-4）', () => {
   it('星级读不到时页面上出现「读取不到星级文件」，并且说明 0 不代表没收藏', async () => {
-    reads.readFontStars.mockResolvedValue({ ok: false, stars: {}, reason: 'EPERM: 拒绝访问' })
+    reads.readFontStars.mockReturnValue({ ok: false, stars: {}, reason: 'EPERM: 拒绝访问' })
 
     const text = (await mountPage()).text()
 
@@ -88,7 +88,7 @@ describe('字体管理页 · 星级读不到（TD-01-4）', () => {
   })
 
   it('星级读得到时不出这句话（不许把正常状态也说成故障）', async () => {
-    reads.readFontStars.mockResolvedValue({ ok: true, stars: { MiSans: 3 } })
+    reads.readFontStars.mockReturnValue({ ok: true, stars: { MiSans: 3 } })
 
     const text = (await mountPage()).text()
 
