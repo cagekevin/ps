@@ -123,7 +123,9 @@ describe('fileRepo（真机装法：真 node:fs + 真 __adobe_cep__）', () => {
     const before = readTarget()
 
     behavior.halfWrite = true
-    await expect(repo.write([2, 3, 4])).rejects.toThrow()
+    // `Repo<T>` 已全同步 ⇒ 失败是**同步抛**，`await expect(...).rejects` 接不到
+    // （抛在 `expect` 被调用之前）。判据不变：写失败必须抛、目标文件必须还是旧内容。
+    expect(() => repo.write([2, 3, 4])).toThrow()
 
     // 非原子直写会在抛错前把目标截成半截 —— 半截 JSON 会让整库读不回来（TD-09-15）
     expect(readTarget()).toBe(before)
@@ -177,7 +179,8 @@ describe('fileRepo（真机装法：真 node:fs + 真 __adobe_cep__）', () => {
     const repo = makeRepo()
     fs.writeFileSync(target, '{ 半截', 'utf8')
 
-    await expect(repo.update((value) => [...value, 1])).rejects.toThrow()
+    // 同上：`update` 同步抛。判据不变：坏原文不许被当成"首次使用"覆盖掉（D-42）。
+    expect(() => repo.update((value) => [...value, 1])).toThrow()
 
     expect(readTarget()).toBe('{ 半截')
   }, 5000)
