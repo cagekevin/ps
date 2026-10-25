@@ -33,7 +33,7 @@ function installRealEnv(): void {
 
 // 顶层 import：`fs.ts` 的 `nodeRequire` 是运行时惰性调用（见 `fs.ts:getRequire`），
 // 只要在真正用到之前把 `window.require` 装上即可，模块加载顺序不影响。
-const { userDir } = await import('@/cep/fs')
+const { userDir } = await import('@/cep/paths')
 const { addKuGroup, selectWarehouse, deleteWarehouse, styleIndexWriter } =
   await import('@/cep/data/style-library-repo')
 const { importKuArchive } = await import('@/cep/data/style-library-io')

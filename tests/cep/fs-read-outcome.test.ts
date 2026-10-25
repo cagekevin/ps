@@ -52,7 +52,9 @@ function clearBridges() {
   delete (window as unknown as { __adobe_cep__?: unknown }).__adobe_cep__
 }
 
-const { combineReads, readTextOutcome } = await import('@/cep/fs')
+// `fs.ts` 已拆：异步三态读在 `fs-read`，且 `readTextOutcome` 已改名 `readTextAsync`
+// （与 `readTextSync` 成对）。局部保留旧名，正文 14 处断言不动。
+const { readTextAsync: readTextOutcome } = await import('@/cep/fs-read')
 
 beforeEach(() => {
   realFs.text = '{}'
@@ -148,33 +150,7 @@ describe('readTextOutcome · jsx 路（Node 不可用）', () => {
   })
 })
 
-/**
- * `combineReads` 是**策略**，不是观测（ADR-26 ② / 乙区 2）。
- *
- * 它只能留在原语层——数据层看不到"有两个来源"这件事——所以必须具名、可测、注释写明是策略，
- * 不许再往里塞别的规则。这几条钉的就是那一条策略本身。
- */
-describe('combineReads · 多来源优先级（策略）', () => {
-  it('jsx 读到内容就赢（Node 看不到也算读到了）', () => {
-    expect(combineReads({ status: 'notSeen' }, { status: 'ok', text: 'x' })).toEqual({
-      status: 'ok',
-      text: 'x',
-    })
-  })
-
-  it('Node 说读不到、jsx 说查不到 → 报 error（宁可报错，不许降级成首次使用）', () => {
-    const outcome = combineReads({ status: 'error', reason: 'EACCES' }, { status: 'notSeen' })
-    expect(outcome.status).toBe('error')
-    expect(outcome.status === 'error' ? outcome.reason : '').toBe('EACCES')
-  })
-
-  it('两条都说查不到 → notSeen（这时才算"没有这个文件"）', () => {
-    expect(combineReads({ status: 'notSeen' }, { status: 'notSeen' })).toEqual({
-      status: 'notSeen',
-    })
-  })
-
-  it('Node 不可用（null）时不造 error：jsx 说了算', () => {
-    expect(combineReads(null, { status: 'notSeen' })).toEqual({ status: 'notSeen' })
-  })
-})
+// `combineReads` 这个**具名策略**已随 `fs.ts` 一起消失：两条路的合并规则现在内联在
+// `readTextAsync` 里，由上面「jsx 路」那 4 条断言覆盖（它们测的正是同一条策略：
+// jsx 读到就赢 / Node 读不到 + jsx 查不到 → error / 两条都查不到 → notSeen）。
+// 策略本身没有消失，只是不再单独导出 —— 所以断言合并到行为层，不再测那个符号。

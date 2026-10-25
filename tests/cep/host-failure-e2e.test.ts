@@ -79,7 +79,7 @@ vi.mock('@/cep/data/actions', () => ({
 vi.mock('@/cep/data/free-panel', () => ({ freePanelRepo: {}, freePanelWriter: {} }))
 vi.mock('@/cep/data/settings', () => ({ settingsSnapshot: () => ({}) }))
 
-const { userDir } = await import('@/cep/fs')
+const { userDir } = await import('@/cep/paths')
 const logPath = () => `${userDir()}/sj_v5_log.txt`
 
 async function bootPanel() {

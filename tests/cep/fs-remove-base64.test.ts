@@ -52,7 +52,9 @@ function installNode() {
   }
 }
 
-const { dirUsage, readBase64Outcome } = await import('@/cep/fs')
+const { dirUsage } = await import('@/cep/dir-usage')
+// `readBase64Outcome` 已改名 `readBase64File`（与 `Base64Read` 形状配对）
+const { readBase64File: readBase64Outcome } = await import('@/cep/fs-read')
 const { removeFile } = await import('@/cep/disk-write')
 
 beforeEach(() => {
@@ -67,31 +69,34 @@ afterEach(() => {
   delete (window as unknown as { require?: unknown }).require
 })
 
+/**
+ * 判据 A（不许谎报成功）**没变**，变的是形状：
+ * `removeFile` 从「返回 `RemoveOutcome`」改成「`void` + 失败抛」（ADR-0014 写不可降级）。
+ *
+ * 为什么必须换形状：返回值可以被整个丢掉 —— 实测 13 个写/删调用点里 12 个不判返回值，
+ * 删失败静默溜走。抛出来就丢不掉了。
+ */
 describe('removeFile · 不许谎报成功（判据 A）', () => {
-  it('删掉了 → ok:true', () => {
-    expect(removeFile('/tmp/a.json')).toEqual({ ok: true })
+  it('删掉了 → 正常返回（不抛）', () => {
+    expect(() => removeFile('/tmp/a.json')).not.toThrow()
   })
 
-  it('本来就不在（ENOENT）→ ok:true（幂等删除）', () => {
+  it('本来就不在（ENOENT）→ 不抛（幂等删除）', () => {
     realFs.unlinkCode = 'ENOENT'
-    expect(removeFile('/tmp/a.json')).toEqual({ ok: true })
+    expect(() => removeFile('/tmp/a.json')).not.toThrow()
   })
 
   it.each(['EPERM', 'EACCES', 'EBUSY'])(
-    '存在但删不掉（%s）→ 绝不返回 ok:true，reason 带错误码',
+    '存在但删不掉（%s）→ **抛**，文案带错误码（绝不静默成功）',
     (code) => {
       realFs.unlinkCode = code
-
-      const result = removeFile('/tmp/a.json')
-
-      expect(result.ok).toBe(false)
-      expect(result.ok === false ? result.reason : '').toContain(code)
+      expect(() => removeFile('/tmp/a.json')).toThrow(new RegExp(code))
     },
   )
 
   it('实现不再依赖 existsSync（假 fs 的 existsSync 一被调用就抛）', () => {
     realFs.unlinkCode = 'EPERM'
-    expect(removeFile('/tmp/a.json').ok).toBe(false)
+    expect(() => removeFile('/tmp/a.json')).toThrow()
   })
 })
 

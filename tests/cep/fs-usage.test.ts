@@ -22,7 +22,7 @@ function uninstallRequire() {
   delete w.require
 }
 
-const { dirUsage } = await import('@/cep/fs')
+const { dirUsage } = await import('@/cep/dir-usage')
 
 beforeAll(() => {
   root = fs.mkdtempSync(path.join(os.tmpdir(), 'sj-dirusage-'))

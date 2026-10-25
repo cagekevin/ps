@@ -48,7 +48,7 @@ function installRequire() {
   w.require = (id: string) => (id === 'fs' ? fs : realRequire(id))
 }
 
-const { userDir } = await import('@/cep/fs')
+const { userDir } = await import('@/cep/paths')
 const logPath = () => `${userDir()}/sj_v5_log.txt`
 
 beforeEach(() => {

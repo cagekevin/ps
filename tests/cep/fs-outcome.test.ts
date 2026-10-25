@@ -67,7 +67,8 @@ function installRequire() {
   w.require = (id: string) => (id === 'fs' ? fs : realRequire(id))
 }
 
-const { readTextSync, dirUsage } = await import('@/cep/fs')
+const { readTextSync } = await import('@/cep/fs-read')
+const { dirUsage } = await import('@/cep/dir-usage')
 
 beforeEach(() => {
   installRequire()

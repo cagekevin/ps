@@ -55,7 +55,7 @@ function installRequire() {
 }
 
 /** 真路径由 `userDir()` 算（jsdom 下没有 APPDATA，会落到 homedir），所以动态取 */
-const { userDir } = await import('@/cep/fs')
+const { userDir } = await import('@/cep/paths')
 const logPath = () => `${userDir()}/sj_v5_log.txt`
 const readLog = () => disk.files.get(logPath()) ?? ''
 
