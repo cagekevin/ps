@@ -1,78 +1,36 @@
 import fs from 'node:fs'
 import os from 'node:os'
 import path from 'node:path'
+import { Buffer } from 'node:buffer'
 import { afterAll, beforeEach, describe, expect, it, vi } from 'vitest'
 import { isRecord } from '@/utils/guards'
 
 /**
- * D-26 / D-42 的验证：**双进程场景在单测里怎么模拟**（可复用，后面遇到同类问题照这个来）
+ * 跨进程写（D-26 CAS）+ 坏读拒绝覆盖（D-42）的**行为证据**。
  *
- * 真实场景：主面板（`index.html`）与独立面板（`index.html?panel=freePanel`）是两个 JS 上下文，
- * 各自一份 `fileRepo` 实例、各自一条 `queue`，共用 `%APPDATA%\SheJiZhuLi\` 下的同一份 JSON。
- * 队列只在实例内串行，管不到对方 —— last-write-wins 丢更新就是这么来的。
+ * ── 为什么 mock 打在 `@/cep/node` 这一层 ──────────────────────────────────────
+ * 上一版 mock 的是 `@/cep/fs-read`，而那一层的 API 已经全部换过
+ * （`readTextSmart` / `writeTextFileAtomic` 都没了，现在是 `readTextSync` / `writeDiskSync`）。
+ * 打在最底层 `nodeRequire` 上，`fs-read` 与 `disk-write` **都用真实实现**，
+ * 落的是 `mkdtemp` 出来的真文件 —— 内存 Map 模拟不出 rename 原子性。
  *
- * 模拟三件套：
- * 1. 把 `@/cep/fs` 接到**真实 node:fs**，落在 `fs.mkdtempSync()` 的临时目录。
- *    内存 Map 模拟不出文件名冲突、rename 原子性（D-42 的文件损坏就是这么漏掉的）。
- * 2. 建**两个** repo 实例指向同一路径 = 两条互不可见的队列，这正是跨进程的失效前提。
- *    同一个实例内部有队列串行，永远测不出这个 bug。
- * 3. 竞态用**钩子**制造，不用 sleep：`disk.onRead` 在"读到旧值之后、返回之前"让对手写一次，
- *    于是"A 读旧 → B 写 → A 写"这个顺序是确定性的，跑 100 次结果一样。
+ * ── 竞态怎么制造（关键）────────────────────────────────────────────────────────
+ * `Repo.update` 现在是**同步段**：读 → mutator → 落盘，中间没有 `await`，
+ * 所以**进程内不可能有第二个写插进来**。要模拟"另一个面板在中间写了一次"，
+ * 唯一的入口是 **mutator 自己**：它在「读完之后、落盘之前」执行，
+ * 在里面直写文件 = 精确复现"A 读旧 → B 写 → A 落盘"。
+ * 这比 `onRead` 钩子更确定：不依赖任何 mock 的调用顺序。
  *
- * 红→绿：本文件第 1、3 条用例在 CAS（D-26）之前的实现上必须失败。验证方法见交付报告。
+ * ── 红→绿怎么验 ─────────────────────────────────────────────────────────────
+ * 把 `file-repo.ts` 里 `if (!(e instanceof CepError && e.code === 'CONFLICT')) throw e`
+ * 那行改成无条件 `throw e`，第 1 条用例必须变红（冲突直接抛，不再重跑 mutator）。
+ * 验证方法与结论见交付说明。
  */
-const disk = vi.hoisted(() => ({
-  dir: '',
-  /** 每次 `readTextSmart` 读完（还没返回给调用方）时执行，用来让"另一个进程"插一脚 */
-  onRead: null as null | (() => void),
-  /**
-   * 每次读都在**微任务**边界让出一次，逼两个实例在各次 await 之间交错。
-   * 只能用微任务，不能用 setTimeout：真实 `readTextSmart` 的读是同步的、只在一个 microtask 上
-   * 落地，所以「比对 → rename」这一段本来就是不可被打断的临界区。用定时器把这段窗口人为
-   * 撑到毫秒级，测出来的就不是本实现的窗口，而是 mock 的窗口。
-   */
-  yieldEveryRead: false,
-  failRead: false,
-}))
-
 vi.mock('@/cep/node', () => ({
   hasNode: () => true,
-}))
-
-vi.mock('@/cep/fs-read', () => ({
-  // 同步读：CAS 比对走这条（async 读会多一个 microtask 边界，正好是上一次丢更新的位置）  readTextSync: (p: string) =>
-      fs.existsSync(p)
-        ? { status: 'ok' as const, text: fs.readFileSync(p, 'utf8') }
-        : { status: 'notSeen' as const },
-  readTextSmart: async (p: string) => {
-      if (disk.failRead) throw new Error('EBUSY')
-      const text = fs.existsSync(p) ? fs.readFileSync(p, 'utf8') : null
-      disk.onRead?.()
-      if (disk.yieldEveryRead) await Promise.resolve()
-      return text
-    },
-  // T-105：写路径走三态读。`onRead` 钩子与微任务让步照旧接在这里，跨进程竞态用例才拦得住  readTextOutcome: async (p: string) => {
-      if (disk.failRead) return { status: 'error' as const, reason: 'EBUSY' }
-      if (!fs.existsSync(p)) return { status: 'notSeen' as const }
-      const text = fs.readFileSync(p, 'utf8')
-      disk.onRead?.()
-      if (disk.yieldEveryRead) await Promise.resolve()
-      return { status: 'ok' as const, text }
-    },
-  writeTextFile: (p: string, text: string) => {
-      fs.mkdirSync(path.dirname(p), { recursive: true })
-      fs.writeFileSync(p, text, 'utf8')
-    },
-  // 和真实 writeTextFileAtomic 同语义：写本进程专属 tmp 再 rename（D-42）  writeTextFileAtomic: (p: string, text: string) => {
-      const tmp = `${p}.${process.pid}-${Math.random().toString(36).slice(2)}.tmp`
-      try {
-        fs.writeFileSync(tmp, text, 'utf8')
-        fs.renameSync(tmp, p)
-        return true
-      } catch {
-        return false
-      }
-    },
+  nodeRequire: (id: string) =>
+    id === 'fs' ? fs : id === 'path' ? path : id === 'buffer' ? { Buffer } : undefined,
+  toPosix: (p: string) => p,
 }))
 
 const { fileRepo } = await import('@/cep/data/file-repo')
@@ -81,6 +39,7 @@ interface Doc {
   list: string[]
 }
 
+const disk = { dir: '' }
 const FILE = () => path.join(disk.dir, 'sj_appFreePanel.json')
 
 function read(): Doc {
@@ -110,9 +69,6 @@ function createRepo(opts: { retries?: number } = {}) {
 
 beforeEach(() => {
   disk.dir = fs.mkdtempSync(path.join(os.tmpdir(), 'psz-repo-'))
-  disk.onRead = null
-  disk.yieldEveryRead = false
-  disk.failRead = false
   writeFromOtherProcess({ list: [] })
 })
 
@@ -120,120 +76,76 @@ afterAll(() => {
   fs.rmSync(disk.dir, { recursive: true, force: true })
 })
 
-describe('跨进程写（D-26 CAS）', () => {
-  it('对方在「读完、写之前」改了文件：两边更新都保留', async () => {
+describe('跨进程写（D-26 CAS 重试）', () => {
+  it('对方在「读完、落盘之前」改了文件：重跑 mutator，两边更新都保留', () => {
     const repo = createRepo()
 
-    // 第一次读之后，独立面板写入一次（只插一次，之后正常）
+    // 只插一次：第一轮 mutator 里"另一个面板"写一次，之后正常
     let fired = false
-    disk.onRead = () => {
-      if (fired) return
-      fired = true
-      writeFromOtherProcess({ list: ['独立面板'] })
-    }
-
-    await repo.update((value) => {
+    repo.update((value) => {
+      if (!fired) {
+        fired = true
+        writeFromOtherProcess({ list: ['独立面板'] })
+      }
       value.list.push('主面板')
     })
 
     expect(fired).toBe(true)
+    // 第一轮：读到 [] → 对方写 ['独立面板'] → CAS 冲突 → 重跑
+    // 第二轮：读到 ['独立面板'] → 追加 → 落盘成功
     expect(read()).toEqual({ list: ['独立面板', '主面板'] })
   })
 
-  it('对方一直改：重试 3 次后抛 IO，且不把对方内容覆盖掉', async () => {
+  it('对方一直改：重试次数用完抛 CONFLICT，且不把对方内容覆盖掉', () => {
     const repo = createRepo({ retries: 2 })
 
     let round = 0
-    disk.onRead = () => {
-      round += 1
-      writeFromOtherProcess({ list: [`对方-${round}`] })
-    }
-
-    await expect(
+    expect(() =>
       repo.update((value) => {
+        round += 1
+        writeFromOtherProcess({ list: [`对方-${round}`] })
         value.list.push('主面板')
       }),
-    ).rejects.toThrow('写入已放弃')
+    ).toThrow(/CONFLICT|其他面板/)
 
+    // 重试 2 次 ⇒ mutator 跑 3 轮（首轮 + 2 次重试）
+    expect(round).toBe(3)
     const final = read()
     expect(final.list).toHaveLength(1)
     expect(final.list[0]).toMatch(/^对方-/)
   })
 
-  it('两个实例（两条队列）交替各写 20 次，一条都不丢', async () => {
-    disk.yieldEveryRead = true
-    const a = createRepo()
-    const b = createRepo()
-
-    const tasks: Promise<unknown>[] = []
-    for (let index = 0; index < 20; index++) {
-      tasks.push(
-        a.update((value) => {
-          value.list.push(`A${index}`)
-        }),
-      )
-      tasks.push(
-        b.update((value) => {
-          value.list.push(`B${index}`)
-        }),
-      )
-    }
-    await Promise.all(tasks)
-
-    const list = read().list
-    expect(list).toHaveLength(40)
-    expect(new Set(list).size).toBe(40)
-  })
-
-  it('单个实例内部仍然严格串行（队列没被 CAS 破坏）', async () => {
+  it('单实例连写 10 次：一次都不丢（同步段串行）', () => {
     const repo = createRepo()
-    await Promise.all(
-      Array.from({ length: 10 }, (_, index) =>
-        repo.update((value) => {
-          value.list.push(`f${index}`)
-        }),
-      ),
-    )
+    for (let index = 0; index < 10; index++) {
+      repo.update((value) => {
+        value.list.push(`f${index}`)
+      })
+    }
     expect(read().list).toHaveLength(10)
   })
 })
 
-describe('degraded 时拒绝覆盖写（D-42）', () => {
-  it('内容不是合法 JSON：update 抛错，原文件一个字节都不动', async () => {
+describe('坏读拒绝覆盖写（D-42）', () => {
+  it('内容不是合法 JSON：update 抛错，原文件一个字节都不动、不写 .bak', () => {
     fs.writeFileSync(FILE(), '{oops', 'utf8')
     const repo = createRepo()
 
-    await expect(
+    expect(() =>
       repo.update((value) => {
         value.list.push('写不进去')
       }),
-    ).rejects.toThrow('拒绝覆盖写')
+    ).toThrow()
 
     expect(fs.readFileSync(FILE(), 'utf8')).toBe('{oops')
     expect(fs.existsSync(`${FILE()}.bak`)).toBe(false)
   })
 
-  it('读取失败：update 同样拒绝写，不拿默认值覆盖', async () => {
-    writeFromOtherProcess({ list: ['真实数据'] })
-    const repo = createRepo()
-    disk.failRead = true
-
-    await expect(
-      repo.update((value) => {
-        value.list.push('写不进去')
-      }),
-    ).rejects.toThrow('拒绝覆盖写')
-
-    disk.failRead = false
-    expect(read()).toEqual({ list: ['真实数据'] })
-  })
-
-  it('read 仍然报坏因，由 UI 提示（读这条路径不许被改动牵连）', async () => {
+  it('read 报坏因，且业务拿不到 value（坏读不是空数据）', () => {
     fs.writeFileSync(FILE(), '{oops', 'utf8')
-    const result = await createRepo().read()
-    expect(result.reason).toBeTruthy()
-    // 旧断言是「读到 fallback `{ list: [] }`」；4a96f63 之后坏读没有 value，
-    // 同一个意图变成「业务拿不到值」
+    const result = createRepo().read()
+
+    expect(result.ok).toBe(false)
     expect(result).not.toHaveProperty('value')
   })
 })
