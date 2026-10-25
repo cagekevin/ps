@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest'
+import { nextTick } from 'vue'
 import { mount } from '@vue/test-utils'
 import DistributedDialog from '@/pages/fontSet/components/DistributedDialog.vue'
 import FontColor from '@/pages/fontSet/components/FontColor.vue'
@@ -13,6 +14,17 @@ describe('DistributedDialog', () => {
     expect(wrapper.text()).toContain('不能输入空字符')
     expect(wrapper.emitted('ok')).toBeUndefined()
     expect(wrapper.emitted('close')).toBeUndefined()
+  })
+
+  it('焦点不在输入框时按 Esc 也能关（原来 Esc 只绑在 input 上）', async () => {
+    const wrapper = mount(DistributedDialog, { attachTo: document.body })
+    await nextTick()
+
+    // 用户 Tab 到"高级用法"按钮后按 Esc —— 事件发生在 document 上，不在 input 上
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+
+    expect(wrapper.emitted('close')).toHaveLength(1)
+    wrapper.unmount()
   })
 
   it('提交后未固定时自动关闭，固定时保持打开', async () => {

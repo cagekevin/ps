@@ -3,6 +3,7 @@ import { computed, ref } from 'vue'
 import { isAsciiFamily } from '@/domain/font-lang'
 import type { FontItem } from '@/domain/font-item'
 import Icon from '@/components/Icon.vue'
+import { useDismiss } from '@/composables/useDismiss'
 
 /**
  * 字重选择。对应原版 font-manage-list-font-weight。
@@ -20,6 +21,20 @@ const props = defineProps<{
 const emit = defineEmits<{ (e: 'select', index: number): void }>()
 
 const open = ref(false)
+const root = ref<HTMLElement | null>(null)
+
+/**
+ * 关闭通道接底座：点外部 + Esc（原来只能"再点一次数字按钮"或"选一项"）。
+ * 定位仍是本组件的 CSS `position: absolute` —— 不接 `useFloatingPosition`，
+ * 那会改变位置来源（本页是表格行内浮层，跟着行滚），属视觉迁移，冻结节不许。
+ */
+useDismiss(
+  () => open.value,
+  root,
+  () => {
+    open.value = false
+  },
+)
 
 /** 只有一个字重时不显示这一行（原版逻辑） */
 const previews = computed(() =>
@@ -39,7 +54,7 @@ function pick(index: number) {
 </script>
 
 <template>
-  <div v-if="previews.length" class="fw">
+  <div v-if="previews.length" ref="root" class="fw">
     <div class="fw__wrap">
       <div class="fw__list">
         <pre

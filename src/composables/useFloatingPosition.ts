@@ -17,7 +17,14 @@ export interface UseFloatingPositionOptions {
   padding?: number
 }
 
-function referenceRect(reference: FloatingReference): FloatingRect {
+/**
+ * 元素 → 锚点矩形；鼠标坐标折成零尺寸矩形。
+ *
+ * **全仓唯一取矩形点**：页面/组件不要再自己 `getBoundingClientRect()` 再把 `{x,y}` 传进来
+ * （那样"取矩形"就有 N 个入口，改一处漏一处）。直接把元素交给它。
+ * 例外只有两类，都不属锚点：① 浮层自己的尺寸（本文件 `update()` 内）；② 纯布局判断（如 clamp 宽度）。
+ */
+export function anchorRect(reference: FloatingReference): FloatingRect {
   if ('getBoundingClientRect' in reference) {
     const rect = reference.getBoundingClientRect()
     return {
@@ -55,7 +62,7 @@ export function useFloatingPosition(options: UseFloatingPositionOptions) {
 
     const box = floating.getBoundingClientRect()
     const position = computeFloatingPosition(
-      referenceRect(reference),
+      anchorRect(reference),
       { width: box.width, height: box.height },
       { width: window.innerWidth, height: window.innerHeight },
       {

@@ -1,4 +1,5 @@
 import { mount } from '@vue/test-utils'
+import { nextTick } from 'vue'
 import { describe, expect, it } from 'vitest'
 import FontWeight from '@/pages/fontManage/components/FontWeight.vue'
 import type { FontItem } from '@/domain/font-item'
@@ -14,6 +15,27 @@ function font(over: Partial<FontItem> = {}): FontItem {
 }
 
 describe('FontWeight', () => {
+  it('下拉能点外部关、也能 Esc 关（原来只能再点一次数字按钮）', async () => {
+    const wrapper = mount(FontWeight, {
+      props: { font: font(), current: 0 },
+      attachTo: document.body,
+    })
+
+    await wrapper.find('.fw__count').trigger('click')
+    expect(wrapper.find('.fw__dropdown').exists()).toBe(true)
+
+    document.body.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+    await nextTick()
+    expect(wrapper.find('.fw__dropdown').exists()).toBe(false)
+
+    await wrapper.find('.fw__count').trigger('click')
+    document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape', bubbles: true }))
+    await nextTick()
+    expect(wrapper.find('.fw__dropdown').exists()).toBe(false)
+
+    wrapper.unmount()
+  })
+
   it('每个字重渲染一个字形，英文用 A', () => {
     const wrapper = mount(FontWeight, { props: { font: font(), current: 0 } })
     const glyphs = wrapper.findAll('.fw__glyph')

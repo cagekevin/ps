@@ -1,6 +1,7 @@
 <script setup lang="ts">
 import { nextTick, onMounted, ref } from 'vue'
 import Icon from '@/components/Icon.vue'
+import { useDismiss } from '@/composables/useDismiss'
 
 /**
  * 原版 distributed（app.v4.js:39179）：
@@ -21,6 +22,19 @@ const value = ref('')
 const error = ref('')
 const advanced = ref(false)
 const inputRef = ref<HTMLInputElement>()
+const rootRef = ref<HTMLElement | null>(null)
+
+/**
+ * 开关态在父级（`v-if="distribution > 0"`），所以组件**存在即"开着"**。
+ * Esc 统一交给 `useDismiss`：原来只把 `keydown.esc` 绑在 `<input>` 上，
+ * 焦点一离开输入框（Tab 到"高级用法"）就关不掉了。遮罩点击仍是自己的关闭通道（`outside: false`）。
+ */
+useDismiss(
+  () => true,
+  rootRef,
+  () => cancel(),
+  { outside: false },
+)
 
 onMounted(async () => {
   await nextTick()
@@ -53,7 +67,7 @@ function selectAll(event: FocusEvent) {
 </script>
 
 <template>
-  <div class="fontset-distributed" @click.stop="cancel">
+  <div ref="rootRef" class="fontset-distributed" @click.stop="cancel">
     <div class="fontset-distributed__main" @click.stop>
       <div class="fontset-distributed__head">
         <span class="fontset-distributed__title">{{ title }}</span>
@@ -77,7 +91,6 @@ function selectAll(event: FocusEvent) {
         @input="onInput"
         @focus="selectAll"
         @keydown.enter.prevent="confirm"
-        @keydown.esc.prevent="cancel"
       />
 
       <p v-if="error" class="fontset-distributed__error">{{ error }}</p>

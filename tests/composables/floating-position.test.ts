@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
 import { computeFloatingPosition } from '@/composables/floating-position'
+import { anchorRect } from '@/composables/useFloatingPosition'
 
 const viewport = { width: 340, height: 600 }
 const options = { placement: 'bottom-start' as const, offset: 4, padding: 4 }
@@ -7,6 +8,33 @@ const options = { placement: 'bottom-start' as const, offset: 4, padding: 4 }
 function rect(left: number, top: number, width: number, height: number) {
   return { left, top, right: left + width, bottom: top + height, width, height }
 }
+
+// ① 观测层唯一取矩形点：元素 → 矩形、鼠标坐标 → 零尺寸矩形。
+// 页面若自己 getBoundingClientRect 再传 {x,y}，"取矩形"就有 N 个入口（TD-18-24）。
+describe('anchorRect', () => {
+  it('元素取真实矩形，鼠标坐标折成零尺寸矩形', () => {
+    const el = document.createElement('div')
+    el.getBoundingClientRect = () =>
+      ({ left: 10, top: 20, right: 110, bottom: 60, width: 100, height: 40 }) as DOMRect
+
+    expect(anchorRect(el)).toEqual({
+      left: 10,
+      top: 20,
+      right: 110,
+      bottom: 60,
+      width: 100,
+      height: 40,
+    })
+    expect(anchorRect({ x: 10, y: 20 })).toEqual({
+      left: 10,
+      top: 20,
+      right: 10,
+      bottom: 20,
+      width: 0,
+      height: 0,
+    })
+  })
+})
 
 describe('computeFloatingPosition', () => {
   it('空间足够时按 bottom-start 展开', () => {

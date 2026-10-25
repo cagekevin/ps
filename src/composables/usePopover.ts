@@ -1,6 +1,6 @@
 // 是什么：锚点浮层的开关态 + 几何（定位/重算）｜替代了什么：它以前自己也挂 document mousedown+keydown 关浮层｜谁在用：GPopover、GDropdown、SelectBox、ActionWarehouse
 import { nextTick, onBeforeUnmount, ref, toValue, watch, type Ref } from 'vue'
-import { useFloatingPosition, type FloatingReference } from './useFloatingPosition'
+import { anchorRect, useFloatingPosition, type FloatingReference } from './useFloatingPosition'
 import { useDismiss } from './useDismiss'
 import type { FloatingPlacement } from './floating-position'
 
@@ -21,8 +21,12 @@ export interface UsePopoverOptions {
  * 浮层行为层：开关 + 几何（resize / scroll 重算、宽度对齐、清理）。
  *
  * **关闭（点外部 / Esc）不在这里** —— 统一交给 `useDismiss`。
- * 想改"点外面关不关、Esc 关几个"，改 `useDismiss` 一处；不要在这里再挂监听，
- * 否则同一个 Esc 会有两条路各关各的（历史上就是这么同时关掉两层的）。
+ * 想改"点外面关不关、Esc 关几个"，改 `useDismiss` 一处；**不要在这里再挂监听**，
+ * 否则同一个 Esc 会有两条路各关各的 —— 一次按下去关掉两层（历史上就是这么坏的）。
+ *
+ * 结构上拦不住：`document.addEventListener` 是 DOM API，类型层没有约束，
+ * 本仓**不建**扫描型闸（不写白名单、不设上限）⇒ 这条规矩只靠注释和 code review。
+ * 本文件只负责**几何**（resize / scroll 重算、宽度对齐、清理）与开关态。
  */
 export function usePopover(options: UsePopoverOptions = {}) {
   const internalOpen = ref(false)
@@ -56,7 +60,7 @@ export function usePopover(options: UsePopoverOptions = {}) {
     const panel = panelRef.value
     if (!trigger || !panel || !options.matchWidth) return
     // 宽度同样走 CSS 变量：面板自己的 <style> 用 var(--floating-width) 消费。
-    const width = `${Math.round(trigger.getBoundingClientRect().width)}px`
+    const width = `${Math.round(anchorRect(trigger).width)}px`
     panel.style.setProperty(
       options.matchWidth === 'width' ? '--floating-width' : '--floating-min-width',
       width,

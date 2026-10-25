@@ -8,7 +8,7 @@ import BaseGroup from '@/components/BaseGroup.vue'
 import Icon from '@/components/Icon.vue'
 import { useCommand } from '@/components/command/useCommand'
 import { useDismiss } from '@/composables/useDismiss'
-import { useFloatingPosition } from '@/composables/useFloatingPosition'
+import { anchorRect, useFloatingPosition } from '@/composables/useFloatingPosition'
 import { useLongPressDrag, type LongPressDragResult } from '@/composables/useLongPressDrag'
 import { usePersistedRef } from '@/composables/usePersisted'
 import { useActionStore } from '@/stores/action'
@@ -249,7 +249,7 @@ watch(
 )
 
 function openMenu(event: MouseEvent, kind: MenuKind, groupIndex: number, itemIndex = -1) {
-  const rect = (event.currentTarget as HTMLElement).getBoundingClientRect()
+  const rect = anchorRect(event.currentTarget as HTMLElement)
   menu.value = { visible: true, x: rect.left, y: rect.bottom + 2, kind, groupIndex, itemIndex }
 }
 

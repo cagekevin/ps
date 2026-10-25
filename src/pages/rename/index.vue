@@ -14,7 +14,7 @@ import PageBottomBar from '@/components/PageBottomBar.vue'
 import PageShell from '@/components/PageShell.vue'
 import { useCommand } from '@/components/command/useCommand'
 import { useDismiss } from '@/composables/useDismiss'
-import { useFloatingPosition } from '@/composables/useFloatingPosition'
+import { anchorRect, useFloatingPosition } from '@/composables/useFloatingPosition'
 import { useLongPressDrag, type LongPressDragResult } from '@/composables/useLongPressDrag'
 import { usePersistedRef } from '@/composables/usePersisted'
 import {
@@ -140,7 +140,7 @@ watch(
 )
 
 function openExpressionMenu(event: MouseEvent) {
-  const rect = (event.currentTarget as HTMLElement).getBoundingClientRect()
+  const rect = anchorRect(event.currentTarget as HTMLElement)
   // 原版是 offsetLeft+10 / offsetTop+32（:57114-57115），这里按输入框左上角定位
   exprPoint.value = { x: rect.left + 10, y: rect.top + 32 }
   exprMenu.value = { visible: true, x: rect.left, y: rect.top }
@@ -187,7 +187,7 @@ watch(
 )
 
 function openMenu(event: MouseEvent, kind: MenuKind, groupIndex: number, itemIndex = -1) {
-  const rect = (event.currentTarget as HTMLElement).getBoundingClientRect()
+  const rect = anchorRect(event.currentTarget as HTMLElement)
   menuPoint.value = { x: rect.left, y: rect.bottom + 2 }
   menu.value = { visible: true, kind, groupIndex, itemIndex }
 }

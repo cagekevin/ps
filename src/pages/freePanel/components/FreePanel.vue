@@ -6,6 +6,7 @@ import Icon from '@/components/Icon.vue'
 import CepModal from '@/components/CepModal.vue'
 import EmptyState from '@/components/EmptyState.vue'
 import { useCommand } from '@/components/command/useCommand'
+import { anchorRect } from '@/composables/useFloatingPosition'
 import { useDismiss } from '@/composables/useDismiss'
 import { useLongPressDrag, type LongPressDragResult } from '@/composables/useLongPressDrag'
 import { useFreePanelStore } from '@/stores/free-panel'
@@ -69,7 +70,7 @@ function toggleMenu(): void {
 }
 
 function refreshMenuClamp(): void {
-  const width = root.value?.getBoundingClientRect().width ?? 0
+  const width = root.value ? anchorRect(root.value).width : 0
   // 可用宽 = 容器宽 - 右侧 gap（--sp-1 = 4px）；装不下就贴左
   menuClamped.value = width > 0 && width - 4 < MENU_MIN_WIDTH
 }
