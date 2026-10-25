@@ -122,13 +122,12 @@ const { update: updateExprPosition } = useFloatingPosition({
   floating: exprRef,
   placement: 'bottom-start',
 })
-useDismiss(
-  () => exprMenu.value.visible,
-  exprRef,
-  () => {
-    exprMenu.value.visible = false
-  },
-)
+/** 关闭表达式菜单 —— **唯一关闭动作**：Esc / 点外部 / 选标记 / 换焦点都走它 */
+function closeExprMenu() {
+  exprMenu.value.visible = false
+}
+
+useDismiss(() => exprMenu.value.visible, exprRef, closeExprMenu)
 
 watch(
   () => exprMenu.value.visible,
@@ -149,7 +148,7 @@ function openExpressionMenu(event: MouseEvent) {
 function pickMark(mark: RenameMark) {
   // 先删旧标记再插入（顺序见 domain/rename.ts 的 DEDUPE_ORDER）
   changeval.value = insertMark(changeval.value, mark)
-  exprMenu.value.visible = false
+  closeExprMenu()
   void nextTick(() => inputWrap.value?.querySelector('input')?.focus())
 }
 
@@ -169,13 +168,12 @@ const { update: updateMenuPosition } = useFloatingPosition({
   floating: menuRef,
   placement: 'bottom-start',
 })
-useDismiss(
-  () => menu.value.visible,
-  menuRef,
-  () => {
-    menu.value.visible = false
-  },
-)
+/** 关闭右键菜单 —— **唯一关闭动作**：Esc / 点外部 / 选中项 / 打开弹窗都走它 */
+function closeMenu() {
+  menu.value.visible = false
+}
+
+useDismiss(() => menu.value.visible, menuRef, closeMenu)
 
 watch(
   () => menu.value.visible,
@@ -213,7 +211,7 @@ const modal = ref({
 const confirmState = ref({ visible: false, text: '', invoke: async () => {} })
 
 function openModal(mode: ModalMode, options: { groupIndex?: number; itemIndex?: number } = {}) {
-  menu.value.visible = false
+  closeMenu()
   // -1 表示"不指定位置"：底条 ＋ 新建分组时追加到末尾（原版 addGroup() 不传下标，:56903）
   const groupIndex = options.groupIndex ?? -1
   const itemIndex = options.itemIndex ?? -1
@@ -242,7 +240,7 @@ async function submitModal() {
 
 function requestDelete(what: 'group' | 'item') {
   const { groupIndex, itemIndex } = menu.value
-  menu.value.visible = false
+  closeMenu()
   const group = preset.value[groupIndex]
   if (what === 'group') {
     confirmState.value = {
