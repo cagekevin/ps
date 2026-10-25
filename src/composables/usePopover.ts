@@ -39,9 +39,14 @@ export function usePopover(options: UsePopoverOptions = {}) {
   })
 
   // 关闭统一走 useDismiss：面板被 Teleport 出去后不在触发器子树里，两端都要声明为"内部"。
-  useDismiss(() => open.value, panelRef, () => close(), {
-    inside: () => [triggerRef.value, panelRef.value],
-  })
+  useDismiss(
+    () => open.value,
+    panelRef,
+    () => close(),
+    {
+      inside: () => [triggerRef.value, panelRef.value],
+    },
+  )
 
   let observer: ResizeObserver | null = null
 

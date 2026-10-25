@@ -161,7 +161,7 @@ mousedown + Ctrl/Meta + 300ms
 
 | 组件 / 场景 | 机制 |
 |---|---|
-| `GDropdown` / `SelectBox` / `ActionWarehouse` | `usePopover`（定位 + outside + Esc + ARIA） |
+| `GDropdown` / `SelectBox` / `ActionWarehouse` | `usePopover`（开关态 + 定位）+ `useDismiss`（点外部 / Esc）+ ARIA |
 | `TagMenu` / `TagContextMenu` | `useFloatingPosition` + `useDismiss` |
 | 动作页右键菜单 / 样式页 `StyleMenu` / 样式项 `.describe` | `useFloatingPosition` + `useDismiss` |
 | 动作页列布局菜单 | `absolute` 挂底栏（有意，不跟鼠标） |

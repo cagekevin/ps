@@ -221,10 +221,10 @@
     },
     {
       "id": "composables-usedismiss-ts",
-      "name": "点击外部 / Esc 关闭",
+      "name": "点击外部 / Esc 关闭（浮层关闭唯一实现）",
       "entry": "src/composables/useDismiss.ts",
-      "api": "useDismiss(visible: () => boolean, container: Ref, close: () => void, { outside = true })",
-      "when": "浮层组件（下拉、右键菜单）关闭逻辑",
+      "api": "useDismiss(visible: () => boolean, container: Ref, close: () => void, { outside = true, inside?: () => HTMLElement[] })",
+      "when": "所有浮层（下拉、菜单、右键菜单、弹窗）的关闭逻辑。点外部=关所有开着的；Esc=只关最近打开的一个（判据是打开序号）。浮层自己禁止 document.addEventListener；面板被 Teleport 时必须传 inside 声明触发器",
       "status": "stable",
       "since": "2026-10-20"
     },
@@ -662,11 +662,10 @@
     },
     {
       "id": "composables-usepopover-ts",
-      "name": "（待补：中文名）",
+      "name": "锚点浮层（开关态 + 几何）",
       "entry": "src/composables/usePopover.ts",
-      "api": "（待补：怎么调）",
-      "when": "（待补：什么时候用）",
-      "status": "todo",
+      "api": "usePopover({ open?, placement?, offset?, padding?, matchWidth?, triggerRef?, panelRef? }) → { open, close, toggle, update, onTriggerKeydown, resolvedPlacement, placement }",
+      "when": "下拉/菜单需要「锚点定位 + 宽度对齐 + resize/scroll 重算」时（GPopover / GDropdown / SelectBox / ActionWarehouse）。关闭（点外部/Esc）归 useDismiss，这里不许挂监听",
       "since": "2026-10-22"
     },
     {
@@ -1108,6 +1107,15 @@
       "api": "userDir() / extensionDir() / psScriptsDir()",
       "when": "拼任何用户目录或扩展目录下的路径",
       "status": "stable",
+      "since": "2026-10-25"
+    },
+    {
+      "id": "cep-data-exclusive-ts",
+      "name": "（待补：中文名）",
+      "entry": "src/cep/data/exclusive.ts",
+      "api": "（待补：怎么调）",
+      "when": "（待补：什么时候用）",
+      "status": "todo",
       "since": "2026-10-25"
     }
   ]
