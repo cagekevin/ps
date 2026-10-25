@@ -15,8 +15,6 @@ const props = withDefaults(
     matchWidth?: 'width' | 'min' | false
     role?: 'menu' | 'listbox' | 'dialog'
     disabled?: boolean
-    closeOnOutside?: boolean
-    closeOnEscape?: boolean
     panelClass?: string
   }>(),
   {
@@ -26,8 +24,6 @@ const props = withDefaults(
     matchWidth: false,
     role: 'menu',
     disabled: false,
-    closeOnOutside: true,
-    closeOnEscape: true,
     panelClass: '',
   },
 )
@@ -42,8 +38,6 @@ const { close, toggle, onTriggerKeydown } = usePopover({
   offset: props.offset,
   padding: props.padding,
   matchWidth: props.matchWidth,
-  closeOnOutside: props.closeOnOutside,
-  closeOnEscape: props.closeOnEscape,
   triggerRef,
   panelRef,
 })
