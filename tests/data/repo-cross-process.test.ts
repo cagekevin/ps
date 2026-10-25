@@ -52,7 +52,7 @@ function writeFromOtherProcess(value: Doc): void {
   fs.writeFileSync(FILE(), JSON.stringify(value), 'utf8')
 }
 
-/** decode 必填：只认 `{ list: string[] }`；坏形状要说出原因，不能返 `null` *
+/** decode 必填：只认 `{ list: string[] }`；坏形状要说出原因，不能返 `null` */
 function decodeDoc(raw: unknown): Decoded<Doc> | DecodeFail {
   if (!isRecord(raw)) return shapeFail('', 'object', raw)
   const rawList = raw.list

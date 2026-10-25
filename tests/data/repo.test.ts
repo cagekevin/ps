@@ -47,7 +47,7 @@ beforeEach(() => {
   env.cep = true
 })
 
-/** decode 必填：只认 `Row[]`，条目必须有字符串 name；坏形状要说出原因，不能返 `null` *
+/** decode 必填：只认 `Row[]`，条目必须有字符串 name；坏形状要说出原因，不能返 `null` */
 function isRow(raw: unknown): raw is Row {
   return isRecord(raw) && typeof raw.name === 'string'
 }

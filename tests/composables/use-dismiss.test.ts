@@ -44,7 +44,7 @@ afterEach(() => {
 })
 
 describe('useDismiss', () => {
-  it('两层都开着时，Esc 只关最近打开的那一个（与挂载顺序无关）', async () => {
+  it('两层都开着时，Esc 只关最近打开的那一个（挂载顺序与打开顺序相反也成立）', async () => {
     const a = ref(false)
     const b = ref(false)
     const A = host(a)
@@ -61,6 +61,25 @@ describe('useDismiss', () => {
     expect(B.close).toHaveBeenCalledTimes(0)
   })
 
+  it('两层都开着时，Esc 关的是后打开的那个（挂载顺序与打开顺序相同也成立）', async () => {
+    // 这条专门排掉"按挂载顺序取第一个"这种半吊子实现：此处挂载最早 = 先打开，
+    // 若判据是挂载顺序就会错关 A。
+    const a = ref(false)
+    const b = ref(false)
+    const A = host(a)
+    const B = host(b)
+
+    a.value = true // 先开 A（A 也是先挂载的）
+    await nextTick()
+    b.value = true // B 最后打开 ⇒ 它才是"最上层"
+    await nextTick()
+
+    pressEscape()
+
+    expect(B.close).toHaveBeenCalledTimes(1)
+    expect(A.close).toHaveBeenCalledTimes(0)
+  })
+
   it('挂载即打开的浮层同样能被 Esc 关掉（seq 不能是 0）', async () => {
     const only = ref(true)
     const M = host(only, { outside: false })
@@ -69,6 +88,52 @@ describe('useDismiss', () => {
     pressEscape()
 
     expect(M.close).toHaveBeenCalledTimes(1)
+  })
+
+  it('DOM 嵌套（一层浮层里再开一层）：点内层不关外层，Esc 只关内层', async () => {
+    const outerEl = document.createElement('div')
+    const innerEl = document.createElement('div')
+    outerEl.appendChild(innerEl)
+    document.body.appendChild(outerEl)
+
+    const outerVisible = ref(false)
+    const innerVisible = ref(false)
+    const outerClose = vi.fn(() => {
+      outerVisible.value = false
+    })
+    const innerClose = vi.fn(() => {
+      innerVisible.value = false
+    })
+    const outerRef = ref<HTMLElement | null>(outerEl)
+    const innerRef = ref<HTMLElement | null>(innerEl)
+
+    mounted.push(
+      mount(
+        defineComponent({
+          setup() {
+            useDismiss(() => outerVisible.value, outerRef, outerClose)
+            useDismiss(() => innerVisible.value, innerRef, innerClose)
+            return () => null
+          },
+        }),
+        { attachTo: document.body },
+      ),
+    )
+
+    outerVisible.value = true
+    await nextTick()
+    innerVisible.value = true // 内层后打开
+    await nextTick()
+
+    // 点内层：落在外层容器里 ⇒ 外层不许关（这是 contains 分支，不是"点外部"）
+    innerEl.dispatchEvent(new MouseEvent('mousedown', { bubbles: true }))
+    expect(outerClose).not.toHaveBeenCalled()
+    expect(innerClose).not.toHaveBeenCalled()
+
+    pressEscape()
+
+    expect(innerClose).toHaveBeenCalledTimes(1)
+    expect(outerClose).not.toHaveBeenCalled()
   })
 
   it('点页面空白：所有开着的浮层都关（点空白与 Esc 是两个手势）', async () => {

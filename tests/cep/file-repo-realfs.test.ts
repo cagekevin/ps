@@ -72,7 +72,7 @@ function installRealEnv(): void {
 // 只要在第一次 `repo.read()` / `repo.write()` 之前把环境装好即可。
 const { dataRepo } = await import('@/cep/data/data-repo')
 
-/** decode 必填：只认数字数组；坏形状由 `decodeList` 说原因（不返 `null`） *
+/** decode 必填：只认数字数组；坏形状由 `decodeList` 说原因（不返 `null`） */
 function decodeNumberList(raw: unknown) {
   return decodeList(raw, (item): item is number => typeof item === 'number')
 }
