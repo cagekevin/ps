@@ -1087,7 +1087,7 @@
       "id": "cep-fs-read-ts",
       "name": "读原语（观测层）",
       "entry": "src/cep/fs-read.ts",
-      "api": "readTextOutcome(p) / readTextSync(p) / readBase64Outcome(p) / classifyFsError(e)",
+      "api": "readTextAsync(p) / readTextSync(p) / readBase64File(p) / classifyFsError(e)",
       "when": "读文件；三态观测，结论由数据层 decode 下",
       "status": "stable",
       "since": "2026-10-25"

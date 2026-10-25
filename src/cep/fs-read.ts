@@ -4,8 +4,8 @@
 // 谁在用：四个档各有固定消费者 ——
 //   `readOwnFileText` → `data/style-library-repo.ts`(4) / `cloud/entries/action-library.ts` / `data/swatch-repo.ts` / `cep/log-file.ts`
 //   `readExternalText` → `commands/{font,rename}.ts` / `data/{action-archive,style-library-io}.ts`
-//   `readBase64Outcome` → `data/{style-library-repo,style-library-io,action-archive}.ts`
-//   原语 `readTextSync` / `readTextOutcome` → **只有** `cep/disk-write.ts` 与 `data/repo-read.ts`
+//   `readBase64File` → `data/{style-library-repo,style-library-io,action-archive}.ts`
+//   原语 `readTextSync` / `readTextAsync` → **只有** `cep/disk-write.ts` 与 `data/repo-read.ts`
 // 禁止：这里**不许**判"读到坏数据该怎么办"（那是数据层的 `decode`）；也不许把三态压成 `boolean` / `string` / `null`
 //
 // ── `readTextSync` 的四个具名消费者（**加第五个之前先改 ADR-0026**）─────────────────────
@@ -53,7 +53,7 @@ function errCode(e: unknown): string {
 /**
  * **唯一的错误归判据**：只认 `ENOENT` 是"查不到"，其余错误码一律 `error` + 原始原因。
  *
- * 为什么必须只有一份：读侧（`readTextNode` / `readBase64Outcome`）与写侧/删除侧原本各自
+ * 为什么必须只有一份：读侧（`readTextNode` / `readBase64File`）与写侧/删除侧原本各自
  * 写了一遍「是不是 ENOENT」，四份会各自漂移 —— 一处把 `EPERM` 认成"没有"，
  * 就会出现「读不到 → 当成首次使用 → 拿默认值覆盖用户文件」（D-42 / T-105）。
  * 想放开哪个错误码当"没有"，只改这里，一次生效、一次被审。
@@ -70,7 +70,7 @@ export function classifyFsError(
 /**
  * Node 同步读的三态骨架：`hasNode` 守卫 + `try/catch` + `classifyFsError`。
  *
- * **唯一一份**：utf8 文本（`readTextNode`）与 base64 字节（`readBase64Outcome`）都走这里，
+ * **唯一一份**：utf8 文本（`readTextNode`）与 base64 字节（`readBase64File`）都走这里，
  * 只把"怎么取字节"当参数传进来。以前这两处各自写了一遍 `if (!hasNode()) … try/catch …`，
  * 结构重复、只差 `readFileSync` 的编码参数。
  */
@@ -99,7 +99,7 @@ function readTextNode(absPath: string): TextRead {
  * - 面板数据文件（JSON，要 `decode`）→ `data/repo-read.ts` 的 `readRepoFile`
  * - 我们自己的文件原文（库文件 / 上传 / 纯文本）→ `readOwnFileText`
  * - 用户选的外部文件 → `readExternalText`
- * - 字节（base64）→ `readBase64Outcome`
+ * - 字节（base64）→ `readBase64File`
  *
  * 为什么它必须同步：落盘前的 CAS 比对若 `await`，会多一个 microtask 边界，
  * 另一个面板正好能在那个边界里写完一次 —— 这就是 D-26 丢更新的位置。
@@ -115,14 +115,14 @@ export function readTextSync(absPath: string): TextRead {
 }
 
 /**
- * 读文件为 base64。与 `readTextOutcome` 同一条规矩：**只认 `ENOENT` 是 `notSeen`**，
+ * 读文件为 base64。与 `readTextAsync` 同一条规矩：**只认 `ENOENT` 是 `notSeen`**，
  * 其余错误码一律 `error`（不用 `existsSync`，它对"存在但读不到"也返回 `false`）。
  *
  * 为什么它也需要三态：`style-library-io.ts` 的 `writeKuFile` 用"读没读到原文"判断
  * "这个文件是不是本次新建的"，回滚时只删新建的那些。把"读不到"当成"没有"，
  * 回滚就会删掉一个本来就存在的文件（T-109 的 P1）。
  */
-export function readBase64Outcome(absPath: string): Base64Read {
+export function readBase64File(absPath: string): Base64Read {
   // 与 `readTextNode` 共用同一个骨架（`readNodeOutcome`），只换"怎么取字节"
   const out = readNodeOutcome((fs) => fs.readFileSync(absPath).toString('base64'))
   return out.status === 'ok' ? { status: 'ok', base64: out.value } : out
@@ -196,7 +196,7 @@ function combineReads(node: TextRead | null, viaJsx: TextRead): TextRead {
  * （合并规则见 `combineReads`，那是策略）。写路径必须用它：读失败被当成"文件不存在"时，
  * `update` 会拿 `fallback()` 派生的值覆盖用户文件，而且因为"原文为空"连 `.bak` 都不留（D-42 / T-105）。
  */
-export async function readTextOutcome(absPath: string): Promise<TextRead> {
+export async function readTextAsync(absPath: string): Promise<TextRead> {
   const node = hasNode() ? readTextNode(absPath) : null
   if (node?.status === 'ok') return node
   if (!hasCep()) return node ?? { status: 'error', reason: '当前环境没有 Node，也没有 CEP' }
@@ -248,5 +248,5 @@ export function readExternalText(target: string): Promise<TextRead> {
       reason: `readExternalText 只读用户目录外的文件；面板自己的文件走 readOwnFileText / readRepoFile：${target}`,
     })
   }
-  return readTextOutcome(target)
+  return readTextAsync(target)
 }

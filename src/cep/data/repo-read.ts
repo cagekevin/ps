@@ -2,7 +2,7 @@
 // 是什么：**档 1（面板数据文件）的唯一读入口** —— 三态观测 → JSON.parse → `decode`（必填）→ 三态结论；
 //   另有一个**纯折叠函数**把"文件不在"折成默认值（无 IO、无判断）
 // 替代了什么：`file-repo.ts:62-101` 内联的 `readRaw`，以及 11 个仓库各自写的
-//   `readTextOutcome` + `JSON.parse` + 自己的校验（那正是"10 种读结果形状"的来源）
+//   `readTextAsync` + `JSON.parse` + 自己的校验（那正是"10 种读结果形状"的来源）
 // 谁在用：`data/file-repo.ts`、`data/classification-repo.ts`、`cloud/ledger.ts`，
 //   以及逐个迁进来的 `data/{sys-font,swatch-repo,legacy-settings,style-library-repo,common-use}.ts`
 //
@@ -13,7 +13,7 @@
 // 为什么折叠必须能单独存在：台账 / 系统字体**没有默认值** —— 拿 `{rev:0}` 顶"没有台账"正是 T-114 的 bug。
 //   给它们硬塞一个 `fallback` 参数 = 往签名里塞谎言，所以折叠不做进入口。
 //
-// 别这么写：自己 `readTextSync` / `readTextOutcome` + `JSON.parse` + 当数据用。那会绕过 `decode`，
+// 别这么写：自己 `readTextSync` / `readTextAsync` + `JSON.parse` + 当数据用。那会绕过 `decode`，
 //   于是"文件坏了"在页面上表现为"空面板"（T-101-1 的原始症状）。
 //
 // 判据边界（ADR-26 ②）：本文件**只**做"磁盘内容能不能当 T 用"这一个判断。

@@ -8,7 +8,7 @@
 import { DATA_FILES } from '@/cep/env'
 import { b64ToUtf8 } from '@/cep/codec'
 import { hasNode } from '@/cep/node'
-import { readBase64Outcome, readOwnFileText } from '@/cep/fs-read'
+import { readBase64File, readOwnFileText } from '@/cep/fs-read'
 import { userDir } from '@/cep/paths'
 import { removeFile, writeBase64File } from '@/cep/disk-write'
 import { applyItemDrop, applyListDrop, type DropMove, type DropPosition } from '@/domain/reorder'
@@ -546,7 +546,7 @@ async function warehouseFiles(warehouse: StyleWarehouse): Promise<string[]> {
  * 复制失败抛：这一步在写索引之前，抛出去时索引与原件都还没动。
  */
 async function copyToRecycle(relative: string, recycleDir: string): Promise<boolean> {
-  const read = readBase64Outcome(`${userDir()}/${relative}`)
+  const read = readBase64File(`${userDir()}/${relative}`)
   // T-109：读不到 ≠ 没有。返回 `false` 只表示"没东西可移"——原件不会被删，留在原位。
   // 读不到也走这条（不抛）：抛会中止整次删仓库，而留下的只是一个孤儿文件
   if (read.status === 'error') {

@@ -11,7 +11,7 @@
 // 禁止：在 `data/` 层再写一份 `if (有原文) .bak` + `writeTextFileAtomic` —— 那是又一条路。
 
 import { hasNode, nodeRequire } from './node'
-import { classifyFsError, readTextOutcome, readTextSync } from './fs-read'
+import { classifyFsError, readTextAsync, readTextSync } from './fs-read'
 
 /**
  * 写结果（**观测**，与 `TextRead` 同形）：`ok` = 内容已落盘；`error` + `reason` = 没写进去。
@@ -99,7 +99,7 @@ function writeBackupFile(path: string, text: string): void {
 /**
  * 落盘前的 CAS 比对（D-26）。返回 `'same' | 'diff' | 'unknown'`。
  *
- * 必须用**同步**读：`readTextOutcome` 是 async，即使 Node 读本身是同步的，`await` 也会让出
+ * 必须用**同步**读：`readTextAsync` 是 async，即使 Node 读本身是同步的，`await` 也会让出
  * 一个 microtask 边界——另一个实例正好能在这个边界里完成一次完整写入，
  * 于是"比对通过 → rename"之间被插一脚，照样丢更新（`tests/data/repo-cross-process.test.ts`）。
  */
@@ -189,7 +189,7 @@ export async function writeDisk(
 ): Promise<'written' | 'conflict'> {
   let previous = opts.previous
   if (previous === undefined) {
-    const before = await readTextOutcome(path)
+    const before = await readTextAsync(path)
     if (before.status === 'error' && opts.requireReadable) {
       throw new CepError('IO', msg.data.fn.fileReadFailedAbortWrite(path, before.reason))
     }

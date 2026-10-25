@@ -104,7 +104,7 @@
  *                             - 无 --file：全库搜唯一定义；多个同名定义 → 报错要求 --file 限定。
  *                             - 基于 typescript LanguageService.findRenameLocations：类型感知，
  *                              覆盖 shadow/类型位置/跨文件 import/export 引用。
- *                             - 落地后 tsc --noEmit 兜底，报错即整体回退（原子改名）。
+ *                             - 落地后 `vue-tsc --noEmit` 兜底，报错即整体回退（原子改名）。
  *                             - 不处理属性名（obj.x 的 x）与字符串/注释里的名字。
  *
  *   # 未用 import 清理（L3 语义版：TS checker 绑定级判断，比 eslint 准）
@@ -1523,9 +1523,21 @@ function buildTsRefactor() {
   return { program, ls, progFiles }
 }
 
-/** tsc --noEmit 兜底：报错 → 全部涉及文件写回原内容（原子一致），返回是否通过。 */
+/**
+ * 类型检查兜底：报错 → 全部涉及文件写回原内容（原子一致），返回是否通过。
+ *
+ * **必须用 `vue-tsc` 而不是 `tsc`**：本仓是 Vue 3 项目，裸 `tsc` 解析不了 `.vue` 导入，
+ * 会报 13 条 `Cannot find module '*.vue'`（0 条真错误）—— 那会让每一次符号改名都被
+ * 这个假红回退，工具等于不可用。`vue-tsc` 与 `npm run typecheck` 用的是同一个编译器，
+ * 所以"工具说绿"和"门禁说绿"是同一个判据，不是两份。
+ */
 function runTscGuard(byFileKeys, backups) {
-  const tscOut = spawnSync(join(root, 'node_modules', '.bin', 'tsc'), ['--noEmit'], {
+  const vueTsc = join(root, 'node_modules', '.bin', 'vue-tsc')
+  const bin = existsSync(vueTsc) ? vueTsc : join(root, 'node_modules', '.bin', 'tsc')
+  if (bin.endsWith('tsc') && !bin.endsWith('vue-tsc')) {
+    console.warn('⚠ 未找到 vue-tsc，退回裸 tsc —— Vue 项目下这次校验可能报假的 .vue 模块错')
+  }
+  const tscOut = spawnSync(bin, ['--noEmit'], {
     encoding: 'utf8',
     cwd: root,
   })

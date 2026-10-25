@@ -1,4 +1,4 @@
-import { readBase64Outcome, readExternalText } from '@/cep/fs-read'
+import { readBase64File, readExternalText } from '@/cep/fs-read'
 import { userDir } from '@/cep/paths'
 import { removeFile, writeBase64File } from '@/cep/disk-write'
 import { writeDisk } from '@/cep/disk-write'
@@ -95,7 +95,7 @@ export function exportActionArchive(current: boolean, targetPath: string): Promi
     if (!list.length) throw new CepError('PARSE', msg.data.text.noExportableWarehouse)
 
     const arrFileData = list.map((item) => {
-      const read = readBase64Outcome(pathOf(item.fileName))
+      const read = readBase64File(pathOf(item.fileName))
       // T-109：导出前读不到就不许导出。两种不 ok 这里同果（都抛同一句），文案不变
       if (read.status !== 'ok')
         throw new CepError('IO', msg.data.fn.readWarehouseFailed(item.fileName))

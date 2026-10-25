@@ -6,7 +6,7 @@
 // 禁止：页面不许 import；不弹文件对话框（命令层负责）；不碰 jsx
 
 import { b64ToUtf8, utf8ToB64 } from '@/cep/codec'
-import { readBase64Outcome, readExternalText } from '@/cep/fs-read'
+import { readBase64File, readExternalText } from '@/cep/fs-read'
 import { userDir } from '@/cep/paths'
 import { removeFile, writeBase64File, writeDisk } from '@/cep/disk-write'
 import { isKuLibraryFileName } from '@/domain/ku-format'
@@ -113,7 +113,7 @@ function backupOriginal(relative: string, path: string, base64: string): void {
  */
 function writeKuFile(relative: string, base64: string): boolean {
   const path = `${userDir()}/${relative}`
-  const read = readBase64Outcome(path)
+  const read = readBase64File(path)
   // T-109：**读不到 ≠ 没有**。读不到时若当成"本次新建"，回滚会删掉一个本来就存在的文件；
   // 若照旧覆盖，原文没进 `.bak` 就再也回不去。所以读不到直接中止这次导入
   if (read.status === 'error') {
@@ -258,7 +258,7 @@ export async function exportKuArchive(
         if (!fileName) continue
         // 契约 §2.5：`data` 不是字符串时就是布尔 `false`，语义是"这个文件当时读不到"。
         // 所以这里**有意**把 `notSeen` 与 `error` 合成都写成 `false`（导出格式要求的形状）
-        const read = readBase64Outcome(`${userDir()}/${fileName}`)
+        const read = readBase64File(`${userDir()}/${fileName}`)
         if (read.status === 'error') log.warn('style', `导出：${fileName} 读不到`, read.reason)
         arrFileData.push({ name: fileName, data: read.status === 'ok' ? read.base64 : false })
       }
@@ -267,7 +267,7 @@ export async function exportKuArchive(
       // 这里按「每个仓库先 4 个库文件、再该仓库的旁路图」落，顺序未在真实样本上核对
       for (const name of await sidecarNamesOfWarehouse(warehouse)) {
         // 同上：契约 §2.5 要求 `false` 表示"读不到"，这里有意把两态合成 `false`
-        const sidecar = readBase64Outcome(`${userDir()}/${name}`)
+        const sidecar = readBase64File(`${userDir()}/${name}`)
         if (sidecar.status === 'error') log.warn('style', `导出：${name} 读不到`, sidecar.reason)
         arrFileData.push({ name, data: sidecar.status === 'ok' ? sidecar.base64 : false })
       }
@@ -289,7 +289,7 @@ function moveToRecycle(names: readonly string[], keep: ReadonlySet<string>, dir:
   const moved: string[] = []
   for (const name of names) {
     if (keep.has(name)) continue
-    const read = readBase64Outcome(`${userDir()}/${name}`)
+    const read = readBase64File(`${userDir()}/${name}`)
     // 读不到就跳过：旧文件留在原位，不会丢；只是没进回收目录（宁留孤儿，不丢原件）
     if (read.status === 'error') {
       log.warn('style', `替换导入：旧文件读不到，跳过回收：${name}`, read.reason)
