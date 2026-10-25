@@ -127,7 +127,15 @@ export const useActionStore = defineStore('action', () => {
     warehouses.value = value.list
     activeIndex.value = value.index
     selectActionFile(currentWarehouseFile(value))
-    degraded.value = ''
+
+    // **切了 Repo 路径就必须重读库内容。**
+    // 库是另一个文件，`actionLibraryRepo.onChange` 不会因为换了路径而触发 ——
+    // 只更新 warehouses/activeIndex 的话，仓库名变了、动作列表还是上一个仓库的
+    // （云写回也只触发索引这一路，同理会看到旧内容）。
+    // 凭证：`tests/stores/action-warehouse-switch.test.ts`（本条修复前它是红的）。
+    const library = actionLibraryRepo.read()
+    groups.value = library.ok ? library.value : library.fallback
+    degraded.value = library.ok ? '' : msg.data.fn.actionLibraryCorrupt(library.reason)
   }
 
   // ── 对外**只给用途**，不给内部字段（深模块：窄接口） ──────────────────
