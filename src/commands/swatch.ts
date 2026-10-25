@@ -159,8 +159,13 @@ export const swatchCommands: Command<unknown>[] = [
 
       // 官方 `faSongDaoZhuLi`（`sf.js:426-460`）：`{ name: zuMing, show: true, list: GetColorArray() }`
       // → 交给主面板 `addGroupItem`。**不碰盘**（官方那段写文件的代码是注释掉的，`:446-457`）。
-      const list = readCustomItems()
-      const group = { name: groupName, show: true, list }
+      // `readCustomItems()` 返回**判别联合**（`RepoRead<unknown[]>`），不是数组。
+      // 直接塞进 `group.list` 会把整个 `{ok, value}` 写进库文件 —— `list` 变成对象，
+      // 该组在样式库里显示不出色块（且 `decodeActionLibrary` 之类会判成坏形状）。
+      // 读不到就不许发：发一个空组比不发更糟（用户以为已经发过去了）。
+      const read = readCustomItems()
+      if (!read.ok) throw new CepError('IO', read.reason)
+      const group = { name: groupName, show: true, list: read.value }
 
       // 落点走本地命令（`style.appendGroup` = 官方 `addGroupItem`，`app.v4.js:52470-52475`），
       // **不**再发 `sendColor`：官方主面板与本机同装且监听同一频道，两条路都做会把同一个组追加两遍。

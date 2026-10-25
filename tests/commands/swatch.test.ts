@@ -13,45 +13,62 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
  */
 const fsMock = vi.hoisted(() => ({ files: new Map<string, string>() }))
 
-vi.mock('@/cep/node', () => ({
-  hasNode: () => true,
-}))
+/**
+ * 假 fs **挂在 `@/cep/node` 这一层**，不挂在 `@/cep/fs-read` 上。
+ *
+ * 为什么搬：写原语（`writeDiskSync` / `writeBase64File` / `removeFile`）已经从
+ * `fs.ts` 搬到 `@/cep/disk-write`。以前 mock 在 `fs-read` 上，`disk-write` 拿不到它，
+ * 于是写路径走**真 `nodeRequire('fs')`** —— 红的 4 条是真的在往磁盘写，
+ * 绿的 18 条则根本没走到写盘（假绿）。
+ * 挂到 `nodeRequire` 上之后，`fs-read` 与 `disk-write` 共用同一份内存 fs。
+ */
+vi.mock('@/cep/node', async () => {
+  const pathMod = await import('node:path')
+  const bufferMod = await import('node:buffer')
+
+  const enoent = (p: string) =>
+    Object.assign(new Error(`ENOENT: ${p}`), { code: 'ENOENT' })
+
+  const fakeFs = () => ({
+    mkdirSync: () => undefined,
+    writeFileSync: (p: string, data: string | Uint8Array) => {
+      fsMock.files.set(p, String(data))
+    },
+    renameSync: (from: string, to: string) => {
+      const data = fsMock.files.get(from)
+      if (data === undefined) throw enoent(from)
+      fsMock.files.set(to, data)
+      fsMock.files.delete(from)
+    },
+    unlinkSync: (p: string) => {
+      if (!fsMock.files.has(p)) throw enoent(p)
+      fsMock.files.delete(p)
+    },
+    readFileSync: (p: string) => {
+      const data = fsMock.files.get(p)
+      if (data === undefined) throw enoent(p)
+      return data
+    },
+    readdirSync: () => [],
+    // 故意**不提供** `existsSync`：实现若回退成"先判存在"，这里会立刻炸（T-108）
+  })
+
+  return {
+    hasNode: () => true,
+    nodeRequire: (id: string) =>
+      id === 'fs' ? fakeFs() : id === 'path' ? pathMod.default : id === 'buffer' ? bufferMod : undefined,
+    toPosix: (p: string) => p,
+  }
+})
 
 vi.mock('@/cep/paths', () => ({
   userDir: () => 'ROAM/SheJiZhuLi',
 }))
 
-vi.mock('@/cep/fs-read', () => ({
-  readTextOutcome: async (path: string) => {
-      const text = fsMock.files.get(path)
-      return text === undefined ? { status: 'notSeen' as const } : { status: 'ok' as const, text }
-    },
-  readTextSync: (path: string) => {
-      const text = fsMock.files.get(path)
-      return text === undefined ? { status: 'notSeen' as const } : { status: 'ok' as const, text }
-    },
-  writeTextFileAtomic: (path: string, text: string) => {
-      fsMock.files.set(path, text)
-      return true
-    },
-  writeTextFile: (path: string, text: string) => {
-      fsMock.files.set(path, text)
-    },
-  readBase64Outcome: (path: string) => {
-      const text = fsMock.files.get(path)
-      return text === undefined
-        ? { status: 'notSeen' as const }
-        : { status: 'ok' as const, base64: Buffer.from(text).toString('base64') }
-    },
-  writeBase64File: (path: string, base64: string) => {
-      fsMock.files.set(path, Buffer.from(base64, 'base64').toString('utf8'))
-      return true
-    },
-  removeFile: (path: string) => {
-      fsMock.files.delete(path)
-      return { ok: true as const }
-    },
-}))
+// 这里以前 mock 的是 `@/cep/fs-read`，里面还塞着 `writeTextFileAtomic` / `writeBase64File`
+// / `removeFile` —— 那三个函数已经搬到 `@/cep/disk-write`，而且 `fs-read` 里从来没有过它们。
+// mock 挂在那里等于：写路径完全没被拦（`disk-write` 走真 fs），读路径被一份假实现顶掉。
+// 现在 `fs-read` / `disk-write` 都走上面 `@/cep/node` 的那份假 fs，**不需要也不该**再 mock 它。
 
 vi.mock('@/cep/codec', () => ({
   b64ToUtf8: (b64: string) => Buffer.from(b64, 'base64').toString('utf8'),
