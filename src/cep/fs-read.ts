@@ -226,9 +226,18 @@ export async function readTextAsync(absPath: string): Promise<TextRead> {
  * 不是"绕过入口"。**判据入口唯一、取原文开放**，这是设计不是漏洞。
  */
 export function readOwnFileText(target: string): TextRead {
-  const root = `${userDir()}/`
-  if (!target.startsWith(root)) {
-    return { status: 'error', reason: `readOwnFileText 只读用户目录下的文件：${target}` }
+  // 放行**本应用拥有的两个根**，不放行任意外部路径（那些走 `readExternalText`）：
+  //   ① `userDir()`         —— 扩展自己的数据（`sj_*.json`）
+  //   ② `dirname(userDir())` —— `%APPDATA%`：色板在 `%APPDATA%/FengZiSeBan/` 下，
+  //      是 `userDir()` 的**兄弟目录**，不在里面。
+  //
+  // 只放 ① 会把色板的 `.txt` 全挡掉 —— 症状是「最近色数量」改完写得进去、读不回来，
+  // 永远显示默认值（`recentLimitPath()` 用的就是 `%APPDATA%/FengZiSeBan/`）。
+  const own = userDir()
+  const appRoot = nodeRequire('path').dirname(own)
+  const targets = [`${own}/`, `${appRoot}/`]
+  if (!targets.some((root) => target.startsWith(root))) {
+    return { status: 'error', reason: `readOwnFileText 只读本应用目录下的文件：${target}` }
   }
   return readTextSync(target)
 }
