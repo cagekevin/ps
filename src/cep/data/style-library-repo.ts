@@ -15,7 +15,6 @@ import { applyItemDrop, applyListDrop, type DropMove, type DropPosition } from '
 import {
   defaultStyleIndex,
   readKuGroups,
-  readStyleWarehouseIndex,
   KU_KINDS,
   KU_TAB_LABELS,
   type KuGroup,
@@ -31,7 +30,8 @@ import { dataRepo } from './data-repo'
 import { repoAt } from './repo-at'
 // 写队列与色板文件原语都在 `swatch-repo`（依赖方向只能是 `style-library-repo → swatch-repo`）
 import { readSwatchItems, swatchFilePath, writeSwatchItems } from './swatch-repo'
-import type { Repo, RepoView } from './types'
+import type { Repo, RepoRead, RepoView } from './types'
+import { isDecodeFail, shapeFail, type DecodeFail, type Decoded } from '@/utils/decode'
 import { isRecord } from '@/utils/guards'
 import { fileNameOf } from '@/domain/style-library'
 import { runExclusive } from './exclusive'
@@ -51,12 +51,6 @@ export const styleIndexRepo: RepoView<StyleWarehouseIndex> = styleIndexImpl
 /** 写侧句柄：只给 `style-library-io.ts`（库文件写成功之后补登记索引）用 */
 export const styleIndexWriter: Repo<StyleWarehouseIndex> = styleIndexImpl
 
-export interface KuLibraryRead {
-  groups: KuGroup[]
-  /** 非空 = 这个库读不到（文件缺 / 结构不认识 / 载荷被跳过），页面必须提示 */
-  note: string
-}
-
 /**
  * 读一个库文件。
  *
@@ -64,8 +58,9 @@ export interface KuLibraryRead {
  * 所以仍走 `domain/ku-format.ts` 的三形态分派；`data` 是布尔 `false` 的条目在那里被跳过。
  * 文件名来自索引（可能是 `.ini` 也可能是 `.json`，**扩展名不代表格式**，契约 §2.2）。
  */
-export function readKuLibrary(kind: KuKind, fileName: string): KuLibraryRead {
-  if (!fileName) return { groups: [], note: '' }
+export function readKuLibrary(kind: KuKind, fileName: string): RepoRead<KuGroup[]> {
+  // 索引里没登记这个库 = 还没有这个库（不是读失败）
+  if (!fileName) return { ok: true, value: [] }
 
   const read = readOwnFileText(`${userDir()}/${fileName}`)
   // T-116：`notSeen`（首次使用，本来就没有库文件）返回空库、`note` 留空；
@@ -73,11 +68,16 @@ export function readKuLibrary(kind: KuKind, fileName: string): KuLibraryRead {
   // 由样式页渲染出来。否则用户看到的是"空库"，与"这个库本来就没有组"分不开
   if (read.status === 'error') {
     log.error('style', `${kind} 库文件读不到：${read.reason}`)
-    return { groups: [], note: `库文件读不到（${read.reason}）` }
+    return { ok: false, reason: `库文件读不到（${read.reason}）`, fallback: [] }
   }
-  if (read.status === 'notSeen' || read.text === '') return { groups: [], note: '' }
+  if (read.status === 'notSeen' || read.text === '') return { ok: true, value: [] }
 
-  return readKuGroups(kind, read.text, b64ToUtf8)
+  // domain 的纯解析走 `Decoded | DecodeFail`；这一层折成 IO 结论 `RepoRead`
+  const parsed = readKuGroups(kind, read.text, b64ToUtf8)
+  if (isDecodeFail(parsed)) return { ok: false, reason: parsed.fail, fallback: [] }
+  return parsed.degraded
+    ? { ok: true, value: parsed.value, reason: parsed.degraded }
+    : { ok: true, value: parsed.value }
 }
 
 export interface StyleLibrarySnapshot {
@@ -100,11 +100,11 @@ export function readIndexState(): {
 } {
   // 一次同步读：没有队列，不存在"排在自己后面"这回事
   const stored = styleIndexImpl.read()
-  // 坏索引没有 value：用仓库自己的 fallback 继续归一，坏因拼进 degraded
-  const parsed = readStyleWarehouseIndex(stored.ok ? stored.value : defaultStyleIndex())
+  // `styleIndexImpl.read()` 已过 `decodeStyleWarehouseIndex` ⇒ `stored.value` 就是合法索引，
+  // 不需要再归一一次。这里只把「值可用但降级」与「读坏了」都折成一句 degraded（值用 fallback）。
   return {
-    value: parsed.value,
-    degraded: [stored.ok ? '' : stored.reason, parsed.degraded].filter(Boolean).join('；'),
+    value: stored.ok ? stored.value : stored.fallback,
+    degraded: stored.reason ?? '',
   }
 }
 
@@ -123,8 +123,9 @@ export function readStyleLibrary(): StyleLibrarySnapshot {
 
   for (const kind of KU_KINDS) {
     const read = readKuLibrary(kind, fileNameOf(current, kind))
-    libraries[kind] = read.groups
-    if (read.note) notes.push(read.note)
+    // 读不到时给空库（页面照常渲染其它库），但**原因必须进 notes** —— 不许显示成"这个库没有组"
+    libraries[kind] = read.ok ? read.value : read.fallback
+    if (read.reason) notes.push(read.reason)
   }
 
   return {
@@ -142,11 +143,11 @@ function currentLibPath(kind: KuKind): string {
   if (!stored.ok) {
     throw new CepError('IO', msg.data.fn.warehouseIndexCorruptAbort(stored.reason))
   }
-  const parsed = readStyleWarehouseIndex(stored.value)
-  if (parsed.degraded) {
-    throw new CepError('IO', msg.data.fn.warehouseIndexUnusableAbort(parsed.degraded))
+  // `stored.value` 已过 decode；这里只剩「一个仓库都没有」这一种不可用
+  if (!stored.value.list.length) {
+    throw new CepError('IO', msg.data.fn.warehouseIndexUnusableAbort('仓库索引里没有任何仓库'))
   }
-  const warehouse = parsed.value.list[parsed.value.index]
+  const warehouse = stored.value.list[stored.value.index]
   const fileName = fileNameOf(warehouse, kind)
   if (!fileName) {
     throw new CepError('IO', msg.data.fn.indexNoKindFileName(kind))
@@ -224,8 +225,8 @@ type KuRawGroup = Record<string, unknown>
  * 库文件数组的 decode：顶层必须是数组，元素必须是对象（`[1,2,3]` 不算"三个组"）。
  * 元素用 `isRecord` 证，不用 `as`（guards.ts 明禁）。
  */
-function decodeKuGroups(raw: unknown): { value: KuRawGroup[] } | null {
-  if (!Array.isArray(raw)) return null
+function decodeKuGroups(raw: unknown): Decoded<KuRawGroup[]> | DecodeFail {
+  if (!Array.isArray(raw)) return shapeFail('', 'array', raw)
   return { value: raw.filter(isRecord) }
 }
 
@@ -384,7 +385,7 @@ function updateKuGroups(kind: KuKind, mutate: (groups: KuRawGroup[]) => void): v
     // 库文件已经落盘才登记索引：反过来会让索引指向一个不存在的文件
     // 用 `update`（带 CAS）：跨进程仍可能被另一面板改过，比对失败会重读重跑
     styleIndexImpl.update((value) => {
-      const current = readStyleWarehouseIndex(value).value
+      const current = value
       const warehouse = current.list[current.index]
       if (!warehouse) throw new CepError('PARSE', msg.data.text.warehouseIndexNoCurrent)
       warehouse[kind] = target.fileName
@@ -424,7 +425,7 @@ export function selectWarehouse(index: number): void {
   usableIndex()
   // `update` 自带原子写 + CAS，不需要外层再包一层
   styleIndexImpl.update((value) => {
-    const current = readStyleWarehouseIndex(value).value
+    const current = value
     const valid = Number.isInteger(index) && index >= 0 && index < current.list.length
     return { ...value, index: valid ? index : 0, list: current.list }
   })
@@ -435,7 +436,7 @@ export function addWarehouse(): void {
   usableIndex()
   // 同 selectWarehouse：`update` 自带原子写 + CAS
   styleIndexImpl.update((value) => {
-    const current = readStyleWarehouseIndex(value).value
+    const current = value
     const list = [...current.list, createWarehouse('未命名分组')]
     return { ...value, index: current.index, list }
   })
@@ -454,7 +455,7 @@ export function renameWarehouse(index: number, name: string): void {
   usableIndex()
   // 同 selectWarehouse：`update` 自带原子写 + CAS
   styleIndexImpl.update((value) => {
-    const current = readStyleWarehouseIndex(value).value
+    const current = value
     const warehouse = current.list[index]
     if (!warehouse) throw new CepError('PARSE', msg.data.fn.warehouseMissing(String(index)))
     warehouse.name = warehouseName
@@ -592,7 +593,7 @@ export function deleteWarehouse(index: number): WarehouseDeleteResult {
     }
 
     styleIndexImpl.update((value) => {
-      const next = readStyleWarehouseIndex(value).value
+      const next = value
       next.list.splice(index, 1)
       if (index < next.index) next.index -= 1
       else if (index === next.index) next.index = 0

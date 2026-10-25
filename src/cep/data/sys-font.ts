@@ -5,7 +5,7 @@ import { normalizeFontList } from '@/domain/font-normalize'
 import { isRecord } from '@/utils/guards'
 import type { FontItem } from '@/domain/font-item'
 import { readRepoFile } from './repo-read'
-import type { DecodeFail, Decoded } from '@/utils/decode'
+import { shapeFail, type DecodeFail, type Decoded } from '@/utils/decode'
 import { readFontStars } from './font-meta'
 
 /**
@@ -16,8 +16,10 @@ import { readFontStars } from './font-meta'
  */
 export function mergeFontStars(list: FontItem[]): FontItem[] {
   const read = readFontStars()
-  if (!read.ok || !Object.keys(read.stars).length) return list
-  return list.map((f) => ({ ...f, star: read.stars[f.family] ?? 0 }))
+  // 读不到星级**不动列表**（评分按 0 显示），但"读不到"这件事由 `useFontStore.loadStars`
+  // 单独报给用户 —— 列表能不能显示和评分读不读得到是两件事。
+  if (!read.ok || !Object.keys(read.value).length) return list
+  return list.map((f) => ({ ...f, star: read.value[f.family] ?? 0 }))
 }
 
 /**
@@ -40,8 +42,9 @@ export type SysFontRead =
  * 不许 `as SysFontFile`：`as` 之后 `file.arr` 恒可信，坏形状会漏过去变成"没有系统字体"（静默）。
  * 判据即证明：`isRecord` + `Array.isArray` ⇒ 不转型。
  */
-function decodeSysFont(raw: unknown): Decoded<unknown[]> | DecodeFail | null {
-  if (!isRecord(raw) || !Array.isArray(raw.arr)) return { fail: '结构不认识：缺 arr 数组' }
+function decodeSysFont(raw: unknown): Decoded<unknown[]> | DecodeFail {
+  if (!isRecord(raw)) return shapeFail('', 'object', raw)
+  if (!Array.isArray(raw.arr)) return shapeFail('arr', 'array', raw.arr)
   return { value: raw.arr }
 }
 

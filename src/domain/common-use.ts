@@ -3,7 +3,7 @@
 // 谁在用：`cep/data/common-use.ts`（仓库）、后续 `stores/common-use.ts`（只读投影，T-87）
 // 禁止：不读文件、不调 jsx、不 import Vue；不在这里判断"要不要写"（那是命令层的事）
 import { isArrayOf, isRecord, isUnknownArray } from '@/utils/guards'
-import { type Decoded } from '@/utils/decode'
+import { shapeFail, type DecodeFail, type Decoded } from '@/utils/decode'
 
 /**
  * 一条常用项：官方 `configReset()` 的 10 个键（`app.v4.js:11113-11161` 起）。
@@ -264,9 +264,9 @@ export function readCommonUseItems(file: CommonUseFile | null | undefined): Comm
 }
 
 /** 读边界：常用页文件（判据在 `toCommonUseItems`，认裸数组与旧 `{ info: [...] }`） */
-export function decodeCommonUseFile(raw: unknown): Decoded<CommonUseFile> | null {
+export function decodeCommonUseFile(raw: unknown): Decoded<CommonUseFile> | DecodeFail {
   const items = toCommonUseItems(raw)
-  return items === null ? null : { value: items }
+  return items === null ? shapeFail('', 'array', raw) : { value: items }
 }
 
 /**

@@ -1,7 +1,8 @@
 import { readOwnFileText } from '@/cep/fs-read'
 import { userDir } from '@/cep/paths'
-import { writeDisk } from '@/cep/disk-write'
+import { writeDiskSync } from '@/cep/disk-write'
 import { actionIndexWriter, actionLibraryRepo } from '@/cep/data/actions'
+import { runExclusive } from '@/cep/data/exclusive'
 import type { ActionWarehouseIndex } from '@/domain/action'
 import type { SyncFile, SyncUnitAdapter, WriteOutcome } from '@/domain/cloud'
 import { CepError } from '@/utils/errors'
@@ -94,37 +95,49 @@ export const actionLibraryEntry: SyncUnitAdapter = {
     return unitPayload(files)
   },
 
+  /**
+   * 云下载写回：写 N 个 `sj_dz*.json` + 写索引。
+   *
+   * **两条纪律，缺一条这个洞就还在**（35 号 P1）：
+   * ① 落盘段**同步**（`writeDiskSync` + 同步索引写）—— 原来两个 `await` 之间有 microtask 边界，
+   *    `importActionArchive` / `deleteWarehouse` 能插进去，留下「索引指向不存在的库」或孤儿文件；
+   * ② 进 `action-files` **互斥域** —— 和导入/删仓库写同一批 `sj_dz*`，不许并发。
+   *
+   * 函数本身仍标 `async`（接口要求 `Promise<WriteOutcome>`），但体内**没有 `await`**，
+   * 所以整段是一次跑完的同步段。
+   */
   async write(payload): Promise<WriteOutcome> {
     try {
-      const indexFile = payload.files.find((file) => file.path === INDEX_PATH)
-      const index = readIndex(parseFile(indexFile, '动作仓库索引'))
+      return runExclusive('action-files', '动作库写回', () => {
+        const indexFile = payload.files.find((file) => file.path === INDEX_PATH)
+        const index = readIndex(parseFile(indexFile, '动作仓库索引'))
 
-      for (const entry of index.list) {
-        const file = payload.files.find((item) => item.path === `/${entry.fileName}`)
-        parseFile(file, `动作仓库 ${entry.fileName}`)
-      }
-
-      // 先写仓库文件，最后写索引。
-      // 落盘走**唯一入口** `writeDisk`（`.bak` + 原子写）——
-      // 以前裸 `writeTextFileAtomic`：无 `.bak`、坏写无退路（债 11-24）。
-      for (const entry of index.list) {
-        const file = payload.files.find((item) => item.path === `/${entry.fileName}`)
-        if (!file || file.content.kind !== 'inline') continue
-        const target = `${userDir()}/${entry.fileName}`
-        try {
-          await writeDisk(target, file.content.data)
-        } catch (error) {
-          throw new CepError(
-            'IO',
-            msg.cloud.fn.actionLibWriteBackFailed(
-              entry.fileName,
-              error instanceof Error ? error.message : String(error),
-            ),
-          )
+        for (const entry of index.list) {
+          const file = payload.files.find((item) => item.path === `/${entry.fileName}`)
+          parseFile(file, `动作仓库 ${entry.fileName}`)
         }
-      }
-      await actionIndexWriter.write(index)
-      return { ok: true }
+
+        // 先写仓库文件，最后写索引。
+        // 落盘走**唯一入口**（`.bak` + 原子写）—— 以前裸 `writeTextFileAtomic`：无 `.bak`（债 11-24）。
+        for (const entry of index.list) {
+          const file = payload.files.find((item) => item.path === `/${entry.fileName}`)
+          if (!file || file.content.kind !== 'inline') continue
+          const target = `${userDir()}/${entry.fileName}`
+          try {
+            writeDiskSync(target, file.content.data)
+          } catch (error) {
+            throw new CepError(
+              'IO',
+              msg.cloud.fn.actionLibWriteBackFailed(
+                entry.fileName,
+                error instanceof Error ? error.message : String(error),
+              ),
+            )
+          }
+        }
+        actionIndexWriter.write(index)
+        return { ok: true }
+      })
     } catch (error) {
       return {
         ok: false,

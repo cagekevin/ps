@@ -5,7 +5,7 @@
 
 import { resolveKuGroups } from './ku-format'
 import { isRecord } from '@/utils/guards'
-import { type Decoded } from '@/utils/decode'
+import { shapeFail, type DecodeFail, type Decoded } from '@/utils/decode'
 
 /** 四类库。顺序 = 页面 tab 顺序（原版 `switchval`，`app.v4.js:54590`） */
 export type KuKind = 'color' | 'gradient' | 'font' | 'style'
@@ -52,36 +52,39 @@ export function defaultStyleIndex(): StyleWarehouseIndex {
   return { index: 0, list: [{ name: '默认仓库' }] }
 }
 
-export interface KuIndexRead {
-  value: StyleWarehouseIndex
-  /** 非空 = 索引不是认识的形状，调用方要提示，不能当成"新用户" */
-  degraded: string
-}
-
-/** 索引归一化：缺字段不补假值，`index` 越界夹到合法范围 */
-export function readStyleWarehouseIndex(raw: unknown): KuIndexRead {
-  if (!isRecord(raw) || !Array.isArray(raw.list)) {
-    return { value: defaultStyleIndex(), degraded: '仓库索引结构不认识' }
-  }
+/**
+ * 索引归一化：**纯转换，不做判断**。缺字段不补假值，`index` 越界夹到合法范围。
+ *
+ * 它**不报**"结构不认识" —— 那是判据，归 `decodeStyleWarehouseIndex`。
+ * 把两件事塞进一个函数，就会造出「值 + 可忽略的 `degraded` 字段」这种形状：
+ * 调用方直接 `.value` 就把降级吞了（原来 10 个调用点里 8 个这么写）。
+ * 现在归一化返回的就是 `StyleWarehouseIndex`，**没有第二个字段可忽略**。
+ */
+export function normalizeStyleIndex(raw: unknown): StyleWarehouseIndex {
+  if (!isRecord(raw) || !Array.isArray(raw.list)) return defaultStyleIndex()
 
   const list = raw.list.filter(isRecord).map((item) => item as StyleWarehouse)
-  if (!list.length) {
-    return { value: { index: 0, list: [] }, degraded: '仓库索引里没有任何仓库' }
-  }
+  if (!list.length) return { index: 0, list: [] }
 
   const index = typeof raw.index === 'number' && Number.isFinite(raw.index) ? raw.index : 0
   const safe = Math.min(Math.max(Math.trunc(index), 0), list.length - 1)
-  return { value: { index: safe, list }, degraded: '' }
+  return { index: safe, list }
 }
 
 /**
- * 读边界：样式库索引。容器先自己证一遍 —— `readStyleWarehouseIndex` 把"结构不认识"折成
- * `defaultStyleIndex()`：那在"索引为空"时是对的，在"结构不认识"时会把坏文件当成新用户。
+ * 读边界：样式库索引。**判据在这里，归一化在 `normalizeStyleIndex`**。
+ *
+ * 两件事必须分开：`normalizeStyleIndex` 会把"结构不认识"折成 `defaultStyleIndex()`——
+ * 那在"索引为空"时是对的，在"结构不认识"时会把坏文件当成新用户。所以结构判断必须在
+ * 归一化**之前**做（这里），不能塞进归一化里靠一个 `degraded` 字段事后提醒。
  */
-export function decodeStyleWarehouseIndex(raw: unknown): Decoded<StyleWarehouseIndex> | null {
-  if (!isRecord(raw) || !Array.isArray(raw.list)) return null
-  const read = readStyleWarehouseIndex(raw)
-  return read.degraded ? { value: read.value, degraded: read.degraded } : { value: read.value }
+export function decodeStyleWarehouseIndex(raw: unknown): Decoded<StyleWarehouseIndex> | DecodeFail {
+  // 结构不认识 ⇒ 形状臂说清是顶层不对还是 `list` 不对（原来返回 `null`，统一成一句话）
+  if (!isRecord(raw)) return shapeFail('', 'object', raw)
+  if (!Array.isArray(raw.list)) return shapeFail('list', 'array', raw.list)
+  const value = normalizeStyleIndex(raw)
+  // 合法 JSON 但一个仓库都没有：值可用（空列表），但**必须标记**（ADR-14）
+  return value.list.length ? { value } : { value, degraded: '仓库索引里没有任何仓库' }
 }
 
 /** 列表里显示的一项；`swatch` 是可直接塞进 `background` 的 CSS 值（颜色 / 渐变），没有就不画色块 */
@@ -261,31 +264,30 @@ const ITEM_READERS: Record<KuKind, (raw: Record<string, unknown>) => KuItem> = {
   style: styleItem,
 }
 
-export interface KuGroupsRead {
-  groups: KuGroup[]
-  /** 非空 = 内容被跳过或结构不认识，调用方要提示（不许当成空库） */
-  note: string
-}
-
 /**
- * 把一个库文件文本读成组列表。
+ * 把一个库文件文本解析成组列表（**纯解析，不做 IO**）。
  *
- * `decode` 由调用方注入（`cep/fs.ts` 的 `b64ToUtf8`），这里保持纯函数、可单测。
+ * 返回 `Decoded` 而不是「`groups` + 可忽略的 `note`」：后者把"库是空的"和"读不懂"压成
+ * 同一个空数组，调用方分不出，只能显示成"这个库没有组"——把我们的故障说成用户的数据。
+ * 失败臂用 `DecodeFail`（带原因），`ok` 臂的 `degraded` 表示"值可用但有条目被跳过"。
+ *
+ * `decode` 由调用方注入（base64 → utf8），这里保持纯函数、可单测。
  */
 export function readKuGroups(
   kind: KuKind,
   text: string,
   decode: (base64: string) => string,
-): KuGroupsRead {
+): Decoded<KuGroup[]> | DecodeFail {
   let parsed: unknown
   try {
     parsed = JSON.parse(text)
   } catch {
-    return { groups: [], note: '库文件不是合法 JSON' }
+    return { fail: 'notJson' }
   }
 
+  // 三形态分派都不匹配 ⇒ 容器层形状不认识（说不出具体字段，因为形态本来就多）
   const source = resolveKuGroups(parsed, decode)
-  if (!source.groups) return { groups: [], note: source.note || '库文件里没有可用的组数据' }
+  if (!source.groups) return shapeFail('', 'array', parsed)
 
   const reader = ITEM_READERS[kind]
   const groups: KuGroup[] = []
@@ -299,5 +301,7 @@ export function readKuGroups(
       items: list.filter(isRecord).map(reader),
     })
   }
-  return { groups, note: groups.length ? '' : source.note }
+  // `degraded` 保留「有条目被跳过」这件事（原实现只在 `groups` 为空时才透出 `note`，
+  // 有组时把提示丢了 —— 那本身就是一处静默吞）
+  return { value: groups, degraded: source.note || undefined }
 }

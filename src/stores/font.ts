@@ -70,8 +70,8 @@ export const useFontStore = defineStore('font', () => {
   async function loadStars() {
     try {
       const read = readFontStars()
-      stars.value = read.stars
-      starsError.value = read.ok ? '' : msg.data.fn.starsReadFailed(read.reason ?? '原因未知')
+      stars.value = read.ok ? read.value : {}
+      starsError.value = read.ok ? '' : msg.data.fn.starsReadFailed(read.reason)
       if (!read.ok) log.warn('font', '星级读不到：界面显示"读不到"，不是"未收藏"', read.reason)
     } catch (e) {
       stars.value = {}
@@ -83,12 +83,11 @@ export const useFontStore = defineStore('font', () => {
   /** force 用于仓库变更后的强制刷新；普通调用命中缓存就返回 */
   async function loadTags(force = false) {
     if (!force && tags.value.length) return
-    tagsError.value = ''
-    try {
-      tags.value = readFontTags()
-    } catch (e) {
-      tagsError.value = describeCepError(e)
-    }
+    // `readFontTags()` **不抛**（读失败在判别联合里）⇒ 原来那个 `try/catch` 永远接不到东西，
+    // `tagsError` 因此从来没被设置过 —— 那是装饰，不是错误通道。现在改成直接判 `ok`。
+    const read = readFontTags()
+    tags.value = read.ok ? read.value : []
+    tagsError.value = read.ok ? '' : read.reason
   }
 
   function cyclePreview() {

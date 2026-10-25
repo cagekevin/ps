@@ -16,6 +16,7 @@ import { repoAt } from './repo-at'
 import { readRepoFile } from './repo-read'
 import { writeProtectedText } from './protected-text'
 import type { Repo, RepoRead } from './types'
+import { shapeFail, type DecodeFail, type Decoded } from '@/utils/decode'
 
 // 写队列已删：`Repo<T>` 全同步 ⇒ 读改写是不可打断的同步段，不需要排队（TD-09-18 的"只留一条链"变成"没有链"）
 /**
@@ -92,8 +93,8 @@ export function readSwatchItems(path: string): RepoRead<unknown[]> {
 /**
  * 色板数组文件的 decode：顶层必须是数组（条目是开放形状，由各消费侧自己判）。
  */
-function decodeSwatchArray(raw: unknown): { value: unknown[] } | null {
-  return isUnknownArray(raw) ? { value: raw } : null
+function decodeSwatchArray(raw: unknown): Decoded<unknown[]> | DecodeFail {
+  return isUnknownArray(raw) ? { value: raw } : shapeFail('', 'array', raw)
 }
 
 /**

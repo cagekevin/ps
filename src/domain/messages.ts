@@ -426,6 +426,14 @@ export const msg: Msg = {
         `${target} 正被其他面板修改，写入已放弃（重试 ${retries} 次）`,
       // exclusive.ts：长事务互斥（同一批文件不许两个事务同时改）
       exclusiveBusy: (what: string) => `${what}还没完成，请等它结束再试`,
+      // utils/decode.ts：`DecodeFail` 的**唯一渲染处**（形状臂 + 语义臂）
+      // decode 层只报观测/码，用户话只在这里出现
+      decodeShapeFail: (field: string, expected: string, actual: string) =>
+        `${field ? `字段 ${field}` : '顶层'} 期望 ${expected}，实际是 ${actual}`,
+      decodeNotJson: () => '内容不是合法 JSON',
+      decodeEmptyContent: () => '内容是空的',
+      decodeNoItemsParsed: (count: string) => `有 ${count} 个条目，但一个都没解析出来`,
+      decodeBadItem: (count: string) => `有 ${count} 个条目形状不对`,
       // font-list.ts
       sysFontReadFailed: (reason: string) => `读不到系统字体：${reason}（SysFont2.json）`,
       sysFontUnrecognized: (data: string) => `ztgl_initSystemList 返回了无法识别的数据：${data}`,

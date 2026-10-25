@@ -18,7 +18,7 @@ import {
   type CommonUseItem,
 } from '@/domain/common-use'
 import { applyListDrop, type DropPosition } from '@/domain/reorder'
-import type { Decoded } from '@/utils/decode'
+import { shapeFail, type DecodeFail, type Decoded } from '@/utils/decode'
 import { CepError } from '@/utils/errors'
 import { isRecord } from '@/utils/guards'
 import { msg } from '@/domain/messages'
@@ -97,10 +97,10 @@ export function ensureCommonUseFile(): EnsureResult {
  * `{ info: [...] }` 是我们自己写错的历史文件 —— 读得懂、下次写会归一成数组。
  * 判据即证明（`isRecord` + 字段访问）⇒ 不 `as` 断言。
  */
-function decodeCommonUseRoot(raw: unknown): Decoded<unknown> | null {
+function decodeCommonUseRoot(raw: unknown): Decoded<unknown> | DecodeFail {
   if (Array.isArray(raw)) return { value: raw }
   if (isRecord(raw) && Array.isArray(raw.info)) return { value: raw }
-  return null
+  return shapeFail('', 'array', raw)
 }
 
 /**

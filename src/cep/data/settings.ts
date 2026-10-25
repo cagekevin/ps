@@ -7,7 +7,7 @@ import { CepError } from '@/utils/errors'
 import { msg } from '@/domain/messages'
 import { isRecord } from '@/utils/guards'
 import { log } from '@/utils/logger'
-import type { Decoder } from '@/utils/decode'
+import { shapeFail, type Decoder } from '@/utils/decode'
 
 /**
  * 面板自己的界面偏好，独立一个文件，不动原面板的 sj_set.json。
@@ -28,7 +28,7 @@ const FILE = DATA_FILES.uiPrefs
  * 这一层只回答"这份文件能不能当 `Record<string, unknown>` 用"。
  */
 const decodePrefs: Decoder<Record<string, unknown>> = (raw) =>
-  isRecord(raw) ? { value: raw } : null
+  isRecord(raw) ? { value: raw } : shapeFail('', 'object', raw)
 const LS_KEY = 'psz:v5:ui'
 const FLUSH_DELAY = 300
 /** 偏好文件结构版本；以后字段迁移靠它，不靠猜 */

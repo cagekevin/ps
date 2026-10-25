@@ -13,7 +13,7 @@ import { CloudError } from '@/domain/cloud'
 import { msg } from '@/domain/messages'
 import { isRecord } from '@/utils/guards'
 import { log } from '@/utils/logger'
-import type { DecodeFail, Decoded } from '@/utils/decode'
+import { shapeFail, type DecodeFail, type Decoded } from '@/utils/decode'
 
 const FILE = DATA_FILES.cloudLedger
 
@@ -62,10 +62,11 @@ function nonNegInt(value: unknown): number {
  * 台账的 decode。`localHash` 是判断"上次同步到哪"的**唯一依据**，缺了就是坏台账 ——
  * 不能当成"rev 0 的新台账"，那会让 `decideUpload` 判成 `cloud-newer`（T-114）。
  */
-function decodeLedger(raw: unknown): Decoded<CloudLedgerRecord> | DecodeFail | null {
-  if (!isRecord(raw)) return null
+function decodeLedger(raw: unknown): Decoded<CloudLedgerRecord> | DecodeFail {
+  if (!isRecord(raw)) return shapeFail('', 'object', raw)
   const localHash = raw.localHash
-  if (typeof localHash !== 'string' || !localHash) return { fail: '缺少 localHash' }
+  if (typeof localHash !== 'string' || !localHash)
+    return shapeFail('localHash', 'string', localHash)
   const units = readUnits(raw.units)
   return {
     value: {

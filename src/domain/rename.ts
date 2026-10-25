@@ -7,7 +7,7 @@
 import { CepError } from '@/utils/errors'
 import { msg } from './messages'
 import { isRecord } from '@/utils/guards'
-import { decodeList, type Decoded } from '@/utils/decode'
+import { decodeList, type DecodeFail, type Decoded } from '@/utils/decode'
 
 /** 一个重命名分组。第 0 组是固定组（最近使用），不可改名/删除 */
 export interface RenameGroup {
@@ -290,8 +290,8 @@ function isRenameGroup(x: unknown): x is RenameGroup {
   return isRecord(x) && typeof x.name === 'string' && Array.isArray(x.list)
 }
 
-/** 读边界：重命名预设（必须是 `[{ name, show, list }]`；有条目坏 → 整份 `null`） */
-export function decodeRenamePreset(raw: unknown): Decoded<RenamePreset> | null {
+/** 读边界：重命名预设（必须是 `[{ name, show, list }]`；有条目坏 → 整份失败 + 原因） */
+export function decodeRenamePreset(raw: unknown): Decoded<RenamePreset> | DecodeFail {
   return decodeList(raw, isRenameGroup)
 }
 

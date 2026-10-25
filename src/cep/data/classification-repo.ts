@@ -3,7 +3,7 @@ import { DATA_FILES } from '@/cep/env'
 import { hasCep } from '@/cep/transport'
 import { isRecord, isUnknownArray } from '@/utils/guards'
 import { foldAbsent, readRepoFile } from './repo-read'
-import type { DecodeFail, Decoded } from '@/utils/decode'
+import { shapeFail, type DecodeFail, type Decoded } from '@/utils/decode'
 import type { RepoRead } from './types'
 
 /**
@@ -107,8 +107,8 @@ export function getClassification(): RepoRead<Classification> {
  * 因为 `presets` / `commercials` 与分组无关，整份拒绝会让"免费商用"筛选一起空。
  * 顶层不是对象则整份拒绝（`null`），因为那时连 `presets` 都没有可信来源。
  */
-function decodeClassification(raw: unknown): Decoded<Classification> | DecodeFail | null {
-  if (!isRecord(raw)) return null
+function decodeClassification(raw: unknown): Decoded<Classification> | DecodeFail {
+  if (!isRecord(raw)) return shapeFail('', 'object', raw)
 
   const rawCategories = isRecord(raw.categories) ? raw.categories : {}
   const categories: Category[] = []

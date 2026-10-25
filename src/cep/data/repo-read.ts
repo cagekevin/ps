@@ -22,7 +22,7 @@
 import { readTextSync } from '../fs-read'
 import { log } from '@/utils/logger'
 import { msg } from '@/domain/messages'
-import { isDecodeFail, type Decoder } from '@/utils/decode'
+import { isDecodeFail, type DecodeFail, type Decoder } from '@/utils/decode'
 import type { RepoRead } from './types'
 
 /**
@@ -88,16 +88,17 @@ export function readRepoFile<T>(target: string, decode: Decoder<T>): RepoFileOut
     return { kind: 'bad', why: 'notJson', reason: '内容不是合法 JSON', text }
   }
 
-  // 唯一的形状通道：`decode` 是必填参数，解析结果没有"直接当 T"这条路
+  // 唯一的形状通道：`decode` 是必填参数，解析结果没有"直接当 T"这条路。
+  // 它也**不返回 `null`**（`Decoder<T>` 只允许 `Decoded<T> | DecodeFail`）——
+  // 所以这里不存在"失败但说不出原因"的分支，`reason` 一定是 decode 给的。
   const decoded = decode(parsed)
-  if (decoded === null) {
-    log.error('repo', `${target} 内容结构不认识`)
-    return { kind: 'bad', why: 'badShape', reason: '内容结构不认识', text }
-  }
   // `decode` 说清了哪里坏 ⇒ 用它的文案（各仓库的用户提示不同，不许在这里统一成一句）
   if (isDecodeFail(decoded)) {
-    log.error('repo', `${target} 内容结构不认识：${decoded.fail}`)
-    return { kind: 'bad', why: 'badShape', reason: decoded.fail, text }
+    // **`DecodeFail` 的唯一渲染处**：decode 层只报观测（字段/期望/实际）或码，
+    // 用户话只从这里出、只从 `msg` 取 —— 12 个 decoder 不再各写一句中文。
+    const reason = describeDecodeFail(decoded)
+    log.error('repo', `${target} 内容结构不认识：${reason}`)
+    return { kind: 'bad', why: 'badShape', reason, text }
   }
 
   // 值可用但不完整 → 带上 degraded（ADR-14：读可降级但必须标记）
@@ -141,5 +142,28 @@ export function foldAbsent<T>(
       return outcome.degraded
         ? { ok: true, value: outcome.value, reason: outcome.degraded }
         : { ok: true, value: outcome.value }
+  }
+}
+
+/**
+ * `DecodeFail` 的**唯一渲染处**。
+ *
+ * 形状臂拼「字段 / 期望 / 实际」；语义臂按码取文案。decode 层因此不需要知道
+ * "用户该看到什么" —— 它只报它真正知道的东西（哪个字段不对，或者内容空/没解析出条目）。
+ */
+function describeDecodeFail(fail: DecodeFail): string {
+  if (fail.fail === 'shape') {
+    return msg.data.fn.decodeShapeFail(fail.field, fail.expected, fail.actual)
+  }
+  const count = String(fail.count ?? '')
+  switch (fail.fail) {
+    case 'notJson':
+      return msg.data.fn.decodeNotJson()
+    case 'emptyContent':
+      return msg.data.fn.decodeEmptyContent()
+    case 'noItemsParsed':
+      return msg.data.fn.decodeNoItemsParsed(count)
+    case 'badItem':
+      return msg.data.fn.decodeBadItem(count)
   }
 }

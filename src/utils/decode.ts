@@ -16,7 +16,7 @@
 //
 //      // domain/foo.ts
 //      function isFooItem(x: unknown): x is FooItem { return isRecord(x) }   // 条目级只证"是对象"
-//      export function decodeFooFile(raw: unknown): Decoded<FooFile> | null {
+//      export function decodeFooFile(raw: unknown): Decoded<FooFile> | DecodeFail {
 //        return decodeIndexed(raw, isFooItem)      // `{ index, list }` 型容器
 //        // return decodeList(raw, isFooItem)      // 裸数组型容器
 //      }
@@ -24,8 +24,13 @@
 // ② 仓库构造时**直接传函数引用**：`dataRepo(path, fallback, decodeFooFile)`。
 //    需要绑谓词时才包一层（这是唯一允许的 lambda 形态，里面只许调 decodeList/decodeIndexed）：
 //      `(raw) => decodeList(raw, isRawTag)` —— 别在 lambda 里转型、补默认值或 try/catch。
-// ③ 返回值只有三种：`null` = 结构不认识（仓库转 `ok:false + reason`）；`{ value }` = 正常；
-//    `{ value, degraded }` = 值可用但不完整（ADR-14 必须标记）。
+// ③ 返回值**只有三种**，**没有 `null`**：
+//    `{ value }` = 正常；`{ value, degraded }` = 值可用但不完整（ADR-14 必须标记）；
+//    `DecodeFail` = 结构不认识 —— **两臂**：
+//      形状臂 `{ fail:'shape', field, expected, actual }`（只报观测，说不出用户话）
+//      语义臂 `{ fail:'notJson'|'emptyContent'|'noItemsParsed'|'badItem', count? }`（码可穷举）
+//    **不许 `return null`**：那等于"失败但说不出原因"，类型上已经写不出来了（`Decoder<T>` 里没有 `| null`）。
+//    用户文案由 `data/repo-read.ts` 的 `describeDecodeFail()` **唯一一处**渲染 —— 这里只报观测/码。
 // ④ **新增一个 decode 必须同时加一条坏形状用例**（照 `tests/data/decode-badshape.test.ts`）：
 //    类型只能保证"传了 decode"，保证不了"decode 真在校验" —— 有人把它改成 `=> ({ value: raw as T })`
 //    或把谓词改成 `isRecord` 恒真，编译一点都不红。**用例是唯一的兜底**，且必须双向断言
@@ -58,8 +63,50 @@ export interface Decoded<T> {
  *
  * 判据：**能说清哪里坏了就用它；说不清才用 `null`**（`null` 会被统一成"内容结构不认识"）。
  */
-export interface DecodeFail {
-  fail: string
+/** 形状失败：**只报观测**（哪个字段 / 期望什么 / 实际什么）。用户文案由 `repo-read` 一处渲染 */
+export interface DecodeShapeFail {
+  fail: 'shape'
+  /** 出问题的字段名；空串 = 顶层 */
+  field: string
+  expected: 'object' | 'array' | 'string' | 'number'
+  /** 实际拿到的形状（`typeof`；`null` / 数组单独说，别把 null 说成 object） */
+  actual: string
+}
+
+/** 语义失败：形状合法但内容不可用。**码可穷举**，文案在 `msg` */
+export interface DecodeSemanticFail {
+  fail: 'notJson' | 'emptyContent' | 'noItemsParsed' | 'badItem'
+  /** 附带的数量（`noItemsParsed` 的 received / `badItem` 的条目数）；没有就不传 */
+  count?: number
+}
+
+/**
+ * decode 的失败臂。
+ *
+ * **为什么不是 `{ fail: string }`**：自由文本等于让每个 decoder 自己写用户文案 ——
+ * 文案就散在 domain 层，绕过 `msg.data.fn.*` 的收口，而且"有几种失败"不可穷举、
+ * "每个失败都有文案"不可测。这里拆成两臂：
+ * - 形状臂：结构化观测，**说不出用户话**（它只知道字段/期望/实际）
+ * - 语义臂：码表，**说不出字段**（形状没问题，是内容空 / 下游没适配）
+ * 两者都由 `data/repo-read.ts` 一处渲染成 `RepoRead.reason`。
+ */
+export type DecodeFail = DecodeShapeFail | DecodeSemanticFail
+
+/** 造一个形状失败（`raw` 用来填 `actual`） */
+export function shapeFail(
+  field: string,
+  expected: DecodeShapeFail['expected'],
+  raw: unknown,
+): DecodeShapeFail {
+  return { fail: 'shape', field, expected, actual: describeShape(raw) }
+}
+
+/** `typeof` 会把 `null` 说成 object、把数组说成 object —— 这里分开说 */
+export function describeShape(raw: unknown): string {
+  if (raw === null) return 'null'
+  if (raw === undefined) return 'undefined'
+  if (Array.isArray(raw)) return 'array'
+  return typeof raw
 }
 
 /**
@@ -68,7 +115,7 @@ export interface DecodeFail {
  * 逐条**不许丢**：条目级不认识要整份返回 `null` / `{ fail }`，不许 `filter` 掉坏条目后
  * 把剩下的写回磁盘 —— 那是数据丢失。
  */
-export type Decoder<T> = (raw: unknown) => Decoded<T> | DecodeFail | null
+export type Decoder<T> = (raw: unknown) => Decoded<T> | DecodeFail
 
 /** 区分三种返回：`null` / `{ fail }` / `{ value }` */
 export function isDecodeFail(x: Decoded<unknown> | DecodeFail): x is DecodeFail {
@@ -90,11 +137,12 @@ function readIndexField(value: unknown): number | null {
 export function decodeIndexed<T>(
   raw: unknown,
   isItem: (x: unknown) => x is T,
-): Decoded<{ index: number; list: T[] }> | null {
-  if (!isRecord(raw)) return null
+): Decoded<{ index: number; list: T[] }> | DecodeFail {
+  if (!isRecord(raw)) return shapeFail('', 'object', raw)
   // 「数组 + 逐条证明」的判据只有一份：`guards.isArrayOf`（本文件不再自己 filter）
   const rawList = raw.list
-  if (!isArrayOf(rawList, isItem)) return null
+  if (!Array.isArray(rawList)) return shapeFail('list', 'array', rawList)
+  if (!isArrayOf(rawList, isItem)) return { fail: 'badItem', count: rawList.length }
   const list = rawList
 
   const index = readIndexField(raw.index)
@@ -103,7 +151,12 @@ export function decodeIndexed<T>(
     : { value: { index, list } }
 }
 
-/** 数组根的解码：判据同上，这里只负责转成 `Decoded`（`null` = 结构不认识） */
-export function decodeList<T>(raw: unknown, isItem: (x: unknown) => x is T): Decoded<T[]> | null {
-  return isArrayOf(raw, isItem) ? { value: raw } : null
+/** 数组根的解码：判据同上，这里只负责转成 `Decoded`（`DecodeFail` = 结构不认识 + 原因） */
+export function decodeList<T>(
+  raw: unknown,
+  isItem: (x: unknown) => x is T,
+): Decoded<T[]> | DecodeFail {
+  if (!Array.isArray(raw)) return shapeFail('', 'array', raw)
+  if (!isArrayOf(raw, isItem)) return { fail: 'badItem', count: raw.length }
+  return { value: raw }
 }

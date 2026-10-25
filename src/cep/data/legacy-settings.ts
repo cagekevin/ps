@@ -13,6 +13,7 @@ import { isRecord } from '@/utils/guards'
 import { dataRepo } from './data-repo'
 import { readRepoFile } from './repo-read'
 import type { Repo, RepoRead, RepoView } from './types'
+import { shapeFail, type DecodeFail, type Decoded } from '@/utils/decode'
 
 export type {
   CreateButtonConfig,
@@ -27,8 +28,8 @@ export { FONT_SET_DEFAULTS } from '@/domain/font-set-config'
  * 原面板同时写这个文件（目标架构 W3），只认识本页字段就整写等于删数据。
  */
 /** 设置文件是几十个键的扁平对象：只证"是对象"，逐键归一在 `mergeFontSetSettings`（消费侧） */
-function decodeSettingsRecord(raw: unknown): { value: Record<string, unknown> } | null {
-  return isRecord(raw) ? { value: raw } : null
+function decodeSettingsRecord(raw: unknown): Decoded<Record<string, unknown>> | DecodeFail {
+  return isRecord(raw) ? { value: raw } : shapeFail('', 'object', raw)
 }
 
 const legacySettingsImpl: Repo<Record<string, unknown>> = dataRepo(

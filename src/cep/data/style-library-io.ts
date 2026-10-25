@@ -24,7 +24,7 @@ import {
 } from '@/domain/ku-io'
 import {
   fileNameOf,
-  readStyleWarehouseIndex,
+  normalizeStyleIndex,
   type StyleWarehouse,
   type StyleWarehouseIndex,
 } from '@/domain/style-library'
@@ -373,7 +373,7 @@ function importKuFromText(
   // 覆盖导入允许索引已损坏：它本来就要整份替换，且替换前会留 `.bak`；追加导入必须能读懂原索引
   const before = append ? currentIndex() : readIndexState().value
   const oldFiles = append ? [] : filesOfIndex(before)
-  const nextIndex = readStyleWarehouseIndex(remapped.store).value
+  const nextIndex = normalizeStyleIndex(remapped.store)
 
   const written: string[] = []
   const created: string[] = []
@@ -392,7 +392,7 @@ function importKuFromText(
 
     if (append) {
       styleIndexWriter.update((value) => {
-        const current = readStyleWarehouseIndex(value).value
+        const current = value
         const list = [...current.list, ...nextIndex.list]
         // 与 action-archive 同口径：追加后选中最后一个新仓库。
         // UNVERIFIED: 原版样式页 importAdd 是否也这样切，未实测（契约 §3.4 只写了写盘顺序）

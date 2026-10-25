@@ -4,7 +4,7 @@
 // 谁在用：pages/fontSet/**、commands/fontSet.ts、cep/data/legacy-settings.ts
 // 禁止：这里不发请求、不读文件；写路径只在 data 层
 import { isRecord } from '@/utils/guards'
-import { decodeIndexed, type Decoded } from '@/utils/decode'
+import { decodeIndexed, shapeFail, type DecodeFail, type Decoded } from '@/utils/decode'
 
 export interface PasteFontConfig {
   scriptFamily: boolean
@@ -116,8 +116,8 @@ function isQuickFont(x: unknown): x is QuickFont {
   return isRecord(x)
 }
 
-/** 读边界：快捷字体文件（容器坏 / 有条目不是对象 → 整份 `null`） */
-export function decodeQuickFontFile(raw: unknown): Decoded<QuickFontFile> | null {
+/** 读边界：快捷字体文件（容器坏 / 有条目不是对象 → 整份 `DecodeFail`，带原因） */
+export function decodeQuickFontFile(raw: unknown): Decoded<QuickFontFile> | DecodeFail {
   return decodeIndexed(raw, isQuickFont)
 }
 
@@ -126,7 +126,7 @@ function isHierarchyPreset(x: unknown): x is HierarchyPreset {
 }
 
 /** 读边界：层级预设文件（条目要 `name` + `data[]`） */
-export function decodeHierarchyFile(raw: unknown): Decoded<HierarchyFile> | null {
+export function decodeHierarchyFile(raw: unknown): Decoded<HierarchyFile> | DecodeFail {
   return decodeIndexed(raw, isHierarchyPreset)
 }
 
@@ -136,10 +136,13 @@ export function decodeHierarchyFile(raw: unknown): Decoded<HierarchyFile> | null
  * ⚠️ **UNVERIFIED**：真机文件形状未经实测（禁 e2e）。若真实文件缺字段，用户会看到
  * 「内容结构不认识」且写被 D-42 拒绝 —— 已记进 R1 轮次文件的未处置清单。
  */
-export function decodeTranslateCounter(raw: unknown): Decoded<TranslateCounter> | null {
-  if (!isRecord(raw)) return null
+export function decodeTranslateCounter(raw: unknown): Decoded<TranslateCounter> | DecodeFail {
+  if (!isRecord(raw)) return shapeFail('', 'object', raw)
+  // 逐字段报「哪个字段、期望什么、实际什么」—— 缺哪个直接决定排查方向
   const { num, max, time } = raw
-  if (typeof num !== 'number' || typeof max !== 'number' || typeof time !== 'string') return null
+  if (typeof num !== 'number') return shapeFail('num', 'number', num)
+  if (typeof max !== 'number') return shapeFail('max', 'number', max)
+  if (typeof time !== 'string') return shapeFail('time', 'string', time)
   return { value: { num, max, time } }
 }
 

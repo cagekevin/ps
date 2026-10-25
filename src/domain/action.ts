@@ -8,7 +8,7 @@
  * - 仓库文件：`[{ groupName, show, list: [{ group, name, alias? }] }]`
  */
 import { isRecord } from '@/utils/guards'
-import { decodeIndexed, type Decoded } from '@/utils/decode'
+import { decodeIndexed, shapeFail, type DecodeFail, type Decoded } from '@/utils/decode'
 
 export interface ActionItem {
   /** PS 动作组名 */
@@ -83,17 +83,15 @@ export function readActionList(raw: unknown): ActionListRead {
   }
 }
 
-export function normalizeActionList(raw: unknown): ActionGroup[] {
-  return readActionList(raw).groups
-}
-
 /** 条目形状有出处：`app.v4.js:6552-6559` = `{ index, list: [{ name, fileName }] }` */
 function isActionWarehouse(x: unknown): x is ActionWarehouse {
   return isRecord(x) && typeof x.name === 'string' && typeof x.fileName === 'string'
 }
 
-/** 读边界：动作仓库索引（容器坏 / 有条目不是对象 → 整份 `null`，不丢条目） */
-export function decodeActionWarehouseIndex(raw: unknown): Decoded<ActionWarehouseIndex> | null {
+/** 读边界：动作仓库索引（容器坏 / 有条目不是对象 → 整份失败 + 原因，不丢条目） */
+export function decodeActionWarehouseIndex(
+  raw: unknown,
+): Decoded<ActionWarehouseIndex> | DecodeFail {
   return decodeIndexed(raw, isActionWarehouse)
 }
 
@@ -104,10 +102,15 @@ export function decodeActionWarehouseIndex(raw: unknown): Decoded<ActionWarehous
  * "PS 没返回就当中没有"的口径）。读边界上，文件内容是 `null` 就是坏文件 ——
  * 放过去等于"坏文件当空库"，`update` 会把 `[]` 写回磁盘（丢数据）。
  */
-export function decodeActionLibrary(raw: unknown): Decoded<ActionLibrary> | null {
-  if (raw === null || raw === undefined) return null
+export function decodeActionLibrary(raw: unknown): Decoded<ActionLibrary> | DecodeFail {
+  if (raw === null || raw === undefined) return { fail: 'emptyContent' }
   const read = readActionList(raw)
-  return read.shape === 'unknown' ? null : { value: read.groups }
+  // 说清是哪一种坏：外层形状不认识（形状臂）vs 有分组但一个动作都解析不出来（语义臂）
+  if (read.shape === 'unknown') return shapeFail('', 'array', raw)
+  if (read.received > 0 && read.actions === 0) {
+    return { fail: 'noItemsParsed', count: read.received }
+  }
+  return { value: read.groups }
 }
 
 function normalizeGroups(list: unknown[]): ActionGroup[] {
