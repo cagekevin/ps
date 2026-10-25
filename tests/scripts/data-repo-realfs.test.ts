@@ -174,7 +174,7 @@ function calledIdentifiers(body: ts.Node): Set<string> {
  * 才写盘的，手写名单会把这条链漏掉。
  */
 function deriveWritePrimitives(root: string): string[] {
-  const file = join(root, 'src/cep/fs.ts')
+  const file = join(root, 'src/cep/disk-write.ts')
   if (!ts.sys.fileExists(file)) return []
   const sf = parse(file)
   const fns = localFns(sf)
@@ -407,7 +407,7 @@ describe('写盘的数据模块必须有真机用例（TD-09-38）', () => {
 
   it('反例：新写盘仓库没有真机用例 → 缺口里必须有它（红）', () => {
     const root = makeRoot({
-      'src/cep/fs.ts': MINI_FS,
+      'src/cep/disk-write.ts': MINI_FS,
       'src/cep/data/data-repo.ts': MINI_DATA_REPO,
       'src/cep/data/file-repo.ts': 'export const fileRepo = (..._a: unknown[]) => null\n',
       'src/cep/data/memory-repo.ts': 'export const memoryRepo = (..._a: unknown[]) => null\n',
@@ -424,7 +424,7 @@ export const newRepo = dataRepo(() => 'x', () => [], () => null)
   it('反例：纯内存 / 纯逻辑模块不进名单（不误伤）', () => {
     // 只有纯模块的根：一个写盘的都没有 ⇒ 什么也不要求
     const pure = makeRoot({
-      'src/cep/fs.ts': MINI_FS,
+      'src/cep/disk-write.ts': MINI_FS,
       'src/cep/data/memory-repo.ts': 'export const memoryRepo = (..._a: unknown[]) => null\n',
       'src/cep/data/logic.ts': `export const add = (a: number, b: number) => a + b
 `,
@@ -441,7 +441,7 @@ it('x', () => { add(1, 2) })
     // 同一个根再加一个写盘仓库：只有它（和造写者的 `dataRepo`）进名单，
     // `memory-repo` / `logic` / `queue` 一个都不许被要求真机用例
     const mixed = makeRoot({
-      'src/cep/fs.ts': MINI_FS,
+      'src/cep/disk-write.ts': MINI_FS,
       'src/cep/data/data-repo.ts': MINI_DATA_REPO,
       'src/cep/data/file-repo.ts': 'export const fileRepo = (..._a: unknown[]) => null\n',
       'src/cep/data/memory-repo.ts': 'export const memoryRepo = (..._a: unknown[]) => null\n',
@@ -463,7 +463,7 @@ it('x', () => { add(1, 2) })
 
   it('反例：只装 __adobe_cep__ 没装 window.require 不算真机装法 → 红', () => {
     const root = makeRoot({
-      'src/cep/fs.ts': MINI_FS,
+      'src/cep/disk-write.ts': MINI_FS,
       'src/cep/data/data-repo.ts': MINI_DATA_REPO,
       'src/cep/data/file-repo.ts': 'export const fileRepo = (..._a: unknown[]) => null\n',
       'src/cep/data/memory-repo.ts': 'export const memoryRepo = (..._a: unknown[]) => null\n',
@@ -484,7 +484,7 @@ it('x', async () => { await import('@/cep/data/half-repo') })
 
   it('反例：真机用例直接 import（含传递闭包）即算覆盖 → 缺口清空', () => {
     const root = makeRoot({
-      'src/cep/fs.ts': MINI_FS,
+      'src/cep/disk-write.ts': MINI_FS,
       'src/cep/data/data-repo.ts': MINI_DATA_REPO,
       'src/cep/data/file-repo.ts': 'export const fileRepo = (..._a: unknown[]) => null\n',
       'src/cep/data/memory-repo.ts': 'export const memoryRepo = (..._a: unknown[]) => null\n',
