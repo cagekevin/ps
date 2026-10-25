@@ -149,47 +149,27 @@ function wrapMutator(
  * **四个写方法（`write` / `writeInLock` / `overwrite` / `overwriteInLock`）共用这一份** ——
  * `showText` 是会话态、不落盘（ADR-05），四条写路都要走同一条剥/回填序列。
  */
-async function persistStripped(
+function persistStripped(
   value: FreePanelFile,
-  writeToBase: (onDisk: FreePanelFile) => Promise<void>,
-): Promise<void> {
+  writeToBase: (onDisk: FreePanelFile) => void,
+): void {
   const onDisk = deepClone(value)
   captureShowText(onDisk.obj.list)
-  await writeToBase(onDisk)
+  writeToBase(onDisk)
   applySessionShowText(value.obj.list)
   emit(value)
 }
 
 const freePanelImpl: Repo<FreePanelFile> = {
-  async read(): Promise<RepoRead<FreePanelFile>> {
-    return prepareRead(await base.read())
-  },
-
-  /** 与 `write` 同语义的"锁内"版本：转给底层仓库的同名方法（TD-09-18） */
-  writeInLock: (value) => persistStripped(value, base.writeInLock),
+  read: () => prepareRead(base.read()),
 
   write: (value) => persistStripped(value, base.write),
 
   /** 整份覆盖 + 保留原文做备份/隔离：底层 `base.overwrite`，剥/回填序列同 `write` */
   overwrite: (value) => persistStripped(value, base.overwrite),
 
-  overwriteInLock: (value) => persistStripped(value, base.overwriteInLock),
-
-  async update(mutator: (value: FreePanelFile) => FreePanelFile | void): Promise<FreePanelFile> {
-    const persisted = await base.update(wrapMutator(mutator))
-    applySessionShowText(persisted.obj.list)
-    emit(persisted)
-    return persisted
-  },
-
-  async readInLock(): Promise<RepoRead<FreePanelFile>> {
-    return prepareRead(await base.readInLock())
-  },
-
-  async updateInLock(
-    mutator: (value: FreePanelFile) => FreePanelFile | void,
-  ): Promise<FreePanelFile> {
-    const persisted = await base.updateInLock(wrapMutator(mutator))
+  update: (mutator: (value: FreePanelFile) => FreePanelFile | void): FreePanelFile => {
+    const persisted = base.update(wrapMutator(mutator))
     applySessionShowText(persisted.obj.list)
     emit(persisted)
     return persisted

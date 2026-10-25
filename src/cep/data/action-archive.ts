@@ -90,7 +90,7 @@ export async function archiveDefaultName(current: boolean): Promise<string> {
 export function exportActionArchive(current: boolean, targetPath: string): Promise<void> {
   return runQueued(async () => {
     // 锁内读：走不排队的 readInLock，避免 runQueued 套 runQueued 自锁（write-queue.ts:6 / TD-09-30）
-    const index = requireIndex(await actionIndexWriter.readInLock(), '导出')
+    const index = requireIndex(await actionIndexWriter.read(), '导出')
     const list = current ? [index.list[index.index]].filter(Boolean) : index.list
     if (!list.length) throw new CepError('PARSE', msg.data.text.noExportableWarehouse)
 
@@ -129,7 +129,7 @@ export function importActionArchive(append: boolean, sourcePath: string): Promis
 
     // 任何写之前先确认索引是真实数据：坏索引时下面的 next.list 会基于 fallback 算出来
     // 锁内读：readInLock（不自排自，TD-09-30）
-    const current = requireIndex(await actionIndexWriter.readInLock(), '导入')
+    const current = requireIndex(await actionIndexWriter.read(), '导入')
     const nextList = append ? [...current.list, ...imported.store.list] : imported.store.list
     const next: ActionWarehouseIndex = {
       index: append ? nextList.length - 1 : 0,
@@ -147,7 +147,7 @@ export function importActionArchive(append: boolean, sourcePath: string): Promis
       }
 
       // 已在全局写锁内：再排队会自锁（writeInLock 的注释写了这一条）
-      await actionIndexWriter.writeInLock(next)
+      await actionIndexWriter.write(next)
     } catch (e) {
       removeAll(written)
       throw e

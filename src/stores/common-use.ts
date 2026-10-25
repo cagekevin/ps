@@ -16,7 +16,7 @@ import { log } from '@/utils/logger'
  */
 export interface CommonUseSource {
   /** 用 `RepoRead`：以前这里自声明了一份 `{ value, degraded }` 的第三份同义形状（T-101-0 P 类） */
-  read(): Promise<RepoRead<CommonUseFile | null>>
+  read(): RepoRead<CommonUseFile | null>
   onChange(listener: (value: CommonUseFile) => void): () => void
 }
 

@@ -63,10 +63,15 @@ export type RepoRead<T> = RepoReadOk<T> | RepoReadBad<T>
 export type RepoView<T> = Pick<Repo<T>, 'read' | 'onChange'>
 
 export interface Repo<T> {
-  /** 读；文件不存在时返回 fallback，且**不算**失败（首次使用是正常状态） */
-  read(): Promise<RepoRead<T>>
-  /** 覆写；失败抛 */
-  write(value: T): Promise<void>
+  /**
+   * 读；文件不存在时返回 fallback，且**不算**失败（首次使用是正常状态）。
+   *
+   * **同步**：写原语是 `renameSync`，本来就同步；读跟着同步之后，
+   * 「读 → 改 → 写」是一个不可被打断的同步段 —— 串行队列因此没有存在理由。
+   */
+  read(): RepoRead<T>
+  /** 覆写；失败抛。**同步**，理由同上 */
+  write(value: T): void
   /**
    * **整份覆盖 + 保留原文做备份/隔离**；失败抛。与另两个写的区别：
    * - `write` 不看原文（`previous` 恒 `null`）⇒ 拿不到原文就没有 `.bak`；
@@ -78,32 +83,15 @@ export interface Repo<T> {
    * 待迁（下一步）：`cloud/entries/action-library.ts:109` 云下载把原文落盘 —— 它现在直写
    * `writeTextFileAtomic`，无 `.bak`、不 emit（债 11-24）。**不要把这条读成"已迁"**。
    */
-  overwrite(value: T): Promise<void>
+  overwrite(value: T): void
   /**
-   * 与 `overwrite` 相同，但**不排队**：调用方必须已持有 `data/write-queue` 的锁。
-   * `swatch-repo.writeSwatchItems` 的 6 个调用方全在 `runQueued` 任务体里，用这个。
-   */
-  overwriteInLock(value: T): Promise<void>
-  /**
-   * 与 `write` 相同，但**不排队**：调用方必须已持有 `data/write-queue` 的锁。
-   * 用在"写 N 个库文件 + 写索引"这类要独占一段的事务里——已在锁内再排一次队会自锁。
-   */
-  writeInLock(value: T): Promise<void>
-  /**
-   * 与 `read` 相同，但**不排队**：调用方必须已持有 `data/write-queue` 的锁。
+   * 读 → 改 → 写（含落盘前 CAS 比对 + 重试）；失败抛。
    *
-   * 这是 `writeInLock` 的另一半：锁内的读也必须走"不排队"版本，否则读一次就把队列
-   * 自己排在了自己后面 → 自锁（`write-queue.ts:6` 的禁令）。不排队读本身安全：
-   * 写是原子 rename，读到的要么是旧值要么是新值，不会看到半截。
+   * **同步**：整段不可被打断。跨进程仍可能被另一个面板改过，那是 CAS 的事
+   * （`compareSync` 比对失败 → 重读重跑 mutator），不是队列的事。
+   * `mutator` 因此必须**幂等** —— 重试时会拿新值再跑一遍。
    */
-  readInLock(): Promise<RepoRead<T>>
-  /** 读 → 改 → 写，同一文件的调用严格串行；失败抛 */
-  update(mutator: (value: T) => T | void): Promise<T>
-  /**
-   * 与 `update` 相同（读→改→写 + 落盘前 CAS 比对），但**不排队**：调用方必须已持有写队列锁。
-   * 锁内的索引读改写用它——保留 CAS（跨进程仍可能被另一面板改过），又不会自己排自己。
-   */
-  updateInLock(mutator: (value: T) => T | void): Promise<T>
+  update(mutator: (value: T) => T | void): T
   /** 写成功后通知；用于 store 保持只读投影 */
   onChange(listener: (value: T) => void): () => void
 }

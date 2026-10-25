@@ -100,7 +100,7 @@ export async function readIndexState(): Promise<{
 }> {
   // 锁内的读：本函数会在 `runQueued` 任务体里被调用（`updateKuGroups`/仓库事务），
   // 再走排队的 `read()` 会把队列排在自己后面 → 自锁（write-queue.ts:6）。读不排队是安全的（原子写）。
-  const stored = await styleIndexImpl.readInLock()
+  const stored = await styleIndexImpl.read()
   // 坏索引没有 value：用仓库自己的 fallback 继续归一，坏因拼进 degraded
   const parsed = readStyleWarehouseIndex(stored.ok ? stored.value : defaultStyleIndex())
   return {
@@ -138,7 +138,7 @@ export async function readStyleLibrary(): Promise<StyleLibrarySnapshot> {
 /** 当前仓库某个库的绝对路径；**读**用它（索引里没登记文件名就等于没这个库，不许猜路径） */
 async function currentLibPath(kind: KuKind): Promise<string> {
   // 锁内读（在 send* 的 runQueued 任务体里被调用）：走 readInLock 避免自锁
-  const stored = await styleIndexImpl.readInLock()
+  const stored = await styleIndexImpl.read()
   // 「索引文件坏了」≠「这个仓库没登记库文件名」：不分开说，用户会以为是自己没建过库（T-101-1）
   if (!stored.ok) {
     throw new CepError('IO', msg.data.fn.warehouseIndexCorruptAbort(stored.reason))
@@ -384,7 +384,7 @@ async function updateKuGroups(kind: KuKind, mutate: (groups: KuRawGroup[]) => vo
   if (target.isNew) {
     // 库文件已经落盘才登记索引：反过来会让索引指向一个不存在的文件
     // 锁内写（updateKuGroups 的调用方都已 runQueued）：用 updateInLock 保留 CAS，又不自排自
-    await styleIndexImpl.updateInLock((value) => {
+    await styleIndexImpl.update((value) => {
       const current = readStyleWarehouseIndex(value).value
       const warehouse = current.list[current.index]
       if (!warehouse) throw new CepError('PARSE', msg.data.text.warehouseIndexNoCurrent)
@@ -590,7 +590,7 @@ export async function deleteWarehouse(index: number): Promise<WarehouseDeleteRes
       if (await copyToRecycle(relative, recycleDir)) moved.push(relative)
     }
 
-    await styleIndexImpl.updateInLock((value) => {
+    await styleIndexImpl.update((value) => {
       const next = readStyleWarehouseIndex(value).value
       next.list.splice(index, 1)
       if (index < next.index) next.index -= 1

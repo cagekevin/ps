@@ -128,7 +128,7 @@ function swatchRepo(path: string): Repo<unknown[]> {
  * 再排一次队会自锁。T-112（读不到不许写）与 TD-09-21（坏原文隔离）由 `file-repo.rawOverwrite` 保证。
  */
 export async function writeSwatchItems(path: string, items: unknown[]): Promise<void> {
-  await swatchRepo(path).overwriteInLock(items)
+  await swatchRepo(path).overwrite(items)
 }
 
 // ---------- 变更通知（本地写成功后重读投影） ----------

@@ -384,7 +384,7 @@ export async function importKuArchive(
       }
 
       if (append) {
-        await styleIndexWriter.updateInLock((value) => {
+        await styleIndexWriter.update((value) => {
           const current = readStyleWarehouseIndex(value).value
           const list = [...current.list, ...nextIndex.list]
           // 与 action-archive 同口径：追加后选中最后一个新仓库。
@@ -395,7 +395,7 @@ export async function importKuArchive(
         // 整份替换索引：`overwriteInLock` = 读原文 → `.bak` → 原子写 → emit，且**在锁内**。
         // 以前这里自己 `readExternalText` + `backupOrQuarantine` + `writeInLock` 三步 ——
         // 那是上层在做底层的事（T-112 的"读不到就中止"由 `overwrite` 的 D-42 拒绝覆盖保证）。
-        await styleIndexWriter.overwriteInLock(nextIndex)
+        await styleIndexWriter.overwrite(nextIndex)
       }
     } catch (e) {
       // 只回滚这次新建的文件：被覆盖的原件还在原位（`.bak` 是它的上一版）

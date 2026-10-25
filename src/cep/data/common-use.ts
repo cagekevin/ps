@@ -155,12 +155,12 @@ async function resetAll(): Promise<CommonUseFile> {
 }
 
 export const commonUseRepo = {
-  read: (): Promise<RepoRead<CommonUseFile>> => base.read(),
+  read: (): RepoRead<CommonUseFile> => base.read(),
 
-  // 订阅**不自己实现**：`fileRepo` / `memoryRepo` 本来就有 `onChange` + 监听表
-  // （`file-repo.ts:32,45-46,170-173`），这层再包一遍就是同一事件两套总线。
-  write: (value: CommonUseFile): Promise<void> => base.write(value),
-  update: (mutator: (value: CommonUseFile) => CommonUseFile | void): Promise<CommonUseFile> =>
+  // 订阅**不自己实现**：`fileRepo` / `memoryRepo` 本来就有 `onChange` + 监听表，
+  // 这层再包一遍就是同一事件两套总线。
+  write: (value: CommonUseFile): void => base.write(value),
+  update: (mutator: (value: CommonUseFile) => CommonUseFile | void): CommonUseFile =>
     base.update(mutator),
   onChange: (listener: (value: CommonUseFile) => void): (() => void) => base.onChange(listener),
 

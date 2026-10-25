@@ -14,9 +14,8 @@
 //      `tests/scripts/data-repo-realfs.test.ts`（夹具字符串，不真 import）。
 import { CepError } from '@/utils/errors'
 import { msg } from '@/domain/messages'
-import { runQueued } from './write-queue'
 import { foldAbsent, readRepoFile } from './repo-read'
-import { writeDisk } from '@/cep/disk-write'
+import { writeDiskSync } from '@/cep/disk-write'
 import { log } from '@/utils/logger'
 import type { Decoder } from '@/utils/decode'
 import type { Repo, RepoRead } from './types'
@@ -76,13 +75,15 @@ export function fileRepo<T>(
    * 返回 `false` = 传了 `expected` 且磁盘原文已经不是它（别的面板改过）。
    * 具体顺序（备份 → CAS → 原子写）在 `./disk-write` 的 `writeDisk` 里，本文件不再重写一遍。
    */
-  async function persist(
+  function persist(
     value: T,
     previous: string | null,
     expected?: string | null,
     quarantine = false,
-  ): Promise<boolean> {
-    const result = await writeDisk(resolvePath(), JSON.stringify(value), {
+  ): boolean {
+    // **同步**落盘：原语本来就是 `renameSync`；异步只多一个 microtask 边界，
+    // 而那正是 D-26 丢更新的窗口。
+    const result = writeDiskSync(resolvePath(), JSON.stringify(value), {
       // `backup` 关掉时不写 `.bak`：显式传 `null` 表示"没有原文"
       previous: backup ? previous : null,
       quarantineOnCorrupt: quarantine,
@@ -98,11 +99,11 @@ export function fileRepo<T>(
    * 但把坏原文隔离到 `.corrupt-<ts>`（TD-09-21）。与 `write` 的区别：`write` 不读原文，
    * `.bak` 无从谈起。T-112：读不到原文时**不许写** —— 整份覆盖会把旧内容抹平且没有第二份。
    */
-  async function rawOverwrite(value: T): Promise<void> {
+  function rawOverwrite(value: T): void {
     // 读原文交给 `writeDisk`（`requireReadable` ⇒ 读不到就抛，T-112）；
     // 本文件**不再自己读**，所以 `readTextSync` 的消费者只剩 `disk-write` 一个。
     // `backup` 关掉时显式传 `null`（"没有原文"）⇒ 不写 `.bak`，也就没有"读不到原文"这一步可判。
-    await writeDisk(resolvePath(), JSON.stringify(value), {
+    writeDiskSync(resolvePath(), JSON.stringify(value), {
       previous: backup ? undefined : null,
       quarantineOnCorrupt: true,
       requireReadable: true,
@@ -111,18 +112,23 @@ export function fileRepo<T>(
   }
 
   /** 不排队的读：给锁内调用方用（`readInLock`）。写是原子 rename，读不会看到半截 */
-  async function rawRead(): Promise<RepoRead<T>> {
-    const { read } = await readRaw()
+  function rawRead(): RepoRead<T> {
+    const { read } = readRaw()
     return read
   }
 
-  /** 不排队的读→改→写（含 CAS 比对 + 重试）：`update` 与 `updateInLock` 共用这一份 */
-  async function rawUpdate(mutator: (value: T) => T | void): Promise<T> {
+  /**
+   * 读→改→写（含 CAS 比对 + 重试）。
+   *
+   * **同步**：整段不可被打断。写原语是 `renameSync`，本来就同步；
+   * 以前为了等一个 async 读把这段拆成两半，中间那个 microtask 边界正是 D-26 丢更新的位置。
+   */
+  function rawUpdate(mutator: (value: T) => T | void): T {
     const target = resolvePath()
     let attempts = 0
 
     for (;;) {
-      const { read, text } = await readRaw()
+      const { read, text } = readRaw()
 
       // D-42：读到的不是真实数据（损坏 / 读不到）时**禁止写**。以前这里会拿 fallback
       // 继续 update，一次点击就把用户文件覆盖成默认值——原文只剩 .bak 里那一份。
@@ -137,15 +143,16 @@ export function fileRepo<T>(
 
       // D-26：读 → 改 的窗口里，另一个面板（独立面板）可能已经写过。
       // 落盘前同步比对；不一致就丢掉本轮结果、在新值上重跑 mutator。
-      const written = await persist(next, text, text)
+      const written = persist(next, text, text)
       if (!written) {
         attempts += 1
         if (attempts > retries) {
           throw new CepError('IO', msg.data.fn.fileLockedByOtherPanel(target, String(retries)))
         }
         log.warn('repo', `${target} 被其他面板改过，重试 ${attempts}/${retries}`)
-        // 退避 + 抖动：两个面板同时连点时，不加抖动会一直撞在同一个时间片里
-        await new Promise((resolve) => setTimeout(resolve, 3 * attempts + Math.random() * 7))
+        // **不再退避等待**：整段同步，本进程内不可能有第二个写插进来；
+        // 跨进程窗口只剩「读 → 比对」几条指令，立刻重试就是最优解。
+        // 加 sleep 要把这段重新变成 async，等于把刚关掉的窗口再打开。
         continue
       }
 
@@ -154,33 +161,19 @@ export function fileRepo<T>(
     }
   }
 
+  // 全是同步段：没有队列、没有 `*InLock`。
+  // 一次「读 → 改 → 写」在 JS 单线程里不可被打断，不需要排队。
   return {
-    read: () => runQueued(() => rawRead()),
+    read: () => rawRead(),
 
-    write: (value) =>
-      runQueued(async () => {
-        await persist(value, null)
-        emit(value)
-      }),
-
-    /**
-     * 落盘但**不排队**：调用方必须已经持有 `runQueued` 的锁（锁内再排一次队会自锁）。
-     * 用在"写 N 个库文件 + 写索引"这类独占事务里（`action-archive` / `style-library-io`）。
-     */
-    writeInLock: async (value) => {
-      await persist(value, null)
+    write: (value) => {
+      persist(value, null)
       emit(value)
     },
 
-    readInLock: () => rawRead(),
+    overwrite: (value) => rawOverwrite(value),
 
-    overwrite: (value) => runQueued(() => rawOverwrite(value)),
-
-    overwriteInLock: (value) => rawOverwrite(value),
-
-    update: (mutator) => runQueued(() => rawUpdate(mutator)),
-
-    updateInLock: (mutator) => rawUpdate(mutator),
+    update: (mutator) => rawUpdate(mutator),
 
     onChange(listener) {
       listeners.add(listener)

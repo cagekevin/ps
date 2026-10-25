@@ -53,75 +53,29 @@ import type { Repo } from './types'
 function memoryRepo<T>(initial: () => T): Repo<T> {
   let value = initial()
   const listeners = new Set<(value: T) => void>()
-  let queue: Promise<unknown> = Promise.resolve()
-
-  function enqueue<R>(task: () => Promise<R>): Promise<R> {
-    const next = queue.then(task, task)
-    queue = next.then(
-      () => undefined,
-      () => undefined,
-    )
-    return next
+  const emit = (): void => {
+    for (const listener of listeners) listener(value)
   }
 
+  // 没有本地队列：`Repo<T>` 全同步，内存态读改写本身就是一段不可打断的同步代码。
   return {
     // 内存态没有"从磁盘读到坏内容"这一步，所以永远是成功读（`ok: true`）
-    read: async () => ({ ok: true as const, value }),
+    read: () => ({ ok: true as const, value }),
 
-    write: (next) =>
-      enqueue(() => {
-        value = next
-        for (const listener of listeners) listener(value)
-        return Promise.resolve()
-      }),
+    write: (next) => {
+      value = next
+      emit()
+    },
 
-    /**
-     * 内存仓库没有磁盘事务，`writeInLock` 与 `write` 同语义（TD-09-18）。
-     * 它**不并进** `data/write-queue` 的链：内存实现没有磁盘、也没有跨仓库共享的文件，
-     * 并链只会让浏览器 dev 与用例里互不相干的仓库互相阻塞（实测：并链后 39 条用例失败）。
-     */
-    writeInLock: (next) =>
-      enqueue(() => {
-        value = next
-        for (const listener of listeners) listener(value)
-        return Promise.resolve()
-      }),
+    overwrite: (next) => {
+      value = next
+      emit()
+    },
 
-    /** 内存态没有"原文"，`overwrite` 与 `write` 同语义（无 `.bak` / 无隔离可做） */
-    overwrite: (next) =>
-      enqueue(() => {
-        value = next
-        for (const listener of listeners) listener(value)
-        return Promise.resolve()
-      }),
-
-    /** 同上；与 `writeInLock` 同一约定（不并进本地 `enqueue`） */
-    overwriteInLock: (next) =>
-      enqueue(() => {
-        value = next
-        for (const listener of listeners) listener(value)
-        return Promise.resolve()
-      }),
-
-    update: (mutator) =>
-      enqueue(() => {
-        const result = mutator(value)
-        if (result !== undefined) value = result
-        for (const listener of listeners) listener(value)
-        return Promise.resolve(value)
-      }),
-
-    /**
-     * 锁内的读：调用方已持有全局 `runQueued` 锁，内存态读永远成功、无需再排本地队列。
-     * 与 `writeInLock` 同一约定（不并进本地 `enqueue`）。
-     */
-    readInLock: async () => ({ ok: true as const, value }),
-
-    /** 锁内的读→改→写：全局链已串行化，直接同步改内存值，不再排本地队列 */
-    updateInLock: async (mutator) => {
+    update: (mutator) => {
       const result = mutator(value)
       if (result !== undefined) value = result
-      for (const listener of listeners) listener(value)
+      emit()
       return value
     },
 
@@ -166,12 +120,8 @@ export function dataRepo<T>(
   return {
     read: () => repo().read(),
     write: (value) => repo().write(value),
-    writeInLock: (value) => repo().writeInLock(value),
     overwrite: (value) => repo().overwrite(value),
-    overwriteInLock: (value) => repo().overwriteInLock(value),
-    readInLock: () => repo().readInLock(),
     update: (mutator) => repo().update(mutator),
-    updateInLock: (mutator) => repo().updateInLock(mutator),
     onChange: (listener) => repo().onChange(listener),
   }
 }
