@@ -46,9 +46,15 @@ function installNode() {
   // 回什么要跟 `disk.code` 对齐：`combineReads` 的规则是"任一条说 error 就报 error"，
   // 所以只有两条路**都说不存在**时才是 `notSeen`——这正是判据 C 想钉的语义
   const cep = window as unknown as {
-    __adobe_cep__?: { evalScript: (script: string, cb: (res: string) => void) => void }
+    __adobe_cep__?: {
+      evalScript: (script: string, cb: (res: string) => void) => void
+      getSystemPath: (name: string) => string
+    }
   }
   cep.__adobe_cep__ = {
+    // 真桥一定有 `getSystemPath`；`userDir()` 现在"桥在就只认宿主"（拿不到就抛，不静默回落）。
+    // 这里给的值与 `os.homedir() = '/home/u'` 那条平台公式**逐字等价**，用例期望不变。
+    getSystemPath: () => 'file:///home/u/Library/Application Support',
     evalScript: (_script, cb) =>
       cb(disk.code === 'ENOENT' ? `${ERR_PREFIX}文件不存在: /x` : `${ERR_PREFIX}用例：jsx 不可用`),
   }

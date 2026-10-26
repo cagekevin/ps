@@ -8,7 +8,13 @@ declare const __APP_VERSION__: string
 /** CEP 注入到 window 的桥接对象，只声明我们真正用到的部分 */
 interface CepBridge {
   evalScript(script: string, callback: (result: string) => void): void
-  getSystemPath(name: string): string
+  /**
+   * 取系统路径。**只允许这两个名字**（收窄成字面量联合）：
+   * `'extension'` 给 `extensionDir()`、`'userData'` 给 `userDir()`。
+   * 收窄的理由：拼错（`'userdata'`）时 CEP 不报错、只回空串，收窄后编译期就红。
+   * 返回的是 `file://` URI，不是路径 —— 调用方必须 `decodeURI` 再剥前缀（见 `paths.ts`）。
+   */
+  getSystemPath(name: 'extension' | 'userData'): string
   getOSInformation(): string
   /**
    * 扩展 ID。**注意大小写**：CEP 桥上是 `getExtensionId`（小写 d），
@@ -25,7 +31,7 @@ interface CepBridge {
 
 /**
  * CEP 的 Node 侧文件对话框 API（CEP 文档化接口，只在 --enable-nodejs 下存在）。
- * 声明在这里而不是 `cep/dialog.ts`：`window.cep` 是**运行时注入**的第三方形状（硬规则 20(a)）。
+ * 声明在这里而不是 `cep/dialog.ts`：`window.cep` 是**运行时注入**的第三方形状（ADR-0024）。
  */
 interface CepFs {
   showOpenDialogEx(
@@ -46,7 +52,7 @@ interface CepFs {
 
 /**
  * CEP 的通用接口（`window.cep.util`）。声明在这里而不是 `cep/open-url.ts`：
- * 这是**运行时注入**的第三方形状（硬规则 20(a)）。
+ * 这是**运行时注入**的第三方形状（ADR-0024）。
  */
 interface CepUtil {
   openURLInDefaultBrowser(url: string): void
@@ -66,7 +72,7 @@ interface Window {
   /**
    * JSONP 回调挂载点（`cep/http.ts` 的 `jsonp()`）：回调名运行时拼成 `__pszJsonp<base36><序号>`。
    *
-   * 为什么是**模板字面量索引签名**而不是 `Record<string, unknown>` 转型（硬规则 20(a) 第 1 步）：
+   * 为什么是**模板字面量索引签名**而不是 `Record<string, unknown>` 转型（ADR-0024 第 1 步）：
    * 只放开这一个前缀，`window.任意拼写` 仍然过拼写检查；通用字符串索引签名会把全仓
    * `window.xxx` 的拼写错误一起放行，比一处转型更坏。写进 `.d.ts` 之后调用处一行转型都不用写。
    */

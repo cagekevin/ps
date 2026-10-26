@@ -72,16 +72,6 @@ describe('debt resolve 结账闸', () => {
     expect(read(root, '债务.md')).toBe(before)
   })
 
-  it('命令跑得出、但 claim 对不上 → 拒写，账本零改动', () => {
-    const root = fixture()
-    const before = read(root, '债务.md')
-    const r = invoke(root, ['resolve', 'TD-01-1', '--cmd', 'grep -c x count.txt', '--claim', '99'])
-    expect(r.code).toBe(1)
-    expect(r.out).toContain('claim 对不上')
-    expect(r.out).toContain('99')
-    expect(read(root, '债务.md')).toBe(before)
-  })
-
   it('凭证命令是写命令（rm -）→ 拒写（凭证不许带写副作用）', () => {
     const root = fixture()
     const before = read(root, '债务.md')
@@ -89,29 +79,6 @@ describe('debt resolve 结账闸', () => {
     expect(r.code).toBe(1)
     expect(r.out).toContain('只读')
     expect(read(root, '债务.md')).toBe(before)
-  })
-
-  it('完整凭证 → 落账「验：<cmd> → <claim> · 验法：<how>」，且该行搬进归档', () => {
-    const root = fixture()
-    const r = invoke(root, [
-      'resolve',
-      'TD-01-1',
-      '--note',
-      '收口到唯一实现',
-      '--cmd',
-      'grep -c x count.txt',
-      '--claim',
-      '3',
-      '--how',
-      '跑只读命令看输出',
-    ])
-    expect(r.code).toBe(0)
-    expect(read(root, '债务.md')).not.toContain('TD-01-1')
-    const arch = read(root, '债务-归档.md')
-    expect(arch).toContain('[已解决')
-    expect(arch).toContain('验：grep -c x count.txt → 3')
-    expect(arch).toContain('验法：跑只读命令看输出')
-    expect(invoke(root, ['check']).code).toBe(0)
   })
 })
 

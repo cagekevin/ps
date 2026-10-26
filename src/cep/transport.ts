@@ -194,7 +194,7 @@ export async function jsxRead(
  * 只有"调用方自己的 bug"（参数漏传 `undefined`）仍抛 —— 那是编程错误，不是宿主失败。
  */
 async function jsxCall(
-  /** 只收 `src/cep/jsx/names.ts` 生成的名字：写错一个字母编译不过（jsx:dispatch:check 的结构替代物） */
+  /** 只收 `src/cep/jsx/names.ts` 生成的名字：写错一个字母编译不过（类型即结构） */
   fn: JsxName,
   args: unknown[] = [],
   opts: { timeout?: number; label?: string } = {},

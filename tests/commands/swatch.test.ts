@@ -68,6 +68,7 @@ vi.mock('@/cep/node', async () => {
 
 vi.mock('@/cep/paths', () => ({
   userDir: () => 'ROAM/SheJiZhuLi',
+  appDataRoot: () => 'ROAM',
 }))
 
 // 这里以前 mock 的是 `@/cep/fs-read`，里面还塞着 `writeTextFileAtomic` / `writeBase64File`

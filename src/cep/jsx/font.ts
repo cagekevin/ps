@@ -181,7 +181,7 @@ export function createFontJsx(): FontJsx {
     // ---------- 文本 ----------
     // 依据 app.v4.js:38916 / 38925（原版"先探一次 → 再真执行"，两步不能合并）
     // 两处都按 jsxName 调：原版 :38916 用的是派发表 key `zt_changeTextBranchMerge`，
-    // 它在 case 94 转发到同一个 `zt_textBranchMerge`；本仓约定不许把 key 当函数名（jsx-dispatch 闸钉着）。
+    // 它在 case 94 转发到同一个 `zt_textBranchMerge`；本仓约定不许把 key 当函数名（类型层钉着）。
     // 通道差异（jsx vs jsxHistory）我方 transport 不区分，见 types.ts:165（D-25）。
     changeTextBranchMerge: (mode) => write('zt_textBranchMerge', [mode], '拆分/合并文本'),
     textBranchMerge: (mode) => write('zt_textBranchMerge', [mode], '拆分/合并文本'),

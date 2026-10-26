@@ -1,4 +1,4 @@
-﻿#!/usr/bin/env node
+#!/usr/bin/env node
 // 是什么：Vue 模板守卫——抓「编译得过去、真机崩」的两类问题：BOM 头、模板里的非法属性名
 // 替代了什么：口头约定"别手抖"。2026-10-23 真机整页崩溃就是一行游离的 `` `n `` 混进了
 //   `<UseGridItem>` 的标签里：@vue/compiler-sfc 编译 0 错误、jsdom 挂载也不抛，

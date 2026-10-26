@@ -79,7 +79,7 @@
 
 - **落点**：`.codebuddy/skill/<skill 名>/SKILL.md`（可带 `references/` 子目录放长材料）。仓库内现有样例：`.codebuddy/skill/doubao-canvas-arch/SKILL.md`（含 `references/` 08/09/10 三篇），写新的照它的结构来：定位 → 绝对禁令 → 工作流 → 输出前自检清单。
 - **命令 vs Skill 的区别**：`.codebuddy/commands/*.md` 是**一次性工序**（用户敲 `/命令名` 触发，有步进协议与启动指令）；`.codebuddy/skill/` 是**可被模型按需加载的能力包**（描述触发场景 + 工作流 + 参考材料）。别把工序写成 Skill，也别把 Skill 写成工序。
-- **Skill 里引用的本仓真源**（能指回真源才写）：仓库根 `AGENTS.md`（硬约束）· `docs/规范/`（测试规范 / 视觉规范 / 原版缺陷 / 任务书模板）· `docs/组件库/`（页面契约 / 新控件准入 / 现有控件）· `docs/架构/`（目标架构 / dataflow / jsx契约）· `docs/生成/横切能力.md`（公共能力清单，`npm run registry`）· `docs/原版/01-原版源码/panel/js/app.v4.js`（一手证据）。
+- **Skill 里引用的本仓真源**（能指回真源才写）：仓库根 `AGENTS.md`（硬约束）· `docs/规范/`（测试规范 / 视觉规范 / 原版缺陷 / 任务书模板）· `docs/组件库/`（页面契约 / 新控件准入 / 现有控件）· `docs/架构/`（目标架构 / dataflow / jsx契约）· `docs/组件库/现有控件.md`（已有控件与公共能力）· `docs/原版/01-原版源码/panel/js/app.v4.js`（一手证据）。
 - **Skill 里不许写的**：指向不存在脚本的命令、要求用户去 PS 里点面板的验证步骤、e2e / 浏览器自动化 / 截图回归方案。
 
 ### 通用：提示词顺序 = 信息优先级

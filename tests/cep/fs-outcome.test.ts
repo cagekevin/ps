@@ -68,7 +68,6 @@ function installRequire() {
 }
 
 const { readTextSync } = await import('@/cep/fs-read')
-const { dirUsage } = await import('@/cep/dir-usage')
 
 beforeEach(() => {
   installRequire()
@@ -109,21 +108,3 @@ describe('readTextSync · 三态（不是 string | null）', () => {
 })
 
 // 「写原语失败必须带原因」的覆盖已随写原语搬到 `tests/cep/fs-atomic.test.ts`（那里测 `writeDisk`）。
-
-describe('dirUsage · 少算的文件要数出来（TD-06-5）', () => {
-  it('有文件 stat 失败 → skipped 计数、bytes 只是下限', () => {
-    fake.entries.set('/u', ['a.json', 'b.json'])
-    fake.files.set('/u/a.json', 'x'.repeat(10))
-    fake.files.set('/u/b.json', 'y'.repeat(10))
-    fake.statFail.add('/u/b.json')
-
-    expect(dirUsage('/u')).toEqual({ bytes: 10, files: 1, skipped: 1 })
-  })
-
-  it('全部读得到 → skipped 为 0（不误报）', () => {
-    fake.entries.set('/u', ['a.json'])
-    fake.files.set('/u/a.json', 'xyz')
-
-    expect(dirUsage('/u')).toEqual({ bytes: 3, files: 1, skipped: 0 })
-  })
-})

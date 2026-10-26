@@ -32,7 +32,7 @@ import type { Command } from './types'
  */
 
 // 固定表（方向 / 预设倍率）在 `domain/common-use.ts`——页面也要用；**不在这里 re-export**，
-// 否则页面又能值导入命令层（T-88a 教训，守卫 `scripts/page-boundary.mjs` 会拦）。
+// 否则页面又能值导入命令层（T-88a 教训，`npm run lint` 的 no-restricted-imports 会拦）。
 
 /** 变换参数顺序（`docs/页面/05-常用.md:57`） */
 export const TRANSFORM_KEYS = [

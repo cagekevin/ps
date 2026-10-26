@@ -1,4 +1,4 @@
-﻿# 数据流总览
+# 数据流总览
 
 > 只写**跨页不变量**：分层、唯一入口、存储归属、跨页机制、写入边界。
 > 单页细节 → `docs/页面/0N-*.md`；待办 → `daily/架构日志/债务.md`；机制选型 → `docs/adr/`（一条一文件）。
@@ -192,7 +192,7 @@ mousedown + Ctrl/Meta + 300ms
 
 | 页面 | 一行数据流 | 细节落点 | 状态（任务索引） |
 |---|---|---|---|
-| `/fontManage` | `stores/font.load*` → `tagsRepo` / `starsRepo` / `sys-font`；`classification-view` → `classification-repo`；列表走 `usePagedList` | `docs/页面/01-字体管理.md` §六 / 七 / 十；`docs/生成/横切能力.md` §二 | 部分实现（T-51 / 52 / 53 / 58） |
+| `/fontManage` | `stores/font.load*` → `tagsRepo` / `starsRepo` / `sys-font`；`classification-view` → `classification-repo`；列表走 `usePagedList` | `docs/页面/01-字体管理.md` §六 / 七 / 十 | 部分实现（T-51 / 52 / 53 / 58） |
 | `/fontSet` | 页面 → `useCommand('fontSet.*')` → `commands/fontSet.ts` → `ctx.jsx.font.*`；当前文字走 `selection/current-text` → `stores/font-set`；字体列表走 `cep/jsx/font.initSystemList` → `stores/font` | `docs/页面/02-字体面板.md` §三；`docs/架构/字体面板事件数据流.md` §一 / 三 | 部分实现（T-54 / 55） |
 | `/action` | 读：`actionIndexRepo` → `actionLibraryRepo` → `normalizeGroups` → `stores/action`；写：页面 → `action.*` → `commands/action.ts` → repo → `onChange`；执行：`ActionGrid @run` → `action.call` → `jsx.action.callAction` | `docs/页面/03-动作.md` §十 | 部分实现（T-56） |
 | `/freePanel` | 见 §7 | 本文 §7（没有单页文档） | 独立面板 |

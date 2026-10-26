@@ -6,9 +6,8 @@
 //   `cep/data/style-library-repo.ts`（只 import 队列）
 // 禁止：页面/组件不许 import；读不到不许当"没有"；不许新增同步读（ADR-26 ④）
 
-import { USER_DIR } from '@/cep/env'
 import { readOwnFileText } from '@/cep/fs-read'
-import { userDir } from '@/cep/paths'
+import { appDataRoot } from '@/cep/paths'
 import { CepError } from '@/utils/errors'
 import { msg } from '@/domain/messages'
 import { isUnknownArray } from '@/utils/guards'
@@ -37,30 +36,24 @@ export const SWATCH_FILES = {
 } as const
 
 /**
- * `%APPDATA%` 根。`userDir()` = `getUserDataPath() + USER_DIR`（`cep/fs.ts:45-52`），
- * 剥掉后缀还原成根 —— 色板文件不在 `USER_DIR` 里，不能直接拼。
+ * `%APPDATA%` 根由 `cep/paths.ts` 的 `appDataRoot()` 提供 —— 色板文件不在 `USER_DIR` 里，
+ * 要的是**根**不是 `userDir()`。以前这里 `slice(0, -USER_DIR.length)` 反推，是第二份判据
+ * （`TD-13-1`）；现在反推已删，直接问唯一入口。
  */
-function dataRoot(): string {
-  const dir = userDir()
-  if (!dir.endsWith(USER_DIR)) {
-    throw new CepError('IO', msg.data.fn.swatchUserDirMismatch(USER_DIR, dir))
-  }
-  return dir.slice(0, -USER_DIR.length)
-}
 
 /** 自定义色文件绝对路径（`%APPDATA%/FengZiSeBan/userColor.ini`） */
 export function swatchFilePath(): string {
-  return `${dataRoot()}/${SWATCH_DIR}/${SWATCH_FILES.custom}`
+  return `${appDataRoot()}/${SWATCH_DIR}/${SWATCH_FILES.custom}`
 }
 
 /** 最近色文件绝对路径（`%APPDATA%/FengZiSeBan/vecently.ini`） */
 export function recentFilePath(): string {
-  return `${dataRoot()}/${SWATCH_DIR}/${SWATCH_FILES.recent}`
+  return `${appDataRoot()}/${SWATCH_DIR}/${SWATCH_FILES.recent}`
 }
 
 /** 最近数量文件绝对路径（`%APPDATA%/FengZiSeBan/zuiJinShuLiang.txt`） */
 export function recentLimitPath(): string {
-  return `${dataRoot()}/${SWATCH_DIR}/${SWATCH_FILES.limit}`
+  return `${appDataRoot()}/${SWATCH_DIR}/${SWATCH_FILES.limit}`
 }
 
 /**

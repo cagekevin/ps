@@ -21,7 +21,7 @@
  *   show    TD-xx-yy
  *   resolve TD-xx-yy --cmd "…" --claim "…" [--note "…"] [--how "怎么验的"]   # 闸：真跑 cmd，claim 必须命中；结账后该行搬进归档
  *   reopen  TD-xx-yy --why "…"                            # 已解决 → 待还（单向）；该行搬回主表
- *   check                                                 # 只读校验 6 条（独立命令 `npm run debt:check`；**不进** `npm run check` —— 账本是手写数据，手写文档不作为门禁）
+ *   check                                                 # 只读校验 6 条（直接 `node scripts/debt.mjs check`；不进任何门禁）
  *
  * 测试夹具：`--root=<dir>`（把账本指到已知答案的夹具，见 `tests/scripts/debt-gate.test.ts`）。
  */

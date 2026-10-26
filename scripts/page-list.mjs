@@ -8,7 +8,7 @@
  *   - 结构：08-模板/*.md，**按 jsx 块首个 class 匹配**（文件名整体错位）
  *   - 方法 / 文案 / 子组件：02-组件/<组件>.md
  *   - CSS：原版 app.bf68b505.css，按 class 查
- *   - 事件：交互清单.md，按 class 相关过滤
+ *   - 事件：原版 render 里的 `on:` 与组件文档，按 class 相关过滤
  */
 import { existsSync, readFileSync, readdirSync, writeFileSync } from 'node:fs'
 import { join } from 'node:path'

@@ -1,4 +1,4 @@
-﻿import { describe, expect, it } from 'vitest'
+import { describe, expect, it } from 'vitest'
 import snapshot from '../../docs/生成/常用页-左键分派.json'
 import { LEFT_CLICK_BY_NAME, TARGET_ACTIONS, leftClickOf } from '@/domain/common-use-dispatch'
 import { get } from '@/commands/registry'

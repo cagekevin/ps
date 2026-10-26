@@ -232,7 +232,7 @@ node .codebuddy/commands/dep-audit.cjs
 
 | # | 项目 | 偏离内容 | 原因 | 何时可收回 |
 |---|---|---|---|---|
-| E1 | `/Users/kevin/Documents/maomao`（本仓库） | 继续用 **npm** 而非 pnpm | 锁文件为 `package-lock.json`（lockfileVersion 3），`husky` prepare + `scripts/*.cjs` 门禁链均绑定 npm 扁平 `node_modules`；贸然转 pnpm 会因幽灵依赖导致 `npm run test:all` 全线报错 | 待确认：需在跑通 `npm run test:all` 基线后，用 `pnpm import` 试转，验证全套门禁通过才可迁移 |
+| E1 | `/Users/kevin/Documents/maomao`（本仓库） | 继续用 **npm** 而非 pnpm | 锁文件为 `package-lock.json`（lockfileVersion 3），`husky` prepare + `scripts/*.cjs` 门禁链均绑定 npm 扁平 `node_modules`；贸然转 pnpm 会因幽灵依赖导致 `npm test` 全线报错 | 待确认：需在跑通 `npm test` + `npm run deploy` 基线后，用 `pnpm import` 试转，验证全套门禁通过才可迁移 |
 | E2 | `/Users/kevin/Downloads/One-Click-VidGen` | 需 **Python 3.11 独立 venv**；本地 IndexTTS 不可用 | 项目声明支持 3.10/3.11，且 `numpy==1.26.2`、`opencv-python==4.9.0.80` 等老 pin 在 3.12 上易缺 wheel；另 `torch==2.8.0+cu128` 带 Windows 平台标记 + macOS 无 NVIDIA CUDA，**本地 GPU 配音能力缺失**，须走 Qwen-TTS / 集群 GPU | 不可收回（硬件限制）；装 3.11 只此一次，后续复用 |
 | E3 | `豆包画布/app`（本仓） | 继续用 **npm** 而非 pnpm | Node 单栈（React 19 + Vite + Vitest + dependency-cruiser）；锁文件为 `package-lock.json`，门禁链（`npm run check` = typecheck + lint + boundaries + invariants + test）已绑定 npm 扁平 `node_modules`；本项目**无 Python 侧**（`electron/**` 是 Node） | 不可收回（项目已定型；如需转 pnpm，先在 `npm run check` 全绿基线上 `pnpm import` 试转并复验全套门禁） |
 

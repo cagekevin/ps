@@ -26,11 +26,11 @@
  *      静默冲掉、探针还报绿"这类**假绿**（比丢一次改动更坏：结论建在旧码上）。
  *
  * 【用法】
- *   # 闸探针：注入一处越层 import → 期待 boundary:pages 报错且命中关键词
- *   node scripts/probe.mjs --label "boundary:pages 负例" \
+ *   # 闸探针：注入一处越层 import → 期待 npm run lint 报错且命中关键词
+ *   node scripts/probe.mjs --label "lint 负例" \
  *     --file src/pages/fontSet/index.vue \
  *     --find "import { defineCommand }" --replace "import { defineCommand } // probe" \
- *     --run "npm run boundary:pages" \
+ *     --run "npm run lint" \
  *     --expect-exit 1 --expect-out "pages"
  *
  *   # 行为探针：临时还原旧实现 → 期待单测变红（可加 --expect-not-out 防"红在别处"）

@@ -64,6 +64,7 @@ vi.mock('@/cep/node', async () => {
 vi.mock('@/cep/paths', () => ({
   // 以 `USER_DIR` 结尾，`dataRoot()` 才能还原出 `%APPDATA%`（= `/ROAM`）
   userDir: () => '/ROAM/SheJiZhuLi',
+  appDataRoot: () => '/ROAM',
 }))
 
 vi.mock('@/cep/events', () => ({

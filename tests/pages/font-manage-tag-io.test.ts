@@ -9,7 +9,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
  * 1. 菜单里有「导入标签」「导出标签」两项；
  * 2. 点了先弹**确认框**，取消不跑命令（不写盘），确定才跑命令。
  *
- * 命令本身的四条 P0 在 `tests/commands/font-tag-io.test.ts` 里钉死，这里不重复。
+ * 命令本身的四条 P0 在命令层用例里钉死，这里不重复。
  */
 const selection = vi.hoisted(() => ({ hasSelection: true, typeNumber: 2 }))
 

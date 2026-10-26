@@ -16,12 +16,12 @@
 | --- | --- | --- |
 | **应用级错误边界** | `src/components/ErrorBoundary.vue` · `src/components/ToastHost.vue` · `src/components/ConfirmHost.vue` | 渲染是否被边界捕获（**没白屏** = 边界在起作用，不是没 bug） |
 | **日志** | `src/utils/logger.ts`（统一入口，禁散写 `console.log`） | 运行时轨迹；调试埋点默认安静、可开关 |
-| **白屏体检** | `npm run render:check`（需 `PSZ_EXT_DIR=/tmp/x`；**只覆盖 `fontManage` / `style` 两页**） | SSR 渲染是否崩、是否白屏 |
+| **白屏体检** | 无（`render:check` 已不存在） | 只能 `npm test` 的组件用例；真实渲染进 PS 看，算 `UNVERIFIED` |
 | **单测 / 组件测** | `npm test`（vitest + jsdom + `@vue/test-utils`） | 逻辑 / 事件 / DOM 输出；**不启浏览器、不点 PS、不 fetch** |
-| **机器守卫** | `npm run lint` · `style:guard` · `template:guard` · `dispatch:check` | 空 catch / 裸契约串 / 页面层越界 / 公共件分发 / 断言禁令 |
+| **机器守卫** | `npm run lint` · `npm run format:check` · `npm run typecheck` | 空 catch / 断言禁令 / 页面层越界 / 转型。样式与公共件分发**无守卫** |
 | **类型闸** | `npm run typecheck`（`src/**` 与 `tests/**` 两套 tsconfig） | 类型漂移、漏改引用 |
 | **原版结构** | `docs/生成/页面规格/0N-*.md`（结构树 + 全量 class + CSS 实测值） | 我方该长什么样 |
-| **原版事件** | `docs/生成/交互清单.md`（**只查"某元素有没有事件"，不能当页面清单**） | 某个 class 有没有绑事件 |
+| **原版事件** | `app.v4.js` 的 render（看 `on:`） | 某个 class 有没有绑事件 |
 | **原版一手源码** | `docs/原版/01-原版源码/panel/js/app.v4.js`（jsx 派发表 **17058**，调用封装 **17061-17184**） | 官方怎么调 / 什么参数 / 什么返回结构 |
 | **引用面** | `grep -rn "<名>" src/ tests/ docs/ scripts/` + `npm run typecheck` | 谁引用它 + 字符串残留引用（改名/搬运后必跑） |
 | **真机行为** | 只能靠 PS：PS 是否回某事件、jsx 返回值取值 | **查不到就标 `UNVERIFIED` 并写进该页清单**，不猜、不外推 |
@@ -146,7 +146,7 @@
 | 层 | 唯一职责 | 严禁 | 机器守卫 |
 | --- | --- | --- | --- |
 | `src/pages/**` | 视图 | import `@/cep/**`；值导入 `@/commands/**`；直调宿主 | `npm run lint` |
-| `src/components/**` | 跨页 UI 基础件（`G` 前缀） | 塞业务规则；页面私有结构混进公共件 | `npm run dispatch:check` |
+| `src/components/**` | 跨页 UI 基础件（`G` 前缀） | 塞业务规则；页面私有结构混进公共件 | 无守卫，靠 `mv-sync-refs.mjs refs` |
 | `src/stores/**` | **只读投影** + 少量 UI 状态 | 写状态；算业务规则 | 人工 + `npm run lint` |
 | `src/composables/**` | 组合式 | 造第二套订阅总线 | 人工 |
 | `src/commands/**` | 命令注册与执行（`execute` 唯一入口） | 直接调宿主；页面绕过它 | `npm run lint` |
@@ -161,14 +161,14 @@
 
 | 武器 | 命令 | 断在哪 |
 | --- | --- | --- |
-| 白屏 | `npm run render:check`（`PSZ_EXT_DIR=/tmp/x`） | 启动链 [1]~[4] |
+| 白屏 | 无守卫 —— `npm test` 组件用例 + 启动链 [1]~[4] | 启动链断点 |
 | 逻辑 / 事件 / DOM | `npm test`（vitest + jsdom） | 命令链 / 事件链 |
 | 层间方向 | `npm run lint` | 页面层越权 |
-| 公共件分发 | `npm run dispatch:check` | 第二份实现 |
-| 样式基线 | `npm run style:guard` | 裸色值 / 裸字号 |
+| 公共件分发 | 无守卫（`dispatch:check` 已删） | 第二份实现 |
+| 样式基线 | 无守卫（`style:guard` 已删） | 裸色值 / 裸字号靠 `docs/规范/视觉规范.md` |
 | 断言禁令 | `npm run lint` | 断言缺失或过期 |
 | 引用面 | `grep -rn "<名>" src/ tests/ docs/ scripts/` + `npm run typecheck` | 改名 / 搬运后的引用漏改 |
-| 原版对照 | `docs/生成/页面规格/0N-*.md` · `docs/生成/交互清单.md` · `app.v4.js:17058` | 结构 / 事件 / jsx 签名 |
+| 原版对照 | `docs/生成/页面规格/0N-*.md` · `app.v4.js` 的 render · `app.v4.js:17058` | 结构 / 事件 / jsx 签名 |
 | 判据 | `node scripts/adr.mjs search <关键词>` · `node scripts/adr.mjs refs --check` | 判据打架 / 断链 |
 
 ---
@@ -176,7 +176,7 @@
 ## 八、与通用排查5步法的衔接
 
 - **State 1（现象对齐）**：走通用引擎，复述痛点（"没数据" ≠ "保存失败" ≠ "没生效"，先分清）。
-- **State 2（提取证据）**：先按〇取证据；疑原版行为查 `app.v4.js` 与页面规格；疑事件绑定查交互清单。
+- **State 2（提取证据）**：先按〇取证据；疑原版行为查 `app.v4.js` 与页面规格；疑事件绑定查 `app.v4.js` render 里的 `on:`。
 - **State 3（物理断点）**：**对照第一~六节链路地图，指"第几跳、哪个契约没守"**。
 - **State 4（靶向修复）**：守红线（`src/cep` 唯一出口 / 命令唯一入口 / 写不可降级 / 错误原样透传 / domain 纯函数），最小改动。
 - **State 5（闭环验证）**：呼应 State 1 —— 跑 `npm run check` + `npm run typecheck` + `npm test`（**`check` 不含测试与 typecheck**）；真机相关写进该页清单并标 `UNVERIFIED`。

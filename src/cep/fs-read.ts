@@ -19,7 +19,7 @@
 
 import { hasNode, nodeRequire, toPosix, type NodeModules } from './node'
 import { evalScriptRaw, hasCep } from './transport'
-import { userDir } from './paths'
+import { appDataRoot, userDir } from './paths'
 import { ERR_PREFIX } from '@/utils/errors'
 
 /**
@@ -227,15 +227,17 @@ export async function readTextAsync(absPath: string): Promise<TextRead> {
  */
 export function readOwnFileText(target: string): TextRead {
   // 放行**本应用拥有的两个根**，不放行任意外部路径（那些走 `readExternalText`）：
-  //   ① `userDir()`         —— 扩展自己的数据（`sj_*.json`）
-  //   ② `dirname(userDir())` —— `%APPDATA%`：色板在 `%APPDATA%/FengZiSeBan/` 下，
+  //   ① `userDir()`      —— 扩展自己的数据（`sj_*.json`）
+  //   ② `appDataRoot()`  —— `%APPDATA%`：色板在 `%APPDATA%/FengZiSeBan/` 下，
   //      是 `userDir()` 的**兄弟目录**，不在里面。
   //
   // 只放 ① 会把色板的 `.txt` 全挡掉 —— 症状是「最近色数量」改完写得进去、读不回来，
   // 永远显示默认值（`recentLimitPath()` 用的就是 `%APPDATA%/FengZiSeBan/`）。
+  //
+  // ② 以前是 `dirname(userDir())` 反推（`TD-13-1`）：那是第二份判据，且宿主优先后
+  // `userDir()` 的父目录**未必**等于数据根。现在直接问 `appDataRoot()`。
   const own = userDir()
-  const appRoot = nodeRequire('path').dirname(own)
-  const targets = [`${own}/`, `${appRoot}/`]
+  const targets = [`${own}/`, `${appDataRoot()}/`]
   if (!targets.some((root) => target.startsWith(root))) {
     return { status: 'error', reason: `readOwnFileText 只读本应用目录下的文件：${target}` }
   }

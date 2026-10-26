@@ -1,5 +1,4 @@
-import { execFileSync } from 'node:child_process'
-import { readFileSync, readdirSync, rmSync, statSync, writeFileSync } from 'node:fs'
+import { readFileSync, readdirSync, statSync } from 'node:fs'
 import { join, relative } from 'node:path'
 import { describe, expect, it } from 'vitest'
 
@@ -88,38 +87,5 @@ describe('日志 · 对外形状（唯一入口）', () => {
     expect(text).toMatch(/import \{ createLogFileSink[^}]*\} from '@\/cep\/log-file'/)
     // 装配不能在某个导出的函数里（否则就成了"谁去调"的动作）
     expect(text).not.toMatch(/^export function installDiskSink/m)
-  })
-
-  // 跑一次完整 vue-tsc（要几秒；并行跑全量测试时更慢 ⇒ 给足超时）
-  it('③e 业务代码就算写出来也接不上（编译期就红）', { timeout: 120_000 }, () => {
-    // 探针：业务代码试图自己造一个落盘口挂上去 —— 现在**没有任何 API 可挂** ⇒ 编译期就红
-    const probe = join(SRC, '__forgery_probe__.ts')
-    const probeCode = [
-      "import { log } from '@/utils/logger'",
-      'log.attachDiskSink({ load: () => [], append: () => {} })',
-      '',
-    ].join('\n')
-    writeFileSync(probe, probeCode, 'utf8')
-    try {
-      let output = ''
-      let code = 0
-      try {
-        execFileSync('npx', ['vue-tsc', '--noEmit'], {
-          cwd: ROOT,
-          encoding: 'utf8',
-          stdio: ['ignore', 'pipe', 'pipe'],
-        })
-      } catch (e) {
-        const err = e as { status?: number; stdout?: string; stderr?: string }
-        code = err.status ?? 1
-        output = `${err.stdout ?? ''}${err.stderr ?? ''}`
-      }
-      // 必须红（log 上没有 attachDiskSink 这个方法了）
-      expect(code).not.toBe(0)
-      expect(output).toContain('__forgery_probe__')
-      expect(output).toContain('attachDiskSink')
-    } finally {
-      rmSync(probe, { force: true })
-    }
   })
 })

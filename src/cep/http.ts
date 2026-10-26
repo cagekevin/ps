@@ -18,7 +18,7 @@ export interface HttpTextResponse {
 }
 
 /**
- * POST 一段文本、拿回文本。**这是 `fetch` 在本仓的唯一出口**（AGENTS §17「外部网络」）。
+ * POST 一段文本、拿回文本。**这是 `fetch` 在本仓的唯一出口**。
  *
  * 抛错只有两种情况，且分得开：
  * - `TIMEOUT`：到点没回（`AbortController` 触发）；
@@ -94,7 +94,7 @@ export function jsonp(
   script.src = `${url}?${query.toString()}`
 
   // 回调名带 `__pszJsonp` 前缀，`Window` 的模板字面量索引签名（`src/env.d.ts`）已放行这一类属性，
-  // 所以这里**不需要转型**：`window` 本身就是可写的类型，不需要 `as unknown as` 过桥（硬规则 20(a)）。
+  // 所以这里**不需要转型**：`window` 本身就是可写的类型，不需要 `as unknown as` 过桥（ADR-0024）。
   const win = window
   const head = document.head || document.getElementsByTagName('head')[0]
 

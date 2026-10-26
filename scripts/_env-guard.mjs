@@ -19,9 +19,7 @@ export function requireExternal(absPath, hint) {
   console.error(`[缺数据] 路径不在：${absPath}`)
   console.error(`         ${hint}`)
   console.error('         原版资料在 docs/原版/（已入库）。路径不在说明工作区不完整：')
-  console.error(
-    '         先 git status 确认没漏文件，别改脚本绕过。清单见 AGENTS.md「我们有什么」§3。',
-  )
+  console.error('         先 git status 确认没漏文件，别改脚本绕过。清单见 docs/原版/README.md。')
   console.error('')
   process.exit(2)
 }

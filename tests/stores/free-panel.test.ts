@@ -9,7 +9,7 @@ import type { Repo } from '@/cep/data/types'
  * 钉一条：**读坏时业务层拿到的是空列表**（不是 fallback 的空区域），且 `degraded` 有值——
  * 页面靠它把"文件坏了"显示出来，而不是显示成"面板是空的"。
  *
- * 真实接线（磁盘 → `file-repo` → 归一器 → `degraded`）在 `tests/data/free-panel-repo.test.ts`，
+ * 真实接线（磁盘 → `file-repo` → 归一器 → `degraded`）在数据层用例里，
  * 这里只钉投影这一层，所以把 repo 换成假对象。
  */
 

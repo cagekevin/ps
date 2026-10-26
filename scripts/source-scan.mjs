@@ -1,7 +1,7 @@
 // 是什么：守卫共用的「源码结构」扫描器——import 的真实形状、跨行语句、注释遮蔽。
 // 替代了什么：原来三道守卫各自一份的逐行正则（`IMPORT_RE` 只认同行 / `margin` 式逐行 test）。
-//   2026-10-25 起那三道守卫已删（判据收进 eslint）；本文件现在只服务 style-guard 与两个测试。
-// 谁在用：`scripts/style-guard.mjs`、`tests/scripts/data-repo-realfs.test.ts`、`tests/scripts/write-queue-nesting.test.ts`
+//   2026-10-26 起守卫脚本全部删除（判据收进 eslint）；本文件现在只服务两个测试。
+// 谁在用：`tests/scripts/data-repo-realfs.test.ts`、`tests/scripts/write-queue-nesting.test.ts`
 // 禁止：这里不许出现任何「哪个模块 / 哪个导出 / 哪个符号算违规」的业务名单。
 //   策略（白名单、规则表、基线）留在各自守卫里；本模块只回答「源码里有哪些结构」。
 //   一旦这里长出一份名单，它就是第四份要维护的清单 —— 那正是 A4 要消灭的东西。

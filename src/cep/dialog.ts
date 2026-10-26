@@ -6,7 +6,7 @@ import { msg } from '@/domain/messages'
  *
  * 原版 `D.a.saveFile / openFile` 走 `window.cep.fs.showSaveDialogEx / showOpenDialogEx`
  * （app.v4.js:2465528 附近），不是 ExtendScript File。
- * `CepFs` 的形状声明在 `src/env.d.ts`：`window.cep` 是 CEP 运行时注入的第三方形状（硬规则 20(a)）。
+ * `CepFs` 的形状声明在 `src/env.d.ts`：`window.cep` 是 CEP 运行时注入的第三方形状（ADR-0024）。
  */
 function cepFs(): CepFs {
   const fs = window.cep?.fs

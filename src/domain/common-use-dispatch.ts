@@ -1,7 +1,7 @@
 // 是什么：常用页「格子左键」分派表——官方 `clickFunction`（`app.v4.js:37882-37946`）的逐格语义
 // 唯一入口：页面判断"点格子做什么"只能查这张表，不许写 if 链
 // 替代了什么：2026-10-23 我按 `isMore` 猜"有子面板就展开"，官方只有 3 格左键=展开
-// 谁在用：`src/pages/commonUse/index.vue`；`tests/domain/common-use-dispatch.test.ts` 用快照当外部预言机比对
+// 谁在用：`src/pages/commonUse/index.vue`
 // 禁止：在这里写死页面文案/提示；只描述"动作类型 + 命令 id"
 
 /**

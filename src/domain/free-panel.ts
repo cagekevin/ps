@@ -173,7 +173,7 @@ export function normalizeFreePanel(raw: unknown): FreePanelFile {
  *
  * 与 `normalizeFreePanel` 的唯一区别：**形状不认识返回 `null`**，由 `file-repo` 转成
  * `degraded` + fallback，页面据此提示。在这里补一个空面板就等于静默回退——
- * 坏文件和"面板本来就是空的"从此分不开（硬规则 20(b)）。
+ * 坏文件和"面板本来就是空的"从此分不开（ADR-0014 扩展二）。
  */
 export function readFreePanelFile(raw: unknown): FreePanelFile | null {
   return hasPanelList(raw) ? normalizeFreePanel(raw) : null

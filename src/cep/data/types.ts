@@ -33,7 +33,7 @@ export interface RepoReadOk<T> {
  *
  * `fallback` 是**仓库自己规定的默认值**，由 `fileRepo(resolvePath, fallback)` 的
  * `fallback()` 产生（`file-repo.ts:36`）——与"文件不存在"（`file-repo.ts:72`）**同一个来源**。
- * 消费侧要展示时取它，不许自己再写一份默认值（ADR-24 / 硬规则 20）。
+ * 消费侧要展示时取它，不许自己再写一份默认值（ADR-0024）。
  *
  * 代价（ADR-14 扩展二）：`fallback` 与"文件不存在"在**值上不可分辨**，
  * 要区分只能看 `ok`——所以 `ok` 是唯一判别位，不是调试字段。
@@ -57,7 +57,7 @@ export type RepoRead<T> = RepoReadOk<T> | RepoReadBad<T>
  *
  * 为什么是类型而不是一道闸（目标架构 §4.7「写用户资产」）：store 里写 repo.write(...) 时
  * 这个类型上**根本没有那个方法** —— vue-tsc 报 TS2339，不需要任何扫描脚本
- * （原 layer-boundary.mjs 规则 L1 已删）。写侧叫 <域>Writer（同一对象，类型是全量 Repo<T>），
+ * 。写侧叫 <域>Writer（同一对象，类型是全量 Repo<T>），
  * 只给 commands / cloud 用；eslint 禁 store 导入那个名字。
  */
 export type RepoView<T> = Pick<Repo<T>, 'read' | 'onChange'>

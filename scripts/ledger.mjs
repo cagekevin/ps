@@ -10,7 +10,7 @@
  * 【为什么债侧不在这儿】债的**编号唯一 / 锚点存在 / 状态白名单 / 两表分区**由
  *   `node scripts/debt.mjs check` 查（债侧只留一份判据）。
  *   ⚠️ `debt.mjs check` 是**独立命令，不进 `npm run check`** —— 账本是手写数据，手写文档不作为门禁；
- *   要跑就手动跑一次（`npm run debt:check`）。
+ *   要跑就手动跑一次（`node scripts/debt.mjs check`）。
  *   两处各查一半 = 两份真相 ⇒ 债侧只留一份，本文件只留任务侧。
  */
 import { readFileSync, readdirSync, statSync, existsSync } from 'node:fs'

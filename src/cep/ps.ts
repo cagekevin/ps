@@ -26,8 +26,8 @@ export function initJsx(): Promise<void> {
 async function doInit(): Promise<void> {
   if (!hasCep()) return
 
+  // `extensionDir()` 失败一律抛 `CepError('INIT')`（不再返空串）⇒ 这里不判空
   const dir = extensionDir()
-  if (!dir) throw new CepError('INIT', msg.ps.text.extDirUnavailable)
 
   const jsxPath = `${dir}/lib/all.decrypted.js`
 

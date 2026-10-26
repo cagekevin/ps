@@ -36,9 +36,15 @@ function installBridges() {
     throw new Error(`用例没准备 ${id}`)
   }
   const cep = window as unknown as {
-    __adobe_cep__?: { evalScript: (script: string, cb: (res: string) => void) => void }
+    __adobe_cep__?: {
+      evalScript: (script: string, cb: (res: string) => void) => void
+      getSystemPath: (name: string) => string
+    }
   }
   cep.__adobe_cep__ = {
+    // 真桥一定有 `getSystemPath`；`userDir()` 现在"桥在就只认宿主"（拿不到就抛，不静默回落）。
+    // 这里给的值与下面 `os.homedir() = '/home/u'` 那条平台公式**逐字等价**，用例期望不变。
+    getSystemPath: () => 'file:///home/u/Library/Application Support',
     evalScript: (_script, cb) =>
       cb(disk.code === 'ENOENT' ? `${ERR_PREFIX}文件不存在: /x` : `${ERR_PREFIX}用例：jsx 不可用`),
   }

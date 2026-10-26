@@ -74,7 +74,7 @@ export function useFloatingPosition(options: UseFloatingPositionOptions) {
 
     resolvedPlacement.value = position.placement
     // 直接写元素上的 CSS 变量，模板不再出现 :style：
-    // 定位规则放在浮层自己的 <style> 里（D-22，模板内联样式会绕过 style-guard）。
+    // 定位规则放在浮层自己的 <style> 里（D-22，模板内联样式 `npm run lint` 会拦）。
     floating.style.setProperty('--floating-x', `${position.left}px`)
     floating.style.setProperty('--floating-y', `${position.top}px`)
   }

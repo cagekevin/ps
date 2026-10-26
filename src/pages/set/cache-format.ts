@@ -1,7 +1,7 @@
 // 是什么：缓存占用的显示格式化（纯函数，无 IO）
 // 唯一入口：`ClearCacheDialog` 里把 `dirUsage()` 的字节数变成人能读的字符串
 // 替代了什么：无（首次落）
-// 谁在用：pages/set/components/ClearCacheDialog.vue、tests/pages/set-clear-cache.test.ts
+// 谁在用：pages/set/components/ClearCacheDialog.vue（清缓存无独立用例）
 // 禁止：不在这里读磁盘；不格式化除字节以外的单位
 
 /**

@@ -20,13 +20,20 @@ let dir = ''
 function installRealEnv(): void {
   const w = window as unknown as {
     require?: (id: string) => unknown
-    __adobe_cep__?: { evalScript?: (script: string, cb?: (res: string) => void) => void }
+    __adobe_cep__?: {
+      evalScript?: (script: string, cb?: (res: string) => void) => void
+      getSystemPath?: (name: string) => string
+    }
   }
   // 断言理由：`window.require` / `__adobe_cep__` 由 CEP 运行时注入，测试里手工补上真实现
   w.require = (id) => realRequire(id)
   // 真机上 `readTextOutcome` 在 node 报 notSeen 时会再问一次 jsx `File`（fs.ts:493）；
   // 这里让假桥对"文件不存在"回 notSeen（`ERR:` + `文件不存在: `），否则该分支永不回包 → 挂。
   w.__adobe_cep__ = {
+    // 真桥一定有 `getSystemPath`；`userDir()` 现在"桥在就只认宿主"（拿不到就抛，不静默回落）。
+    // 指到本用例的 `dir`（闭包，beforeEach 才赋值）—— 与 `process.env.APPDATA = dir`
+    // 那条平台公式等价，所以各用例期望的路径不变。
+    getSystemPath: () => `file://${dir}`,
     evalScript: (_script: string, cb?: (res: string) => void) => cb?.(`ERR:文件不存在: fake`),
   }
 }

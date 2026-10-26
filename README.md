@@ -57,16 +57,28 @@ public/
 | `npm run dev` | 纯浏览器开发，走 mock 数据，不碰 PS |
 | `npm run dev:cep` | 把扩展目录指向 `localhost:5173` 再起 dev server，PS 里改代码即时生效 |
 | `npm run build` | 只构建（`vite build`），**产物直接写进 CEP 扩展目录**（build 即部署）。检查归 `check` / `typecheck` |
-| `npm run deploy` | `check` → `typecheck` → `build` → `verify:dist`，**唯一强制点**，进 PS 验收前跑这个 |
+| `npm run deploy` | `check` → `typecheck` → `build`，**唯一强制点**，进 PS 验收前跑这个 |
 | `npm run typecheck` | 只跑 vue-tsc（`src/**` 与 `tests/**` 两个 program） |
 | `npm run lint` | ESLint（vue essential + TS，`--max-warnings 0`） |
 | `npm run format` / `format:check` | Prettier（不管 `docs/`、`public/`、产物） |
-| `npm run check` | 样式守卫 + 债务账本校验 + 规模校验 + lint + prettier |
+| `npm run check` | lint + prettier |
 | `npm test` / `test:watch` | 单元 / 组件测试（vitest + jsdom，不启浏览器） |
-| `npm run ledger` | 只校验 `docs/债务.md`（依赖、id、done 状态） |
-| `npm run registry` | 新增横切能力后同步 `docs/横切能力.md` |
-| `npm run style:fix` / `style:baseline` | 自动修样式违规 / 修完后收紧基线 |
+| `npm run check:tools` | 工具层 lint + prettier（只管 `scripts/**`，不进 `deploy`） |
 | `npm run log:new` / `log:index` | 写日志（决策/踩坑/机制变更才写） |
+| `npm run stats` | 生成规模数字（`docs/生成/规模.md` + 注入块） |
+| `npm run spec` | 重新生成 `docs/生成/页面规格/0N-*.md`（`-- --page X` 只跑一页） |
+| `npm run list` | 按页面聚合 spec |
+
+治理脚本（不进 `check`）：
+
+| 命令 | 作用 |
+|---|---|
+| `node scripts/debt.mjs` | 债务账本读写：`add` / `list` / `show` / `resolve` / `reopen` / `check` |
+| `node scripts/adr.mjs` | ADR 读写与索引：`list` / `add` / `index` |
+| `node scripts/arch-index.mjs` | 生成 `daily/架构日志/index.md`（禁手改） |
+| `node scripts/probe.mjs` | 先红后绿探针：临时注入一处违规 → 跑命令 → 自动还原（不许 `--keep`） |
+| `node scripts/mv-sync-refs.mjs` | 引用图 / 孤儿 / 重命名搬移，自动改写 import（字符串引用仍要人工同步） |
+| `node scripts/comment-audit.mjs` | 注释死指针审计（只读）：指向已删文件 / 已删命令 / 已删规则的注释，`--json` 可机读 |
 
 构建输出目录默认 `%APPDATA%\Adobe\CEP\extensions\com.local.psz.panel.v5`，
 可用环境变量 `PSZ_EXT_DIR` 覆盖。
@@ -100,8 +112,7 @@ reg query "HKCU\Software\Adobe\CSXS.12" /v PlayerDebugMode   # 要是 1
 我们把它整段抽出来了，共 189 个（原文件里另有 52 个 `fol-icon-test*` 测试图标，已剔除）：
 
 ```powershell
-cd ..\tools
-node 14-sprite.cjs      # 重新生成 src/assets/icons-sprite.svg 和 src/components/icon/names.ts
+node docs/原版/tools/14-sprite.cjs   # 重新生成 icons-sprite.svg 与 icon/names.ts；脚本内路径按仓外旧目录写死，跑前先确认输出位置
 ```
 
 用法：

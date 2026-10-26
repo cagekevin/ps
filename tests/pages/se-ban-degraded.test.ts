@@ -68,6 +68,7 @@ vi.mock('@/cep/node', async () => {
 
 vi.mock('@/cep/paths', () => ({
   userDir: () => 'ROAM/SheJiZhuLi',
+  appDataRoot: () => 'ROAM',
 }))
 
 // 这里以前 mock 的是 `@/cep/fs-read`，里面还塞着已搬到 `@/cep/disk-write` 的写原语。

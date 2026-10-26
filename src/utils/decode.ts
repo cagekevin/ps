@@ -31,7 +31,7 @@
 //      语义臂 `{ fail:'notJson'|'emptyContent'|'noItemsParsed'|'badItem', count? }`（码可穷举）
 //    **不许 `return null`**：那等于"失败但说不出原因"，类型上已经写不出来了（`Decoder<T>` 里没有 `| null`）。
 //    用户文案由 `data/repo-read.ts` 的 `describeDecodeFail()` **唯一一处**渲染 —— 这里只报观测/码。
-// ④ **新增一个 decode 必须同时加一条坏形状用例**（照 `tests/data/decode-badshape.test.ts`）：
+// ④ **新增一个 decode 必须同时加一条坏形状用例**（照 `tests/data/repo.test.ts` 的坏形状分支）：
 //    类型只能保证"传了 decode"，保证不了"decode 真在校验" —— 有人把它改成 `=> ({ value: raw as T })`
 //    或把谓词改成 `isRecord` 恒真，编译一点都不红。**用例是唯一的兜底**，且必须双向断言
 //    （坏形状 → `ok:false`、好形状 → `ok:true`），否则"永远返回 null"的判据也能通过。

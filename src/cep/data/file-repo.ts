@@ -10,7 +10,7 @@
 //   ① `data-repo.ts` —— 唯一构造器，环境选择在它那里；
 //   ② `swatch-repo.ts` —— **具名例外**：色板是**用户资产**，`dataRepo` 的内存兜底会把"读不到"
 //      变成"空色板 + 写入落内存"（静默丢）。这里宁可在无 Node 时抛 `NO_NODE`（响的）；
-//   ③ 实现级用例三处：`tests/cep/file-repo.test.ts`（动态 import）、`tests/data/repo.test.ts`（import）、
+//   ③ 实现级用例三处：`tests/cep/file-repo-realfs.test.ts`（动态 import）、`tests/data/repo.test.ts`（import）、
 //      `tests/scripts/data-repo-realfs.test.ts`（夹具字符串，不真 import）。
 import { CepError } from '@/utils/errors'
 import { msg } from '@/domain/messages'

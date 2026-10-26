@@ -24,7 +24,7 @@ import ts from 'typescript'
  * **A. 哪些模块"写盘"**（`src/cep/data/**` 内，自身体内出现下列任一调用）：
  *   1. `dataRepo(`  —— 造一个由 `fileRepo` 落盘的 Repo；
  *   2. `fileRepo(`  —— 直接造文件实现（`data-repo.ts`）；
- *   3. `@/cep/fs` 的**写原语** —— 名单从 `src/cep/fs.ts` 的 AST **推导**：函数体（含文件内调用链）
+ *   3. `@/cep/fs` 的**写原语** —— 名单从 `src/cep/fs-read.ts` 的 AST **推导**：函数体（含文件内调用链）
  *      触达 node fs 的写类 API（`writeFileSync` / `renameSync` / `unlinkSync` / `mkdirSync` …）即算。
  *
  * 只看**自己动手**的写：经另一个仓库间接写盘的模块不算（它的写必然经过那个仓库，
@@ -86,7 +86,7 @@ export interface Scan {
   gap: string[]
   /** 判为"真机装法"的用例文件（相对仓库根） */
   realTests: string[]
-  /** 从 `src/cep/fs.ts` 推导出的写原语 */
+  /** 从 `src/cep/fs-read.ts` 推导出的写原语 */
   writePrimitives: string[]
 }
 
@@ -169,7 +169,7 @@ function calledIdentifiers(body: ts.Node): Set<string> {
 }
 
 /**
- * `src/cep/fs.ts` 的写原语：函数体**直接或经文件内调用链**触达 node fs 的写类 API。
+ * `src/cep/fs-read.ts` 的写原语：函数体**直接或经文件内调用链**触达 node fs 的写类 API。
  * 不手写名字 —— `writeTextFileAtomic` 自己是靠 `atomicReplace → atomicReplaceBytes → writeBytesFile`
  * 才写盘的，手写名单会把这条链漏掉。
  */
@@ -350,7 +350,7 @@ function makeRoot(files: Record<string, string>): string {
   return root
 }
 
-/** 最小可用的 `src/cep/fs.ts`：一个写原语 + 一个读原语 */
+/** 最小可用的 `src/cep/fs-read.ts`：一个写原语 + 一个读原语 */
 const MINI_FS = `const fs = { writeFileSync: (_p: string, _t: string) => {} }
 export function writeTextFileAtomic(p: string, t: string): void {
   fs.writeFileSync(p, t)

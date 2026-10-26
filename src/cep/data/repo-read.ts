@@ -111,7 +111,7 @@ export function readRepoFile<T>(target: string, decode: Decoder<T>): RepoFileOut
 export interface FoldOptions {
   /**
    * `classification.json` 不随面板分发，首次使用确实没有 —— 它要 `ok:true` **+ 一句 reason**
-   * （去掉 reason 就是静默回退，硬规则 20(b)）。其余仓库不要。
+   * （去掉 reason 就是静默回退，ADR-0014 扩展二）。其余仓库不要。
    */
   notSeenReason?: string
 }
