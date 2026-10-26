@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { SEED } from '../helpers/cas-seed'
 import { createPinia, setActivePinia } from 'pinia'
 import { readValue } from '../support/repo-read'
 
@@ -15,7 +16,7 @@ const { createEmptyFreePanel, findBlock, normalizeFreePanel } = await import('@/
 
 beforeEach(async () => {
   setActivePinia(createPinia())
-  await freePanelWriter.write(createEmptyFreePanel())
+  await freePanelWriter.replace(createEmptyFreePanel(), SEED)
 })
 
 async function addTwo() {
@@ -162,7 +163,7 @@ describe('自由面板命令', () => {
   it('跨 block 拖拽：从源 block 删除，插入目标 block', async () => {
     const file = createEmptyFreePanel()
     file.obj.list.push({ ...file.obj.list[0], id: 2, data: [] })
-    await freePanelWriter.write(file)
+    await freePanelWriter.replace(file, SEED)
 
     await execute('freePanel.add', {
       blockId: 1,

@@ -32,6 +32,7 @@ import { CepError } from '@/utils/errors'
 import { msg } from '@/domain/messages'
 import { log } from '@/utils/logger'
 import { kuGuid, readIndexState, readKuFileText, styleIndexWriter } from './style-library-repo'
+import { REPLACE_WITHOUT_BASELINE } from './types'
 // 与日常编辑共用同一批 sj_ku* 文件；没有队列了 —— 读改写是同步段，不可能交错
 import { isRecord } from '@/utils/guards'
 import { runExclusiveAsync } from './exclusive'
@@ -74,7 +75,7 @@ function parseOrThrow<T>(read: () => T): T {
  * "这份原文还算不算库文件"是领域知识，只有数据层有解析器。
  * 旁路图（`kuStyle/*.png` 等）不是库文件，不适用本判据，照旧写 `.bak`。
  */
-function backupOriginal(relative: string, path: string, base64: string): void {
+function classifyOriginal(relative: string, path: string, base64: string): 'keep' | 'quarantined' {
   if (isKuLibraryFileName(relative)) {
     // 解不出来（二进制乱码）就是"不可用"，与解析失败同一条判据
     let text: string
@@ -87,19 +88,19 @@ function backupOriginal(relative: string, path: string, base64: string): void {
       const quarantine = `${path}.corrupt-${Date.now()}`
       // 写不进去就抛（底层文案已含 `<path>.corrupt-*` 与原因）。
       // **不在这里再包一层** —— 包了就是"备份失败：x.corrupt（写入失败：x.corrupt（EACCES））"。
-      writeBase64File(quarantine, base64)
+      // `.corrupt-<ts>` 是新文件：它还在就说明同一毫秒内撞了，停下比覆盖安全
+      writeBase64File(quarantine, base64, {
+        cas: { mode: 'compare', expected: null },
+        backup: { mode: 'none', why: '坏原文的隔离副本就是退路，不再为它留退路' },
+      })
       log.warn(
         'style',
         `原文不是可用的库文件，已另存为 ${relative}.corrupt-*（不写 .bak，免得把坏内容当备份）`,
       )
-      return
+      return 'quarantined'
     }
   }
-
-  //`.bak` 写失败**必须中止**。旧实现把这个失败丢掉继续写本体 ——
-  // 结果是"导入报成功、原件被覆盖、`.bak` 不存在、日志一行都没有"（EISDIR 可复现）
-  // 写不进去就抛（底层文案已含 `<path>.bak` 与原因）。不二次包装，理由同上。
-  writeBase64File(`${path}.bak`, base64)
+  return 'keep'
 }
 
 /**
@@ -116,9 +117,23 @@ function writeKuFile(relative: string, base64: string): boolean {
   if (read.status === 'error') {
     throw new CepError('IO', msg.data.fn.readOriginalFailedAbortImport(relative, read.reason))
   }
-  if (read.status === 'ok') backupOriginal(relative, path, read.base64)
+  const original = read.status === 'ok' ? read.base64 : null
+  // **只有判据留在这里**（"这份原文算不算可用库文件"是领域知识）；
+  // 写 `.bak` 的机制归落盘入口（`backup: 'keep'`），本文件不再自己写一份。
+  const classified = original === null ? 'none' : classifyOriginal(relative, path, original)
   // 写不进去就抛（底层文案已含完整路径与原因）。不二次包装。
-  writeBase64File(path, base64)
+  // CAS 比的是**本次读到的原文**：读与写之间别的面板可能已经改过这一份库文件。
+  writeBase64File(path, base64, {
+    cas: { mode: 'compare', expected: original },
+    backup:
+      classified === 'keep'
+        ? // 原文已读到，直接交给落盘入口写 `.bak`，省一次重读
+          { mode: 'keep', previous: original }
+        : {
+            mode: 'none',
+            why: classified === 'quarantined' ? '坏原文已另存 .corrupt-*' : '没有原文可备',
+          },
+  })
   return read.status === 'ok'
 }
 
@@ -274,7 +289,10 @@ export function exportKuArchive(
   if (!arrFileData.length) throw new CepError('PARSE', msg.data.text.noExportableLibFile)
 
   // 导出包是**新文件**，无 `.bak` 概念（`previous: null`）；走唯一落盘入口（原子写）
-  writeDiskSync(targetPath, encodeKuContainer({ arrFileData, store }), { previous: null })
+  writeDiskSync(targetPath, encodeKuContainer({ arrFileData, store }), {
+    backup: { mode: 'none', why: '导出包是新文件，无原文可备' },
+    cas: { mode: 'skip', why: '用户经系统对话框选定导出路径，覆盖意图已确认' },
+  })
 }
 
 /** 把替换掉的旧文件移进回收目录（与 `deleteWarehouse` 同一个 `.deleted-<时间戳>` 约定，可整目录拷回） */
@@ -291,7 +309,11 @@ function moveToRecycle(names: readonly string[], keep: ReadonlySet<string>, dir:
     if (read.status === 'notSeen') continue
     // 两段各自窄 catch，各说各的话 —— 合并成一个大 catch 会把"复制失败"和"删不掉"说成同一句
     try {
-      writeBase64File(`${dir}/${name}`, read.base64)
+      // 回收目录名带时间戳，副本必定是新文件
+      writeBase64File(`${dir}/${name}`, read.base64, {
+        cas: { mode: 'compare', expected: null },
+        backup: { mode: 'none', why: '回收副本是新文件，无原文可备' },
+      })
     } catch (e) {
       // 复制失败就**不能删原件**：删了就等于原件没了、回收目录里也没有
       log.warn('style', `替换导入：旧文件没复制进回收目录（原件保留原位）：${name}`, e)
@@ -392,7 +414,7 @@ function importKuFromText(
       // 整份替换索引：`overwrite` = 读原文 → `.bak` → 原子写 → emit。
       // 以前这里自己 `readExternalText` + `backupOrQuarantine` + 裸写三步 ——
       // 那是上层在做底层的事（T-112 的"读不到就中止"由 `overwrite` 的 D-42 拒绝覆盖保证）。
-      styleIndexWriter.overwrite(nextIndex)
+      styleIndexWriter.replace(nextIndex, REPLACE_WITHOUT_BASELINE)
     }
   } catch (e) {
     // 只回滚这次新建的文件：被覆盖的原件还在原位（`.bak` 是它的上一版）

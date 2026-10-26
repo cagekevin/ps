@@ -15,7 +15,7 @@
 import { CepError } from '@/utils/errors'
 import { msg } from '@/domain/messages'
 import { foldAbsent, readRepoFile } from './repo-read'
-import { writeDiskSync } from '@/cep/disk-write'
+import { writeDiskSync, type CasMode } from '@/cep/disk-write'
 import { log } from '@/utils/logger'
 import type { Decoder } from '@/utils/decode'
 import type { Repo, RepoRead } from './types'
@@ -72,39 +72,32 @@ export function fileRepo<T>(
   /**
    * 落盘。写失败必须抛：这里不做任何兜底（ADR-14）。
    *
-   * 返回 `false` = 传了 `expected` 且磁盘原文已经不是它（别的面板改过）。
-   * 具体顺序（备份 → CAS → 原子写）在 `./disk-write` 的 `writeDisk` 里，本文件不再重写一遍。
+   * `cas` 由调用方表态：`rawUpdate` 传「与读到的原文比」，`write` 传「不比 + 理由」。
+   * 具体顺序（备份 → CAS → 原子写）在 `./disk-write` 的 `writeDiskSync` 里，本文件不再重写一遍。
    */
-  function persist(
-    value: T,
-    previous: string | null,
-    expected?: string | null,
-    quarantine = false,
-  ): void {
+  function persist(value: T, previous: string | null, cas: CasMode): void {
     // **同步**落盘：原语本来就是 `renameSync`；异步只多一个 microtask 边界，
     // 而那正是 D-26 丢更新的窗口。
     // 失败一律抛（含 CAS 冲突 ⇒ `CONFLICT`），本函数没有返回值可丢。
     writeDiskSync(resolvePath(), JSON.stringify(value), {
-      // `backup` 关掉时不写 `.bak`：显式传 `null` 表示"没有原文"
-      previous: backup ? previous : null,
-      quarantineOnCorrupt: quarantine,
-      expected,
+      backup: backup
+        ? { mode: 'keep', previous }
+        : { mode: 'none', why: '仓库构造时 opts.backup=false' },
+      cas,
     })
   }
 
   /**
-   * 整份覆盖 + 保留原文做备份/隔离。
+   * 整份替换：备份恒定开（`backup: false` 的仓库除外）+ 读不到原文就抛（T-112），CAS 由调用方表态。
    *
-   * 与 `rawUpdate` 的区别：`rawUpdate` 在原文坏时**拒绝写**（D-42）；这里**照写**，
-   * 但把坏原文隔离到 `.corrupt-<ts>`。与 `write` 的区别：`write` 不读原文
-   * `.bak` 无从谈起。T-112：读不到原文时**不许写** —— 整份覆盖会把旧内容抹平且没有第二份。
+   * 与 `rawUpdate` 的区别：`rawUpdate` 是读→改→写并自己重试；这里调用方已经算好完整内容。
+   * 本文件**不自己读原文**（交给 `requireReadable`），所以 `readTextSync` 的消费者只有 `disk-write`。
    */
-  function rawOverwrite(value: T): void {
-    // 读原文交给 `writeDisk`（`requireReadable` ⇒ 读不到就抛，T-112）；
-    // 本文件**不再自己读**，所以 `readTextSync` 的消费者只剩 `disk-write` 一个。
-    // `backup` 关掉时显式传 `null`（"没有原文"）⇒ 不写 `.bak`，也就没有"读不到原文"这一步可判。
+  function replace(value: T, cas: CasMode): void {
+    // `backup` 关掉时不读原文 ⇒ `requireReadable` 这一步也不存在（没有原文可判）
     writeDiskSync(resolvePath(), JSON.stringify(value), {
-      previous: backup ? undefined : null,
+      backup: backup ? { mode: 'keep' } : { mode: 'none', why: '仓库构造时 opts.backup=false' },
+      cas,
       quarantineOnCorrupt: true,
       requireReadable: true,
     })
@@ -144,7 +137,7 @@ export function fileRepo<T>(
       // D-26：读 → 改 的窗口里，另一个面板（独立面板）可能已经写过。
       // 落盘前同步比对；不一致时 `writeDiskSync` 抛 `CONFLICT` 且**不写**，我们在新值上重跑 mutator。
       try {
-        persist(next, text, text)
+        persist(next, text, { mode: 'compare', expected: text })
       } catch (e) {
         // **只接「CAS 冲突」这一种** —— 它不是失败，是"该重跑"。
         // 其余（IO 错 / 无 Node）一律往上抛：那是真失败，不许在这里变成"再试一次"。
@@ -169,12 +162,7 @@ export function fileRepo<T>(
   return {
     read: () => rawRead(),
 
-    write: (value) => {
-      persist(value, null)
-      emit(value)
-    },
-
-    overwrite: (value) => rawOverwrite(value),
+    replace,
 
     update: (mutator) => rawUpdate(mutator),
 

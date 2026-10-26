@@ -21,7 +21,10 @@ const SCRIPT_SUBDIR = '快捷键脚本'
 function writeScripts(dir: string, groups: ShortcutScriptGroup[]) {
   // 导出的脚本是**新文件**，无 `.bak` 概念（`previous: null`）；走唯一落盘入口（原子写）
   for (const group of groups)
-    writeDiskSync(`${dir}/SJZL-${group}.jsx`, SCRIPT_TEMPLATE, { previous: null })
+    writeDiskSync(`${dir}/SJZL-${group}.jsx`, SCRIPT_TEMPLATE, {
+      backup: { mode: 'none', why: '脚本内容恒定（模板），无退路价值' },
+      cas: { mode: 'skip', why: '脚本内容恒定，覆盖与首次写等价' },
+    })
 }
 
 export const systemCommands: Command<unknown>[] = [

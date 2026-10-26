@@ -101,9 +101,14 @@ export function createLogFileSink(onError?: (reason: string) => void): DiskLogSi
     // 日志落盘也走**唯一写盘入口**（`previous: null` = 覆盖写、无 `.bak` 概念）。
     // 观测设施不许把失败抛给业务 ⇒ 在这里兜住并 report。
     try {
-      writeDiskSync(filePath(), `${lines.join('\n')}\n`, { previous: null })
+      writeDiskSync(filePath(), `${lines.join('\n')}\n`, {
+        backup: { mode: 'none', why: '日志无退路价值，.bak 只会占磁盘' },
+        cas: { mode: 'skip', why: '日志是覆盖写，丢一次只影响调试信息' },
+      })
     } catch (e) {
-      // UNVERIFIED: report() 落到的是日志还是用户提示待定；若用户可见应归 msg.*
+      // 落盘失败只进**日志**（`onError` → `noteSinkFailure` → 一条 warn 进缓冲 + 控制台），**不弹 toast**：
+      // 日志系统自己坏了还去弹提示，网络盘掉线时会刷屏（`report` 每次会话只报第一条）。
+      // 所以这**不是静默吞**（有上报），只是上报的载体是日志而不是用户提示。
       report(`写 ${FILE} 失败：${e instanceof Error ? e.message : String(e)}`)
     }
   }

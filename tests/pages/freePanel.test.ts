@@ -1,4 +1,5 @@
 import { flushPromises, mount } from '@vue/test-utils'
+import { SEED } from '../helpers/cas-seed'
 import { createPinia, setActivePinia, type Pinia } from 'pinia'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { readValue } from '../support/repo-read'
@@ -51,7 +52,7 @@ beforeEach(async () => {
   setActivePinia(pinia)
   vi.clearAllMocks()
 
-  await freePanelWriter.write(createEmptyFreePanel())
+  await freePanelWriter.replace(createEmptyFreePanel(), SEED)
   // block 1：A、B；block 2：X
   await execute('freePanel.addBlock', { type: 'norow' })
   await execute('freePanel.add', {

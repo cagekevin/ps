@@ -85,7 +85,10 @@ export function writeCloudLedger(ledger: CloudLedgerRecord): void {
     // 原子写失败必须抛：退回普通写等于摘掉 rename 保护，台账写坏会污染同步判定
     // 台账是覆盖写、无 `.bak` 概念（`previous: null`）
     try {
-      writeDiskSync(target, text, { previous: null })
+      writeDiskSync(target, text, {
+        backup: { mode: 'none', why: '台账可从云端重算，不保留 .bak' },
+        cas: { mode: 'skip', why: '台账在 cloud 互斥域内串行写，无并发窗口' },
+      })
     } catch (error) {
       throw new CloudError(
         'CLOUD_WRITE_FAILED',

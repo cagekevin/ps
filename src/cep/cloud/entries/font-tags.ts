@@ -2,6 +2,7 @@ import { tagsWriter, isRawTag } from '@/cep/data'
 import { isArrayOf } from '@/utils/guards'
 import type { SyncUnitAdapter, WriteOutcome } from '@/domain/cloud'
 import { inlineFile, readInlineJson, unitPayload } from './util'
+import { REPLACE_WITHOUT_BASELINE } from '@/cep/data/types'
 
 const PATH = '/sj_ztglTags.ini'
 
@@ -22,7 +23,7 @@ export const fontTagsEntry: SyncUnitAdapter = {
     try {
       const value = readInlineJson(payload)
       if (!isArrayOf(value, isRawTag)) return { ok: false, message: '字体标签不是数组' }
-      await tagsWriter.write(value)
+      tagsWriter.replace(value, REPLACE_WITHOUT_BASELINE)
       return { ok: true }
     } catch (error) {
       return { ok: false, message: error instanceof Error ? error.message : '字体标签写回失败' }

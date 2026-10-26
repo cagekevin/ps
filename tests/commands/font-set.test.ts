@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { SEED } from '../helpers/cas-seed'
 import { CepError } from '@/utils/errors'
 import { createPinia, setActivePinia } from 'pinia'
 import { readValue } from '../support/repo-read'
@@ -204,7 +205,7 @@ describe('fontSet.quickFont：平行数组不等长不许落盘（TD-12-27）', 
 
 describe('fontSet.fontName 最近使用', () => {
   it('家族应用成功后写入最近列表，重复项提前', async () => {
-    await fontHistoryWriter.write(['旧字体', 'MiSans'])
+    await fontHistoryWriter.replace(['旧字体', 'MiSans'], SEED)
     font.setFontName.mockResolvedValue(undefined)
 
     await execute('fontSet.fontName', {

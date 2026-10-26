@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { SEED } from '../helpers/cas-seed'
 
 /**
  * 色板面板 7 条命令（`commands/swatch.ts`）。
@@ -144,10 +145,13 @@ beforeEach(async () => {
   vi.clearAllMocks()
   fsMock.files.clear()
 
-  await styleIndexWriter.write({
-    index: 0,
-    list: [{ name: '默认仓库', color: 'sj_kuColA.ini' }],
-  })
+  await styleIndexWriter.replace(
+    {
+      index: 0,
+      list: [{ name: '默认仓库', color: 'sj_kuColA.ini' }],
+    },
+    SEED,
+  )
   fsMock.files.set(COLOR_LIB, JSON.stringify([{ name: '灰白', show: true, list: [] }]))
 
   jsx.style.getForegroundColor.mockResolvedValue({ ok: true, data: RED })
@@ -161,7 +165,7 @@ beforeEach(async () => {
 
   // 智能填色开关落在 sj_set.json：每条用例都从"缺键 = 官方默认开"开始，防用例间互串
   const { legacySettingsWriter } = await import('@/cep/data/legacy-settings')
-  await legacySettingsWriter.write({})
+  await legacySettingsWriter.replace({}, SEED)
 })
 
 describe('按钮 1：seban.addForegroundColor（原版 TianJia，sf.js:377-382）', () => {
@@ -359,7 +363,7 @@ describe('联动 2：主面板侧执行（开关在 /commonUse，不在色板）
   it('智能填色**关**（sj_set.json 显式 false）→ 只设前景色，不动图层', async () => {
     // 走仓库写入而不是直写文件：`dataRepo()` 决定实现（内存 / 磁盘），直写文件在测试里读不到
     const { legacySettingsWriter } = await import('@/cep/data/legacy-settings')
-    await legacySettingsWriter.write({ cyAutoFillColor: false })
+    await legacySettingsWriter.replace({ cyAutoFillColor: false }, SEED)
 
     await expect(execute('seban.applyColor', { item: RED })).resolves.toEqual({ ok: true })
 

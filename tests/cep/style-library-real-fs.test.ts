@@ -1,4 +1,5 @@
 import fs from 'node:fs'
+import { SEED } from '../helpers/cas-seed'
 import { createRequire } from 'node:module'
 import os from 'node:os'
 import path from 'node:path'
@@ -88,7 +89,7 @@ afterAll(() => {
  */
 describe('TD-09-30：fileRepo 下编辑/切换/删除仓库不再自锁', () => {
   it('addKuGroup 真落盘（读-改-写一次原子写 + 一份 .bak）', async () => {
-    await styleIndexWriter.write(oneWarehouse('sj_kuColA.json'))
+    await styleIndexWriter.replace(oneWarehouse('sj_kuColA.json'), SEED)
     fs.writeFileSync(
       libPath('sj_kuColA.json'),
       JSON.stringify([{ name: 'g', show: true, list: [] }]),
@@ -103,13 +104,16 @@ describe('TD-09-30：fileRepo 下编辑/切换/删除仓库不再自锁', () => 
   }, 5000)
 
   it('selectWarehouse 写索引不挂', async () => {
-    await styleIndexWriter.write({
-      index: 0,
-      list: [
-        { name: 'A', color: 'sj_kuColA.json' },
-        { name: 'B', color: 'sj_kuColB.json' },
-      ],
-    })
+    await styleIndexWriter.replace(
+      {
+        index: 0,
+        list: [
+          { name: 'A', color: 'sj_kuColA.json' },
+          { name: 'B', color: 'sj_kuColB.json' },
+        ],
+      },
+      SEED,
+    )
 
     await selectWarehouse(1)
 
@@ -119,13 +123,16 @@ describe('TD-09-30：fileRepo 下编辑/切换/删除仓库不再自锁', () => 
   it('deleteWarehouse 把旧文件移进 .deleted-*/ 并改索引，不挂', async () => {
     fs.writeFileSync(libPath('sj_kuColA.json'), '[]')
     fs.writeFileSync(libPath('sj_kuColB.json'), '[]')
-    await styleIndexWriter.write({
-      index: 1,
-      list: [
-        { name: 'A', color: 'sj_kuColA.json' },
-        { name: 'B', color: 'sj_kuColB.json' },
-      ],
-    })
+    await styleIndexWriter.replace(
+      {
+        index: 1,
+        list: [
+          { name: 'A', color: 'sj_kuColA.json' },
+          { name: 'B', color: 'sj_kuColB.json' },
+        ],
+      },
+      SEED,
+    )
 
     const result = await deleteWarehouse(0)
 
@@ -173,7 +180,7 @@ describe('TD-09-29：.kux 导入对真磁盘写盘（fileRepo + node:fs）', () 
  */
 describe('TD-09-28：导入与编辑共用一条写链（顺序执行都不丢）', () => {
   it('编辑 → 导入 → 再编辑：三次都真落盘', async () => {
-    await styleIndexWriter.write(oneWarehouse('sj_kuColA.json'))
+    await styleIndexWriter.replace(oneWarehouse('sj_kuColA.json'), SEED)
     fs.writeFileSync(
       libPath('sj_kuColA.json'),
       JSON.stringify([{ name: 'g', show: true, list: [] }]),

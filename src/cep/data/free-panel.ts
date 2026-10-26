@@ -160,10 +160,8 @@ function persistStripped(value: FreePanelFile, writeToBase: (onDisk: FreePanelFi
 const freePanelImpl: Repo<FreePanelFile> = {
   read: () => prepareRead(base.read()),
 
-  write: (value) => persistStripped(value, base.write),
-
-  /** 整份覆盖 + 保留原文做备份/隔离：底层 `base.overwrite`，剥/回填序列同 `write` */
-  overwrite: (value) => persistStripped(value, base.overwrite),
+  /** 整份替换：剥/回填序列后再落盘，CAS 由调用方表态 */
+  replace: (value, cas) => persistStripped(value, (onDisk) => base.replace(onDisk, cas)),
 
   update: (mutator: (value: FreePanelFile) => FreePanelFile | void): FreePanelFile => {
     const persisted = base.update(wrapMutator(mutator))

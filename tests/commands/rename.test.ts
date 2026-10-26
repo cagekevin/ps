@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { SEED } from '../helpers/cas-seed'
 import { createPinia, setActivePinia } from 'pinia'
 import type { RenamePreset } from '@/domain/rename'
 import { readValue } from '../support/repo-read'
@@ -47,7 +48,7 @@ async function read(): Promise<RenamePreset> {
 beforeEach(async () => {
   setActivePinia(createPinia())
   vi.clearAllMocks()
-  await renameWriter.write(seed())
+  await renameWriter.replace(seed(), SEED)
 })
 
 describe('rename.reorderGroup（组排序）', () => {

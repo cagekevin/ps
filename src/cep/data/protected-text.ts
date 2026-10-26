@@ -16,5 +16,9 @@ import { writeDiskSync } from '@/cep/disk-write'
  * 写失败抛 —— 不返回 boolean，调用方不用猜。
  */
 export function writeProtectedText(path: string, text: string): void {
-  writeDiskSync(path, text, { verifyReadBack: true })
+  writeDiskSync(path, text, {
+    backup: { mode: 'keep' },
+    cas: { mode: 'skip', why: '单值文本，值由 UI 当前态决定，冲突即覆盖' },
+    verifyReadBack: true,
+  })
 }

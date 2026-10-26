@@ -320,7 +320,10 @@ export const fontCommands: Command<unknown>[] = [
 
       const payload: TagImportFile = { tags: tagRead.value, stars: starRead.value }
       // 导出文件是**新文件**，无 `.bak` 概念（`previous: null`）；走唯一落盘入口（原子写）
-      await writeDisk(path, JSON.stringify(payload), { previous: null })
+      await writeDisk(path, JSON.stringify(payload), {
+        backup: { mode: 'none', why: '导出产物，无原文可备' },
+        cas: { mode: 'skip', why: '用户经系统对话框选定目标路径，覆盖意图已确认' },
+      })
     },
   }),
 ]

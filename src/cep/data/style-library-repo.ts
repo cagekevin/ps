@@ -27,6 +27,7 @@ import { msg } from '@/domain/messages'
 import { log } from '@/utils/logger'
 import { decodeStyleWarehouseIndex } from '@/domain/style-library'
 import { dataRepo } from './data-repo'
+import { REPLACE_WITHOUT_BASELINE } from './types'
 import { repoAt } from './repo-at'
 // 写队列与色板文件原语都在 `swatch-repo`（依赖方向只能是 `style-library-repo → swatch-repo`）
 import { readSwatchItems, swatchFilePath, writeSwatchItems } from './swatch-repo'
@@ -379,7 +380,7 @@ function updateKuGroups(kind: KuKind, mutate: (groups: KuRawGroup[]) => void): v
   if (JSON.stringify(groups) === before) return
 
   // `.overwrite` = 读原文做 `.bak` → 原子写 → **emit(新值)**：三个语义都在 Repo 里
-  repo.overwrite(groups)
+  repo.replace(groups, REPLACE_WITHOUT_BASELINE)
 
   if (target.isNew) {
     // 库文件已经落盘才登记索引：反过来会让索引指向一个不存在的文件
@@ -556,7 +557,11 @@ function copyToRecycle(relative: string, recycleDir: string): boolean {
   if (read.status === 'notSeen') return false
   // 复制失败必须抛：**没有退路就不许往下删原件**（`.bak` / 回收目录是唯一退路）。
   // 底层文案已含目标路径（就在 recycleDir 下）与原因，不再二次包装。
-  writeBase64File(`${recycleDir}/${relative}`, read.base64)
+  // 回收目录名带时间戳，副本必定是新文件：它还在就说明同名碰撞，停下比覆盖安全
+  writeBase64File(`${recycleDir}/${relative}`, read.base64, {
+    cas: { mode: 'compare', expected: null },
+    backup: { mode: 'none', why: '回收副本是新文件，无原文可备' },
+  })
   return true
 }
 

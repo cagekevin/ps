@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { SEED } from '../helpers/cas-seed'
 import { createPinia, setActivePinia, type Pinia } from 'pinia'
 import { readValue } from '../support/repo-read'
 
@@ -49,7 +50,7 @@ beforeEach(async () => {
   setActivePinia(pinia)
   selection.refresh.mockClear()
   vi.clearAllMocks()
-  await freePanelWriter.write(createEmptyFreePanel())
+  await freePanelWriter.replace(createEmptyFreePanel(), SEED)
 })
 
 /** 往 block 1 里放一条旧自由面板项（key 走 `domain/free-panel-legacy` 的映射表） */
@@ -67,7 +68,7 @@ async function putItem(key: string, option: unknown = null, btnId = 1) {
     top: '',
     position: false,
   })
-  await freePanelWriter.write(file)
+  await freePanelWriter.replace(file, SEED)
 }
 
 /** 临时把某条命令换成"必抛某 code"的假实现，跑完还原 */
@@ -189,7 +190,7 @@ describe('区域 id 分配（D-38 / D-39）', () => {
     const file = createEmptyFreePanel()
     file.uid = 1 // 故意落后：旧文件 / 别的面板写过的文件都可能这样
     file.obj.list.push({ ...file.obj.list[0], id: 7, data: [] })
-    await freePanelWriter.write(file)
+    await freePanelWriter.replace(file, SEED)
 
     await execute('freePanel.addBlock', { type: 'norow' })
 
@@ -202,7 +203,7 @@ describe('区域 id 分配（D-38 / D-39）', () => {
     const file = createEmptyFreePanel()
     file.uid = 5
     file.obj.list[0].id = 5
-    await freePanelWriter.write(file)
+    await freePanelWriter.replace(file, SEED)
 
     await execute('freePanel.removeBlock', { blockId: 5 })
 

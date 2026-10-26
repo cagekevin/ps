@@ -1,5 +1,6 @@
 // 契约测试，非实机：仓库用内存实现，全程零网络（fetch 被 stub 成"一调用就失败"）
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { SEED } from '../helpers/cas-seed'
 import { fontExtraDefaults, hierarchyWriter } from '@/cep/data/font-extra'
 import { fontHierarchyEntry } from '@/cep/cloud/entries/font-hierarchy'
 import { cloudEntries } from '@/cep/cloud/entries'
@@ -18,10 +19,13 @@ function inlineData(payload: Awaited<ReturnType<typeof fontHierarchyEntry.read>>
 beforeEach(async () => {
   vi.stubGlobal('fetch', fetchGuard)
   fetchGuard.mockClear()
-  await hierarchyWriter.write({
-    index: 0,
-    list: [{ name: '常规', data: [92, 48, 36, 24, 15, 12] }],
-  })
+  await hierarchyWriter.replace(
+    {
+      index: 0,
+      list: [{ name: '常规', data: [92, 48, 36, 24, 15, 12] }],
+    },
+    SEED,
+  )
 })
 
 afterEach(() => {

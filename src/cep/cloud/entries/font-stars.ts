@@ -2,6 +2,7 @@ import { starsWriter, isRawStar } from '@/cep/data'
 import { isArrayOf } from '@/utils/guards'
 import type { SyncUnitAdapter, WriteOutcome } from '@/domain/cloud'
 import { inlineFile, readInlineJson, unitPayload } from './util'
+import { REPLACE_WITHOUT_BASELINE } from '@/cep/data/types'
 
 const PATH = '/sj_ztglStar.ini'
 
@@ -22,7 +23,7 @@ export const fontStarsEntry: SyncUnitAdapter = {
     try {
       const value = readInlineJson(payload)
       if (!isArrayOf(value, isRawStar)) return { ok: false, message: '字体收藏不是数组' }
-      await starsWriter.write(value)
+      starsWriter.replace(value, REPLACE_WITHOUT_BASELINE)
       return { ok: true }
     } catch (error) {
       return { ok: false, message: error instanceof Error ? error.message : '字体收藏写回失败' }

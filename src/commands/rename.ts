@@ -200,7 +200,10 @@ export const renameCommands: Command<unknown>[] = [
       if (!path) throw new CepError('PARSE', msg.command.text.actionCancelled)
 
       // 导出文件是**新文件**，无 `.bak` 概念（`previous: null`）；走唯一落盘入口（原子写）
-      await writeDisk(path, serializePreset(read.value), { previous: null })
+      await writeDisk(path, serializePreset(read.value), {
+        backup: { mode: 'none', why: '导出产物，无原文可备' },
+        cas: { mode: 'skip', why: '用户经系统对话框选定目标路径，覆盖意图已确认' },
+      })
     },
   }),
 
@@ -225,7 +228,11 @@ export const renameCommands: Command<unknown>[] = [
       const text = read.text
 
       // JSON 优先、旧格式 `<z>`/`<>` 兜底，见 domain/rename.ts 的 parsePreset（原版 :57036-57045）
-      renameWriter.write(parsePreset(text))
+      // 预设文本整份替换：用户显式触发重命名，整份覆盖即意图
+      renameWriter.replace(parsePreset(text), {
+        mode: 'skip',
+        why: '用户显式重命名，整份覆盖预设文本',
+      })
     },
   }),
 ]

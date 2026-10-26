@@ -1,4 +1,5 @@
 import fs from 'node:fs'
+import { SEED } from '../helpers/cas-seed'
 import { createRequire } from 'node:module'
 import os from 'node:os'
 import path from 'node:path'
@@ -108,7 +109,7 @@ describe('fileRepo（真机装法：真 node:fs + 真 __adobe_cep__）', () => {
   it('pick 在 hasCep 为真时选的是 fileRepo：write 真落盘', async () => {
     const repo = makeRepo()
 
-    await repo.write([1, 2, 3])
+    await repo.replace([1, 2, 3], SEED)
 
     // memoryRepo 也能"写成功"，但它不会碰磁盘 —— 这条只有真走 fileRepo 才成立
     expect(readTarget()).toBe('[1,2,3]')
@@ -118,13 +119,13 @@ describe('fileRepo（真机装法：真 node:fs + 真 __adobe_cep__）', () => {
 
   it('原子写：写一半失败时目标文件仍是旧内容，且不留 tmp', async () => {
     const repo = makeRepo()
-    await repo.write([1])
+    await repo.replace([1], SEED)
     const before = readTarget()
 
     behavior.halfWrite = true
     // `Repo<T>` 已全同步 ⇒ 失败是**同步抛**，`await expect(...).rejects` 接不到
     // （抛在 `expect` 被调用之前）。判据不变：写失败必须抛、目标文件必须还是旧内容。
-    expect(() => repo.write([2, 3, 4])).toThrow()
+    expect(() => repo.replace([2, 3, 4], SEED)).toThrow()
 
     // 非原子直写会在抛错前把目标截成半截 —— 半截 JSON 会让整库读不回来
     expect(readTarget()).toBe(before)
@@ -133,7 +134,7 @@ describe('fileRepo（真机装法：真 node:fs + 真 __adobe_cep__）', () => {
 
   it('排队：并发 10 次 update 全部落地，不丢更新也不抛错', async () => {
     const repo = makeRepo()
-    await repo.write([])
+    await repo.replace([], SEED)
 
     await Promise.all(Array.from({ length: 10 }, (_, i) => repo.update((value) => [...value, i])))
 
@@ -186,7 +187,7 @@ describe('fileRepo（真机装法：真 node:fs + 真 __adobe_cep__）', () => {
 
   it('update 真落盘并留下上一版的 .bak', async () => {
     const repo = makeRepo()
-    await repo.write([1])
+    await repo.replace([1], SEED)
     const before = readTarget()
 
     await repo.update((value) => [...value, 2])

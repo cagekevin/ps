@@ -62,12 +62,8 @@ function memoryRepo<T>(initial: () => T): Repo<T> {
     // 内存态没有"从磁盘读到坏内容"这一步，所以永远是成功读（`ok: true`）
     read: () => ({ ok: true as const, value }),
 
-    write: (next) => {
-      value = next
-      emit()
-    },
-
-    overwrite: (next) => {
+    // 内存态没有"原文"这个概念：CAS 在这里恒过（同进程同步段本来就不会被插进来）
+    replace: (next) => {
       value = next
       emit()
     },
@@ -119,8 +115,7 @@ export function dataRepo<T>(
 
   return {
     read: () => repo().read(),
-    write: (value) => repo().write(value),
-    overwrite: (value) => repo().overwrite(value),
+    replace: (value, cas) => repo().replace(value, cas),
     update: (mutator) => repo().update(mutator),
     onChange: (listener) => repo().onChange(listener),
   }

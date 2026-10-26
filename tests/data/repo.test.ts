@@ -93,10 +93,13 @@ describe('fileRepo 读', () => {
   })
 })
 
+/** 这些用例只测落盘/通知，不涉及并发 ⇒ 显式声明不比（`cas` 现在必填） */
+const SKIP = { mode: 'skip', why: '用例：只测写盘与通知，不涉及并发' } as const
+
 describe('fileRepo 写', () => {
   it('写失败必须抛，不许吞掉', () => {
     disk.failWrite = true
-    expect(() => createRepo().write([{ name: 'A' }])).toThrow()
+    expect(() => createRepo().replace([{ name: 'A' }], SKIP)).toThrow()
   })
 
   /**
@@ -150,8 +153,30 @@ describe('fileRepo 写', () => {
   })
 
   it('首次写不生成 .bak（没有原文可备份）', () => {
-    createRepo().write([{ name: 'A' }])
+    createRepo().replace([{ name: 'A' }], SKIP)
     expect(disk.files.has(`${PATH}.bak`)).toBe(false)
+  })
+
+  /**
+   * T2：`Repo.write` 与 `Repo.overwrite` 合并成 `replace(value, cas)` 后，
+   * 「只在新装机时写种子」这件事终于有结构保证 —— 传 `expected: null` 就是
+   * 「这个路径上应当没有文件」，文件已被别的面板/用户写出来就抛 `CONFLICT`，不覆盖。
+   *
+   * 旧 `Repo.write` 没有这个能力：它恒 `previous: null`、恒不比对，种子会盖掉用户数据。
+   */
+  it('replace 传「必须不存在」：文件已存在 → 抛 CONFLICT，用户数据不被种子覆盖', () => {
+    const userData = [{ name: '用户自己存的' }]
+    disk.files.set(PATH, JSON.stringify(userData))
+
+    let code = ''
+    try {
+      createRepo().replace([{ name: '种子' }], { mode: 'compare', expected: null })
+    } catch (e) {
+      code = (e as { code?: string }).code ?? ''
+    }
+
+    expect(code).toBe('CONFLICT')
+    expect(JSON.parse(disk.files.get(PATH)!)).toEqual(userData)
   })
 })
 
@@ -171,10 +196,10 @@ describe('fileRepo 连续调用', () => {
   it('前一次写失败不影响后续', () => {
     const repo = createRepo()
     disk.failWrite = true
-    expect(() => repo.write([{ name: 'bad' }])).toThrow()
+    expect(() => repo.replace([{ name: 'bad' }], SKIP)).toThrow()
 
     disk.failWrite = false
-    repo.write([{ name: 'ok' }])
+    repo.replace([{ name: 'ok' }], SKIP)
     const value = readValue(repo.read())
     expect(value).toEqual([{ name: 'ok' }])
   })
@@ -186,11 +211,11 @@ describe('fileRepo onChange', () => {
     const seen: Row[][] = []
     const off = repo.onChange((value) => seen.push(value))
 
-    repo.write([{ name: 'A' }])
+    repo.replace([{ name: 'A' }], SKIP)
     expect(seen).toHaveLength(1)
 
     off()
-    repo.write([{ name: 'B' }])
+    repo.replace([{ name: 'B' }], SKIP)
     expect(seen).toHaveLength(1)
   })
 
@@ -231,7 +256,7 @@ describe('memoryRepo（经唯一构造器 + 无 CEP）', () => {
     )
     const seen: Row[][] = []
     repo.onChange((value) => seen.push(value))
-    repo.write([{ name: 'A' }])
+    repo.replace([{ name: 'A' }], SKIP)
     expect(seen).toEqual([[{ name: 'A' }]])
   })
 })

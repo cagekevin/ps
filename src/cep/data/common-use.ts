@@ -24,6 +24,7 @@ import { isRecord } from '@/utils/guards'
 import { msg } from '@/domain/messages'
 import { dataRepo } from './data-repo'
 import type { Repo, RepoRead } from './types'
+import type { CasMode } from '@/cep/disk-write'
 
 /** 文件名与路径都来自 `env.ts` 的 `DATA_FILES`（唯一来源；原版 `app.v4.js:5218`） */
 const FILE_NAME = DATA_FILES.cyCommonFunction
@@ -65,7 +66,8 @@ export function ensureCommonUseFile(): EnsureResult {
     // 无 CEP（浏览器 / jsdom）：内存仓库没有"文件不存在"这个概念，按"进程内首次"算
     if (memoryEnsured) return { created: false }
     memoryEnsured = true
-    base.write(createCommonUseSeed())
+    // 种子只在"文件确实不存在"时写 ⇒ `expected: null` = 「这个路径上应当没有文件」
+    base.replace(createCommonUseSeed(), { mode: 'compare', expected: null })
     return { created: true }
   }
 
@@ -75,7 +77,8 @@ export function ensureCommonUseFile(): EnsureResult {
 
   // 查不到 = 首次使用，写种子（`requireExisting` 在这条路上是"文件确实没有"，不是"读不出"）
   if (outcome.kind === 'absent') {
-    base.write(createCommonUseSeed())
+    // 种子只在"文件确实不存在"时写 ⇒ `expected: null` = 「这个路径上应当没有文件」
+    base.replace(createCommonUseSeed(), { mode: 'compare', expected: null })
     return { created: true }
   }
 
@@ -159,7 +162,7 @@ export const commonUseRepo = {
 
   // 订阅**不自己实现**：`fileRepo` / `memoryRepo` 本来就有 `onChange` + 监听表，
   // 这层再包一遍就是同一事件两套总线。
-  write: (value: CommonUseFile): void => base.write(value),
+  replace: (value: CommonUseFile, cas: CasMode): void => base.replace(value, cas),
   update: (mutator: (value: CommonUseFile) => CommonUseFile | void): CommonUseFile =>
     base.update(mutator),
   onChange: (listener: (value: CommonUseFile) => void): (() => void) => base.onChange(listener),

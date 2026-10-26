@@ -2,6 +2,7 @@ import { readOwnFileText } from '@/cep/fs-read'
 import { userDir } from '@/cep/paths'
 import { writeDiskSync } from '@/cep/disk-write'
 import { actionIndexWriter, actionLibraryRepo } from '@/cep/data/actions'
+import { REPLACE_WITHOUT_BASELINE } from '@/cep/data/types'
 import { runExclusive } from '@/cep/data/exclusive'
 import type { ActionWarehouseIndex } from '@/domain/action'
 import type { SyncFile, SyncUnitAdapter, WriteOutcome } from '@/domain/cloud'
@@ -124,7 +125,13 @@ export const actionLibraryEntry: SyncUnitAdapter = {
           if (!file || file.content.kind !== 'inline') continue
           const target = `${userDir()}/${entry.fileName}`
           try {
-            writeDiskSync(target, file.content.data)
+            writeDiskSync(target, file.content.data, {
+              backup: { mode: 'keep' },
+              cas: {
+                mode: 'skip',
+                why: '云写回整份覆盖本地库文件，冲突由上一层 REV_CONFLICT 判定',
+              },
+            })
           } catch (error) {
             throw new CepError(
               'IO',
@@ -135,7 +142,7 @@ export const actionLibraryEntry: SyncUnitAdapter = {
             )
           }
         }
-        actionIndexWriter.write(index)
+        actionIndexWriter.replace(index, REPLACE_WITHOUT_BASELINE)
         return { ok: true }
       })
     } catch (error) {

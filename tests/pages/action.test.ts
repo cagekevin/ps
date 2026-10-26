@@ -1,4 +1,5 @@
 import { flushPromises, mount } from '@vue/test-utils'
+import { SEED } from '../helpers/cas-seed'
 import { createPinia, setActivePinia, storeToRefs, type Pinia } from 'pinia'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { readValue } from '../support/repo-read'
@@ -55,7 +56,7 @@ beforeEach(async () => {
 
   vi.clearAllMocks()
   jsx.action.callAction.mockResolvedValue({ ok: true, data: null })
-  await actionLibraryWriter.write(JSON.parse(JSON.stringify(seed)))
+  await actionLibraryWriter.replace(JSON.parse(JSON.stringify(seed)), SEED)
 })
 
 describe('动作页', () => {
@@ -116,7 +117,7 @@ describe('动作页', () => {
   })
 
   it('空库显示空态', async () => {
-    await actionLibraryWriter.write([])
+    await actionLibraryWriter.replace([], SEED)
     const wrapper = await mountPage()
 
     expect(wrapper.text()).toContain('还没有动作')

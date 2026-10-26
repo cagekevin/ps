@@ -12,6 +12,7 @@ import { CepError } from '@/utils/errors'
 import { msg } from '@/domain/messages'
 import { isUnknownArray } from '@/utils/guards'
 import { repoAt } from './repo-at'
+import { REPLACE_WITHOUT_BASELINE } from './types'
 import { readRepoFile } from './repo-read'
 import { writeProtectedText } from './protected-text'
 import type { Repo, RepoRead } from './types'
@@ -119,7 +120,7 @@ function swatchRepo(path: string): Repo<unknown[]> {
  * 调用方不必自己读原文，也不许在原文坏时退回普通写。
  */
 export function writeSwatchItems(path: string, items: unknown[]): void {
-  swatchRepo(path).overwrite(items)
+  swatchRepo(path).replace(items, REPLACE_WITHOUT_BASELINE)
 }
 
 // ---------- 变更通知（本地写成功后重读投影） ----------

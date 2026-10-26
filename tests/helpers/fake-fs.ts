@@ -23,8 +23,8 @@ export interface WriteRecord {
 }
 
 export interface FakeDisk {
-  /** 内存盘：路径 → 文本 */
-  readonly files: Map<string, string>
+  /** 内存盘：路径 → 文本或字节（`writeBase64File` 写的是 `Buffer`） */
+  readonly files: Map<string, string | Buffer>
   /** 所有 `writeFileSync` 的调用记录（含 tmp 写入 —— 用它断言"不留 tmp"） */
   readonly writes: WriteRecord[]
   /** true 或错误串 ⇒ 下一次 `writeFileSync` 抛 */
@@ -35,6 +35,11 @@ export interface FakeDisk {
   failRead: boolean
   /** true ⇒ 下一次 `writeFileSync` 写入被**写坏**（内容追加"截断"），用来造"回读不一致" */
   corruptNextWrite: boolean
+  /**
+   * 路径**包含**其中任一片段时 `unlinkSync` 抛 `EPERM`。
+   * 用来造"删不掉"（孤儿文件）：`unlink` 失败但文件还在。
+   */
+  failUnlinkFor: string[]
   /**
    * `n > 0` ⇒ 前 n 次读成功，第 n+1 次起抛 EACCES。
    * 用来构造"异步读 ok、同步 CAS 比对读不到"：`rawUpdate` 先异步读、再同步比对。
@@ -66,6 +71,7 @@ export function installFakeFs(): FakeDisk {
     corruptNextWrite: false,
     failReadAfter: 0,
     failReadArmed: false,
+    failUnlinkFor: [] as string[],
   }
 
   const ensureDir = (p: string): void => {
@@ -88,9 +94,13 @@ export function installFakeFs(): FakeDisk {
         const reason = typeof state.failWrite === 'string' ? state.failWrite : 'ENOSPC: 模拟写失败'
         throw new Error(reason)
       }
-      if (typeof data !== 'string') throw new Error('fake-fs 只支持文本写；二进制请用真磁盘用例')
-      writes.push({ path: p, text: data })
-      if (state.corruptNextWrite) {
+      // 文本与字节都收：库文件走 `writeBase64File`，落的是 Buffer
+      if (typeof data !== 'string' && !Buffer.isBuffer(data)) {
+        throw new Error('fake-fs 只支持 string / Buffer 写')
+      }
+      writes.push({ path: p, text: typeof data === 'string' ? data : `<${data.length} bytes>` })
+      // 「写坏」只对文本生效（造"回读不一致"用）；字节版另有 `corruptNextWrite` 的真磁盘用例
+      if (state.corruptNextWrite && typeof data === 'string') {
         state.corruptNextWrite = false
         files.set(p, `${data}截断`)
         return
@@ -108,6 +118,9 @@ export function installFakeFs(): FakeDisk {
       files.set(to, text)
     },
     unlinkSync: (p: string) => {
+      if (state.failUnlinkFor.some((frag) => p.includes(frag))) {
+        throw Object.assign(new Error(`EPERM: 模拟删不掉 ${p}`), { code: 'EPERM' })
+      }
       if (!files.has(p)) throw new Error(`ENOENT: no such file, unlink '${p}'`)
       files.delete(p)
     },
@@ -182,6 +195,12 @@ export function installFakeFs(): FakeDisk {
     set corruptNextWrite(value: boolean) {
       state.corruptNextWrite = value
     },
+    get failUnlinkFor() {
+      return state.failUnlinkFor
+    },
+    set failUnlinkFor(value: string[]) {
+      state.failUnlinkFor = value
+    },
     get failReadAfter() {
       return state.failReadAfter
     },
@@ -198,6 +217,7 @@ export function installFakeFs(): FakeDisk {
       state.failReadAfter = 0
       state.failReadArmed = false
       state.corruptNextWrite = false
+      state.failUnlinkFor = []
       const w = window as unknown as { require?: (id: string) => unknown }
       w.require = (id: string) => (id === 'fs' ? fakeFs : realRequire(id))
     },

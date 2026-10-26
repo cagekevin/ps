@@ -59,7 +59,10 @@ describe('writeDisk（原子写：tmp 名唯一 / 不留 tmp / 失败必抛）',
   it('落盘内容正确，且不在目录里留下 tmp', async () => {
     const target = path.join(dir, 'sj_appFreePanel.json')
 
-    await writeDisk(target, '{"a":1}', { previous: null })
+    await writeDisk(target, '{"a":1}', {
+      backup: { mode: 'none' as const, why: '测试：新建文件' },
+      cas: { mode: 'skip' as const, why: '测试：不涉及并发' },
+    })
 
     expect(fs.readFileSync(target, 'utf8')).toBe('{"a":1}')
     expect(fs.readdirSync(dir)).toEqual(['sj_appFreePanel.json'])
@@ -68,8 +71,14 @@ describe('writeDisk（原子写：tmp 名唯一 / 不留 tmp / 失败必抛）',
   it('每次调用的 tmp 名都不同，且不再是固定的 <目标>.tmp', async () => {
     const target = path.join(dir, 'sj_appFreePanel.json')
 
-    await writeDisk(target, '{"a":2}', { previous: null })
-    await writeDisk(target, '{"a":3}', { previous: null })
+    await writeDisk(target, '{"a":2}', {
+      backup: { mode: 'none' as const, why: '测试：新建文件' },
+      cas: { mode: 'skip' as const, why: '测试：不涉及并发' },
+    })
+    await writeDisk(target, '{"a":3}', {
+      backup: { mode: 'none' as const, why: '测试：新建文件' },
+      cas: { mode: 'skip' as const, why: '测试：不涉及并发' },
+    })
 
     const tmps = writes.filter((p) => p !== target)
     expect(tmps).toHaveLength(2)
@@ -87,7 +96,10 @@ describe('writeDisk（原子写：tmp 名唯一 / 不留 tmp / 失败必抛）',
     const otherProcessTmp = `${target}.tmp`
     fs.writeFileSync(otherProcessTmp, '对方进程写到一半的内容', 'utf8')
 
-    await writeDisk(target, '{"a":4}', { previous: null })
+    await writeDisk(target, '{"a":4}', {
+      backup: { mode: 'none' as const, why: '测试：新建文件' },
+      cas: { mode: 'skip' as const, why: '测试：不涉及并发' },
+    })
 
     expect(fs.readFileSync(otherProcessTmp, 'utf8')).toBe('对方进程写到一半的内容')
     expect(fs.readFileSync(target, 'utf8')).toBe('{"a":4}')
@@ -98,15 +110,23 @@ describe('writeDisk（原子写：tmp 名唯一 / 不留 tmp / 失败必抛）',
     behavior.failRename = true
 
     // 失败必须**抛**（boolean 说不出为什么，调用方只能猜着退回普通写）
-    await expect(writeDisk(target, '{"a":5}', { previous: null })).rejects.toThrow('EACCES')
+    await expect(
+      writeDisk(target, '{"a":5}', {
+        backup: { mode: 'none' as const, why: '测试：新建文件' },
+        cas: { mode: 'skip' as const, why: '测试：不涉及并发' },
+      }),
+    ).rejects.toThrow('EACCES')
     expect(fs.readdirSync(dir)).toEqual([])
   })
 
   it('无 node（未装 window.require）时抛，不静默', async () => {
     delete (window as unknown as { require?: unknown }).require
-    await expect(writeDisk(path.join(dir, 'x.json'), '{}', { previous: null })).rejects.toThrow(
-      'Node 不可用',
-    )
+    await expect(
+      writeDisk(path.join(dir, 'x.json'), '{}', {
+        backup: { mode: 'none' as const, why: '测试：新建文件' },
+        cas: { mode: 'skip' as const, why: '测试：不涉及并发' },
+      }),
+    ).rejects.toThrow('Node 不可用')
   })
 })
 
@@ -114,7 +134,10 @@ describe('writeDisk（导出到用户选的路径）', () => {
   it('写入用户选的路径，同样不留 tmp', async () => {
     const out = path.join(dir, '导出', '字体.json')
 
-    await writeDisk(out, '{}', { previous: null })
+    await writeDisk(out, '{}', {
+      backup: { mode: 'none' as const, why: '测试：新建文件' },
+      cas: { mode: 'skip' as const, why: '测试：不涉及并发' },
+    })
 
     expect(fs.readFileSync(out, 'utf8')).toBe('{}')
     expect(fs.readdirSync(path.dirname(out))).toEqual(['字体.json'])
@@ -124,7 +147,12 @@ describe('writeDisk（导出到用户选的路径）', () => {
     const out = path.join(dir, '导出.json')
     behavior.failRename = true
 
-    await expect(writeDisk(out, '[]', { previous: null })).rejects.toThrow()
+    await expect(
+      writeDisk(out, '[]', {
+        backup: { mode: 'none' as const, why: '测试：新建文件' },
+        cas: { mode: 'skip' as const, why: '测试：不涉及并发' },
+      }),
+    ).rejects.toThrow()
     expect(fs.readdirSync(dir)).toEqual([])
   })
 })

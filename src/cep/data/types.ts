@@ -1,3 +1,18 @@
+import type { CasMode } from '@/cep/disk-write'
+
+/**
+ * `Repo.replace` 拿不到 CAS 基准时的**统一表态**。
+ *
+ * 为什么要有这个常量：`Repo.read()` 返回 `RepoRead`，**不含原文**；整份替换的调用点
+ * （动作索引、样式索引、库分组、色板、四个云写回）因此拿不到 `expected`。
+ * 9 处各写一句 `why` 就是同一份事实写 9 遍（刀 7）。要真正比对，得让 `Repo` 记住
+ * "上一次读到的原文" —— 那是另一个设计（缺口见 `18-横切-写落盘-收口-2026-10-26.md` §6）。
+ */
+export const REPLACE_WITHOUT_BASELINE: CasMode = {
+  mode: 'skip',
+  why: '整份替换；CAS 基准原文不在 Repo.read 上',
+}
+
 /**
  * 数据仓库接口。**所有持久化都必须经过它**（ADR-15）。
  *
@@ -70,20 +85,18 @@ export interface Repo<T> {
    * 「读 → 改 → 写」是一个不可被打断的同步段 —— 串行队列因此没有存在理由。
    */
   read(): RepoRead<T>
-  /** 覆写；失败抛。**同步**，理由同上 */
-  write(value: T): void
   /**
-   * **整份覆盖 + 保留原文做备份/隔离**；失败抛。与另两个写的区别：
-   * - `write` 不看原文（`previous` 恒 `null`）⇒ 拿不到原文就没有 `.bak`；
-   * - `update` 在原文坏时**拒绝写**（D-42），而"整份替换"要的正是**读坏也写**、
-   *   但把坏原文隔离到 `.corrupt-<ts>`（不让坏内容顶 `.bak`）。
-   * 不带 CAS（整份覆盖：调用方已决定完整内容，没有"读→改→写"的丢更新窗口）。
+   * 整份替换：**备份恒定开 + 读不到原文就抛（D-42）**，CAS 由调用方表态。
    *
-   * 消费者：`swatch-repo.writeSwatchItems`（已迁）。
-   * 待迁（下一步）：`cloud/entries/action-library.ts:109` 云下载把原文落盘 —— 它现在直写
-   * `writeTextFileAtomic`，无 `.bak`、不 emit（债 11-24）。**不要把这条读成"已迁"**。
+   * 合并了旧的两个写口：
+   * - `write`（不读原文、不备份、不比）—— 「忘了比」与「决定不比」在类型上同形；
+   * - `overwrite`（有备份、不比）—— 旧注释写「整份覆盖没有丢更新窗口」，**这句是错的**：
+   *   整份内容恰恰是基于"我刚才读到的那一份"算出来的，别人在读写之间改过就该拒。
+   *
+   * 现在只有一个写口、`cas` 必填 ⇒ 每个调用点必须表态（`compare` 或 `skip` + 理由）。
+   * `update` 是另一件事（读→改→写 + 重试），不并入。
    */
-  overwrite(value: T): void
+  replace(value: T, cas: CasMode): void
   /**
    * 读 → 改 → 写（含落盘前 CAS 比对 + 重试）；失败抛。
    *

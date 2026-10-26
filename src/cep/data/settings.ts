@@ -38,11 +38,24 @@ let cache: Record<string, unknown> | null = null
 /**
  * 读失败的原因；非空 = **本次会话禁止写回**。
  *
- * 读不到时内存里给默认值，UI 照旧能用；但一旦把这份默认值写回去，用户原有偏好就没了 ——
- * 所以"读不到"与"新装机没有偏好"必须分开：后者可以写，前者不许写。
+ * 为什么不能只靠写盘入口的 `requireReadable`：它保证的是"写的那一刻读得到"，
+ * 保证不了"写出去的基底是完整的"。读失败时 `cache` 只是空壳 `{}`，
+ * 拿它写回去会把磁盘上其他键全抹掉。
+ *
+ * T3b 曾删掉本判据（以为 D-42 收进 `writeRequireReadable` 就够了），实测发现：
+ * CAS 确实挡住了覆盖，但**用户从此每次写都收到"正被其他面板修改"** —— 原因是他自己
+ * 读过一次失败。判据回来了，理由也写在这里。
  */
 let readFailure = ''
 let readFailureReported = false
+/**
+ * 本次会话读到的**磁盘原文**：落盘 CAS 的基准。
+ *
+ * 为什么不在写的时候重新读：`loadAll` 读、用户操作写，中间隔了很久 ——
+ * 写之前重读一次就变成「拿刚读到的原文当 expected」，CAS 恒过，等于没比。
+ * 必须拿**会话开始时那一份**：中间别的面板改过 ⇒ 这里抛 `CONFLICT`，而不是静默覆盖。
+ */
+let rawText: string | null = null
 let timer: ReturnType<typeof setTimeout> | null = null
 
 const errorListeners = new Set<(message: string) => void>()
@@ -84,12 +97,15 @@ function loadAll(): Record<string, unknown> {
 
   // 偏好文件就是**我们的 JSON 数据文件**，所以走档 1 的唯一结论入口（`decode` 必填），
   // 不再在这里自己写一遍「三态分流 + parse + 判对象」—— 那是 `file-repo` 的第二份判据。
-  const read = foldAbsent(readRepoFile(filePath(), decodePrefs), () => ({}))
+  const outcome = readRepoFile(filePath(), decodePrefs)
+  const read = foldAbsent(outcome, () => ({}))
   if (read.ok) {
     cache = read.value
+    // CAS 基准：读成功才设。读失败时保持 `null`，写的时候由 `requireReadable` 挡住
+    rawText = outcome.text
   } else {
     // 读不到 / 坏文件 ⇒ 给 UI 默认值，但**本次会话禁止写回**：
-    // 拿默认值写回去 = 用户原有偏好没了。
+    // 内存里只是空壳，写回去会把磁盘上其他键抹掉（`refuseIfReadFailed` 负责喊出来）。
     readFailure = read.reason
     cache = {}
   }
@@ -106,8 +122,8 @@ function normalizeVersion(all: Record<string, unknown>) {
 /**
  * 读失败过就拒绝写盘。返回 true = 已拒绝（调用方直接 return）。
  *
- * 为什么不是"再试一次读"：此刻仍然读不到，重试只会把同一次失败重复一遍；
- * 而放行写入的后果是**不可恢复**的（用户偏好被默认值覆盖），拒绝的后果只是本次不保存。
+ * 为什么不是"再试一次读"：此刻内存里已经是空壳，重试成功也补不回被 UI 丢掉的键；
+ * 而放行写入的后果是**不可恢复**的（其他键被空壳覆盖），拒绝的后果只是本次不保存。
  */
 function refuseIfReadFailed(): boolean {
   if (!readFailure) return false
@@ -120,6 +136,42 @@ function refuseIfReadFailed(): boolean {
   return true
 }
 
+/**
+ * 写偏好文件并维护 CAS 基准。**`persistSync` 与 `persist` 共用这一份**（同步）。
+ *
+ * - CAS 基准 = `rawText`（会话开始时读到的磁盘原文）；写成功后跟着走。
+ * - **`CONFLICT` 原样上抛**：它是"别的面板先写了，本次主动放弃"，不是"写失败"。
+ *   一律包成 `IO` 会把两件事说成一件，用户重试也只是再覆盖一次。
+ * - 其余错误包成 `IO` 并带底层原因。
+ */
+function writePrefFile(text: string): void {
+  const target = filePath()
+  try {
+    // 原子写失败就报错：旧实现退回普通写，等于把 rename 保护摘掉
+    writeDiskSync(target, text, {
+      backup: { mode: 'none', why: '偏好整份覆盖：原文即默认值，.bak 无退路价值' },
+      cas: { mode: 'compare', expected: rawText },
+      // 不写 `.bak`，但**原文读不到就绝不写**（D-42）：否则默认值会盖掉用户设置
+      requireReadable: true,
+    })
+    // 写成功后基准跟着走：否则下一次写会拿上一版原文去比，恒 CONFLICT
+    rawText = text
+  } catch (error) {
+    if (error instanceof CepError && error.code === 'CONFLICT') {
+      // `retries: '0'` = 本次没重试就放弃了，文案见 `msg.data.fn.fileLockedByOtherPanel`
+      throw new CepError('CONFLICT', msg.data.fn.fileLockedByOtherPanel(target, '0'))
+    }
+    // 落盘层抛的 `CepError` 已经带着完整可读的原因（读不到 / 写入失败），
+    // 再套一层 `prefWriteFailed` 只会变成「偏好写入失败：x（读不到原文，已中止写入：x）」——
+    // 同一句话说两遍。原样上抛，让用户看到真正的那一句。
+    if (error instanceof CepError) throw error
+    throw new CepError(
+      'IO',
+      msg.data.fn.prefWriteFailed(error instanceof Error ? error.message : String(error)),
+    )
+  }
+}
+
 /** 同步写，只在关闭面板时用（beforeunload 里等不了异步） */
 function persistSync(all: Record<string, unknown>) {
   if (refuseIfReadFailed()) return
@@ -129,42 +181,24 @@ function persistSync(all: Record<string, unknown>) {
       localStorage.setItem(LS_KEY, text)
       return
     }
-    const target = filePath()
-    // 原子写失败就报错：旧实现退回普通写，等于把 rename 保护摘掉
-    // 偏好文件是覆盖写、无 `.bak` 概念（`previous: null`）
-    try {
-      writeDiskSync(target, text, { previous: null })
-    } catch (error) {
-      throw new CepError(
-        'IO',
-        msg.data.fn.prefWriteFailed(error instanceof Error ? error.message : String(error)),
-      )
-    }
+    writePrefFile(text)
   } catch (e) {
     notifyError(e)
   }
 }
 
 function persist(all: Record<string, unknown>) {
+  if (refuseIfReadFailed()) return
   const text = JSON.stringify(all)
   // 同步落盘：没有 `.then` 的"延后一拍"。以前那条 `writeQueue` 是自建的第二条链
   // （`write-queue.ts` 头写着「不许自己再造一条链」，它造了），而任务体本来就是同步的
   // ⇒ 那层 `.then` 只把写延后一拍，从没起过并发保护作用。
-  if (refuseIfReadFailed()) return
   try {
     if (!hasCep()) {
       localStorage.setItem(LS_KEY, text)
       return
     }
-    const target = filePath()
-    try {
-      writeDiskSync(target, text, { previous: null })
-    } catch (error) {
-      throw new CepError(
-        'IO',
-        msg.data.fn.prefWriteFailed(error instanceof Error ? error.message : String(error)),
-      )
-    }
+    writePrefFile(text)
   } catch (e) {
     // 失败必须让用户看见（`notifyError` 走统一 toast），不是吞掉
     notifyError(e)
@@ -207,6 +241,8 @@ export function __resetSettingsForTest() {
   cache = null
   readFailure = ''
   readFailureReported = false
+  // CAS 基准也是会话级状态：不清会让下一个用例拿上一个用例的原文去比
+  rawText = null
 }
 
 export function getPref<T>(key: PrefKey, fallback: T): T {

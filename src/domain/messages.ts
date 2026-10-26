@@ -418,6 +418,9 @@ export const msg: Msg = {
       fileWriteFailed: (target: string, reason: string) => `写入失败：${target}（${reason}）`,
       // disk-write.ts：removeFile 失败（`ENOENT` 不算失败，已被它自己放过）
       fileRemoveFailed: (target: string, reason: string) => `删除失败：${target}（${reason}）`,
+      // action-archive：导入成功但旧文件删不掉（孤儿）。用户必须知道，否则磁盘上慢慢堆积且界面上看不见
+      orphanFilesLeft: (count: string, sample: string) =>
+        `导入已完成，但有 ${count} 个旧文件没删掉（例如 ${sample}）——它们还留在动作库目录里，可手动删除`,
       fileReadFailedAbortWrite: (target: string, reason: string) =>
         `${target} 读不到，已中止写入（${reason}）`,
       fileReadReasonRefuseOverwrite: (target: string, reason: string) =>

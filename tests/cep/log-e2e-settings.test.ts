@@ -78,16 +78,16 @@ describe('真实失败的全链条 · 关掉重开还能查到', () => {
     const settings = await import('@/cep/data/settings')
     settings.__resetSettingsForTest()
     expect(settings.getPref('font.previewText', 'default')).toBe('default')
-    // 读失败之后写回必须被拒（1a 的 `refuseIfReadFailed`）——这条路会记一条 error
+    // 读失败之后写回必须被拒（D-42 已收进落盘入口的 `requireReadable`）——这条路会记一条 error
     settings.setPref('font.previewText', 'changed')
     settings.flushPrefs()
 
     // 3) 落点：flush 到"盘"上
     vi.advanceTimersByTime(500)
     const onDisk = disk.files.get(logPath()) ?? ''
-    expect(onDisk).toContain('偏好写入失败')
-    // 原因也必须留下来（Error 被序列化成 `{}` 就等于没记）
     expect(onDisk).toContain('偏好文件读不到')
+    // 原因也必须留下来（Error 被序列化成 `{}` 就等于没记）
+    expect(onDisk).toContain('不保存')
 
     // 4) 面板重开：新模块实例 + 新落盘口，出口仍是 `log.dump()`（DebugLog 就显示这个）
     vi.resetModules()
@@ -95,8 +95,8 @@ describe('真实失败的全链条 · 关掉重开还能查到', () => {
     await import('@/cep/log-file')
 
     const dumped = rebooted.log.dump()
-    expect(dumped).toContain('偏好写入失败')
     expect(dumped).toContain('偏好文件读不到')
+    expect(dumped).toContain('不保存')
     expect(dumped).toContain('EACCES')
   })
 })

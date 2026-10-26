@@ -8,6 +8,7 @@ import { hierarchyWriter } from '@/cep/data/font-extra'
 import type { SyncUnitAdapter, WriteOutcome } from '@/domain/cloud'
 import type { HierarchyFile, HierarchyPreset } from '@/domain/font-set-config'
 import { inlineFile, readInlineJson, unitPayload } from './util'
+import { REPLACE_WITHOUT_BASELINE } from '@/cep/data/types'
 
 const PATH = '/sj_ztHierarych.json'
 
@@ -62,7 +63,7 @@ export const fontHierarchyEntry: SyncUnitAdapter = {
   async write(payload): Promise<WriteOutcome> {
     try {
       const file = toHierarchyFile(readInlineJson(payload))
-      await hierarchyWriter.write(file)
+      hierarchyWriter.replace(file, REPLACE_WITHOUT_BASELINE)
       return { ok: true }
     } catch (error) {
       return {

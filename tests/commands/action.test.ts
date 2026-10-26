@@ -1,4 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { SEED } from '../helpers/cas-seed'
 import { createPinia, setActivePinia } from 'pinia'
 import { readValue } from '../support/repo-read'
 
@@ -25,24 +26,30 @@ const { actionIndexWriter, actionLibraryWriter } = await import('@/cep/data/acti
 
 /** 每个用例重置成可控的初值（浏览器分支是内存仓库） */
 async function seedIndex() {
-  await actionIndexWriter.write({
-    index: 0,
-    list: [{ name: '默认仓库', fileName: 'sj_dz_default.json' }],
-  })
+  await actionIndexWriter.replace(
+    {
+      index: 0,
+      list: [{ name: '默认仓库', fileName: 'sj_dz_default.json' }],
+    },
+    SEED,
+  )
 }
 
 async function seedLibrary() {
-  await actionLibraryWriter.write([
-    {
-      groupName: '修图',
-      show: true,
-      list: [
-        { group: '修图', name: '磨皮' },
-        { group: '修图', name: '锐化', alias: '清晰' },
-      ],
-    },
-    { groupName: '新建', show: true, list: [] },
-  ])
+  await actionLibraryWriter.replace(
+    [
+      {
+        groupName: '修图',
+        show: true,
+        list: [
+          { group: '修图', name: '磨皮' },
+          { group: '修图', name: '锐化', alias: '清晰' },
+        ],
+      },
+      { groupName: '新建', show: true, list: [] },
+    ],
+    SEED,
+  )
 }
 
 beforeEach(async () => {

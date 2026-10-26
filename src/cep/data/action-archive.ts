@@ -8,7 +8,7 @@ import { CepError } from '@/utils/errors'
 import { msg } from '@/domain/messages'
 import { log } from '@/utils/logger'
 import { actionIndexWriter, currentWarehouseFile, selectActionFile } from './actions'
-import type { RepoRead } from './types'
+import { REPLACE_WITHOUT_BASELINE, type RepoRead } from './types'
 import { runExclusiveAsync } from './exclusive'
 
 /**
@@ -52,18 +52,32 @@ function validateImported(file: DzxFile): void {
   }
 }
 
-function removeAll(fileNames: string[]): void {
+/** 导入收尾时删不掉的旧文件。**不回滚索引**（索引已经指向新文件），但必须让用户知道 */
+interface OrphanFile {
+  name: string
+  reason: string
+}
+
+/**
+ * 删除一批文件。**不吞失败**：返回删不掉的名单，由调用方决定怎么处理。
+ *
+ * 旧实现在这里 `catch { log.warn }` —— 索引已经写成功，删不掉的旧文件就成了孤儿，
+ * 而"孤儿"在 UI 上不可见（只一条日志，见 35 号 §3.2）。现在它变成返回值，
+ * 导入流程把它带到命令层，由 `msg.data.fn.orphanFilesLeft` 说出来。
+ */
+function removeAll(fileNames: string[]): OrphanFile[] {
+  const failed: OrphanFile[] = []
   for (const name of fileNames) {
     try {
       removeFile(pathOf(name))
     } catch (e) {
-      // 这是**收尾清理**：索引已经写成功了，删不掉旧文件只留下孤儿，不回滚索引。
-      // 但**必须记下来** —— 旧实现里这段判断是死代码（`removeFile` 从不抛、返回值却被丢掉），
-      // 删没删掉没人知道。现在它是活的：抛出来 → 落日志。
-      // 已知缺口：孤儿文件在 UI 上不可见（只这一条日志），见 35 号 §3.2。
+      // **留痕**：日志里有文件名和原因，事后可查（旧实现只有这一条，界面上看不见）。
       log.warn('action', `清理旧仓库文件失败（留下孤儿）：${name}`, e)
+      // **不静默**：名单返回给调用方，最终由命令层说给用户（`orphanFilesLeft`）。
+      failed.push({ name, reason: e instanceof Error ? e.message : String(e) })
     }
   }
+  return failed
 }
 
 /**
@@ -111,7 +125,10 @@ export function exportActionArchive(current: boolean, targetPath: string): void 
     : index
 
   // 导出包是**新文件**，无 `.bak` 概念（`previous: null`）；走唯一落盘入口（原子写）
-  writeDiskSync(targetPath, encodeDzx({ arrFileData, store }), { previous: null })
+  writeDiskSync(targetPath, encodeDzx({ arrFileData, store }), {
+    backup: { mode: 'none', why: '导出包是新文件，无原文可备' },
+    cas: { mode: 'skip', why: '用户经系统对话框选定导出路径，覆盖意图已确认' },
+  })
 }
 
 /**
@@ -131,7 +148,12 @@ export function importActionArchive(append: boolean, sourcePath: string): Promis
   })
 }
 
-/** 同步写段：解析 → 写各库文件 → 写索引 → 清理旧文件。整段不可打断。 */
+/**
+ * 同步写段：解析 → 写各库文件 → 写索引 → 清理旧文件。整段不可打断。
+ *
+ * 旧文件删不掉时**在这里就抛**（文案已写明「导入已完成」）：名单不出这一层，
+ * 命令层不必参与判断，也就不必知道"数组非空 = 有问题"这种约定。
+ */
 function importArchiveFromText(append: boolean, text: string): void {
   let imported: DzxFile
   try {
@@ -155,20 +177,34 @@ function importArchiveFromText(append: boolean, text: string): void {
     for (const entry of imported.arrFileData) {
       // 写失败直接抛（错误信息里带完整路径与原因）；抛之前 `written` 只记成功的，
       // 下面的 catch 用它回滚 —— 这是"只回滚自己写成功的"，不是吞。
-      writeBase64File(pathOf(entry.name), entry.data)
+      // 导入是用户显式发起的整份替换：同名库文件本来就该被换掉，所以不比。
+      // 但**必须留退路**（旧版这里是裸写，覆盖后没有第二份）。
+      writeBase64File(pathOf(entry.name), entry.data, {
+        cas: { mode: 'skip', why: '用户显式导入，整份替换同名库文件' },
+        backup: { mode: 'keep' },
+      })
       written.push(entry.name)
     }
 
-    actionIndexWriter.write(next)
+    // 写前 `requireIndex` 已校验过形状；CAS 基准拿不到（`Repo.read()` 不暴露原文）
+    actionIndexWriter.replace(next, REPLACE_WITHOUT_BASELINE)
   } catch (e) {
-    removeAll(written)
+    // 回滚自己写成功的文件；这里的失败**不覆盖原错误**（原错误才是用户要看的），只落日志
+    const stuck = removeAll(written)
+    if (stuck.length) log.warn('action', `回滚时有 ${stuck.length} 个文件没删掉`, stuck)
     throw e
   }
 
   selectActionFile(currentWarehouseFile(next))
 
-  if (!append) {
-    const keep = new Set(next.list.map((item) => item.fileName))
-    removeAll(current.list.map((item) => item.fileName).filter((name) => !keep.has(name)))
+  if (append) return
+  const keep = new Set(next.list.map((item) => item.fileName))
+  const orphans = removeAll(
+    current.list.map((item) => item.fileName).filter((name) => !keep.has(name)),
+  )
+  // 删不掉的旧文件：导入**已经成功**（索引指向新文件），但磁盘上留了东西。
+  // 在这里就抛 —— 名单不出这一层，命令层不必知道"数组非空 = 有问题"。
+  if (orphans.length) {
+    throw new CepError('IO', msg.data.fn.orphanFilesLeft(String(orphans.length), orphans[0].name))
   }
 }
