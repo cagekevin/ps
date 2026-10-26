@@ -618,7 +618,7 @@ export async function dispatchPlaceImage(
   // 设置文件坏了 → 开关全缺，`placeImageAction` 会一路静默走 'none'（与 T-97-8 同一个症状）。
   // 事件回调没有 `useCommand` 接住，弹不了 toast（命令层不许 import 视图层，ADR-16），
   // 所以按本文件既有口径落 error 日志（`设置页 → 打开日志` 能看到），并且**不按默认值猜**。
-  if (!read.ok) {
+  if (read.status !== 'ok') {
     log.error('commonUse.placeImage', msg.command.fn.commonUseSettingsCorrupt(read.reason, name))
     return 'none'
   }

@@ -45,8 +45,8 @@ function readUnits(value: unknown): Record<string, string> | undefined {
 export async function readCloudLedger(): Promise<LedgerRead> {
   // 走档 1 的**未折叠**结论：台账"不在"与"读坏了"是两个结论，不能拿默认值顶（T-114）
   const outcome = readRepoFile(path(), decodeLedger)
-  if (outcome.kind === 'absent') return { status: 'none' }
-  if (outcome.kind === 'bad') {
+  if (outcome.status === 'notSeen') return { status: 'none' }
+  if (outcome.status === 'error') {
     log.error('cloud', `台账读不到：${outcome.reason}`)
     return { status: 'broken', reason: outcome.reason }
   }

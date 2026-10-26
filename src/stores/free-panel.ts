@@ -26,7 +26,7 @@ export const useFreePanelStore = defineStore('freePanel', () => {
     // 不是空数组。投影它 = 坏文件和"新装首次使用"在界面上长得一模一样（ADR-14 扩展二），
     // 而且用户点新增会被 `file-repo.ts:161` 以坏因拒绝写（D-42），白点一次。
     // 这里给 `[]` 是**显示决策 + 可见信号（`degraded`）**，不是替生产者捏造值。
-    blocks.value = read.ok ? read.value.obj.list : []
+    blocks.value = read.status === 'ok' ? read.value.obj.list : []
   }
 
   return { blocks, degraded, load }

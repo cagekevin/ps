@@ -40,7 +40,7 @@ describe('getFontList 遇到读不到', () => {
   })
 
   it('文件不在 / 内容为空 → 抛 PARSE，同样不是空列表', async () => {
-    sys.readSysFontFile.mockReturnValue({ status: 'none' })
+    sys.readSysFontFile.mockReturnValue({ status: 'notSeen' })
 
     await expect(getFontList({ refresh: true })).rejects.toMatchObject({ code: 'PARSE' })
   })

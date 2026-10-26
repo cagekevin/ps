@@ -164,7 +164,7 @@ export const swatchCommands: Command<unknown>[] = [
       // 该组在样式库里显示不出色块（且 `decodeActionLibrary` 之类会判成坏形状）。
       // 读不到就不许发：发一个空组比不发更糟（用户以为已经发过去了）。
       const read = readCustomItems()
-      if (!read.ok) throw new CepError('IO', read.reason)
+      if (read.status !== 'ok') throw new CepError('IO', read.reason)
       const group = { name: groupName, show: true, list: read.value }
 
       // 落点走本地命令（`style.appendGroup` = 官方 `addGroupItem`，`app.v4.js:52470-52475`），
@@ -277,8 +277,8 @@ export const swatchCommands: Command<unknown>[] = [
  */
 async function readAutoFillColor(): Promise<boolean> {
   const read = readCommonUseOptions()
-  const options = read.ok ? read.value : read.fallback
-  if (!read.ok) {
+  const options = read.status === 'ok' ? read.value : read.fallback
+  if (read.status !== 'ok') {
     // ADR-14 扩展一：降级必须留信号。读坏了按官方默认（开）继续，但要让
     // "我明明关了智能填色，点一下怎么直接改了图层" 能在日志里查到原因。
     log.warn('seban', '读取智能填色开关失败，按官方默认（开）处理', read.reason)

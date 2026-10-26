@@ -18,7 +18,7 @@ export function mergeFontStars(list: FontItem[]): FontItem[] {
   const read = readFontStars()
   // 读不到星级**不动列表**（评分按 0 显示），但"读不到"这件事由 `useFontStore.loadStars`
   // 单独报给用户 —— 列表能不能显示和评分读不读得到是两件事。
-  if (!read.ok || !Object.keys(read.value).length) return list
+  if (read.status !== 'ok' || !Object.keys(read.value).length) return list
   return list.map((f) => ({ ...f, star: read.value[f.family] ?? 0 }))
 }
 
@@ -32,7 +32,7 @@ export function mergeFontStars(list: FontItem[]): FontItem[] {
 export type SysFontRead =
   | { status: 'ok'; list: FontItem[] }
   /** 文件不在：首次使用 / 还没生成，不是失败 */
-  | { status: 'none' }
+  | { status: 'notSeen' }
   /** 读不到或读不懂：**调用方不许当成"没有字体"** */
   | { status: 'error'; reason: string }
 
@@ -50,16 +50,16 @@ function decodeSysFont(raw: unknown): Decoded<unknown[]> | DecodeFail {
 
 /** 读 SysFont2.json；浏览器没有 userDir，按"文件不在"处理（不是失败） */
 export function readSysFontFile(): SysFontRead {
-  if (!hasCep()) return { status: 'none' }
+  if (!hasCep()) return { status: 'notSeen' }
   const abs = `${userDir()}/${DATA_FILES.sysFontList}`
 
   // 档 1 的唯一入口，**不折叠**：这个文件没有默认值 ——
   // "文件不在"（还没生成过）与"读不到"是两种结论，拿 `[]` 顶上去就会显示"没有系统字体"
   const outcome = readRepoFile(abs, decodeSysFont)
-  if (outcome.kind === 'absent') return { status: 'none' }
-  if (outcome.kind === 'bad') {
+  if (outcome.status === 'notSeen') return { status: 'notSeen' }
+  if (outcome.status === 'error') {
     // 空文件按"还没生成"处理（原实现如此：零字节 SysFont2.json 不是坏文件）
-    if (outcome.text === '') return { status: 'none' }
+    if (outcome.text === '') return { status: 'notSeen' }
     // 读不到报原始原因；读到了但读不懂报固定那句 —— 文案保持原样
     return {
       status: 'error',

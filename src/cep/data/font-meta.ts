@@ -7,14 +7,14 @@ import type { RepoRead } from './types'
  *
  * 返回 `RepoRead` 而不是 `FontTag[]`：后者把"一个标签都没有"和"读不到"压成同一个空列表，
  * 调用方分不出，只能显示成"你没有标签"——**把我们的故障说成用户的数据**。
- * `ok:false` 分支上**没有 `.value`** ⇒ 不处理就编译不过（ADR-14）。
+ * `status:'error'` 分支上**没有 `.value`** ⇒ 不处理就编译不过（ADR-14）。
  */
 export function readFontTags(): RepoRead<FontTag[]> {
   const read = tagsRepo.read()
-  if (!read.ok) return { ok: false, reason: read.reason, fallback: [] }
+  if (read.status !== 'ok') return { status: 'error', reason: read.reason, fallback: [] }
 
   return {
-    ok: true,
+    status: 'ok',
     value: read.value
       .filter((item) => typeof item.text === 'string')
       .map((item) => ({
@@ -34,7 +34,7 @@ export function readFontTags(): RepoRead<FontTag[]> {
  */
 export function readFontStars(): RepoRead<Record<string, number>> {
   const read = starsRepo.read()
-  if (!read.ok) return { ok: false, reason: read.reason, fallback: {} }
+  if (read.status !== 'ok') return { status: 'error', reason: read.reason, fallback: {} }
 
   const map: Record<string, number> = {}
   for (const item of read.value) {
@@ -42,5 +42,5 @@ export function readFontStars(): RepoRead<Record<string, number>> {
     const value = Number(item.star)
     if (value > 0) map[item.name] = value
   }
-  return { ok: true, value: map }
+  return { status: 'ok', value: map }
 }

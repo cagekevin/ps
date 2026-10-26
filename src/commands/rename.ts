@@ -193,7 +193,7 @@ export const renameCommands: Command<unknown>[] = [
     kind: 'instant',
     async invoke() {
       const read = renameWriter.read()
-      if (!read.ok) throw new CepError('IO', read.reason)
+      if (read.status !== 'ok') throw new CepError('IO', read.reason)
 
       // 原版 saveFile("导出", ["cmm"], "重命名.cmm", "设计助理导出文件")（:57020）
       const path = saveFile('导出', ['cmm'], '重命名.cmm')

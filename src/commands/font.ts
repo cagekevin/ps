@@ -314,9 +314,11 @@ export const fontCommands: Command<unknown>[] = [
       if (!path) throw new CepError('PARSE', msg.command.text.actionCancelled)
 
       const tagRead = ctx.data.tags.read()
-      if (!tagRead.ok) throw new CepError('IO', msg.command.fn.fontTagReadFailed(tagRead.reason))
+      if (tagRead.status !== 'ok')
+        throw new CepError('IO', msg.command.fn.fontTagReadFailed(tagRead.reason))
       const starRead = ctx.data.stars.read()
-      if (!starRead.ok) throw new CepError('IO', msg.command.fn.fontStarReadFailed(starRead.reason))
+      if (starRead.status !== 'ok')
+        throw new CepError('IO', msg.command.fn.fontStarReadFailed(starRead.reason))
 
       const payload: TagImportFile = { tags: tagRead.value, stars: starRead.value }
       // 导出文件是**新文件**，无 `.bak` 概念（`previous: null`）；走唯一落盘入口（原子写）

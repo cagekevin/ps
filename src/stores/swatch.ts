@@ -130,7 +130,7 @@ export const useSwatchStore = defineStore('swatch', () => {
 
       const notes: string[] = []
 
-      if (customRead.ok) {
+      if (customRead.status === 'ok') {
         const result = convert(customRead.value)
         custom.value = result.items
         // 认不出的条目：数量如实写出来（用户"存了 16 条显示 15 条"就靠这句查）
@@ -142,7 +142,7 @@ export const useSwatchStore = defineStore('swatch', () => {
         notes.push(msg.data.fn.customColorReadFailed(describeCepError(customRead.reason)))
       }
 
-      if (recentRead.ok) {
+      if (recentRead.status === 'ok') {
         const result = convert(recentRead.value)
         recent.value = result.items
         if (result.skipped) {
@@ -153,11 +153,11 @@ export const useSwatchStore = defineStore('swatch', () => {
         notes.push(msg.data.fn.recentColorReadFailed(describeCepError(recentRead.reason)))
       }
 
-      if (limitRead.ok) recentLimit.value = limitRead.value
+      if (limitRead.status === 'ok') recentLimit.value = limitRead.value
 
       // 两个数据文件都读不到才算"整页读失败"；只坏一个时用 degraded 提示，另一个照常显示
       const reason = notes.join('；')
-      if (!customRead.ok && !recentRead.ok) error.value = reason
+      if (customRead.status !== 'ok' && recentRead.status !== 'ok') error.value = reason
       // 降级说明 = **这一次读的结果**（数量 / 原因 / 要不要重试），不是常驻文案：
       // 每次 load 开头都清空，读全了就是空串 ⇒ 页面不显示任何提示。
       degraded.value = reason ? `${reason}；可点"重试"重新读取（文件被改动或权限恢复后即恢复）` : ''

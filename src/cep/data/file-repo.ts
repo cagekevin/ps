@@ -125,7 +125,7 @@ export function fileRepo<T>(
 
       // D-42：读到的不是真实数据（损坏 / 读不到）时**禁止写**。以前这里会拿 fallback
       // 继续 update，一次点击就把用户文件覆盖成默认值——原文只剩 .bak 里那一份。
-      if (!read.ok)
+      if (read.status !== 'ok')
         throw new CepError('IO', msg.data.fn.fileReadReasonRefuseOverwrite(target, read.reason))
       if (opts.requireExisting && text === null) {
         throw new CepError('IO', msg.data.fn.fileNotExistsRefuseWrite(target))

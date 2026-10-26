@@ -114,7 +114,7 @@ function emit(value: FreePanelFile): void {
 /** 读后把会话态贴回返回值 */
 function prepareRead(result: RepoRead<FreePanelFile>): RepoRead<FreePanelFile> {
   // 坏文件不给 fallback（判别联合里取不到 value）：没有块可挂会话态，原样返回，坏因在 reason 里
-  if (!result.ok) return result
+  if (result.status !== 'ok') return result
   const blocks = result.value.obj.list
   seedShowText(blocks)
   stripShowText(blocks)

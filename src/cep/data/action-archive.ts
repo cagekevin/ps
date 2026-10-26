@@ -93,7 +93,7 @@ function requireIndex(
   read: RepoRead<ActionWarehouseIndex>,
   action: '导入' | '导出',
 ): ActionWarehouseIndex {
-  if (!read.ok) {
+  if (read.status !== 'ok') {
     throw new CepError('IO', msg.data.fn.actionIndexCorruptAbort(read.reason, action))
   }
   return read.value

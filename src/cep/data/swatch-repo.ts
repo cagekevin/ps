@@ -65,19 +65,23 @@ export function recentLimitPath(): string {
  */
 export function readSwatchItems(path: string): RepoRead<unknown[]> {
   const outcome = readRepoFile(path, decodeSwatchArray)
-  if (outcome.kind === 'ok') return { ok: true, value: outcome.value }
-  if (outcome.kind === 'absent') return { ok: true, value: [] }
+  if (outcome.status === 'ok') return { status: 'ok', value: outcome.value }
+  if (outcome.status === 'notSeen') return { status: 'ok', value: [] }
   // 空文件 = 空数组（原版 `readToArray` 同语义）：零字节不是坏文件
-  if (outcome.text === '') return { ok: true, value: [] }
+  if (outcome.text === '') return { status: 'ok', value: [] }
   // T-112：读不到时**不许**返回 `[]`——调用方会把追加后的内容整份写回，等于把一份读不到的
-  // 色板抹平。`ok:false` 分支上没有 `.value`，调用方**必须**显式处理（抛或提示），吞不掉。
+  // 色板抹平。`status:'error'` 分支上没有 `.value`，调用方**必须**显式处理（抛或提示），吞不掉。
   if (outcome.why === 'readError') {
-    return { ok: false, reason: msg.data.fn.swatchReadFailed(path, outcome.reason), fallback: [] }
+    return {
+      status: 'error',
+      reason: msg.data.fn.swatchReadFailed(path, outcome.reason),
+      fallback: [],
+    }
   }
   if (outcome.why === 'notJson') {
-    return { ok: false, reason: msg.data.fn.swatchNotJson(path), fallback: [] }
+    return { status: 'error', reason: msg.data.fn.swatchNotJson(path), fallback: [] }
   }
-  return { ok: false, reason: msg.data.fn.swatchRootNotArray(path), fallback: [] }
+  return { status: 'error', reason: msg.data.fn.swatchRootNotArray(path), fallback: [] }
 }
 
 /**
@@ -173,16 +177,16 @@ export function readRecentLimit(): RepoRead<number> {
   const read = readOwnFileText(recentLimitPath())
   if (read.status === 'error') {
     return {
-      ok: false,
+      status: 'error',
       reason: msg.data.fn.swatchReadFailed(recentLimitPath(), read.reason),
       fallback: DEFAULT_RECENT_LIMIT,
     }
   }
-  if (read.status === 'notSeen') return { ok: true, value: DEFAULT_RECENT_LIMIT }
+  if (read.status === 'notSeen') return { status: 'ok', value: DEFAULT_RECENT_LIMIT }
 
   const value = parseInt(read.text, 10)
   return {
-    ok: true,
+    status: 'ok',
     value:
       Number.isFinite(value) && value > 0 && value <= RECENT_LIMIT_MAX
         ? value
@@ -214,7 +218,7 @@ export function appendCustomItem(item: unknown): { added: boolean } {
   const path = swatchFilePath()
   const read = readSwatchItems(path)
   // T-112：读不到就不许写回 —— 否则一次追加会把整份读不到的色板抹平
-  if (!read.ok) throw new CepError('IO', read.reason)
+  if (read.status !== 'ok') throw new CepError('IO', read.reason)
   const items = read.value
   if (items.some((existing) => itemHex(existing) === hex)) return { added: false }
 
@@ -240,7 +244,7 @@ export function setRecentLimit(limit: number): void {
 
   // 「写数量 → 读色板 → 裁剪 → 写回」是一个同步段
   const read = readSwatchItems(recentFilePath())
-  if (!read.ok) throw new CepError('IO', read.reason)
+  if (read.status !== 'ok') throw new CepError('IO', read.reason)
   const items = read.value
   if (items.length <= limit) {
     // 数量文件已经变了，投影要跟着变；色板本身没动，不重写

@@ -10,6 +10,6 @@ import type { RepoRead } from '@/cep/data/types'
  * 所以抛错等价于断言失败，不是兜底。坏因的断言直接写 `read.reason`（两种分支都有）。
  */
 export function readValue<T>(read: RepoRead<T>): T {
-  if (!read.ok) throw new Error(`用例期望读到真数据，实际是坏读：${read.reason}`)
+  if (read.status !== 'ok') throw new Error(`用例期望读到真数据，实际是坏读：${read.reason}`)
   return read.value
 }

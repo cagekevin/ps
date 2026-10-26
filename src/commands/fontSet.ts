@@ -152,7 +152,7 @@ export const fontSetCommands: Command<unknown>[] = [
       const settingsRead = readFontSetSettings()
       // 坏设置文件 → 数据层不再给 fallback：照常跑等于拿默认 `ztDistributionFilter`
       // 去动用户的文档，用户以为用的是自己的设置（T-101-1）
-      if (!settingsRead.ok) {
+      if (settingsRead.status !== 'ok') {
         throw new CepError('IO', msg.command.fn.fontSetSettingsCorrupt(settingsRead.reason))
       }
       await ctx.jsx.font.distributeByPitch(axis, text, settingsRead.value.ztDistributionFilter)
@@ -259,11 +259,11 @@ export const fontSetCommands: Command<unknown>[] = [
       // 计数器坏了按 0 次继续（清单 §二：对用户有利、不写盘）。这个值决定**是否放行翻译**，
       // 是判断不是渲染，所以默认值也不在消费侧拼：取坏读臂的 `fallback`（仓库自己给的），坏因自己落日志
       const counterRead = translateCounterWriter.read()
-      if (!counterRead.ok) {
+      if (counterRead.status !== 'ok') {
         log.warn('fontSet.translate', `翻译计数读取失败，本次按 0 次处理：${counterRead.reason}`)
       }
       const counter = normalizeCounter(
-        counterRead.ok ? counterRead.value : counterRead.fallback,
+        counterRead.status === 'ok' ? counterRead.value : counterRead.fallback,
         dayKey(),
       )
       if (counter.num >= counter.max) {

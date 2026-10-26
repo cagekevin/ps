@@ -55,13 +55,13 @@ export const useActionStore = defineStore('action', () => {
     const index = actionIndexRepo.read()
     // 坏索引没有 value（判别联合）：显式回退到生产者自己的默认索引，并把"当前显示的是默认仓库"
     // 同时写进提示与日志——不许静默拿默认值冒充用户的仓库（T-101-1 / T-101-2）
-    const indexValue = index.ok ? index.value : defaultActionIndex()
+    const indexValue = index.status === 'ok' ? index.value : defaultActionIndex()
     warehouses.value = indexValue.list
     activeIndex.value = indexValue.index
 
     const reasons: string[] = []
     const indexFile = currentWarehouseFile(indexValue)
-    if (!index.ok) {
+    if (index.status !== 'ok') {
       reasons.push(msg.data.fn.actionIndexCorruptDefault(index.reason, indexFile))
       log.error('action', `索引损坏，已回退默认仓库 ${indexFile}`, index.reason)
     }
@@ -70,8 +70,8 @@ export const useActionStore = defineStore('action', () => {
     const library = actionLibraryRepo.read()
     // 坏库的默认值取生产者给的 `fallback`（`actionLibraryRepo` 构造时传的 `() => []`，`actions.ts:75-79`），
     // 消费侧不另写一份空数组（T-104 / ADR-24）
-    groups.value = library.ok ? library.value : library.fallback
-    if (!library.ok) reasons.push(msg.data.fn.actionLibraryCorrupt(library.reason))
+    groups.value = library.status === 'ok' ? library.value : library.fallback
+    if (library.status !== 'ok') reasons.push(msg.data.fn.actionLibraryCorrupt(library.reason))
     degraded.value = reasons.join('；')
   }
 
@@ -134,8 +134,8 @@ export const useActionStore = defineStore('action', () => {
     // （云写回也只触发索引这一路，同理会看到旧内容）。
     // 凭证：`tests/stores/action-warehouse-switch.test.ts`（本条修复前它是红的）。
     const library = actionLibraryRepo.read()
-    groups.value = library.ok ? library.value : library.fallback
-    degraded.value = library.ok ? '' : msg.data.fn.actionLibraryCorrupt(library.reason)
+    groups.value = library.status === 'ok' ? library.value : library.fallback
+    degraded.value = library.status === 'ok' ? '' : msg.data.fn.actionLibraryCorrupt(library.reason)
   }
 
   // ── 对外**只给用途**，不给内部字段（深模块：窄接口） ──────────────────

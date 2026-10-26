@@ -8,7 +8,7 @@
 //
 // ── 一份判据、一个入口、一个折叠 ────────────────────────────────────────────────
 // 入口：`readRepoFile(target, decode)` —— **只有一个**。`decode` 必填 ⇒「把 JSON.parse 的结果直接当 T」写不出来。
-// 折叠：`foldAbsent(outcome, fallback)` —— **纯函数**，把 `absent` 折成 `ok:true + fallback()`。
+// 折叠：`foldAbsent(outcome, fallback)` —— **纯函数**，把 `notSeen` 折成 `status:'ok' + fallback()`。
 //   它不是第二个入口：无 IO、无判断，只做一次映射。**"文件不在"怎么处理只在这里决定一次。**
 // 为什么折叠必须能单独存在：台账 / 系统字体**没有默认值** —— 拿 `{rev:0}` 顶"没有台账"正是 T-114 的 bug。
 //   给它们硬塞一个 `fallback` 参数 = 往签名里塞谎言，所以折叠不做进入口。
@@ -28,16 +28,16 @@ import type { RepoRead } from './types'
 /**
  * 档 1 的**结论**（三态）。每一臂都带 `text`，所以取原文做 CAS 比对不用分支。
  *
- * 为什么必须是三态而不是 `RepoRead` 的两臂：`RepoRead` 把"文件不在"折成 `ok:true + fallback()`。
+ * 为什么必须是三态而不是 `RepoRead` 的两臂：`RepoRead` 把"文件不在"折成 `status:'ok' + fallback()`。
  * 对**有默认值**的数据文件（动作库、色板、分类）这是对的 —— 首次使用就是空数据。
  * 但对**没有默认值**的文件（同步台账、系统字体列表），"文件不在"是**另一个结论**
  * （还没有同步过 / 还没生成过）。拿默认值顶上去会把"读不到"和"没有"混成一件事
  * （T-114 原始症状）。需要两臂的调用方用 `foldAbsent` 折。
  */
 export type RepoFileOutcome<T> =
-  | { kind: 'ok'; value: T; text: string; degraded?: string }
+  | { status: 'ok'; value: T; text: string; degraded?: string }
   /** 文件系统明确说那个路径上没有东西（只认 `ENOENT`） */
-  | { kind: 'absent'; text: null }
+  | { status: 'notSeen'; text: null }
   /**
    * 读不到 / 不是合法 JSON / 结构不认识 —— 三者都到这里。
    *
@@ -46,7 +46,7 @@ export type RepoFileOutcome<T> =
    * 拿 `reason` 做字符串比较来分档是脆的，所以单列这个位。
    */
   | {
-      kind: 'bad'
+      status: 'error'
       why: 'readError' | 'notJson' | 'badShape'
       reason: string
       text: string | null
@@ -57,10 +57,10 @@ export type RepoFileOutcome<T> =
  *
  * | 观测 | 结论 | 为什么不能合并 |
  * |---|---|---|
- * | `error`（EPERM / 坏盘） | `bad` + reason | 读不到 ≠ 首次使用：拿默认值写回会覆盖用户文件（D-42 / T-105） |
- * | `notSeen`（只认 ENOENT） | `absent` | 是"没有这个文件"，不是"文件是空的" |
- * | 文本不是 JSON | `bad` + reason | 坏文件必须能看见，不能变成"空面板"（T-101-1） |
- * | JSON 但 `decode` 不认 | `bad` + reason | 结构不认识 ≠ 文件不存在，两者要能分辨 |
+ * | `error`（EPERM / 坏盘） | `error` + reason | 读不到 ≠ 首次使用：拿默认值写回会覆盖用户文件（D-42 / T-105） |
+ * | `notSeen`（只认 ENOENT） | `notSeen` | 是"没有这个文件"，不是"文件是空的" |
+ * | 文本不是 JSON | `error` + reason | 坏文件必须能看见，不能变成"空面板"（T-101-1） |
+ * | JSON 但 `decode` 不认 | `error` + reason | 结构不认识 ≠ 文件不存在，两者要能分辨 |
  *
  * 读失败一律 `log.error`（开发者看 logger）+ 结论里带 reason（用户看 UI 状态），两处都有信号。
  */
@@ -70,14 +70,14 @@ export function readRepoFile<T>(target: string, decode: Decoder<T>): RepoFileOut
   if (outcome.status === 'error') {
     log.error('repo', `${target} 读取失败`, outcome.reason)
     return {
-      kind: 'bad',
+      status: 'error',
       why: 'readError',
       reason: msg.data.fn.readFailed(outcome.reason),
       text: null,
     }
   }
 
-  if (outcome.status === 'notSeen') return { kind: 'absent', text: null }
+  if (outcome.status === 'notSeen') return { status: 'notSeen', text: null }
 
   const text = outcome.text
   let parsed: unknown
@@ -85,7 +85,7 @@ export function readRepoFile<T>(target: string, decode: Decoder<T>): RepoFileOut
     parsed = JSON.parse(text)
   } catch (e) {
     log.error('repo', `${target} 不是合法 JSON`, e)
-    return { kind: 'bad', why: 'notJson', reason: '内容不是合法 JSON', text }
+    return { status: 'error', why: 'notJson', reason: '内容不是合法 JSON', text }
   }
 
   // 唯一的形状通道：`decode` 是必填参数，解析结果没有"直接当 T"这条路。
@@ -98,19 +98,19 @@ export function readRepoFile<T>(target: string, decode: Decoder<T>): RepoFileOut
     // 用户话只从这里出、只从 `msg` 取 —— 12 个 decoder 不再各写一句中文。
     const reason = describeDecodeFail(decoded)
     log.error('repo', `${target} 内容结构不认识：${reason}`)
-    return { kind: 'bad', why: 'badShape', reason, text }
+    return { status: 'error', why: 'badShape', reason, text }
   }
 
   // 值可用但不完整 → 带上 degraded（ADR-14：读可降级但必须标记）
   return decoded.degraded
-    ? { kind: 'ok', value: decoded.value, text, degraded: decoded.degraded }
-    : { kind: 'ok', value: decoded.value, text }
+    ? { status: 'ok', value: decoded.value, text, degraded: decoded.degraded }
+    : { status: 'ok', value: decoded.value, text }
 }
 
 /** 折叠时可选的差异。只有一处真差异，不是"万能开关"：见 `notSeenReason`。 */
 export interface FoldOptions {
   /**
-   * `classification.json` 不随面板分发，首次使用确实没有 —— 它要 `ok:true` **+ 一句 reason**
+   * `classification.json` 不随面板分发，首次使用确实没有 —— 它要 `status:'ok'` **+ 一句 reason**
    * （去掉 reason 就是静默回退，ADR-0014 扩展二）。其余仓库不要。
    */
   notSeenReason?: string
@@ -119,29 +119,29 @@ export interface FoldOptions {
 /**
  * **把三态折成两臂**（纯函数，无 IO、无判断）。
  *
- * `absent` → `ok:true` + `fallback()`：首次使用是**正常状态**，不是失败（ADR-26 ②）。
- * `bad` → `ok:false` + `reason` + `fallback()`（`fallback` 是生产者给的默认值，消费侧不许自己再造）。
+ * `notSeen` → `status:'ok'` + `fallback()`：首次使用是**正常状态**，不是失败（ADR-26 ②）。
+ * `error` → `status:'error'` + `reason` + `fallback()`（`fallback` 是生产者给的默认值，消费侧不许自己再造）。
  *
  * **"文件不在就顶上默认值"这件事只在这里决定一次** —— 12 个有默认值的仓库都调它，
- * 谁也不许在自己文件里再写一遍 `kind === 'absent' ? fallback() : …`。
- * 没有默认值的文件（台账 / 系统字体）**不调它**，直接看 `kind`。
+ * 谁也不许在自己文件里再写一遍 `status === 'notSeen' ? fallback() : …`。
+ * 没有默认值的文件（台账 / 系统字体）**不调它**，直接看 `status`。
  */
 export function foldAbsent<T>(
   outcome: RepoFileOutcome<T>,
   fallback: () => T,
   opts: FoldOptions = {},
 ): RepoRead<T> {
-  switch (outcome.kind) {
-    case 'absent':
+  switch (outcome.status) {
+    case 'notSeen':
       return opts.notSeenReason
-        ? { ok: true, value: fallback(), reason: opts.notSeenReason }
-        : { ok: true, value: fallback() }
-    case 'bad':
-      return { ok: false, reason: outcome.reason, fallback: fallback() }
+        ? { status: 'ok', value: fallback(), reason: opts.notSeenReason }
+        : { status: 'ok', value: fallback() }
+    case 'error':
+      return { status: 'error', reason: outcome.reason, fallback: fallback() }
     case 'ok':
       return outcome.degraded
-        ? { ok: true, value: outcome.value, reason: outcome.degraded }
-        : { ok: true, value: outcome.value }
+        ? { status: 'ok', value: outcome.value, reason: outcome.degraded }
+        : { status: 'ok', value: outcome.value }
   }
 }
 

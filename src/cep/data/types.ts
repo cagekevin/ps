@@ -17,27 +17,33 @@ export const REPLACE_WITHOUT_BASELINE: CasMode = {
  * 数据仓库接口。**所有持久化都必须经过它**（ADR-15）。
  *
  * 三条规则：
- * - 读：坏文件不许冒充真数据——**判别联合**，`ok: false` 时类型上取不到 `value`（T-101-2）
+ * - 读：坏文件不许冒充真数据——**判别联合**，`status: 'error'` 时类型上取不到 `value`（T-101-2）
  * - 写：失败必须抛，调用方要能看见
  * - 每个文件一条串行队列：连点两次收藏不能丢更新
  */
 
 /** 读成功：`value` 是磁盘上的真实数据 */
 export interface RepoReadOk<T> {
-  ok: true
+  /**
+   * 判别位。**读链域全仓一份**（观测层 / 语义层 / 仓库层都用它 + 同一套取值词表
+   * `ok` / `notSeen` / `error`）—— 见 `daily/架构日志/18-横切-读链判别联合收口-2026-10-26.md`。
+   *
+   * 用枚举而不是布尔，是为了能承载第三态（`notSeen`）；布尔只能"成 / 不成"。
+   */
+  status: 'ok'
   value: T
   /**
    * 非空 = `value` **可用但不完整**，UI 仍要提示。
    *
    * 目前两处会这么返回，都在 `classification-repo.ts`：
    * - 「分类数据里没有可用分组」：文件是合法 JSON，只是 `categories` 为空——把整份 `value`
-   *   降成 `ok: false` 会连 `presets` / `commercials` 一起丢掉（字体管理页的"免费商用"
+   *   降成 `status: 'error'` 会连 `presets` / `commercials` 一起丢掉（字体管理页的"免费商用"
    *   筛选会跟着空），所以留这个口子。
    * - 「分类数据文件不存在」（T-103）：与 `file-repo.ts:71-72`「文件不存在是首次使用的正常
    *   状态，不算读失败」同一条规则。原版 `app.v4.js:45717-45721` 对 `ENOENT` 也是去下载、
    *   不报错；`classification.json` 不随面板分发（`getClassificationURL` → `v1/font/link`，
    *   `:49501`），首次使用真的不存在。值给空分类，但 reason 保留——不留就是静默回退（20(b)）。
-   * **其余仓库一律 `ok: false` 表示"`value` 不可用"**；新增 `ok: true` + `reason` 要先证明
+   * **其余仓库一律 `status: 'error'` 表示"`value` 不可用"**；新增 `status: 'ok'` + `reason` 要先证明
    * "丢掉 value 就是功能变化"。
    */
   reason?: string
@@ -51,18 +57,18 @@ export interface RepoReadOk<T> {
  * 消费侧要展示时取它，不许自己再写一份默认值（ADR-0024）。
  *
  * 代价（ADR-14 扩展二）：`fallback` 与"文件不存在"在**值上不可分辨**，
- * 要区分只能看 `ok`——所以 `ok` 是唯一判别位，不是调试字段。
+ * 要区分只能看 `status`——所以 `status` 是唯一判别位，不是调试字段。
  */
 export interface RepoReadBad<T> {
-  ok: false
+  status: 'error'
   reason: string
   fallback: T
 }
 
 /**
- * 判别联合：取 `.value` 前必须先判 `ok`；坏读时展示 `fallback`（生产者给的）。
+ * 判别联合：取 `.value` 前必须先判 `status`；坏读时展示 `fallback`（生产者给的）。
  *
- * 两臂各自带值，所以消费侧写 `read.ok ? read.value : read.fallback` 一行就够：
+ * 两臂各自带值，所以消费侧写 `read.status === 'ok' ? read.value : read.fallback` 一行就够：
  * 不传默认值、不写 `if (!ok) return []`，也不需要中间的折叠层（`read-or.ts` 已删，T-102）。
  */
 export type RepoRead<T> = RepoReadOk<T> | RepoReadBad<T>

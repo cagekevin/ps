@@ -106,7 +106,7 @@ describe('font.hierarchy 云同步项（T-55）', () => {
 
   it('read 遇到降级（读不到真实数据）时明确失败，不上传假数据', async () => {
     vi.spyOn(hierarchyWriter, 'read').mockResolvedValue({
-      ok: false,
+      status: 'error',
       reason: '读取失败',
       // 坏读臂必带仓库自己的默认值（T-102）；本条断言的是"读坏必须抛、不上传假数据"
       fallback: fontExtraDefaults.hierarchy(),

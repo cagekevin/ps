@@ -41,7 +41,7 @@ export async function getFontList(opts: { refresh?: boolean } = {}): Promise<Fon
       //把**为什么**读不到带出去，别让页面只写"读不到系统字体"却查不到原因
       throw new CepError('IO', msg.data.fn.sysFontReadFailed(fromFile.reason))
     }
-    if (fromFile.status === 'none' || !fromFile.list.length) {
+    if (fromFile.status === 'notSeen' || !fromFile.list.length) {
       throw new CepError('PARSE', msg.data.text.sysFontEmpty)
     }
     return fromFile.list

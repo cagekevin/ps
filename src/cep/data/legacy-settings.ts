@@ -115,9 +115,9 @@ export function readFontSetSettings(): RepoRead<FontSetSettings> {
   const read = legacySettingsRepo.read()
   // 坏文件的默认值由 `legacySettingsRepo` 的 fallback `{}` 经**同一条**归一产生，
   // 消费侧直接取 `fallback`，不再自己调 `mergeFontSetSettings({})`（ADR-24）
-  if (!read.ok)
-    return { ok: false, reason: read.reason, fallback: mergeFontSetSettings(read.fallback) }
-  return { ok: true, value: mergeFontSetSettings(read.value) }
+  if (read.status !== 'ok')
+    return { status: 'error', reason: read.reason, fallback: mergeFontSetSettings(read.fallback) }
+  return { status: 'ok', value: mergeFontSetSettings(read.value) }
 }
 
 /**
@@ -129,8 +129,8 @@ export function readFontSetSettingsForSync(): FontSetSettings {
   const outcome = readRepoFile(`${userDir()}/${DATA_FILES.ztSet}`, decodeSettingsRecord)
   // T-116：四种坏法都中止，但原因必须分开报 ——
   // "不存在"会让用户以为设置丢了要去重建，"读不到"是关掉占用文件的程序再试
-  if (outcome.kind === 'absent') throw new Error(`${DATA_FILES.ztSet} 不存在`)
-  if (outcome.kind === 'bad') {
+  if (outcome.status === 'notSeen') throw new Error(`${DATA_FILES.ztSet} 不存在`)
+  if (outcome.status === 'error') {
     throw new Error(
       outcome.why === 'readError'
         ? `${DATA_FILES.ztSet} 读不到：${outcome.reason}`
@@ -213,10 +213,10 @@ function pickCommonUseOptions(all: Record<string, unknown>): Partial<CommonUseOp
 /** 读常用页那 8 个键；文件里没有的键**不补默认值**（缺 = 官方默认，由面板决定） */
 export function readCommonUseOptions(): RepoRead<Partial<CommonUseOptions>> {
   const read = legacySettingsRepo.read()
-  if (!read.ok) {
-    return { ok: false, reason: read.reason, fallback: pickCommonUseOptions(read.fallback) }
+  if (read.status !== 'ok') {
+    return { status: 'error', reason: read.reason, fallback: pickCommonUseOptions(read.fallback) }
   }
-  return { ok: true, value: pickCommonUseOptions(read.value) }
+  return { status: 'ok', value: pickCommonUseOptions(read.value) }
 }
 
 /**

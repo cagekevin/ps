@@ -140,7 +140,7 @@ export function deleteWarehouse(index: number): void {
     const read = actionIndexRepo.read()
     // 坏索引没有 value（判别联合）：不先判这一行，下面两句会分别说成「至少保留一个仓库」
     // 和「仓库不存在」——把"文件坏了"说成"你没有仓库"（T-101-1 / T-101-2）
-    if (!read.ok) {
+    if (read.status !== 'ok') {
       throw new CepError('IO', msg.data.fn.actionIndexCorruptDeleteAbort(read.reason))
     }
     if (read.value.list.length <= 1) throw new Error('至少保留一个仓库')

@@ -71,7 +71,7 @@ export const actionLibraryEntry: SyncUnitAdapter = {
 
   async read() {
     const read = await actionIndexWriter.read()
-    if (!read.ok) throw new Error(read.reason)
+    if (read.status !== 'ok') throw new Error(read.reason)
 
     const files: SyncFile[] = [inlineFile(INDEX_PATH, JSON.stringify(read.value))]
 

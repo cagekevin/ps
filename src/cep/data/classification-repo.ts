@@ -84,19 +84,19 @@ export function emptyClassification(): Classification {
 
 export function getClassification(): RepoRead<Classification> {
   // dev：浏览器里没有真实文件，用 MOCK 才能开发 UI
-  if (!hasCep()) return { ok: true, value: MOCK }
+  if (!hasCep()) return { status: 'ok', value: MOCK }
 
   const abs = `${userDir()}/${DATA_FILES.classification}`
   // 档 1 的唯一结论入口（三态 → JSON → decode → RepoRead）。判据不在本文件里。
   const outcome = readRepoFile(abs, decodeClassification)
   // 读不到（`text === null`）与"读到了但读不懂"是两句不同的话，不许合并（T-107）
-  if (outcome.kind === 'bad') {
+  if (outcome.status === 'error') {
     return outcome.why === 'readError'
-      ? { ok: false, reason: '分类数据读取失败', fallback: emptyClassification() }
-      : { ok: false, reason: '分类数据格式不正确', fallback: emptyClassification() }
+      ? { status: 'error', reason: '分类数据读取失败', fallback: emptyClassification() }
+      : { status: 'error', reason: '分类数据格式不正确', fallback: emptyClassification() }
   }
   // 这个文件不随面板分发（`getClassificationURL` → `v1/font/link`，`:49501`），
-  // 新机器上第一次用确实没有 —— `ok:true` 但**必须留 reason**，去掉就是静默回退（20(b)）
+  // 新机器上第一次用确实没有 —— `status:'ok'` 但**必须留 reason**，去掉就是静默回退（20(b)）
   return foldAbsent(outcome, emptyClassification, { notSeenReason: '分类数据文件不存在' })
 }
 

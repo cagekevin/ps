@@ -67,9 +67,9 @@ describe('dataRepo · 首次使用时才定实现（T-113）', () => {
 
     const read = await lateBridge.read()
 
-    expect(read.ok).toBe(true)
+    expect(read.status).toBe('ok')
     // 文件仓库读到磁盘内容 `{a:1}`；内存仓库只会给 seed `{a:0}`
-    expect(read.ok === true ? read.value : null).toEqual({ a: 1 })
+    expect(read.status === 'ok' ? read.value : null).toEqual({ a: 1 })
   })
 
   it('没装桥 → 内存仓库 + dev 种子（浏览器 dev 的既有行为）', async () => {
@@ -77,8 +77,8 @@ describe('dataRepo · 首次使用时才定实现（T-113）', () => {
 
     const read = await noBridge.read()
 
-    expect(read.ok).toBe(true)
-    expect(read.ok === true ? read.value : null).toEqual({ a: 0 })
+    expect(read.status).toBe('ok')
+    expect(read.status === 'ok' ? read.value : null).toEqual({ a: 0 })
   })
 
   it('同一实例只选一次：读之后装桥也不换仓库（队列 / 监听表不分裂）', async () => {
@@ -88,7 +88,7 @@ describe('dataRepo · 首次使用时才定实现（T-113）', () => {
     env.cep = true
     const second = await fixedOnce.read()
 
-    expect(first.ok === true ? first.value : null).toEqual({ a: 0 })
-    expect(second.ok === true ? second.value : null).toEqual({ a: 0 })
+    expect(first.status === 'ok' ? first.value : null).toEqual({ a: 0 })
+    expect(second.status === 'ok' ? second.value : null).toEqual({ a: 0 })
   })
 })

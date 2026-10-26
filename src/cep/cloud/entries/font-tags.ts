@@ -15,7 +15,7 @@ export const fontTagsEntry: SyncUnitAdapter = {
 
   async read() {
     const read = await tagsWriter.read()
-    if (!read.ok) throw new Error(read.reason)
+    if (read.status !== 'ok') throw new Error(read.reason)
     return unitPayload([inlineFile(PATH, JSON.stringify(read.value))])
   },
 

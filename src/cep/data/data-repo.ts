@@ -59,8 +59,8 @@ function memoryRepo<T>(initial: () => T): Repo<T> {
 
   // 没有本地队列：`Repo<T>` 全同步，内存态读改写本身就是一段不可打断的同步代码。
   return {
-    // 内存态没有"从磁盘读到坏内容"这一步，所以永远是成功读（`ok: true`）
-    read: () => ({ ok: true as const, value }),
+    // 内存态没有"从磁盘读到坏内容"这一步，所以永远是成功读（`status: 'ok'`）
+    read: () => ({ status: 'ok' as const, value }),
 
     // 内存态没有"原文"这个概念：CAS 在这里恒过（同进程同步段本来就不会被插进来）
     replace: (next) => {

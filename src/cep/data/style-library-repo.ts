@@ -61,7 +61,7 @@ export const styleIndexWriter: Repo<StyleWarehouseIndex> = styleIndexImpl
  */
 export function readKuLibrary(kind: KuKind, fileName: string): RepoRead<KuGroup[]> {
   // 索引里没登记这个库 = 还没有这个库（不是读失败）
-  if (!fileName) return { ok: true, value: [] }
+  if (!fileName) return { status: 'ok', value: [] }
 
   const read = readOwnFileText(`${userDir()}/${fileName}`)
   // T-116：`notSeen`（首次使用，本来就没有库文件）返回空库、`note` 留空；
@@ -69,16 +69,16 @@ export function readKuLibrary(kind: KuKind, fileName: string): RepoRead<KuGroup[
   // 由样式页渲染出来。否则用户看到的是"空库"，与"这个库本来就没有组"分不开
   if (read.status === 'error') {
     log.error('style', `${kind} 库文件读不到：${read.reason}`)
-    return { ok: false, reason: `库文件读不到（${read.reason}）`, fallback: [] }
+    return { status: 'error', reason: `库文件读不到（${read.reason}）`, fallback: [] }
   }
-  if (read.status === 'notSeen' || read.text === '') return { ok: true, value: [] }
+  if (read.status === 'notSeen' || read.text === '') return { status: 'ok', value: [] }
 
   // domain 的纯解析走 `Decoded | DecodeFail`；这一层折成 IO 结论 `RepoRead`
   const parsed = readKuGroups(kind, read.text, b64ToUtf8)
-  if (isDecodeFail(parsed)) return { ok: false, reason: parsed.fail, fallback: [] }
+  if (isDecodeFail(parsed)) return { status: 'error', reason: parsed.fail, fallback: [] }
   return parsed.degraded
-    ? { ok: true, value: parsed.value, reason: parsed.degraded }
-    : { ok: true, value: parsed.value }
+    ? { status: 'ok', value: parsed.value, reason: parsed.degraded }
+    : { status: 'ok', value: parsed.value }
 }
 
 export interface StyleLibrarySnapshot {
@@ -104,7 +104,7 @@ export function readIndexState(): {
   // `styleIndexImpl.read()` 已过 `decodeStyleWarehouseIndex` ⇒ `stored.value` 就是合法索引，
   // 不需要再归一一次。这里只把「值可用但降级」与「读坏了」都折成一句 degraded（值用 fallback）。
   return {
-    value: stored.ok ? stored.value : stored.fallback,
+    value: stored.status === 'ok' ? stored.value : stored.fallback,
     degraded: stored.reason ?? '',
   }
 }
@@ -125,7 +125,7 @@ export function readStyleLibrary(): StyleLibrarySnapshot {
   for (const kind of KU_KINDS) {
     const read = readKuLibrary(kind, fileNameOf(current, kind))
     // 读不到时给空库（页面照常渲染其它库），但**原因必须进 notes** —— 不许显示成"这个库没有组"
-    libraries[kind] = read.ok ? read.value : read.fallback
+    libraries[kind] = read.status === 'ok' ? read.value : read.fallback
     if (read.reason) notes.push(read.reason)
   }
 
@@ -141,7 +141,7 @@ function currentLibPath(kind: KuKind): string {
   // 读索引，取当前仓库这一类的库文件名
   const stored = styleIndexImpl.read()
   // 「索引文件坏了」≠「这个仓库没登记库文件名」：不分开说，用户会以为是自己没建过库（T-101-1）
-  if (!stored.ok) {
+  if (stored.status !== 'ok') {
     throw new CepError('IO', msg.data.fn.warehouseIndexCorruptAbort(stored.reason))
   }
   // `stored.value` 已过 decode；这里只剩「一个仓库都没有」这一种不可用
@@ -364,7 +364,7 @@ function updateKuGroups(kind: KuKind, mutate: (groups: KuRawGroup[]) => void): v
   const read = repo.read()
   // T-112：**读不到 ≠ 首次使用**。读不到时既不知道旧内容、也写不出 `.bak`，继续写回等于
   // 把一份读不到的库文件换成空数组。`notSeen`（文件本来不存在）才是"首次使用按空处理"。
-  if (!read.ok) {
+  if (read.status !== 'ok') {
     throw new CepError(
       'IO',
       msg.data.fn.libFileReadFailedAbortWrite(kind, target.fileName, read.reason),
@@ -871,7 +871,7 @@ export function appendKuItemToSwatch(kind: KuKind, groupIndex: number, itemIndex
   const path = swatchFilePath()
 
   const read = readSwatchItems(path)
-  if (!read.ok) throw new CepError('IO', read.reason)
+  if (read.status !== 'ok') throw new CepError('IO', read.reason)
   const items = read.value
   items.push(item)
   writeSwatchItems(path, items)
@@ -894,7 +894,7 @@ export function appendKuGroupToSwatch(kind: KuKind, groupIndex: number): void {
   const path = swatchFilePath()
 
   const read = readSwatchItems(path)
-  if (!read.ok) throw new CepError('IO', read.reason)
+  if (read.status !== 'ok') throw new CepError('IO', read.reason)
   const items = read.value
   for (const item of list) items.push(item)
   writeSwatchItems(path, items)

@@ -99,7 +99,7 @@ function loadAll(): Record<string, unknown> {
   // 不再在这里自己写一遍「三态分流 + parse + 判对象」—— 那是 `file-repo` 的第二份判据。
   const outcome = readRepoFile(filePath(), decodePrefs)
   const read = foldAbsent(outcome, () => ({}))
-  if (read.ok) {
+  if (read.status === 'ok') {
     cache = read.value
     // CAS 基准：读成功才设。读失败时保持 `null`，写的时候由 `requireReadable` 挡住
     rawText = outcome.text

@@ -68,25 +68,28 @@ export const useFontSetStore = defineStore('fontSet', () => {
 
     // 坏设置文件：默认值由数据层给（`legacySettingsRepo` 的 fallback `{}` 经同一处归一出），
     // store 只转发，不再自己调 `mergeFontSetSettings({})`（ADR-24）
-    settings.value = settingsRead.ok ? settingsRead.value : settingsRead.fallback
+    settings.value = settingsRead.status === 'ok' ? settingsRead.value : settingsRead.fallback
 
     // 读坏的四份汇成一条 `degraded`（清单 §6.7 的 S2 档）：渲染成默认值与"用户自己配的"
-    // 在界面上不可分辨，所以必须让用户看见。**只有 `ok:false` 才有 reason**——
-    // 首次使用（`notSeen`）走 `ok:true` 且无 reason，天然不进这里（T-111 判据 C，用例钉住）
+    // 在界面上不可分辨，所以必须让用户看见。**只有 `status:'error'` 才有 reason**——
+    // 首次使用（`notSeen`）走 `status:'ok'` 且无 reason，天然不进这里（T-111 判据 C，用例钉住）
     const reasons: string[] = []
-    if (!settingsRead.ok) reasons.push(msg.data.fn.panelSettingsReadFailed(settingsRead.reason))
+    if (settingsRead.status !== 'ok')
+      reasons.push(msg.data.fn.panelSettingsReadFailed(settingsRead.reason))
 
-    quickFonts.value = quickRead.ok ? quickRead.value : quickRead.fallback
-    if (!quickRead.ok) reasons.push(msg.data.fn.quickFontReadFailed(quickRead.reason))
+    quickFonts.value = quickRead.status === 'ok' ? quickRead.value : quickRead.fallback
+    if (quickRead.status !== 'ok') reasons.push(msg.data.fn.quickFontReadFailed(quickRead.reason))
 
-    hierarchy.value = hierarchyRead.ok ? hierarchyRead.value : hierarchyRead.fallback
-    if (!hierarchyRead.ok) reasons.push(msg.data.fn.hierarchyReadFailed(hierarchyRead.reason))
+    hierarchy.value = hierarchyRead.status === 'ok' ? hierarchyRead.value : hierarchyRead.fallback
+    if (hierarchyRead.status !== 'ok')
+      reasons.push(msg.data.fn.hierarchyReadFailed(hierarchyRead.reason))
 
-    counter.value = counterRead.ok ? counterRead.value : counterRead.fallback
-    if (!counterRead.ok) reasons.push(msg.data.fn.translateCounterReadFailed(counterRead.reason))
+    counter.value = counterRead.status === 'ok' ? counterRead.value : counterRead.fallback
+    if (counterRead.status !== 'ok')
+      reasons.push(msg.data.fn.translateCounterReadFailed(counterRead.reason))
 
     // 最近字体 fallback 是 `[]`（S3 档）："没有最近记录"本来就是合法状态，日志够了
-    recentFonts.value = historyRead.ok ? historyRead.value : historyRead.fallback
+    recentFonts.value = historyRead.status === 'ok' ? historyRead.value : historyRead.fallback
 
     degraded.value = reasons.join('；')
   }

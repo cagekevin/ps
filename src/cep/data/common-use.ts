@@ -76,14 +76,14 @@ export function ensureCommonUseFile(): EnsureResult {
   const outcome = readRepoFile(resolvePath(), decodeCommonUseRoot)
 
   // 查不到 = 首次使用，写种子（`requireExisting` 在这条路上是"文件确实没有"，不是"读不出"）
-  if (outcome.kind === 'absent') {
+  if (outcome.status === 'notSeen') {
     // 种子只在"文件确实不存在"时写 ⇒ `expected: null` = 「这个路径上应当没有文件」
     base.replace(createCommonUseSeed(), { mode: 'compare', expected: null })
     return { created: true }
   }
 
   // 读不到 / 不是合法 JSON / 根不是数组：三种都拒绝写，但三句文案不同（用户下一步动作不同）
-  if (outcome.kind === 'bad') {
+  if (outcome.status === 'error') {
     throw outcome.why === 'readError'
       ? new CepError('IO', msg.data.fn.commonUseReadFailedRefuseWrite(FILE_NAME))
       : outcome.why === 'notJson'
