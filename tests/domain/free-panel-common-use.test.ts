@@ -1,5 +1,13 @@
 ﻿import { describe, expect, it } from 'vitest'
 import { adaptFreePanelItem, LEGACY_KEY_ALIASES } from '@/domain/free-panel-legacy'
+import { isDecodeFail } from '@/utils/decode'
+
+/** 取成功臂：`adaptFreePanelItem` 返回 `Decoded<LegacyCommand> | DecodeFail` */
+const adapt = (item: Parameters<typeof adaptFreePanelItem>[0]) => {
+  const out = adaptFreePanelItem(item)
+  if (isDecodeFail(out)) throw new Error(`预期成功，实际失败：${out.fail}`)
+  return out.value
+}
 import type { FreePanelItem } from '@/domain/free-panel'
 import { get } from '@/commands/registry'
 import '@/commands'
@@ -45,14 +53,14 @@ const OFFICIAL_KEYS = [
 describe('官方 key → 常用页命令', () => {
   it('cy_embedImage → commonUse.embedImage，option 原样（官方就是 {path,bLink2,bDelete}）', () => {
     const option = { path: 'C:/a.png', bLink2: -1, bDelete: false }
-    expect(adaptFreePanelItem(item('cy_embedImage', option))).toEqual({
+    expect(adapt(item('cy_embedImage', option))).toEqual({
       id: 'commonUse.embedImage',
       payload: { options: option },
     })
   })
 
   it('cy_embedMultipleImage → commonUse.embedMultipleImages，无参', () => {
-    expect(adaptFreePanelItem(item('cy_embedMultipleImage', null))).toEqual({
+    expect(adapt(item('cy_embedMultipleImage', null))).toEqual({
       id: 'commonUse.embedMultipleImages',
       payload: undefined,
     })
@@ -60,9 +68,7 @@ describe('官方 key → 常用页命令', () => {
 
   it('cy_importMultipleImage → commonUse.importMultipleImages，path 原样透传', () => {
     expect(
-      adaptFreePanelItem(
-        item('cy_importMultipleImage', { path: ['a.png', 'b.png'], toLinkObject: true }),
-      ),
+      adapt(item('cy_importMultipleImage', { path: ['a.png', 'b.png'], toLinkObject: true })),
     ).toEqual({
       id: 'commonUse.importMultipleImages',
       payload: { path: ['a.png', 'b.png'], toLinkObject: true },
@@ -79,51 +85,51 @@ describe('官方 key → 常用页命令', () => {
       scale: 100,
       opacity: 0,
     }
-    expect(adaptFreePanelItem(item('zdy_customBuildTransform', option))).toEqual({
+    expect(adapt(item('zdy_customBuildTransform', option))).toEqual({
       id: 'commonUse.transform',
       payload: { params: [2, 15, '10px', '5px', 3, 100, 0] },
     })
   })
 
   it('三个导出 key 走同一个命令、不同 mode', () => {
-    expect(adaptFreePanelItem(item('cy_exportImage', { a: 1 }))).toEqual({
+    expect(adapt(item('cy_exportImage', { a: 1 }))).toEqual({
       id: 'commonUse.exportImages',
       payload: { mode: 'image', options: { a: 1 } },
     })
-    expect(adaptFreePanelItem(item('cy_batchExportLayer', null))).toEqual({
+    expect(adapt(item('cy_batchExportLayer', null))).toEqual({
       id: 'commonUse.exportImages',
       payload: { mode: 'first', options: undefined },
     })
-    expect(adaptFreePanelItem(item('cy_batchExportSecondLayer', null))).toEqual({
+    expect(adapt(item('cy_batchExportSecondLayer', null))).toEqual({
       id: 'commonUse.exportImages',
       payload: { mode: 'second', options: undefined },
     })
   })
 
   it('cy_useGride / cy_clearCutGuide 拆成两条命令', () => {
-    expect(adaptFreePanelItem(item('cy_useGride', undefined))).toEqual({
+    expect(adapt(item('cy_useGride', undefined))).toEqual({
       id: 'commonUse.referenceGuide',
       payload: { options: undefined },
     })
-    expect(adaptFreePanelItem(item('cy_clearCutGuide', { w: 100 }))).toEqual({
+    expect(adapt(item('cy_clearCutGuide', { w: 100 }))).toEqual({
       id: 'commonUse.referenceSlice',
       payload: { options: { w: 100 } },
     })
   })
 
   it('cy_distributedByPitch → commonUse.distribute，数组原样、非数组包一层', () => {
-    expect(adaptFreePanelItem(item('cy_distributedByPitch', [0, 10, 1]))).toEqual({
+    expect(adapt(item('cy_distributedByPitch', [0, 10, 1]))).toEqual({
       id: 'commonUse.distribute',
       payload: { params: [0, 10, 1] },
     })
-    expect(adaptFreePanelItem(item('cy_distributedByPitch', 42))).toEqual({
+    expect(adapt(item('cy_distributedByPitch', 42))).toEqual({
       id: 'commonUse.distribute',
       payload: { params: [42] },
     })
   })
 
   it('未知 key 返回 null（由命令层报「key 未适配」）', () => {
-    expect(adaptFreePanelItem(item('unknown.key', null))).toBeNull()
+    expect(isDecodeFail(adaptFreePanelItem(item('unknown.key', null)))).toBe(true)
   })
 })
 
@@ -136,7 +142,7 @@ describe('旧自造 key 的别名表', () => {
   })
 
   it('旧 key 仍能解析出命令（不然用户机器上的旧项会变成「key 未适配」）', () => {
-    const mapped = adaptFreePanelItem(item('commonUse.optimization', { optimizeAll: true }))
+    const mapped = adapt(item('commonUse.optimization', { optimizeAll: true }))
     expect(mapped).toEqual({
       id: 'commonUse.optimizeOnce',
       payload: { options: { optimizeAll: true } },
@@ -173,7 +179,7 @@ describe('悬空引用闸门：表里每个 id 都必须已注册', () => {
   it('11 个官方 key 解析出的 id 全部被 defineCommand 注册', () => {
     const missing: string[] = []
     for (const key of OFFICIAL_KEYS) {
-      const mapped = adaptFreePanelItem(item(key, SAMPLE_OPTION[key] ?? null))
+      const mapped = adapt(item(key, SAMPLE_OPTION[key] ?? null))
       expect(mapped, `${key} 应能解析`).toBeTruthy()
       if (!mapped || !get(mapped.id)) missing.push(`${key} → ${mapped?.id}`)
     }

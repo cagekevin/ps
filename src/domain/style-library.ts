@@ -5,7 +5,15 @@
 
 import { resolveKuGroups } from './ku-format'
 import { isRecord } from '@/utils/guards'
-import { shapeFail, type DecodeFail, type Decoded } from '@/utils/decode'
+import {
+  decodeJsonText,
+  isDecodeFail,
+  shapeFail,
+  type DecodeFail,
+  type Decoded,
+} from '@/utils/decode'
+import { isArrayOf } from '@/utils/guards'
+import type { KuRawGroup } from './ku-io'
 
 /** 四类库。顺序 = 页面 tab 顺序（原版 `switchval`，`app.v4.js:54590`） */
 export type KuKind = 'color' | 'gradient' | 'font' | 'style'
@@ -57,7 +65,7 @@ export function defaultStyleIndex(): StyleWarehouseIndex {
  *
  * 它**不报**"结构不认识" —— 那是判据，归 `decodeStyleWarehouseIndex`。
  * 把两件事塞进一个函数，就会造出「值 + 可忽略的 `degraded` 字段」这种形状：
- * 调用方直接 `.value` 就把降级吞了（原来 10 个调用点里 8 个这么写）。
+ * 调用方直接 `.value` 就把降级吞了——所以归一化不返回第二个可忽略字段。
  * 现在归一化返回的就是 `StyleWarehouseIndex`，**没有第二个字段可忽略**。
  */
 export function normalizeStyleIndex(raw: unknown): StyleWarehouseIndex {
@@ -79,12 +87,11 @@ export function normalizeStyleIndex(raw: unknown): StyleWarehouseIndex {
  * 归一化**之前**做（这里），不能塞进归一化里靠一个 `degraded` 字段事后提醒。
  */
 export function decodeStyleWarehouseIndex(raw: unknown): Decoded<StyleWarehouseIndex> | DecodeFail {
-  // 结构不认识 ⇒ 形状臂说清是顶层不对还是 `list` 不对（原来返回 `null`，统一成一句话）
+  // 结构不认识 ⇒ 形状臂说清是顶层不对还是 `list` 不对（统一成一句话，不返回 null）
   if (!isRecord(raw)) return shapeFail('', 'object', raw)
   if (!Array.isArray(raw.list)) return shapeFail('list', 'array', raw.list)
-  const value = normalizeStyleIndex(raw)
-  // 合法 JSON 但一个仓库都没有：值可用（空列表），但**必须标记**（ADR-14）
-  return value.list.length ? { value } : { value, degraded: '仓库索引里没有任何仓库' }
+  // 一个仓库都没有是**合法空值**（新装用户），不是降级也不是失败
+  return { value: normalizeStyleIndex(raw) }
 }
 
 /** 列表里显示的一项；`swatch` 是可直接塞进 `background` 的 CSS 值（颜色 / 渐变），没有就不画色块 */
@@ -265,6 +272,21 @@ const ITEM_READERS: Record<KuKind, (raw: Record<string, unknown>) => KuItem> = {
 }
 
 /**
+ * 库文件文本 → **原始**组数组（不归一化）：导出与写回要原样往返，
+ * 归一化版走下面的 `readKuGroups`（那是给 UI 的）。
+ *
+ * 这是库文件那条链**唯一的解析入口**：`style-library-repo` 的读原始组 / 删仓库枚举图片
+ * 都从这里进，不再各写一份 `JSON.parse` + 各自决定"坏了怎么办"。
+ */
+export function decodeKuRawGroupsText(text: string): Decoded<KuRawGroup[]> | DecodeFail {
+  const json = decodeJsonText(text)
+  if (isDecodeFail(json)) return json
+  if (!Array.isArray(json.value)) return shapeFail('', 'array', json.value)
+  if (!isArrayOf(json.value, isRecord)) return { fail: 'badItem', count: json.value.length }
+  return { value: json.value }
+}
+
+/**
  * 把一个库文件文本解析成组列表（**纯解析，不做 IO**）。
  *
  * 返回 `Decoded` 而不是「`groups` + 可忽略的 `note`」：后者把"库是空的"和"读不懂"压成
@@ -285,13 +307,14 @@ export function readKuGroups(
     return { fail: 'notJson' }
   }
 
-  // 三形态分派都不匹配 ⇒ 容器层形状不认识（说不出具体字段，因为形态本来就多）
+  // 失败原因**原样上抛**：以前这里把四种原因（结构不认识 / 内层不是数组 / 内层不是 JSON / 有非对象项）
+  // 统一压成一句 `shapeFail('', 'array', parsed)` —— 用户看到"期望数组"，实际可能是"内层不是 JSON"
   const source = resolveKuGroups(parsed, decode)
-  if (!source.groups) return shapeFail('', 'array', parsed)
+  if (isDecodeFail(source)) return source
 
   const reader = ITEM_READERS[kind]
   const groups: KuGroup[] = []
-  for (const raw of source.groups) {
+  for (const raw of source.value) {
     if (!isRecord(raw)) continue
     const list = Array.isArray(raw.list) ? raw.list : []
     groups.push({
@@ -301,7 +324,7 @@ export function readKuGroups(
       items: list.filter(isRecord).map(reader),
     })
   }
-  // `degraded` 保留「有条目被跳过」这件事（原实现只在 `groups` 为空时才透出 `note`，
-  // 有组时把提示丢了 —— 那本身就是一处静默吞）
-  return { value: groups, degraded: source.note || undefined }
+  // 不再带 `degraded`：成功臂的 `note` 恒为 `''`，带它只会产出恒空的死字段
+  //（判别联合里它连写法都没了）。
+  return { value: groups }
 }

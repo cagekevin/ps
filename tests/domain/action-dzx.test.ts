@@ -8,16 +8,30 @@ const store = {
 
 describe('action .dzx codec', () => {
   it('decode 保留 arrFileData 和 store', () => {
-    const file = decodeDzx(
+    const decoded = decodeDzx(
       JSON.stringify({ arrFileData: [{ name: 'sj_dzA.json', data: 'AA==' }], store }),
     )
-    expect(file.arrFileData[0].data).toBe('AA==')
-    expect(file.store.list[0].name).toBe('默认仓库')
+    expect(decoded).toMatchObject({
+      value: { arrFileData: [{ data: 'AA==' }], store: { list: [{ name: '默认仓库' }] } },
+    })
   })
 
-  it('非法 JSON / 缺字段抛错', () => {
-    expect(() => decodeDzx('not json')).toThrow(/不是合法的 JSON/)
-    expect(() => decodeDzx(JSON.stringify({ store }))).toThrow(/缺少 arrFileData 或 store/)
+  it('非法 JSON / 缺字段给码（不是抛）', () => {
+    expect(decodeDzx('not json')).toEqual({ fail: 'notJson' })
+    expect(decodeDzx(JSON.stringify({ store }))).toMatchObject({
+      fail: 'shape',
+      field: 'arrFileData',
+    })
+  })
+
+  /**
+   * `store.list` 的每一项都要真有 `fileName`：`remapDzxFileNames` 按文件名做映射，
+   * 只证"是对象"不够 —— 缺 `fileName` 会在映射时变成 `undefined` 键，导入后索引指向空。
+   */
+  it('store.list 项缺 fileName → shape 臂（不是当对象收下）', () => {
+    expect(
+      decodeDzx(JSON.stringify({ arrFileData: [], store: { index: 0, list: [{ name: 'x' }] } })),
+    ).toMatchObject({ fail: 'shape', field: 'store.list[].fileName' })
   })
 
   it('remap 同时改 arrFileData.name 和 store.fileName', () => {
@@ -35,6 +49,6 @@ describe('action .dzx codec', () => {
       arrFileData: [{ name: 'x.json', data: 'AA==' }],
       store,
     })
-    expect(decodeDzx(text).arrFileData[0].name).toBe('x.json')
+    expect(decodeDzx(text)).toMatchObject({ value: { arrFileData: [{ name: 'x.json' }] } })
   })
 })

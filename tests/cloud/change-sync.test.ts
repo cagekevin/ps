@@ -11,8 +11,8 @@ const fetchGuard = vi.fn(() => {
   throw new Error('契约测试，非实机：禁止真实网络请求')
 })
 
-const ok: SyncOutcome = { ok: true }
-const fail: SyncOutcome = { ok: false, errorCode: 'CLOUD_NETWORK' }
+const ok: SyncOutcome = { status: 'ok' }
+const fail: SyncOutcome = { status: 'error', failure: { fail: 'CLOUD_NETWORK', reason: 'test' } }
 
 beforeEach(() => {
   vi.useFakeTimers()
@@ -194,7 +194,10 @@ describe('同步队列：防抖 / 最大等待 / 退避 / 串行（ADR-21）', (
   })
 
   it('被闸门挡下（没发请求）不进退避，5 分钟后慢轮询一次', async () => {
-    const skip: SyncOutcome = { ok: false, skip: true, errorCode: 'CLOUD_AUTO_SYNC_OFF' }
+    const skip: SyncOutcome = {
+      status: 'skipped',
+      failure: { fail: 'CLOUD_AUTO_SYNC_OFF', reason: 'test' },
+    }
     const sync = vi.fn(async () => skip)
     const queue = createSyncQueue({ sync })
 
@@ -261,7 +264,11 @@ describe('同步队列：防抖 / 最大等待 / 退避 / 串行（ADR-21）', (
  */
 describe('同步队列：失败后的重试策略（TD-11-8）', () => {
   it('retry:false 的失败不再自动重试（不是"每档退避都试一遍"）', async () => {
-    const sync = vi.fn(async (): Promise<SyncOutcome> => ({ ok: false, retry: false }))
+    const sync = vi.fn(async (): Promise<SyncOutcome> => ({
+      status: 'error',
+      failure: { fail: 'CLOUD_NETWORK', reason: 'test' },
+      retry: false,
+    }))
     const queue = createSyncQueue({ sync })
 
     queue.markDirty('font.tags')
@@ -281,7 +288,11 @@ describe('同步队列：失败后的重试策略（TD-11-8）', () => {
   })
 
   it('retryAfterMs 拉长等待：到点前不重试，到点才重试', async () => {
-    const sync = vi.fn(async (): Promise<SyncOutcome> => ({ ok: false, retryAfterMs: 10 * 60_000 }))
+    const sync = vi.fn(async (): Promise<SyncOutcome> => ({
+      status: 'error',
+      failure: { fail: 'CLOUD_RATE_LIMITED', reason: 'test' },
+      retryAfterMs: 10 * 60_000,
+    }))
     const queue = createSyncQueue({ sync })
 
     queue.markDirty('font.tags')
@@ -422,7 +433,10 @@ describe('同步队列：sweep 的意图不许靠脏集反推（TD-11-4）', () 
   })
 
   it('被闸门挡下后的慢轮询仍是全量（打开自动同步即可补齐）', async () => {
-    const skip: SyncOutcome = { ok: false, skip: true, errorCode: 'CLOUD_AUTO_SYNC_OFF' }
+    const skip: SyncOutcome = {
+      status: 'skipped',
+      failure: { fail: 'CLOUD_AUTO_SYNC_OFF', reason: 'test' },
+    }
     const sync = vi
       .fn<(units: string[], intent: SyncIntent) => Promise<SyncOutcome>>()
       .mockResolvedValue(skip)

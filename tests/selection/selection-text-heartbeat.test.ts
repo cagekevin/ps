@@ -31,7 +31,7 @@ const TEXT_INFO = {
   color: { rgb: { r: 0, g: 0, b: 0 } },
 }
 /** 两臂成功臂：宿主返回值包在 `data` 里 */
-const TEXT_OK = { ok: true, data: TEXT_INFO }
+const TEXT_OK = { status: 'ok', data: TEXT_INFO }
 
 beforeEach(() => {
   jsx.font.getFontSimpleInfo.mockReset()
@@ -89,7 +89,11 @@ describe('文字属性心跳', () => {
   })
 
   it('读失败时 stale 不冒充「读失败」（两个状态各管一段）', async () => {
-    jsx.font.getFontSimpleInfo.mockResolvedValue({ ok: false, code: 'JSX', reason: '没有文字图层' })
+    jsx.font.getFontSimpleInfo.mockResolvedValue({
+      status: 'error',
+      fail: 'JSX',
+      reason: '没有文字图层',
+    })
     await refreshTextInfo()
 
     expect(textInfoStale.value).toBe('')

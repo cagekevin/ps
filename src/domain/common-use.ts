@@ -3,7 +3,7 @@
 // 谁在用：`cep/data/common-use.ts`（仓库）、后续 `stores/common-use.ts`（只读投影，T-87）
 // 禁止：不读文件、不调 jsx、不 import Vue；不在这里判断"要不要写"（那是命令层的事）
 import { isArrayOf, isRecord, isUnknownArray } from '@/utils/guards'
-import { shapeFail, type DecodeFail, type Decoded } from '@/utils/decode'
+import { isDecodeFail, shapeFail, type DecodeFail, type Decoded } from '@/utils/decode'
 
 /**
  * 一条常用项：官方 `configReset()` 的 10 个键（`app.v4.js:11113-11161` 起）。
@@ -38,8 +38,8 @@ export interface CommonUseItem {
  * 读回来用 `Object.assign(this.info, r)` 灌进数组（`:6392`）；真机文件 `%APPDATA%/SheJiZhuLi/sj_commonFunction.json`
  * 实测 3489 字节、根是数组、14 项（fixture：`tests/fixtures/sj_commonFunction.official.json`）。
  *
- * 之前的 `{ info: [...] }` 是错的（写出去官方面板读不到 14 项 → 常用页显示空态），
- * 现在读侧兼容旧形状、写侧一律归一成数组（见 `readCommonUseItems` 与 `cep/data/common-use.ts` 的 mutator）。
+ * 旧形状 `{ info: [...] }` 也是错的（写出去官方面板读不到 14 项 → 常用页显示空态），
+ * 读侧兼容旧形状、写侧一律归一成数组（见 `readCommonUseItems` 与 `cep/data/common-use.ts` 的 mutator）。
  */
 export type CommonUseFile = CommonUseItem[]
 
@@ -241,7 +241,7 @@ export function createCommonUseSeed(): CommonUseFile {
  * 根形状 → 项数组（**唯一实现**；读边界与写路径共用）：裸数组 或 旧 `{ info: [...] }`，其它返回 `null`。
  * 声明边界：这是「一份实现」，不是「唯一入口」—— TS 挡不住别人再写一遍 `raw.info` 解包。
  *
- * 兼容旧形状：我们早期把文件写成 `{ info: [...] }`（错误），读侧认它、写侧归一成裸数组，
+ * 兼容旧形状：`{ info: [...] }` 是写错的旧格式，读侧认它、写侧归一成裸数组，
  * 这样已经跑过旧版本的用户不会丢那 14 项。
  *
  * 条目级只证"是对象"；有任何一条不是对象 → `null`（整份不认识，不 filter 掉后写回）。
@@ -252,21 +252,22 @@ export function createCommonUseSeed(): CommonUseFile {
  * **别这么写**：`(raw as { info?: unknown }).info`、`Array.isArray(file) ? file : file.info`、
  * `file.info as CommonUseItem[]` —— 都是第二份解包判据，改判据时必漏一处。
  */
-export function toCommonUseItems(raw: unknown): CommonUseItem[] | null {
+export function toCommonUseItems(raw: unknown): Decoded<CommonUseItem[]> | DecodeFail {
   const candidate = isUnknownArray(raw) ? raw : isRecord(raw) ? raw.info : null
   // 「数组 + 逐条证明」用 `guards.isArrayOf`；条目证明用 `isCommonUseItem`（本文件唯一一份）
-  return isArrayOf(candidate, isCommonUseItem) ? candidate : null
+  if (!isArrayOf(candidate, isCommonUseItem)) return shapeFail('', 'array', raw)
+  return { value: candidate }
 }
 
 /** 取项数组；形状不对时给空数组（视图侧兜底，形状判定在 `toCommonUseItems`） */
-export function readCommonUseItems(file: CommonUseFile | null | undefined): CommonUseItem[] {
-  return toCommonUseItems(file) ?? []
+export function readCommonUseItems(file: unknown): CommonUseItem[] {
+  const items = toCommonUseItems(file)
+  return isDecodeFail(items) ? [] : items.value
 }
 
 /** 读边界：常用页文件（判据在 `toCommonUseItems`，认裸数组与旧 `{ info: [...] }`） */
 export function decodeCommonUseFile(raw: unknown): Decoded<CommonUseFile> | DecodeFail {
-  const items = toCommonUseItems(raw)
-  return items === null ? shapeFail('', 'array', raw) : { value: items }
+  return toCommonUseItems(raw)
 }
 
 /**
@@ -284,7 +285,7 @@ export function isCreatedPlaceholder(item: CommonUseItem): boolean {
  *    视图的顺序就是**数组顺序**；
  * 3. `index` 取落盘数组下标（过滤前算），这样 `move` 与视图指向同一坐标。
  */
-export function toTiles(file: CommonUseFile | null | undefined): CommonUseTile[] {
+export function toTiles(file: unknown): CommonUseTile[] {
   return readCommonUseItems(file)
     .map((item, index) => ({ item, index }))
     .filter(({ item }) => !isCreatedPlaceholder(item))

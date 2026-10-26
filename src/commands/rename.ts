@@ -1,7 +1,7 @@
 import { openFile, saveFile } from '@/cep/dialog'
 import { renameWriter } from '@/cep/data/rename'
 import { readExternalText } from '@/cep/fs-read'
-import { writeDisk } from '@/cep/disk-write'
+import { writeDiskSync } from '@/cep/disk-write'
 import {
   addGroupAt,
   addItemAt,
@@ -17,6 +17,8 @@ import {
 } from '@/domain/rename'
 import { applyItemDrop, applyListDrop } from '@/domain/reorder'
 import { CepError } from '@/utils/errors'
+import { isDecodeFail } from '@/utils/decode'
+import { describeDecodeFail } from '@/cep/data/repo-read'
 import { msg } from '@/domain/messages'
 import { defineCommand } from './registry'
 import type { Command } from './types'
@@ -199,8 +201,8 @@ export const renameCommands: Command<unknown>[] = [
       const path = saveFile('导出', ['cmm'], '重命名.cmm')
       if (!path) throw new CepError('PARSE', msg.command.text.actionCancelled)
 
-      // 导出文件是**新文件**，无 `.bak` 概念（`previous: null`）；走唯一落盘入口（原子写）
-      await writeDisk(path, serializePreset(read.value), {
+      // 导出文件是**新文件**，无 `.bak` 概念（`backup: 'none'`）；走唯一落盘入口（原子写）
+      writeDiskSync(path, serializePreset(read.value), {
         backup: { mode: 'none', why: '导出产物，无原文可备' },
         cas: { mode: 'skip', why: '用户经系统对话框选定目标路径，覆盖意图已确认' },
       })
@@ -229,7 +231,9 @@ export const renameCommands: Command<unknown>[] = [
 
       // JSON 优先、旧格式 `<z>`/`<>` 兜底，见 domain/rename.ts 的 parsePreset（原版 :57036-57045）
       // 预设文本整份替换：用户显式触发重命名，整份覆盖即意图
-      renameWriter.replace(parsePreset(text), {
+      const preset = parsePreset(text)
+      if (isDecodeFail(preset)) throw new CepError('PARSE', describeDecodeFail(preset))
+      renameWriter.replace(preset.value, {
         mode: 'skip',
         why: '用户显式重命名，整份覆盖预设文本',
       })

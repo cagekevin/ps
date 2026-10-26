@@ -128,7 +128,7 @@ export function addWarehouse(name = '未命名分组'): number {
 export function renameWarehouse(index: number, name: string): void {
   actionIndexImpl.update((value) => {
     const target = value.list[index]
-    if (!target) throw new Error('仓库不存在')
+    if (!target) throw new Error(msg.data.fn.actionWarehouseMissing())
     target.name = name
   })
 }
@@ -143,12 +143,12 @@ export function deleteWarehouse(index: number): void {
     if (read.status !== 'ok') {
       throw new CepError('IO', msg.data.fn.actionIndexCorruptDeleteAbort(read.reason))
     }
-    if (read.value.list.length <= 1) throw new Error('至少保留一个仓库')
+    if (read.value.list.length <= 1) throw new Error(msg.data.fn.actionWarehouseLastOne())
     const target = read.value.list[index]
-    if (!target) throw new Error('仓库不存在')
+    if (!target) throw new Error(msg.data.fn.actionWarehouseMissing())
 
     if (hasNode()) {
-      // 删不掉会抛（错误里带完整路径与原因）：旧实现丢返回值，磁盘上旧 sj_dz*.json 还在
+      // 删不掉会抛（错误里带完整路径与原因）；否则用户以为仓库已删，磁盘却还在
       // 而用户以为仓库已删。**先删文件、成功后才改索引** —— 反过来的话
       // 删失败就留下"索引说没有、磁盘还有"的孤儿。
       removeFile(`${userDir()}/${target.fileName}`)
@@ -166,7 +166,7 @@ export function deleteWarehouse(index: number): void {
 /** 切换仓库：改索引并切当前文件（原版 wh.select 6605-6612） */
 export function selectWarehouse(index: number): void {
   actionIndexImpl.update((value) => {
-    if (!value.list[index]) throw new Error('仓库不存在')
+    if (!value.list[index]) throw new Error(msg.data.fn.actionWarehouseMissing())
     value.index = index
     selectActionFile(currentWarehouseFile(value))
   })
@@ -183,8 +183,8 @@ export function selectWarehouse(index: number): void {
 export async function getRawActionList(): Promise<unknown> {
   await initJsx()
   const outcome = await jsx.action.getActionList()
-  if (!outcome.ok) {
-    throw new CepError(outcome.code, outcome.reason || '读取 Photoshop 动作列表失败')
+  if (outcome.status !== 'ok') {
+    throw new CepError(outcome.fail, outcome.reason || outcome.fail)
   }
   return outcome.data
 }

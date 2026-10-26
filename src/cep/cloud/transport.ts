@@ -17,7 +17,8 @@ import {
 import { getCloudUrl } from './config'
 import { postText } from '@/cep/http'
 import { CepError } from '@/utils/errors'
-import { msg } from '@/domain/messages'
+import { isRecord } from '@/utils/guards'
+import { decodeJsonText, isDecodeFail, shapeFail, type Decoder } from '@/utils/decode'
 
 const TIMEOUT_MS = 20_000
 
@@ -50,12 +51,26 @@ function serial<T>(task: () => Promise<T>): Promise<T> {
  */
 function httpError(status: number): CloudError {
   if (status === 401 || status === 403) {
-    return new CloudError('CLOUD_PERMISSION', msg.cloud.fn.gatewayDenied(String(status)))
+    return new CloudError('CLOUD_PERMISSION', `HTTP ${status}`)
   }
   if (status === 429) {
-    return new CloudError('CLOUD_RATE_LIMITED', msg.cloud.text.gatewayRateLimited)
+    return new CloudError('CLOUD_RATE_LIMITED', `HTTP ${status}`)
   }
-  return new CloudError('CLOUD_NETWORK', msg.cloud.fn.gasHttpError(String(status)))
+  return new CloudError('CLOUD_NETWORK', `HTTP ${status}`)
+}
+
+/**
+ * GAS 响应体的**唯一解码器**：`JSON.parse` 与「必须是对象」两件事都在这里。
+ *
+ * 为什么非要有它：`request()` 里原来是一段 `let parsed: unknown` + `try JSON.parse` +
+ * `if (!isRecord) throw`——解析、判形状、造 CloudError 三件事挤在一个函数里（刀 5「收路」）。
+ * 现在解析只有一处，`request()` 只负责把失败翻译成云错误码。
+ */
+const decodeGatewayBody: Decoder<Record<string, unknown>> = (raw) => {
+  if (typeof raw !== 'string') return shapeFail('', 'string', raw)
+  const json = decodeJsonText(raw)
+  if (isDecodeFail(json)) return json
+  return isRecord(json.value) ? { value: json.value } : shapeFail('', 'object', json.value)
 }
 
 async function callGateway(
@@ -70,7 +85,7 @@ async function request(
   data?: CloudSnapshot,
 ): Promise<Record<string, unknown>> {
   const url = getCloudUrl()
-  if (!url) throw new CloudError('CLOUD_NOT_CONFIGURED', msg.cloud.text.notConfigured)
+  if (!url) throw new CloudError('CLOUD_NOT_CONFIGURED', 'CLOUD_NOT_CONFIGURED')
 
   try {
     // 网络出口只有一个：`cep/http.ts`。这里不再自己 `fetch`——
@@ -90,21 +105,20 @@ async function request(
     const text = response.text
     if (text.includes('<html')) {
       // 登录页/权限页与 401/403 是同一件事：用户要做的事与重试策略完全一样，共用一个码
-      throw new CloudError('CLOUD_PERMISSION', msg.cloud.text.gasPermissionPage)
+      throw new CloudError('CLOUD_PERMISSION', text.slice(0, 80))
     }
 
-    let json: Record<string, unknown>
-    try {
-      json = JSON.parse(text) as Record<string, unknown>
-    } catch {
-      throw new CloudError('CLOUD_BAD_RESPONSE', msg.cloud.text.gasNotJson)
-    }
+    // 解析与形状判定都在 `decodeGatewayBody`（唯一入口）；这里只把码翻成云错误码，
+    // 文案就是**响应原文片段**（不包中文，用户/日志看到的是 GAS 真正回了什么）
+    const decoded = decodeGatewayBody(text)
+    if (isDecodeFail(decoded)) throw new CloudError('CLOUD_BAD_RESPONSE', text.slice(0, 80))
+    const json = decoded.value
 
     if (typeof json.error === 'string' && json.error) {
       throw new CloudError('CLOUD_BAD_RESPONSE', json.error)
     }
     if (json.ok === false) {
-      throw new CloudError('CLOUD_BAD_RESPONSE', String(json.msg ?? '同步失败'))
+      throw new CloudError('CLOUD_BAD_RESPONSE', String(json.msg ?? ''))
     }
 
     return json
@@ -112,9 +126,9 @@ async function request(
     if (error instanceof CloudError) throw error
     // 11-8 的判据：超时与"发不出去"的重试方式、用户动作都一样 → 同一个码
     if (error instanceof CepError && error.code === 'TIMEOUT') {
-      throw new CloudError('CLOUD_NETWORK', msg.cloud.text.syncTimeout)
+      throw new CloudError('CLOUD_NETWORK', error.message)
     }
-    throw new CloudError('CLOUD_NETWORK', error instanceof Error ? error.message : '同步网络失败')
+    throw new CloudError('CLOUD_NETWORK', error instanceof Error ? error.message : String(error))
   }
 }
 

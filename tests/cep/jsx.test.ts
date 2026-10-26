@@ -67,8 +67,8 @@ describe('真实实现：错误', () => {
 describe('mock 实现', () => {
   it('initSystemList 返回非空数组（已归一化，normalizeFont 幂等）', async () => {
     const outcome = await createMockJsx().font.initSystemList()
-    expect(outcome.ok).toBe(true)
-    const list = outcome.ok ? outcome.data : []
+    expect(outcome.status === 'ok').toBe(true)
+    const list = outcome.status === 'ok' ? outcome.data : []
     expect(Array.isArray(list)).toBe(true)
     expect(list.length).toBeGreaterThan(0)
     expect(typeof (list[0] as { family?: unknown }).family).toBe('string')
@@ -78,8 +78,8 @@ describe('mock 实现', () => {
     const port = createMockJsx()
     await expect(port.font.setFont('a', 'b', 'c')).resolves.toBeUndefined()
     await expect(port.env.setEnv('{}')).resolves.toBeUndefined()
-    await expect(port.layer.isSelectLayer()).resolves.toEqual({ ok: true, data: true })
-    await expect(port.layer.getTypeNumber()).resolves.toEqual({ ok: true, data: 2 })
+    await expect(port.layer.isSelectLayer()).resolves.toEqual({ status: 'ok', data: true })
+    await expect(port.layer.getTypeNumber()).resolves.toEqual({ status: 'ok', data: 2 })
   })
 })
 

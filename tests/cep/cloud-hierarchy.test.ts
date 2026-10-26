@@ -68,7 +68,7 @@ describe('font.hierarchy 云同步项（T-55）', () => {
 
     const result = await fontHierarchyEntry.write({ ...payload, ...next })
 
-    expect(result.ok).toBe(true)
+    expect(result.status === 'ok').toBe(true)
     const saved = await hierarchyWriter.read()
     expect(readValue(saved)).toEqual({ index: 0, list: [{ name: '手机端', data: [72, 50, 28] }] })
   })
@@ -96,7 +96,7 @@ describe('font.hierarchy 云同步项（T-55）', () => {
           },
         ],
       })
-      expect(result.ok).toBe(false)
+      expect(result.status === 'ok').toBe(false)
     }
 
     expect(readValue(await hierarchyWriter.read()).list).toEqual([
@@ -107,9 +107,11 @@ describe('font.hierarchy 云同步项（T-55）', () => {
   it('read 遇到降级（读不到真实数据）时明确失败，不上传假数据', async () => {
     vi.spyOn(hierarchyWriter, 'read').mockResolvedValue({
       status: 'error',
+      fail: 'readError',
       reason: '读取失败',
       // 坏读臂必带仓库自己的默认值（T-102）；本条断言的是"读坏必须抛、不上传假数据"
       fallback: fontExtraDefaults.hierarchy(),
+      failure: { kind: 'errno', code: 'EACCES', raw: new Error('EACCES: permission denied') },
     })
 
     await expect(fontHierarchyEntry.read()).rejects.toThrow('读取失败')

@@ -10,7 +10,8 @@
 // 收尾：装桥之后**每例之后必卸**（桩残留 ⇒ 下一个用例带着上一个的桩跑 ⇒ 假绿），
 //   由本文件注册一次 `afterEach` ⇒ 调用方不用再写卸载的 `afterEach`。
 import { afterEach, expect } from 'vitest'
-import { removeHostBridge } from './host-stub'
+import { getBridge } from '@/cep/host'
+import { installHostBridge, removeHostBridge } from './host-stub'
 
 /**
  * 假桥的开关。默认值刻意与 CEP 的"最坏真实行为"一致：`getSystemPath` 回空串、
@@ -33,9 +34,9 @@ export interface FakeCepBridgeOptions {
 }
 
 export interface FakeCepBridgeHandle {
-  /** 装进 `window.__adobe_cep__`（覆盖已有值） */
+  /** 注入成"当前的桥"（覆盖已有值） */
   install(): void
-  /** 卸载：`delete window.__adobe_cep__` */
+  /** 卸注入（`getBridge()` 回到"不在 CEP 里"） */
   uninstall(): void
 }
 
@@ -73,15 +74,15 @@ export function installFakeCepBridge(options: FakeCepBridgeOptions = {}): FakeCe
   // 收尾集中在这里：每例之后必卸 + 断言"桥没了"（一次注册，调用方不用写 afterEach）
   afterEach(() => {
     removeHostBridge()
-    expect(window.__adobe_cep__).toBeUndefined()
+    expect(getBridge()).toBeUndefined()
   })
 
   return {
     install() {
-      window.__adobe_cep__ = bridge
+      installHostBridge(bridge)
     },
     uninstall() {
-      delete window.__adobe_cep__
+      removeHostBridge()
     },
   }
 }

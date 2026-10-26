@@ -2,8 +2,9 @@ import { userDir } from '@/cep/paths'
 import { DATA_FILES } from '@/cep/env'
 import { hasCep } from '@/cep/transport'
 import { isRecord, isUnknownArray } from '@/utils/guards'
-import { foldAbsent, readRepoFile } from './repo-read'
+import { badContent, badRead, foldAbsent, readRepoFile } from './repo-read'
 import { shapeFail, type DecodeFail, type Decoded } from '@/utils/decode'
+import { msg } from '@/domain/messages'
 import type { RepoRead } from './types'
 
 /**
@@ -91,13 +92,14 @@ export function getClassification(): RepoRead<Classification> {
   const outcome = readRepoFile(abs, decodeClassification)
   // 读不到（`text === null`）与"读到了但读不懂"是两句不同的话，不许合并（T-107）
   if (outcome.status === 'error') {
-    return outcome.why === 'readError'
-      ? { status: 'error', reason: '分类数据读取失败', fallback: emptyClassification() }
-      : { status: 'error', reason: '分类数据格式不正确', fallback: emptyClassification() }
+    // 中文只在 `msg`（判据 3）；两种原因分别成句，不合并（T-107）
+    return outcome.fail === 'readError'
+      ? badRead(msg.data.fn.classificationReadFailed(), emptyClassification(), outcome.failure)
+      : badContent(outcome.fail, msg.data.fn.classificationBadShape(), emptyClassification())
   }
   // 这个文件不随面板分发（`getClassificationURL` → `v1/font/link`，`:49501`），
-  // 新机器上第一次用确实没有 —— `status:'ok'` 但**必须留 reason**，去掉就是静默回退（20(b)）
-  return foldAbsent(outcome, emptyClassification, { notSeenReason: '分类数据文件不存在' })
+  // 新机器上第一次用确实没有 ⇒ 首次使用是正常状态，给空分类
+  return foldAbsent(outcome, emptyClassification)
 }
 
 /**
@@ -144,6 +146,5 @@ function decodeClassification(raw: unknown): Decoded<Classification> | DecodeFai
         ? raw.commercials.filter((c): c is string => typeof c === 'string')
         : [],
     },
-    degraded: categories.length ? undefined : '分类数据里没有可用分组',
   }
 }

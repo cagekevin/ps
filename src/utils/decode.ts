@@ -25,7 +25,7 @@
 //    需要绑谓词时才包一层（这是唯一允许的 lambda 形态，里面只许调 decodeList/decodeIndexed）：
 //      `(raw) => decodeList(raw, isRawTag)` —— 别在 lambda 里转型、补默认值或 try/catch。
 // ③ 返回值**只有三种**，**没有 `null`**：
-//    `{ value }` = 正常；`{ value, degraded }` = 值可用但不完整（ADR-14 必须标记）；
+//    `{ value }` = 正常；
 //    `DecodeFail` = 结构不认识 —— **两臂**：
 //      形状臂 `{ fail:'shape', field, expected, actual }`（只报观测，说不出用户话）
 //      语义臂 `{ fail:'notJson'|'emptyContent'|'noItemsParsed'|'badItem', count? }`（码可穷举）
@@ -44,14 +44,13 @@
 import { isArrayOf, isRecord } from './guards'
 
 /**
- * 解码结果。
+ * 解码结果：成功臂只带 `value`。
  *
- * - 返回 `null` = **结构不认识**：仓库转 `ok:false` + `reason`，用户能在界面上看到。
- * - `degraded` 非空 = 值可用但不完整（ADR-14：读可降级但必须标记）。
+ * 没有「值可用但不完整」这一档 —— 读不懂就是 `DecodeFail`，由调用方决定抛还是拒写；
+ * 半成品值不允许流到业务层。
  */
 export interface Decoded<T> {
   value: T
-  degraded?: string
 }
 
 /**
@@ -117,6 +116,33 @@ export function describeShape(raw: unknown): string {
  */
 export type Decoder<T> = (raw: unknown) => Decoded<T> | DecodeFail
 
+/**
+ * **文本 → 值的唯一 JSON 解码器**：解析失败就是 `notJson`，形状交给调用方/后续 decoder。
+ *
+ * 全仓「`JSON.parse` 完直接当数据」的收口点：谁要解析一段不可信文本，就用它，
+ * 别再各写一份 `try { JSON.parse } catch { return {error:'…'} }`。
+ */
+export function decodeJsonText(text: string): Decoded<unknown> | DecodeFail {
+  try {
+    return { value: JSON.parse(text) }
+  } catch {
+    return { fail: 'notJson' }
+  }
+}
+
+/**
+ * 谓词 → `Decoder<T>`：证明不过就是**形状臂**（带期望与实际），不再只有一句"结构不认识"。
+ *
+ * 为什么要有它：命令层/域层手里本来就有一堆 `x is T` 谓词；让它们各自写
+ * `x ? { value: x } : { fail: 'shape' }` 就是把"怎么表达失败"抄一遍。
+ */
+export function decoderOf<T>(
+  pred: (raw: unknown) => raw is T,
+  expected: 'object' | 'array' | 'string' | 'number' = 'object',
+): Decoder<T> {
+  return (raw) => (pred(raw) ? { value: raw } : shapeFail('', expected, raw))
+}
+
 /** 区分三种返回：`null` / `{ fail }` / `{ value }` */
 export function isDecodeFail(x: Decoded<unknown> | DecodeFail): x is DecodeFail {
   return 'fail' in x
@@ -130,7 +156,7 @@ function readIndexField(value: unknown): number | null {
 /**
  * 容器 `{ index, list }` 的解码：`list` 必须是对象数组，有任何条目不是对象 → 整份 `null`。
  *
- * `index` 缺失**不静默补 0**：给 `degraded`（ADR-14 兜底必须留痕）。返回结构类型，
+ * `index` 缺失**不静默补 0**：整份 `DecodeFail`（补 0 与"选中第 0 条"在值上不可分辨）。返回结构类型，
  * 不做断言 —— `QuickFontFile` / `HierarchyFile` / `ActionWarehouseIndex` 都是这个结构，
  * 赋值处由 TS 结构比较通过。
  */
@@ -145,10 +171,11 @@ export function decodeIndexed<T>(
   if (!isArrayOf(rawList, isItem)) return { fail: 'badItem', count: rawList.length }
   const list = rawList
 
+  // `index` 缺失 / 非数 = 结构不合契约：整份拒绝。按 0 顶上会静默重置界面上选中的那一条，
+  // 而调用方从值上分辨不出来（`0` 也是合法值）—— 与其猜，不如让用户看到"这个文件读不懂"。
   const index = readIndexField(raw.index)
-  return index === null
-    ? { value: { index: 0, list }, degraded: '索引字段缺失或非数，已按 0 处理' }
-    : { value: { index, list } }
+  if (index === null) return shapeFail('index', 'number', raw.index)
+  return { value: { index, list } }
 }
 
 /** 数组根的解码：判据同上，这里只负责转成 `Decoded`（`DecodeFail` = 结构不认识 + 原因） */
@@ -159,4 +186,20 @@ export function decodeList<T>(
   if (!Array.isArray(raw)) return shapeFail('', 'array', raw)
   if (!isArrayOf(raw, isItem)) return { fail: 'badItem', count: raw.length }
   return { value: raw }
+}
+
+/**
+ * **"丢掉坏项"的唯一写法**：把逐项解码的结果收成值数组。
+ *
+ * 用于"一项不合格就跳过、其余照常"的场合（字体列表、自由面板项）。
+ * 没有这条 helper 时，每处都写 `.map(f).filter((x): x is T => Boolean(x))`，
+ * 而 `f` 迟早会被下一个人改成返回 `T | null` —— 于是 `| null` 又长回来。
+ *
+ * ⚠️ **"丢"是有代价的**：被丢的那一项没人知道。需要留痕（"云端有读不懂的 unit"）的场合
+ * 自己遍历 `isDecodeFail` 并记下 key；要"任何一项坏就整份失败"用 `decodeList`。
+ */
+export function keepDecoded<T>(outcomes: readonly (Decoded<T> | DecodeFail)[]): T[] {
+  const values: T[] = []
+  for (const out of outcomes) if (!isDecodeFail(out)) values.push(out.value)
+  return values
 }

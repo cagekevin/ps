@@ -1,4 +1,6 @@
 import type { FontItem } from './font-item'
+import { keepDecoded, shapeFail, type Decoded, type DecodeFail } from '@/utils/decode'
+import { isRecord } from '@/utils/guards'
 
 function asArray(value: unknown): string[] {
   if (Array.isArray(value)) return value.map((v) => String(v))
@@ -7,28 +9,26 @@ function asArray(value: unknown): string[] {
 }
 
 /** 兼容两套键名：family/weights/names/postScriptNames 与 name/zz/mz/hjm。 */
-export function normalizeFont(item: unknown): FontItem | null {
-  if (!item || typeof item !== 'object') return null
-  const f = item as Record<string, unknown>
+export function normalizeFont(item: unknown): Decoded<FontItem> | DecodeFail {
+  if (!isRecord(item)) return shapeFail('', 'object', item)
 
-  const family = typeof f.family === 'string' ? f.family : typeof f.name === 'string' ? f.name : ''
-  if (!family) return null
+  const family =
+    typeof item.family === 'string' ? item.family : typeof item.name === 'string' ? item.name : ''
+  if (!family) return shapeFail('family', 'string', item.family)
 
   return {
-    family,
-    weights: asArray(f.weights ?? f.zz),
-    names: asArray(f.names ?? f.mz),
-    postScriptNames: asArray(f.postScriptNames ?? f.hjm),
-    star: typeof f.star === 'number' ? f.star : 0,
+    value: {
+      family,
+      weights: asArray(item.weights ?? item.zz),
+      names: asArray(item.names ?? item.mz),
+      postScriptNames: asArray(item.postScriptNames ?? item.hjm),
+      star: typeof item.star === 'number' ? item.star : 0,
+    },
   }
 }
 
+/** 列表归一：**坏项丢掉、其余照常**（"丢"的写法只有 `keepDecoded` 这一份） */
 export function normalizeFontList(raw: unknown): FontItem[] {
   if (!Array.isArray(raw)) return []
-  const out: FontItem[] = []
-  for (const item of raw) {
-    const font = normalizeFont(item)
-    if (font) out.push(font)
-  }
-  return out
+  return keepDecoded(raw.map(normalizeFont))
 }

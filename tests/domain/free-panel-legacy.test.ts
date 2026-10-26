@@ -1,5 +1,13 @@
 ﻿import { describe, expect, it } from 'vitest'
 import { adaptFreePanelItem } from '@/domain/free-panel-legacy'
+import { isDecodeFail } from '@/utils/decode'
+
+/** 取成功臂：`adaptFreePanelItem` 返回 `Decoded<LegacyCommand> | DecodeFail` */
+const adapt = (item: Parameters<typeof adaptFreePanelItem>[0]) => {
+  const out = adaptFreePanelItem(item)
+  if (isDecodeFail(out)) throw new Error(`预期成功，实际失败：${out.fail}`)
+  return out.value
+}
 import type { FreePanelItem } from '@/domain/free-panel'
 
 function item(key: string, option: unknown): FreePanelItem {
@@ -20,16 +28,14 @@ function item(key: string, option: unknown): FreePanelItem {
 describe('free-panel legacy adapter', () => {
   it('dz_useAction → action.call，payload 原样', () => {
     const option = { group: '常用', name: 'ps批量导出' }
-    expect(adaptFreePanelItem(item('dz_useAction', option))).toEqual({
+    expect(adapt(item('dz_useAction', option))).toEqual({
       id: 'action.call',
       payload: option,
     })
   })
 
   it('zt_translate 的 delete → replace', () => {
-    expect(
-      adaptFreePanelItem(item('zt_translate', { from: 'auto', to: 'en', delete: false })),
-    ).toEqual({
+    expect(adapt(item('zt_translate', { from: 'auto', to: 'en', delete: false }))).toEqual({
       id: 'fontSet.translate',
       payload: { from: 'auto', to: 'en', replace: false },
     })
@@ -37,14 +43,14 @@ describe('free-panel legacy adapter', () => {
 
   it('zt_createButton 包成 config', () => {
     const option = { type: 2, isLine: false, padding: '10,20' }
-    expect(adaptFreePanelItem(item('zt_createButton', option))).toEqual({
+    expect(adapt(item('zt_createButton', option))).toEqual({
       id: 'fontSet.createButton',
       payload: { config: option },
     })
   })
 
   it('cy_exportOpenFolder → cy_openDirectory', () => {
-    expect(adaptFreePanelItem(item('cy_exportOpenFolder', null))).toEqual({
+    expect(adapt(item('cy_exportOpenFolder', null))).toEqual({
       id: 'legacy.call',
       payload: { key: 'cy_openDirectory', args: [] },
     })
@@ -54,13 +60,13 @@ describe('free-panel legacy adapter', () => {
   // （一条命令内部分流到同样的三条白名单 key）——同一操作只有一个入口。
   it('cy_batchExportLayer 走 commonUse.exportImages 的 first 模式', () => {
     const option = { path: 'D:/out' }
-    expect(adaptFreePanelItem(item('cy_batchExportLayer', option))).toEqual({
+    expect(adapt(item('cy_batchExportLayer', option))).toEqual({
       id: 'commonUse.exportImages',
       payload: { mode: 'first', options: option },
     })
   })
 
   it('未知 key 返回 null', () => {
-    expect(adaptFreePanelItem(item('cy_unknown', null))).toBeNull()
+    expect(isDecodeFail(adaptFreePanelItem(item('cy_unknown', null)))).toBe(true)
   })
 })

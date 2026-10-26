@@ -1,6 +1,7 @@
 import { jsxRead, jsxWrite } from '@/cep/transport'
 import { isJsxOkSentinel, typedOutcome } from '@/utils/jsx-result'
 import { isArrayOf, isRecord, isUnknownArray } from '@/utils/guards'
+import { decoderOf, shapeFail } from '@/utils/decode'
 import { LONG, READ, WRITE } from './timeouts'
 import type { JsxName } from './names'
 import type { CurrentFontInfo, FontJsx, TranslateItem } from './types'
@@ -72,7 +73,10 @@ export function createFontJsx(): FontJsx {
         }),
         // 两种合法形态：数组（系统字体清单）或哨兵（宿主说"去读 SysFont2.json"）。
         // 哨兵判据只有一份：`utils/jsx-result.isJsxOkSentinel`（调用点不许再写 `'ok' || 'OK'`）
-        (data) => (isUnknownArray(data) ? data : isJsxOkSentinel(data) ? data : null),
+        (data) =>
+          isUnknownArray(data) || isJsxOkSentinel(data)
+            ? { value: data }
+            : shapeFail('', 'array', data),
         '读取系统字体',
       ),
 
@@ -90,7 +94,7 @@ export function createFontJsx(): FontJsx {
     getCurrentFontInfo: async () =>
       typedOutcome(
         await read('zt_getCurrentFontInfo', [], '读取当前图层字体'),
-        (data) => (isCurrentFontInfo(data) ? data : null),
+        decoderOf(isCurrentFontInfo),
         '读取当前图层字体',
       ),
 
@@ -98,7 +102,7 @@ export function createFontJsx(): FontJsx {
     getCurrentText: async () =>
       typedOutcome(
         await read('zt_getCurrentText', [], '读取选中文字'),
-        (data) => (isArrayOf(data, isTranslateItem) ? data : null),
+        decoderOf((x): x is TranslateItem[] => isArrayOf(x, isTranslateItem), 'array'),
         '读取选中文字',
       ),
 
@@ -106,7 +110,7 @@ export function createFontJsx(): FontJsx {
     getFontInfo: async () =>
       typedOutcome(
         await read('ys_getFontInfo', [], '复制文字属性'),
-        (data) => (isFontInfoData(data) ? data : null),
+        decoderOf(isFontInfoData),
         '复制文字属性',
       ),
 
@@ -127,7 +131,7 @@ export function createFontJsx(): FontJsx {
     setColor: async () =>
       typedOutcome(
         await jsxRead('zt_setFontColor', [], { label: '设置字体颜色', timeout: WRITE }),
-        (data) => (isSetColorData(data) ? data : null),
+        decoderOf(isSetColorData),
         '设置字体颜色',
       ),
 

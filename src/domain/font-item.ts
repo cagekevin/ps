@@ -1,5 +1,5 @@
 // 是什么：字体项的统一运行时结构（家族名 + 字重 + 字体名 + PostScript 名）。
-// 替代了什么：从 `src/cep/types.ts` 迁出——原来放在适配层，导致 `domain/` 反向 import `@/cep`。
+// 替代了什么：`src/cep/types.ts` 的字体项类型已迁出，现由本文件负责（避免 `domain/` 反向 import `@/cep`）。
 // 谁在用：`domain/font-normalize.ts`（唯一归一化入口）、`domain/font-filter.ts`、`domain/quick-font.ts`、
 //   `stores/font.ts`、`commands/payloads.ts`、`cep/data/sys-font.ts`、`cep/ps.ts`、`cep/mock.ts`、
 //   `pages/fontManage/**`、`pages/fontSet/**`。

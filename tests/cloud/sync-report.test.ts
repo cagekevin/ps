@@ -34,29 +34,32 @@ beforeEach(async () => {
 
 describe('后台同步的结局 → 日志', () => {
   it('成功：安静（不刷屏）', () => {
-    reportSyncOutcome({ ok: true }, ['font.tags'])
-    reportSyncOutcome({ ok: true }, ['font.tags'])
+    reportSyncOutcome({ status: 'ok' }, ['font.tags'])
+    reportSyncOutcome({ status: 'ok' }, ['font.tags'])
 
     expect(log.dump()).not.toContain('云同步恢复正常')
   })
 
   it('失败后再成功：留一条"恢复正常"，并带上上次的失败码', () => {
-    reportSyncOutcome({ ok: false, errorCode: 'CLOUD_PERMISSION', error: 'HTTP 403' }, [
-      'font.tags',
-    ])
-    reportSyncOutcome({ ok: true }, ['font.tags'])
+    reportSyncOutcome(
+      { status: 'error', failure: { fail: 'CLOUD_PERMISSION', reason: 'HTTP 403' } },
+      ['font.tags'],
+    )
+    reportSyncOutcome({ status: 'ok' }, ['font.tags'])
 
     expect(log.dump()).toContain('云同步恢复正常')
     expect(log.dump()).toContain('CLOUD_PERMISSION')
   })
 
   it('失败：带码、带原因原文，且每次都记（退避已限频，少一条就是少一份证据）', () => {
-    reportSyncOutcome({ ok: false, errorCode: 'CLOUD_NETWORK', error: 'GAS HTTP 500' }, [
-      'font.tags',
-    ])
-    reportSyncOutcome({ ok: false, errorCode: 'CLOUD_NETWORK', error: 'GAS HTTP 500' }, [
-      'font.tags',
-    ])
+    reportSyncOutcome(
+      { status: 'error', failure: { fail: 'CLOUD_NETWORK', reason: 'GAS HTTP 500' } },
+      ['font.tags'],
+    )
+    reportSyncOutcome(
+      { status: 'error', failure: { fail: 'CLOUD_NETWORK', reason: 'GAS HTTP 500' } },
+      ['font.tags'],
+    )
 
     const dumped = log.dump()
     expect(dumped).toContain('后台同步未完成')
@@ -67,15 +70,13 @@ describe('后台同步的结局 → 日志', () => {
 
   it('跳过：只在原因变化时记，且写明"没发请求、不消耗退避"', () => {
     const offline: SyncOutcome = {
-      ok: false,
-      skip: true,
-      errorCode: 'CLOUD_OFFLINE',
-      error: '当前离线',
+      status: 'skipped',
+      failure: { fail: 'CLOUD_OFFLINE', reason: '当前离线' },
     }
     reportSyncOutcome(offline, [])
     reportSyncOutcome(offline, [])
     reportSyncOutcome(
-      { ok: false, skip: true, errorCode: 'CLOUD_NO_LEDGER', error: '没有台账' },
+      { status: 'skipped', failure: { fail: 'CLOUD_NO_LEDGER', reason: '没有台账' } },
       [],
     )
 

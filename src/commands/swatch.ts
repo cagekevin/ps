@@ -42,7 +42,7 @@ function requireSebanJsx(fn: string): never {
  */
 function assertInherited(result: CommandOutcome): void {
   // `code` 已是必填的 `CepErrorCode`（R3）⇒ 不再需要 `?? 'JSX'` + `as`
-  if (!result.ok) throw new CepError(result.code, result.reason)
+  if (result.status === 'error') throw new CepError(result.fail, result.reason)
 }
 
 /** 色板项的形状（`main.jsx:287-298` 产出）：`{ name, color: { hex, c, m, y, k, isFill? } }` */
@@ -81,9 +81,9 @@ export const swatchCommands: Command<unknown>[] = [
       // 名字在原版派发表里能命中，所以走它而不是 `sb_*`。
       // UNVERIFIED：两条 jsx 的字段是否逐字一致未实测；本命令只要求"是个带 color.hex 的对象"。
       const fgOutcome = await ctx.jsx.style.getForegroundColor()
-      if (!fgOutcome.ok) {
+      if (fgOutcome.status !== 'ok') {
         throw new CepError(
-          fgOutcome.code,
+          fgOutcome.fail,
           fgOutcome.reason || msg.command.text.styleReadForegroundFailed,
         )
       }
@@ -306,7 +306,8 @@ export function bindSeBanReceiver(): () => void {
     const item = (payload?.data ?? {}) as Record<string, unknown>
     void execute(id, { item }).then((result) => {
       // 色板那边收不到执行结果（跨扩展单向广播），失败只能落日志；按钮不静默是色板自己的事
-      if (!result.ok) log.warn('seban', '色板联动执行失败', { type, reason: result.reason })
+      if (result.status === 'error')
+        log.warn('seban', '色板联动执行失败', { type, reason: result.reason })
     })
   })
 }

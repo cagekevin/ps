@@ -42,7 +42,6 @@ export const useStyleLibraryStore = defineStore('styleLibrary', () => {
       warehouses.value = snapshot.index.list
       activeIndex.value = snapshot.index.index
       libraries.value = snapshot.libraries
-      if (snapshot.degraded) error.value = snapshot.degraded
     } catch (e) {
       error.value = describeCepError(e)
       log.error('style', '读取样式库失败', e)

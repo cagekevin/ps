@@ -55,7 +55,7 @@ async function seedLibrary() {
 beforeEach(async () => {
   setActivePinia(createPinia())
   vi.clearAllMocks()
-  jsx.action.callAction.mockResolvedValue({ ok: true, data: null })
+  jsx.action.callAction.mockResolvedValue({ status: 'ok', data: null })
   await seedIndex()
   await seedLibrary()
 })
@@ -75,7 +75,7 @@ describe('action.call', () => {
     jsx.action.callAction.mockRejectedValue(new Error('动作不存在'))
 
     await expect(execute('action.call', { group: '修图', name: '磨皮' })).resolves.toMatchObject({
-      ok: false,
+      status: 'error',
       reason: '动作不存在',
     })
   })
@@ -84,7 +84,7 @@ describe('action.call', () => {
 describe('loadPsActions（store 读模型）', () => {
   it('原版 {name,children} 结构能解析出动作', async () => {
     jsx.action.getActionList.mockResolvedValue({
-      ok: true,
+      status: 'ok',
       data: [{ name: '修图', children: [{ name: '磨皮' }, { name: '锐化' }] }],
     })
 
@@ -106,7 +106,7 @@ describe('loadPsActions（store 读模型）', () => {
   })
 
   it('结构不认识时标 unparsed，不谎报"没有动作"', async () => {
-    jsx.action.getActionList.mockResolvedValue({ ok: true, data: { weird: true } })
+    jsx.action.getActionList.mockResolvedValue({ status: 'ok', data: { weird: true } })
 
     const store = useActionStore()
     await store.loadPsActions()
@@ -116,7 +116,7 @@ describe('loadPsActions（store 读模型）', () => {
   })
 
   it('确实为空时不标 unparsed', async () => {
-    jsx.action.getActionList.mockResolvedValue({ ok: true, data: [] })
+    jsx.action.getActionList.mockResolvedValue({ status: 'ok', data: [] })
 
     const store = useActionStore()
     await store.loadPsActions()
@@ -166,7 +166,9 @@ describe('分组 CRUD', () => {
   })
 
   it('空分组名被拒绝', async () => {
-    await expect(execute('action.addGroup', { name: '   ' })).resolves.toMatchObject({ ok: false })
+    await expect(execute('action.addGroup', { name: '   ' })).resolves.toMatchObject({
+      status: 'error',
+    })
   })
 
   it('重命名分组', async () => {
@@ -292,7 +294,7 @@ describe('动作项', () => {
 
   it('添加空列表被拒绝', async () => {
     await expect(execute('action.addFromPs', { groupIndex: 0, items: [] })).resolves.toMatchObject({
-      ok: false,
+      status: 'error',
       reason: '没有选中任何动作',
     })
   })

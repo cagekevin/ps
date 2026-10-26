@@ -6,8 +6,10 @@ import { log } from './logger'
 let installed = false
 
 function report(source: string, error: unknown) {
+  // `text` 只给 toast（用户文案）；日志的主文本只写"哪儿炸的"，技术原因由 `logger.oneLine`
+  // 从 `error.code` / `error.cause` 渲染成原文 —— 中文不许冒充日志的诊断文本。
   const text = describeCepError(error)
-  log.error('global', `${source}: ${text}`, error)
+  log.error('global', source, error)
 
   // 同类错误短时间内只提示一次，避免一个渲染循环刷出几十条 toast
   if (recent.has(text)) return

@@ -1,5 +1,9 @@
-﻿import { hasCep } from './transport'
+﻿import { getBridge } from './host'
+import { hasCep } from './transport'
 import { log } from '@/utils/logger'
+import { msg } from '@/domain/messages'
+import { isRecord } from '@/utils/guards'
+import { isDecodeFail, shapeFail, type Decoded, type DecodeFail } from '@/utils/decode'
 
 /**
  * 语义名 → PS 事件的十进制 ID。
@@ -78,22 +82,17 @@ export interface PhotoshopEventPayload {
   [key: string]: unknown
 }
 
-type Bridge = NonNullable<Window['__adobe_cep__']>
 type Listener = (payload: PhotoshopEventPayload) => void
-
-function bridge(): Bridge | undefined {
-  return window.__adobe_cep__
-}
 
 /** 原版 CSInterface.getExtensionID() 内部就是 `window.__adobe_cep__.getExtensionId()` */
 export function extensionId(): string {
-  const b = bridge()
+  const b = getBridge()
   return b && typeof b.getExtensionId === 'function' ? b.getExtensionId() : ''
 }
 
 /** 通道可用性只做一次能力判断，不在运行中兜底 */
 export function hasCepEvents(): boolean {
-  const b = bridge()
+  const b = getBridge()
   return (
     hasCep() &&
     !!extensionId() &&
@@ -103,14 +102,32 @@ export function hasCepEvents(): boolean {
 }
 
 /**
- * 原版 `listedHandle`：`JSON.parse(e.data.substring(5))`。
- * 不加 `indexOf('{')` 之类的兜底；解析失败就让它抛，避免静默吞事件。
+ * **PS 回调载荷的唯一解析入口**（替代原 `parseEventData`）。
+ *
+ * 原版 `listedHandle`：`JSON.parse(e.data.substring(5))`。但调用点在宿主的 `addEventListener` 里 —— 抛出去的异常被宿主吞掉，
+ * 表现是「事件静默消失」，没人知道通道坏了（刀 4：静默吞 → 0）。
+ *
+ * 失败是**可枚举的结论**：不是字符串 / 不是合法 JSON / 不是对象，三臂各自带观测；
+ * 由调用方记日志并明确丢弃这一次事件。**失败臂取不到 payload**。
+ *
+ * 唯一一处转型：`Record<string, unknown>` → `PhotoshopEventPayload`（`isRecord` 之后）。
+ * **它确实声称了已知键的类型**（`layerID?: number[]` 之类）—— 这一点没被运行时证明，
+ * 不能假装没声称。能守住它的只有消费侧的再窄化：取字段的地方全部是
+ * `?.` + `Array.isArray` / `typeof`（见 `selection/current-text.ts`）。
+ * 真正被证否的是另一半：`null` / 数组 / 标量**进不来**（`isRecord` 挡住），
+ * 而那一半正是 `as` 最致命的地方。
  */
-export function parseEventData(raw: unknown): PhotoshopEventPayload {
-  if (typeof raw !== 'string') {
-    throw new Error('PS 事件 payload 不是字符串')
+export function decodeEventPayload(raw: unknown): Decoded<PhotoshopEventPayload> | DecodeFail {
+  if (typeof raw !== 'string') return shapeFail('data', 'string', raw)
+
+  let parsed: unknown
+  try {
+    parsed = JSON.parse(raw.substring(PREFIX_LENGTH))
+  } catch {
+    return { fail: 'notJson' }
   }
-  return JSON.parse(raw.substring(PREFIX_LENGTH)) as PhotoshopEventPayload
+  if (!isRecord(parsed)) return shapeFail('', 'object', parsed)
+  return { value: parsed as PhotoshopEventPayload }
 }
 
 /**
@@ -119,7 +136,7 @@ export function parseEventData(raw: unknown): PhotoshopEventPayload {
  * 真实桥收的是**对象**，不是 JSON 字符串；不补 appId。
  */
 export function registerPhotoshopEvent(typeId: string): boolean {
-  const b = bridge()
+  const b = getBridge()
   const id = extensionId()
   if (!b?.dispatchEvent || !id) return false
 
@@ -136,7 +153,7 @@ export function registerPhotoshopEvent(typeId: string): boolean {
 
 /** 原版 `addEventListener("com.adobe.PhotoshopJSONCallback" + id, handler)` */
 export function onPhotoshopCallback(handler: (payload: PhotoshopEventPayload) => void): () => void {
-  const b = bridge()
+  const b = getBridge()
   const id = extensionId()
   if (!b?.addEventListener || !id) return () => {}
 
@@ -144,8 +161,15 @@ export function onPhotoshopCallback(handler: (payload: PhotoshopEventPayload) =>
   const listener = (event: unknown) => {
     const data = (event as { data?: unknown } | undefined)?.data
     log.info('ps-event', '收到 PS 回调', { type, data })
-    const payload = parseEventData(data)
-    handler(payload)
+    const decoded = decodeEventPayload(data)
+    if (isDecodeFail(decoded)) {
+      // 丢弃这一次事件但**必须看得见**：以前抛进宿主 listener，异常被吞，等于静默消失
+      // detail 传**观测对象**（`{ fail, field, expected, received }`），不传渲染后的中文：
+      // 渲染过一道就只剩一句话，`field` / `expected` 全丢了
+      log.error('ps-event', 'PS 回调载荷读不懂，已丢弃本次事件', decoded)
+      return
+    }
+    handler(decoded.value)
   }
 
   // 原版 CSInterface.addEventListener(type, handler) 不传第三个参数；
@@ -213,10 +237,10 @@ function ensureCallback(): void {
 
   // 必须先确认监听真的挂上，再置位；否则第一次失败后
   // callbackInstalled 永远是 true，后面注册多少事件都收不到回调
-  const b = bridge()
+  const b = getBridge()
   const id = extensionId()
   if (!b?.addEventListener || !id) {
-    throw new Error('CEP 回调监听不可用')
+    throw new Error(msg.ps.text.psEventListenerUnavailable)
   }
 
   onPhotoshopCallback((payload) => {
@@ -254,7 +278,7 @@ async function register(name: HostEventName): Promise<void> {
 
   log.info('ps-event', '开始注册 PS 事件', { name, typeId, extensionId: extensionId() })
   if (!registerPhotoshopEvent(typeId)) {
-    throw new Error(`注册 PS 事件失败：${name}（${typeId}）`)
+    throw new Error(msg.ps.fn.psEventRegisterFailed(name, String(typeId)))
   }
   registered.set(name, Number(typeId))
   log.info('ps-event', 'PS 事件注册完成', { name, typeId })
@@ -354,7 +378,7 @@ export const APP_EVENT_SEBAN = 'com.fengzi.event.seban'
  * 交给 CEP 桥"，"发出去有没有人收、收不收得到"未验。见 T-125。
  */
 export function sendAppEvent(channel: string, data: unknown): boolean {
-  const b = bridge()
+  const b = getBridge()
   if (!b?.dispatchEvent) return false
 
   b.dispatchEvent({
@@ -373,7 +397,7 @@ export function sendAppEvent(channel: string, data: unknown): boolean {
  * （`app.v4.js:5025-5029`）：`CSInterface.addEventListener(type, handler)`。
  *
  * 与 `onPhotoshopCallback` 的差别：那条挂在**带 extensionId 的回调频道**上、payload
- * 要 `substring(5)` 再 `JSON.parse`（`parseEventData:109`）；这条挂在**调用方给的频道**
+ * 要 `substring(5)` 再 `JSON.parse`（`decodeEventPayload`，失败是判别联合）；这条挂在**调用方给的频道**
  * 上，`event.data` 已经是对象，不解析、不加前缀。
  *
  * 每个订阅者各挂一个桥监听（不共用）：桥的 `addEventListener` 是 type → listener 的
@@ -381,7 +405,7 @@ export function sendAppEvent(channel: string, data: unknown): boolean {
  * 返回取消函数；非 CEP 环境返回 no-op（与 `subscribeHostEvent` 同规矩）。
  */
 export function onAppEvent(channel: string, handler: (data: unknown) => void): () => void {
-  const b = bridge()
+  const b = getBridge()
   if (!b?.addEventListener) {
     log.warn('app-event', '桥上没有 addEventListener，跳过订阅', { channel })
     return () => {}

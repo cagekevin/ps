@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { describe, expect, it } from 'vitest'
 import { resolveKuGroups } from '@/domain/ku-format'
 import { sortQuickFont } from '@/domain/quick-font'
@@ -23,32 +24,29 @@ const decode = (s: string) => Buffer.from(s, 'base64').toString('utf8')
 
 describe('ku-format：扁平清单为空 / 容器里没有库文件', () => {
   it('空数组 → 当成"空库"而不是报错（`[0]` 是 undefined，形态判断不崩）', () => {
-    expect(resolveKuGroups([], decode)).toEqual({ groups: [], note: '' })
+    expect(resolveKuGroups([], decode)).toEqual({ value: [] })
   })
 
-  it('组数组里有非对象项 → 报"读不到"，不是把 42 当组交下去', () => {
-    // 现在 `kuShapeOf` 把非对象项判成"不认识"（生产者证形状，不再让消费侧兜底）⇒ note 是通用那句
-    expect(resolveKuGroups([42], decode)).toEqual({
-      groups: null,
-      note: '结构不认识（既不是数组也不是容器）',
-    })
-    expect(resolveKuGroups([{ name: 'a', list: [] }, null], decode)).toEqual({
-      groups: null,
-      note: '结构不认识（既不是数组也不是容器）',
+  it('组数组里有非对象项 → 报 `badItem` + 个数，不是把 42 当组交下去', () => {
+    // 顶层是数组、元素不是对象 ⇒ 是"项坏了"，不是"不是数组"。
+    // 断 `badItem` + `count`：说得出坏了几项，才不用人去猜是形态错还是内容错。
+    expect(resolveKuGroups([42], decode)).toMatchObject({ fail: 'badItem', count: 1 })
+    expect(resolveKuGroups([{ name: 'a', list: [] }, null], decode)).toMatchObject({
+      fail: 'badItem',
+      count: 2,
     })
   })
 
   it('正常组数组 → 原样交出', () => {
     const groups = [{ name: 'a', show: true, list: [] }]
-    expect(resolveKuGroups(groups, decode)).toEqual({ groups, note: '' })
+
+    expect(resolveKuGroups(groups, decode)).toEqual({ value: groups })
   })
 
-  it('容器里没有库文件 → 报"容器里没有样式库文件"', () => {
+  it('容器里没有库文件 → emptyContent（"没有内容"，不是"期望数组"）', () => {
     const container = { arrFileData: [{ name: '旁路图.kup', data: '' }] }
-    expect(resolveKuGroups(container, decode)).toEqual({
-      groups: null,
-      note: '容器里没有样式库文件',
-    })
+
+    expect(resolveKuGroups(container, decode)).toEqual({ fail: 'emptyContent' })
   })
 })
 

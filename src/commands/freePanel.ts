@@ -7,6 +7,7 @@ import {
   type FreePanelFile,
 } from '@/domain/free-panel'
 import { adaptFreePanelItem } from '@/domain/free-panel-legacy'
+import { isDecodeFail } from '@/utils/decode'
 import { applyItemDrop } from '@/domain/reorder'
 import { CepError } from '@/utils/errors'
 import { msg } from '@/domain/messages'
@@ -307,7 +308,8 @@ export const freePanelCommands: Command<unknown>[] = [
       if (!item) throw new CepError('PARSE', msg.command.text.freePanelItemMissing)
 
       const mapped = adaptFreePanelItem(item)
-      if (!mapped || !get(mapped.id)) {
+      // 没有对应命令 / 命令表里查不到 ⇒ 同一条失败（"这个按钮没法迁移"）
+      if (isDecodeFail(mapped) || !get(mapped.value.id)) {
         throw new CepError('PARSE', msg.command.fn.freePanelKeyUnadapted(item.key))
       }
 
@@ -315,9 +317,11 @@ export const freePanelCommands: Command<unknown>[] = [
       // 失败时把子命令自己的 `code` 原样抛回去——以前硬编码成 'JSX'，
       // 把 `FONT_MISSING` 这类"要页面弹确认"的语义冲掉了，useCommand 那条分支因此失效。
       // `CommandOutcome.code` 是 `CepErrorCode`（R3 起必填）；直接传给 `CepError`
-      const result = await executeInherited(mapped.id, mapped.payload, { selection: ctx.selection })
+      const result = await executeInherited(mapped.value.id, mapped.value.payload, {
+        selection: ctx.selection,
+      })
       // `code` 已是必填的 `CepErrorCode`（R3）⇒ 不再需要 `?? 'JSX'` + `as`
-      if (!result.ok) throw new CepError(result.code, result.reason)
+      if (result.status === 'error') throw new CepError(result.fail, result.reason)
     },
   }),
 ]

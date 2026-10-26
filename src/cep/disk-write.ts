@@ -1,24 +1,31 @@
 // 是什么：**所有落盘的唯一出口** —— 备份（`.bak` / `.corrupt-*`）→ CAS 比对 → 原子写 →（可选）回读校验
-// 唯一入口：**四个门**（不是"一个函数"，是四种动作，各有不可替代的理由）：
-//   `writeDisk`（async 文本）· `writeDiskSync`（sync 文本）· `writeBase64File`（字节：库文件）· `removeFile`（删除）
+// 唯一入口：**三个门**（不是"一个函数"，是三种动作，各有不可替代的理由）：
+//   `writeDiskSync`（文本）· `writeBase64File`（字节：库文件）· `removeFile`（删除）
 //   本模块之外**不许**出现 `writeFileSync` / `renameSync` / `unlinkSync` 落用户数据
+//   旧的 `writeDisk`（async 文本）已删：它唯一的差别是「原文用异步读」，而原文读已收进
+//   `backupStep`（同步，D-26 要求）；无 Node 时写原语自己就抛 `NO_NODE`，那条异步回退从未起过作用。
+// 判据（本轮收口）：**「读不到原文」在类型上取不到 `text`** —— `DiskBefore` 只有 `ok` / `absent` 两臂。
+// 导出一共四个（三个写门 + 一个读侧构造点）：
+//   写：`writeDiskSync` · `writeBase64File` · `removeFile`
+//   读侧：`readBefore(target, 'text' | 'bytes')` —— `DiskBefore` 的**唯一构造入口**。
+//     业务层要「上一版原文」只能走它；自己 `readBase64File` + 判 `status === 'error'`
+//     就是把「读不到 ⇒ 不许写」抄了第二份（TD-18-195 第 4 种写法）。
 // 替代了什么：三条并行的写盘路（`Repo.persist` / `protected-text.writeNow` / 各处裸 `writeTextFileAtomic`）
 // 谁在用：`data/`（Repo、settings、style-library-io、action-archive）· `cloud/` · `commands/` · `log-file`
 // 禁止：在 `data/` 层再写一份 `if (有原文) .bak` + `writeTextFileAtomic`；给 `cas` / `backup` 加默认值
 //   （「忘了表态」与「决定不比」必须在编译期分开 —— 这是本文件唯一的结构保证）
-// 缺口（登记于 `18-横切-写落盘-收口-2026-10-26.md` §6）：入口数 6 ≠ 层数 4；「不许自写 .bak」只能靠这句声明
+// 缺口（登记于 `18-横切-写落盘-收口-2026-10-26.md` §6 与 `18-横切-写前置条件-收口-2026-10-26.md` §9）：
+// 三个写门 ≠ 四层（删掉 `writeDisk` 后写门是 3，不是那份卷里写的 6 —— 它把 `Repo.replace` / `Repo.update`
+// 两个二层入口也算进了"门"）；「不许自写 .bak」仍只能靠这句声明，没有结构约束。
 
+import { getPid } from './host'
 import { hasNode, nodeRequire } from './node'
-import { classifyFsError, readBase64File, readTextAsync, readTextSync } from './fs-read'
+import { classifyFsError, describeReadFailure, readBase64File, readTextSync } from './fs-read'
 
 // ── 写结果：**没有结果类型**（ADR-0014：写不可降级必须抛） ─────────────────────────
 //
-// 这里曾经有三个结果类型（`WriteOutcome{status}` / `RemoveOutcome{ok}` /
-// `'written' | 'conflict'` 裸字符串），同一个"写一次盘"三套语法。
-// 最要命的是 `'written' | 'conflict'`：`conflict` = **写根本没发生**，却是一个
-// **可以被整个丢弃的返回值** —— 实测 13 个调用点里 12 个不判，写失败静默溜走。
-//
-// 现在四个写入口全部返回 `void`：成功就正常返回，失败一律 `throw`。
+// 写一次盘若返回"成功/冲突"这类可丢弃值，调用点不判就会让写失败静默溜走。
+// 所以四个写入口全部返回 `void`：成功就正常返回，失败一律 `throw`。
 // 没有返回值可判 ⇒ 没有"忘了判"这条路。唯一需要分辨冲突的是 `file-repo.rawUpdate`
 // 的重试，它 catch `code === 'CONFLICT'`（判别码，不是字符串比较）。
 
@@ -31,7 +38,7 @@ import { classifyFsError, readBase64File, readTextAsync, readTextSync } from './
  */
 function writeFailureReason(e: unknown): string {
   const classified = classifyFsError(e)
-  return classified.status === 'notSeen' ? 'ENOENT' : classified.reason
+  return classified.status === 'notSeen' ? 'ENOENT' : describeReadFailure(classified.failure)
 }
 
 let tmpSeq = 0
@@ -42,7 +49,7 @@ let tmpSeq = 0
  * 带 pid + 进程内序号 + 随机串后两个进程互不覆盖；同一文件系统内 rename 仍是原子的。
  */
 function uniqueTmpPath(absPath: string): string {
-  const pid = globalThis.process.pid
+  const pid = getPid()
   tmpSeq += 1
   return `${absPath}.${pid}-${tmpSeq}-${Math.random().toString(36).slice(2, 8)}.tmp`
 }
@@ -97,19 +104,76 @@ function writeBackupFile(path: string, text: string): void {
 }
 
 /**
+ * **「写之前磁盘上是什么」—— 唯一形状**（2026-10-26 收口，替代 `string | null` + 两个布尔开关）。
+ *
+ * - `ok`：读到了原文（文本；字节版这个字段装 base64 串）—— 可写 `.bak`、可当 CAS 基准
+ * - `absent`：文件系统**明确说**这个路径上没有东西（只认 `ENOENT`，见 `classifyFsError`）
+ *
+ * **没有「读不到」这一臂**：构造它的时候读不到就抛（`textBefore` / `base64Before`）。
+ * 所以「读不到却继续写」在类型上写不出来 —— 旧写法里 `null` 同时表示「没有文件」「不备份」
+ * 「本函数自己读」，忘传一次就静默跳过 `.bak`（TD-18-195）。
+ */
+export type DiskBefore = { status: 'ok'; text: string } | { status: 'absent' }
+
+/** 文本：观测三态 → `DiskBefore`。**读不到就抛**（全仓唯一一处「读不到 ⇒ 拒写」的判据） */
+function textBefore(target: string): DiskBefore {
+  const read = readTextSync(target)
+  if (read.status === 'error') {
+    throw new CepError(
+      'IO',
+      msg.data.fn.fileReadFailedAbortWrite(target, describeReadFailure(read.failure)),
+    )
+  }
+  return read.status === 'ok' ? { status: 'ok', text: read.text } : { status: 'absent' }
+}
+
+/** 字节版：同上，`text` 里装 base64 串（`compareBase64Sync` 比的就是它） */
+function base64Before(target: string): DiskBefore {
+  const read = readBase64File(target)
+  if (read.status === 'error') {
+    throw new CepError(
+      'IO',
+      msg.data.fn.fileReadFailedAbortWrite(target, describeReadFailure(read.failure)),
+    )
+  }
+  return read.status === 'ok' ? { status: 'ok', text: read.base64 } : { status: 'absent' }
+}
+
+/**
+ * **`DiskBefore` 的唯一构造入口** —— 业务层要「上一版原文」时只能走这里。
+ *
+ * 为什么必须导出：业务层（如 `style-library-io` 的库文件导入）为了自己的判断
+ * （"坏原文要不要隔离" / "这文件是不是本次新建"）本来就要读原文；它若自己
+ * `readBase64File` + 判 `status === 'error'`，就把「读不到 ⇒ 不许写」这条判据抄了第二份，
+ * 而且抄出来的那份还会漏掉后面 CAS/备份两条路（TD-18-195 的第 4 种写法）。
+ *
+ * `kind` 收窄成字面量联合：拼错编译期就红，写不出第三种口径。
+ */
+export function readBefore(target: string, kind: 'text' | 'bytes'): DiskBefore {
+  return kind === 'text' ? textBefore(target) : base64Before(target)
+}
+
+/** 两臂逐臂比：`absent` 只等于 `absent`（`null === null` 曾把「读不到」判成「没人改过」） */
+function sameBefore(actual: DiskBefore, expected: DiskBefore): boolean {
+  if (actual.status === 'absent') return expected.status === 'absent'
+  return expected.status === 'ok' && actual.text === expected.text
+}
+
+/**
  * 落盘前的 CAS 比对（D-26）。返回 `'same' | 'diff' | 'unknown'`。
  *
  * 必须用**同步**读：`readTextAsync` 是 async，即使 Node 读本身是同步的，`await` 也会让出
  * 一个 microtask 边界——另一个实例正好能在这个边界里完成一次完整写入，
  * 于是"比对通过 → rename"之间被插一脚，照样丢更新（`tests/data/repo-cross-process.test.ts`）。
  */
-function compareSync(target: string, expected: string | null): 'same' | 'diff' | 'unknown' {
+function compareSync(target: string, expected: DiskBefore): 'same' | 'diff' | 'unknown' {
   const read = readTextSync(target)
-  // 读不到 ≠ 没人改过：旧实现读不到给 null，`expected` 也是 null 时
-  // `null === null` 判 'same'，于是权限错时并发守卫恒真、别的面板刚建的文件被覆盖。
+  // 读不到 ≠ 没人改过：`expected` 也是 null 时 `null === null` 判 'same'，
+  // 于是权限错时并发守卫恒真、别的面板刚建的文件被覆盖。
   if (read.status === 'error') return 'unknown'
-  const actual = read.status === 'ok' ? read.text : null
-  return actual === expected ? 'same' : 'diff'
+  const actual: DiskBefore =
+    read.status === 'ok' ? { status: 'ok', text: read.text } : { status: 'absent' }
+  return sameBefore(actual, expected) ? 'same' : 'diff'
 }
 
 /**
@@ -119,32 +183,34 @@ function compareSync(target: string, expected: string | null): 'same' | 'diff' |
  * 是二进制，读成文本会得到乱码或解码失败 —— 那样「比不了」会被误判成「没被改过」。
  * 同一份字节的 base64 编码确定（无换行），所以可以直接 `===`。
  */
-function compareBase64Sync(target: string, expected: string | null): 'same' | 'diff' | 'unknown' {
+function compareBase64Sync(target: string, expected: DiskBefore): 'same' | 'diff' | 'unknown' {
   const read = readBase64File(target)
   if (read.status === 'error') return 'unknown'
-  const actual = read.status === 'ok' ? read.base64 : null
-  return actual === expected ? 'same' : 'diff'
+  const actual: DiskBefore =
+    read.status === 'ok' ? { status: 'ok', text: read.base64 } : { status: 'absent' }
+  return sameBefore(actual, expected) ? 'same' : 'diff'
 }
 
 /**
  * 并发策略（**必填**）：比，还是不比。不比必须给理由。
  *
- * 为什么必填：旧版 `expected?: string | null` 是可选参数 —— 「忘了传」与「决定不比」
- * 在类型上同形，实测 13 个调用点**全部**落在「没传」这一支，CAS 只被 `Repo.update` 一条路用到。
- * 现在不比要显式写 `{ cas: 'skip', why }`，漏表态编译不过。
+ * 为什么必填：「忘了传」与「决定不比」在类型上同形，调用点易落到「没传」这一支，
+ * CAS 只被 `Repo.update` 一条路用到。不比要显式写 `{ cas: 'skip', why }`，漏表态编译不过。
  *
- * `expected: null` = 「这个路径上应当没有文件」（新文件）；`expected: '<原文>'` = 「磁盘上应当还是这份」。
+ * `expected: { status: 'absent' }` = 「这个路径上应当没有文件」（新文件）；
+ * `expected: { status: 'ok', text }` = 「磁盘上应当还是这份」。
  * 不一致 ⇒ **抛 `CepError('CONFLICT')` 且不写**。
  */
-export type CasMode = { mode: 'compare'; expected: string | null } | { mode: 'skip'; why: string }
+export type CasMode = { mode: 'compare'; expected: DiskBefore } | { mode: 'skip'; why: string }
 
 /**
  * 备份策略（**必填**）：留退路，还是不留。不留必须给理由。
  *
- * `previous`：`undefined` = 由本函数自己读；`null` = 没有原文（不写 `.bak`）。
- * 调用方已经读过原文时传进来，省一次读。
+ * `before` 省略 = 由 `backupStep` 自己读一次（**读不到就抛**）；给了 = 调用方已经读过，省一次读。
+ * 以前这里是 `previous?: string | null`，`undefined` 与 `null` 是两件事却同形
+ * ⇒ 「忘了传」= 「没有原文可备」，静默跳过 `.bak`。
  */
-export type BackupMode = { mode: 'keep'; previous?: string | null } | { mode: 'none'; why: string }
+export type BackupMode = { mode: 'keep'; before?: DiskBefore } | { mode: 'none'; why: string }
 
 export interface DiskWriteOptions extends BackupOptions {
   /** 并发策略：必须表态（见 `CasMode`） */
@@ -153,26 +219,19 @@ export interface DiskWriteOptions extends BackupOptions {
   backup: BackupMode
   /** 写完回读比对，证明"确实写对了"（比"尽力写对"强一档） */
   verifyReadBack?: boolean
-  /**
-   * 读不到上一版原文时**抛**，不许当成"没有原文"继续写（T-112）。
-   *
-   * 给"整份覆盖"用（`file-repo` 的 `rawOverwrite`）：它会把旧内容整份抹平且没有第二份，
-   * 所以必须先证明原文读得到。普通 `update` 不需要 —— 它读失败时本来就拒绝写（D-42）。
-   *
-   * 有了这个开关，**数据层不必自己读原文** ⇒ `readTextSync` 的消费者只剩本文件一个。
-   */
-  requireReadable?: boolean
 }
 
 /**
  * 步骤 ①：备份上一版。**只备份**，不判断好坏、不决定写不写。
  *
- * `backup: 'none'` = 调用方表态不留退路（要写理由）；`previous === null` = 没有原文可备。
+ * `backup: 'none'` = 调用方表态不留退路（要写理由）；`before.status === 'absent'` = 没有原文可备。
+ * `before` 省略时由 `textBefore` 现读一次 —— **读不到就抛**，旧行为是静默跳过 `.bak` 继续写。
  */
-function backupStep(path: string, previous: string | null, opts: DiskWriteOptions): void {
+function backupStep(path: string, opts: DiskWriteOptions): void {
   if (opts.backup.mode === 'none') return
-  if (previous === null) return
-  backupOrQuarantine(path, previous, opts)
+  const before = opts.backup.before ?? textBefore(path)
+  if (before.status === 'absent') return
+  backupOrQuarantine(path, before.text, opts)
 }
 
 /**
@@ -182,15 +241,16 @@ function backupStep(path: string, previous: string | null, opts: DiskWriteOption
  * （`b64ToUtf8` 解不解得开 + 文件名前缀），归 `style-library-io`（收口 plan T1 方案 A）。
  * 本函数只负责"把旧字节挪到 `.bak`"，不知道 `.kux` 长什么样。
  */
-function backupBytesStep(path: string, previous: string | null, opts: DiskWriteOptions): void {
+function backupBytesStep(path: string, opts: DiskWriteOptions): void {
   if (opts.backup.mode === 'none') return
-  if (previous === null) return
+  const before = opts.backup.before ?? base64Before(path)
+  if (before.status === 'absent') return
   const buffer = nodeRequire('buffer').Buffer
-  atomicReplaceBytes(`${path}.bak`, buffer.from(previous, 'base64'))
+  atomicReplaceBytes(`${path}.bak`, buffer.from(before.text, 'base64'))
 }
 
 /** CAS 的两种口径：文本比字符串，字节比 base64（同一份字节的 base64 编码是确定的） */
-type Comparator = (target: string, expected: string | null) => 'same' | 'diff' | 'unknown'
+type Comparator = (target: string, expected: DiskBefore) => 'same' | 'diff' | 'unknown'
 
 /**
  * 步骤 ②：CAS 比对。**只比对**，不比就返回，比不过就抛。
@@ -217,7 +277,7 @@ function atomicStep(path: string, text: string): void {
 
 /** 步骤 ③（字节版）：原子写字节。**只写**；失败直接抛 */
 function atomicBytesStep(path: string, base64: string): void {
-  if (!hasNode()) throw new CepError('NO_NODE', 'Node 不可用（--enable-nodejs 未开）')
+  if (!hasNode()) throw new CepError('NO_NODE', msg.ps.text.nodeUnavailable)
   try {
     const buffer = nodeRequire('buffer').Buffer
     atomicReplaceBytes(path, buffer.from(base64, 'base64'))
@@ -243,13 +303,8 @@ function verifyStep(path: string, text: string, on: boolean | undefined): void {
  * 本函数里不再出现任何 `if (opts.xxx)` 判定：判定归各步，编排归这里。
  * 写失败一律抛（ADR-14：这里不做任何兜底）。
  */
-function writeCore(
-  path: string,
-  text: string,
-  previous: string | null,
-  opts: DiskWriteOptions,
-): void {
-  backupStep(path, previous, opts)
+function writeCore(path: string, text: string, opts: DiskWriteOptions): void {
+  backupStep(path, opts)
   casStep(path, opts, compareSync)
   atomicStep(path, text)
   verifyStep(path, text, opts.verifyReadBack)
@@ -270,58 +325,23 @@ function verifyBytesStep(path: string, base64: string, on: boolean | undefined):
 }
 
 /** 字节版落盘核心：备份 → CAS → 原子写 →（可选）回读校验。四步与文本版对称 */
-function writeBytesCore(
-  path: string,
-  base64: string,
-  previous: string | null,
-  opts: DiskWriteOptions,
-): void {
-  backupBytesStep(path, previous, opts)
+function writeBytesCore(path: string, base64: string, opts: DiskWriteOptions): void {
+  backupBytesStep(path, opts)
   casStep(path, opts, compareBase64Sync)
   atomicBytesStep(path, base64)
   verifyBytesStep(path, base64, opts.verifyReadBack)
 }
 
 /**
- * **唯一异步落盘入口**（给"读原文本身就得异步"的调用方：用户选的外部路径）。
+ * **唯一文本落盘入口**。给同步函数用（`settings` 偏好、`cloud/ledger` 台账、`log-file` 日志、
+ * `system` 快捷键脚本、`commands` 的外部导出）。
  *
- * 与 `writeDiskSync` 的差别只有"怎么读原文"。两者都**返回 `void`，失败抛**
- * （ADR-0014 写不可降级）—— 没有返回值可丢，也就没有"忘了判"。
- */
-/** 备份要用的「上一版」：`undefined` = 本函数自己读；`null` = 调用方声明没有原文 */
-function previousInput(opts: DiskWriteOptions): string | null | undefined {
-  return opts.backup.mode === 'none' ? null : opts.backup.previous
-}
-
-export async function writeDisk(path: string, text: string, opts: DiskWriteOptions): Promise<void> {
-  let previous = previousInput(opts)
-  // `requireReadable` **独立于备份**：不写 `.bak` 也必须能要求"原文读得到" ——
-  // 偏好文件就是这样（它不备份，但读不到就绝不把默认值写回去覆盖用户设置）。
-  if (previous === undefined || (previous === null && opts.requireReadable)) {
-    const before = await readTextAsync(path)
-    if (before.status === 'error' && opts.requireReadable) {
-      throw new CepError('IO', msg.data.fn.fileReadFailedAbortWrite(path, before.reason))
-    }
-    // 读不到 / 不存在都不写 `.bak`（不拿猜测当备份）
-    if (previous === undefined) previous = before.status === 'ok' ? before.text : null
-  }
-  return writeCore(path, text, previous, opts)
-}
-
-/**
- * **唯一同步落盘入口**。给同步函数用（`settings` 偏好、`cloud/ledger` 台账、`log-file` 日志、
- * `system` 快捷键脚本）。
+ * 返回 `void`，失败抛（ADR-0014 写不可降级）—— 没有返回值可丢，也就没有"忘了判"。
+ * 旧的 async `writeDisk` 已删：它的差别只有"原文用异步读"，而原文读现在由 `backupStep`
+ * 用同步读一次完成（D-26 要求同步），且无 Node 时写原语本身就抛 `NO_NODE` ⇒ 那条回退从未生效。
  */
 export function writeDiskSync(path: string, text: string, opts: DiskWriteOptions): void {
-  let previous = previousInput(opts)
-  if (previous === undefined || (previous === null && opts.requireReadable)) {
-    const before = readTextSync(path)
-    if (before.status === 'error' && opts.requireReadable) {
-      throw new CepError('IO', msg.data.fn.fileReadFailedAbortWrite(path, before.reason))
-    }
-    if (previous === undefined) previous = before.status === 'ok' ? before.text : null
-  }
-  return writeCore(path, text, previous, opts)
+  writeCore(path, text, opts)
 }
 
 // ---------- 底层写原语（**全部内部化**：`fs.ts` 不再导出任何写） ----------
@@ -380,7 +400,7 @@ function atomicReplaceBytes(absPath: string, bytes: string | Uint8Array): void {
 
 /** 原子写文本（内部）：**失败直接抛**（ADR-0014 写不可降级） */
 function writeTextFileAtomic(absPath: string, text: string): void {
-  if (!hasNode()) throw new CepError('NO_NODE', 'Node 不可用（--enable-nodejs 未开）')
+  if (!hasNode()) throw new CepError('NO_NODE', msg.ps.text.nodeUnavailable)
   try {
     atomicReplace(absPath, text)
   } catch (e) {
@@ -392,20 +412,12 @@ function writeTextFileAtomic(absPath: string, text: string): void {
  * **字节落盘入口**：库文件（`sj_ku*` / `sj_dz*`）走这条路。
  *
  * 与 `writeDiskSync` 同一个 `DiskWriteOptions`：`cas` / `backup` 都必填，
- * 不像旧版那样"连选项都不收"（6 处库文件写因此长期零保护）。
+ * 不收选项会让库文件写无并发保护。
  *
  * `cas.expected` 比的是 **base64 串**（`compareBase64Sync`），不是文本。
  */
 export function writeBase64File(absPath: string, base64: string, opts: DiskWriteOptions): void {
-  let previous = previousInput(opts)
-  if (previous === undefined) {
-    const before = readBase64File(absPath)
-    if (before.status === 'error' && opts.requireReadable) {
-      throw new CepError('IO', msg.data.fn.fileReadFailedAbortWrite(absPath, before.reason))
-    }
-    previous = before.status === 'ok' ? before.base64 : null
-  }
-  writeBytesCore(absPath, base64, previous, opts)
+  writeBytesCore(absPath, base64, opts)
 }
 
 /**
@@ -416,13 +428,16 @@ export function writeBase64File(absPath: string, base64: string, opts: DiskWrite
  * 也返回 `false`，会把 `EPERM` 谎报成删成功，调用方据此以为旧文件已清走（T-109）。
  */
 export function removeFile(absPath: string): void {
-  if (!hasNode()) throw new CepError('NO_NODE', 'Node 不可用（--enable-nodejs 未开）')
+  if (!hasNode()) throw new CepError('NO_NODE', msg.ps.text.nodeUnavailable)
   try {
     nodeRequire('fs').unlinkSync(absPath)
   } catch (e) {
     const classified = classifyFsError(e)
     // `ENOENT` = 这个路径上本来就没有文件 ⇒ 目标已达成，不算失败
     if (classified.status === 'notSeen') return
-    throw new CepError('IO', msg.data.fn.fileRemoveFailed(absPath, classified.reason))
+    throw new CepError(
+      'IO',
+      msg.data.fn.fileRemoveFailed(absPath, describeReadFailure(classified.failure)),
+    )
   }
 }

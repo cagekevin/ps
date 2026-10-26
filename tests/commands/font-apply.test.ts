@@ -35,12 +35,14 @@ const font: FontItem = {
 
 beforeEach(() => {
   vi.clearAllMocks()
-  jsx.font.setFont.mockResolvedValue({ ok: true, data: null })
+  jsx.font.setFont.mockResolvedValue({ status: 'ok', data: null })
 })
 
 describe('font.apply', () => {
   it('按 hjm / mz / zz 顺序传参', async () => {
-    await expect(execute('font.apply', { font, variantIndex: 1 })).resolves.toEqual({ ok: true })
+    await expect(execute('font.apply', { font, variantIndex: 1 })).resolves.toEqual({
+      status: 'ok',
+    })
     expect(jsx.font.setFont).toHaveBeenCalledWith('MiSans-Bold', 'MiSans Bold', 'Bold')
   })
 
@@ -50,7 +52,7 @@ describe('font.apply', () => {
 
     const result = await execute('font.apply', { font, variantIndex: 0 })
 
-    expect(result).toMatchObject({ ok: false, reason: '字体未安装', code: 'JSX' })
+    expect(result).toMatchObject({ status: 'error', reason: '字体未安装', fail: 'JSX' })
   })
 
   it('缺少 PostScript 名时直接失败，不调 jsx', async () => {
@@ -58,7 +60,7 @@ describe('font.apply', () => {
 
     const result = await execute('font.apply', { font: broken, variantIndex: 0 })
 
-    expect(result).toMatchObject({ ok: false, code: 'PARSE' })
+    expect(result).toMatchObject({ status: 'error', fail: 'PARSE' })
     expect(jsx.font.setFont).not.toHaveBeenCalled()
   })
 })

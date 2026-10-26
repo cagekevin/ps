@@ -1,13 +1,13 @@
 import { hasCep } from '@/cep/transport'
 import { userDir } from '@/cep/paths'
 import { DATA_FILES } from '@/cep/env'
-import { writeDiskSync } from '@/cep/disk-write'
-import { foldAbsent, readRepoFile } from './repo-read'
+import { writeDiskSync, type DiskBefore } from '@/cep/disk-write'
+import { describeDecodeFail, foldAbsent, readRepoFile } from './repo-read'
 import { CepError } from '@/utils/errors'
 import { msg } from '@/domain/messages'
 import { isRecord } from '@/utils/guards'
 import { log } from '@/utils/logger'
-import { shapeFail, type Decoder } from '@/utils/decode'
+import { decodeJsonText, isDecodeFail, shapeFail, type Decoder } from '@/utils/decode'
 
 /**
  * 面板自己的界面偏好，独立一个文件，不动原面板的 sj_set.json。
@@ -38,7 +38,7 @@ let cache: Record<string, unknown> | null = null
 /**
  * 读失败的原因；非空 = **本次会话禁止写回**。
  *
- * 为什么不能只靠写盘入口的 `requireReadable`：它保证的是"写的那一刻读得到"，
+ * 为什么不能只靠写盘入口的 CAS：它保证的是"写的那一刻读得到、且没被别人改过"，
  * 保证不了"写出去的基底是完整的"。读失败时 `cache` 只是空壳 `{}`，
  * 拿它写回去会把磁盘上其他键全抹掉。
  *
@@ -54,8 +54,12 @@ let readFailureReported = false
  * 为什么不在写的时候重新读：`loadAll` 读、用户操作写，中间隔了很久 ——
  * 写之前重读一次就变成「拿刚读到的原文当 expected」，CAS 恒过，等于没比。
  * 必须拿**会话开始时那一份**：中间别的面板改过 ⇒ 这里抛 `CONFLICT`，而不是静默覆盖。
+ *
+ * 形状是 `DiskBefore`（不是 `string | null`）：`absent` = 会话开始时确认没有这个文件。
+ * 读**失败**时保持 `absent`，但那条路本来就被 `refuseIfReadFailed` 关着（会话级判据），
+ * 两道关各管一件事，不重复。
  */
-let rawText: string | null = null
+let rawText: DiskBefore = { status: 'absent' }
 let timer: ReturnType<typeof setTimeout> | null = null
 
 const errorListeners = new Set<(message: string) => void>()
@@ -83,11 +87,15 @@ function loadAll(): Record<string, unknown> {
 
   if (!hasCep()) {
     try {
-      // 不许 `as Record<string, unknown>`：先 parse 成 unknown，再由通用判据收窄
-      const parsed: unknown = JSON.parse(localStorage.getItem(LS_KEY) ?? '{}')
-      if (!isRecord(parsed)) throw new Error('顶层不是对象')
-      cache = parsed
+      // 与 CEP 分支**同一个 decode**（`decodePrefs`）：以前这里自己 parse + 自己 `isRecord`
+      // + 自己写中文 = 同一份判据的第二遍（TD-18-8 的第 13 处）
+      const json = decodeJsonText(localStorage.getItem(LS_KEY) ?? '{}')
+      if (isDecodeFail(json)) throw new Error(describeDecodeFail(json))
+      const decoded = decodePrefs(json.value)
+      if (isDecodeFail(decoded)) throw new Error(describeDecodeFail(decoded))
+      cache = decoded.value
     } catch (e) {
+      // 仅 dev/无 CEP 分支：坏值退回空偏好，但**进日志**（不是无痕吞）
       log.warn('settings', '本地偏好解析失败，使用默认值', e)
       cache = {}
     }
@@ -101,8 +109,9 @@ function loadAll(): Record<string, unknown> {
   const read = foldAbsent(outcome, () => ({}))
   if (read.status === 'ok') {
     cache = read.value
-    // CAS 基准：读成功才设。读失败时保持 `null`，写的时候由 `requireReadable` 挡住
-    rawText = outcome.text
+    // CAS 基准：读成功才设。`notSeen`（折叠成 ok + 空对象）在这里是 `absent` 臂，
+    // 写的语义就成了「这个路径上应当还没有文件」——与首次使用一致
+    rawText = outcome.status === 'ok' ? { status: 'ok', text: outcome.text } : { status: 'absent' }
   } else {
     // 读不到 / 坏文件 ⇒ 给 UI 默认值，但**本次会话禁止写回**：
     // 内存里只是空壳，写回去会把磁盘上其他键抹掉（`refuseIfReadFailed` 负责喊出来）。
@@ -147,19 +156,23 @@ function refuseIfReadFailed(): boolean {
 function writePrefFile(text: string): void {
   const target = filePath()
   try {
-    // 原子写失败就报错：旧实现退回普通写，等于把 rename 保护摘掉
+    // 原子写失败就报错（不退回普通写，保留 rename 原子保护）
     writeDiskSync(target, text, {
       backup: { mode: 'none', why: '偏好整份覆盖：原文即默认值，.bak 无退路价值' },
+      // 不写 `.bak`，但基准比不了（读不到 / 无 Node）时 `casStep` 一律拒写（D-42）
       cas: { mode: 'compare', expected: rawText },
-      // 不写 `.bak`，但**原文读不到就绝不写**（D-42）：否则默认值会盖掉用户设置
-      requireReadable: true,
     })
     // 写成功后基准跟着走：否则下一次写会拿上一版原文去比，恒 CONFLICT
-    rawText = text
+    rawText = { status: 'ok', text }
   } catch (error) {
     if (error instanceof CepError && error.code === 'CONFLICT') {
       // `retries: '0'` = 本次没重试就放弃了，文案见 `msg.data.fn.fileLockedByOtherPanel`
-      throw new CepError('CONFLICT', msg.data.fn.fileLockedByOtherPanel(target, '0'))
+      throw new CepError(
+        'CONFLICT',
+        msg.data.fn.fileLockedByOtherPanel(target, '0'),
+        undefined,
+        error,
+      )
     }
     // 落盘层抛的 `CepError` 已经带着完整可读的原因（读不到 / 写入失败），
     // 再套一层 `prefWriteFailed` 只会变成「偏好写入失败：x（读不到原文，已中止写入：x）」——
@@ -242,7 +255,7 @@ export function __resetSettingsForTest() {
   readFailure = ''
   readFailureReported = false
   // CAS 基准也是会话级状态：不清会让下一个用例拿上一个用例的原文去比
-  rawText = null
+  rawText = { status: 'absent' }
 }
 
 export function getPref<T>(key: PrefKey, fallback: T): T {

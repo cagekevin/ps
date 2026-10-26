@@ -65,10 +65,10 @@ export function matchFilter(family: string, state: FilterState, data: Classifica
  *
  * 和 matchFilter 放同一个文件，是因为它们是同一条规则链的两级：
  * matchFilter 判断"单个字体是否满足面板条件"，filterFonts 在其上叠加搜索与标签。
- * 分成两个文件只会让人不知道改哪个（上一轮就是 domain/filter 与页面 filter 各一份）。
+ * 分成两个文件只会让人不知道改哪个（domain/filter 与页面 filter 各一份就会这样）。
  *
  * 抽成纯函数的目的不是"好看"，是能单独测：
- * 之前写在页面的 computed 里，jsdom 起个整页才能验，实际等于没人验。
+ * 若写在页面的 computed 里，jsdom 起个整页才能验，实际等于没人验。
  */
 export interface FontFilter {
   /** 搜索词，匹配家族名 / 字体名 / PostScript 名，忽略大小写 */

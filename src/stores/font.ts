@@ -26,7 +26,7 @@ export const PREVIEW_LABEL: Record<PreviewMode, string> = {
 
 /**
  * 家族名 → 中/英。**判据只有一处**：`domain/font-lang`。
- * 这里保留同名转发，是因为 `fontSet` 页的字体下拉已经在 import 它（页面轮之前不动那些文件）；
+ * 这里保留同名转发，是因为 `fontSet` 页的字体下拉已经在 import 它；
  * 转发不是第二份实现——规则本身不在这个文件里。
  */
 export { familyLang }
@@ -61,7 +61,7 @@ export const useFontStore = defineStore('font', () => {
    * 字体列表读取入口。
    *
    * 数据在 `cep/data/font-list.ts`，本 store 只做只读投影：页面只有"读模型"和"命令"两条通道，
-   * 这样"页面不碰 cep"是结构事实，不靠 eslint 拦（上一轮就是页面在 ps.ts 上开了口子）。
+   * 这样"页面不碰 cep"是结构事实，不靠 eslint 拦——页面若经 ps.ts 取数据就破了这层。
    */
   async function fetchList(opts: { refresh?: boolean } = {}): Promise<FontItem[]> {
     return getFontList(opts)
@@ -84,8 +84,8 @@ export const useFontStore = defineStore('font', () => {
   /** force 用于仓库变更后的强制刷新；普通调用命中缓存就返回 */
   async function loadTags(force = false) {
     if (!force && tags.value.length) return
-    // `readFontTags()` **不抛**（读失败在判别联合里）⇒ 原来那个 `try/catch` 永远接不到东西，
-    // `tagsError` 因此从来没被设置过 —— 那是装饰，不是错误通道。现在改成直接判 `ok`。
+    // `readFontTags()` **不抛**（读失败在判别联合里），直接判 `ok` 取数据或原因：
+    // `tagsError` 只在读失败时设置，不是永远装饰的错误通道。
     const read = readFontTags()
     tags.value = read.status === 'ok' ? read.value : []
     tagsError.value = read.status === 'ok' ? '' : read.reason

@@ -1,3 +1,4 @@
+import { exposeBuildInfo, getBridge } from '@/cep/host'
 import { log } from '@/utils/logger'
 
 /** 构建信息：版本号来自 package.json，时间来自 vite define */
@@ -21,11 +22,11 @@ export function installStartupCheck(): BuildInfo {
   const data = document.documentElement.dataset
   data.appVersion = BUILD_INFO.version
   data.buildTime = BUILD_INFO.time
-  window.__PSZ_BUILD__ = BUILD_INFO
+  exposeBuildInfo(BUILD_INFO)
 
   log.info('build', `版本 ${BUILD_INFO.version} · ${BUILD_INFO.time}`)
 
-  const cep = window.__adobe_cep__
+  const cep = getBridge()
   if (!cep) {
     log.warn('build', '启动自检：当前不是 CEP 环境（浏览器调试）')
     return BUILD_INFO

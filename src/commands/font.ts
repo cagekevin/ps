@@ -1,8 +1,17 @@
 import { openFile, saveFile } from '@/cep/dialog'
 import type { RawStar, RawTag } from '@/cep/data'
 import { readExternalText } from '@/cep/fs-read'
-import { writeDisk } from '@/cep/disk-write'
+import { writeDiskSync } from '@/cep/disk-write'
 import { CepError } from '@/utils/errors'
+import { isRecord } from '@/utils/guards'
+import {
+  decodeJsonText,
+  isDecodeFail,
+  shapeFail,
+  type Decoded,
+  type DecodeFail,
+} from '@/utils/decode'
+import { describeDecodeFail } from '@/cep/data/repo-read'
 import { msg } from '@/domain/messages'
 import { fontListRefresh } from '@/utils/signal'
 import { defineCommand } from './registry'
@@ -33,19 +42,17 @@ interface TagImportFile {
  *
  * 开放结构：未知键不判错（导入是覆盖写，我方不重建对象，字段一个不少）。
  */
-function tagItemError(tag: unknown, index: number): string {
-  if (typeof tag !== 'object' || tag === null || Array.isArray(tag)) {
-    return `标签第 ${index + 1} 项不是对象`
+function tagItemFail(tag: unknown, index: number): DecodeFail | null {
+  if (!isRecord(tag)) return { fail: 'badItem', count: index + 1 }
+  if (typeof tag.text !== 'string' || !tag.text)
+    return shapeFail(`[${index}].text`, 'string', tag.text)
+  if (tag.arr !== undefined && !Array.isArray(tag.arr)) {
+    return shapeFail(`[${index}].arr`, 'array', tag.arr)
   }
-  const item = tag as Record<string, unknown>
-  if (typeof item.text !== 'string' || !item.text) return `标签第 ${index + 1} 项缺少 text`
-  if (item.arr !== undefined && !Array.isArray(item.arr)) {
-    return `标签第 ${index + 1} 项的 arr 不是数组`
+  if (tag.xz !== undefined && typeof tag.xz !== 'boolean') {
+    return shapeFail(`[${index}].xz`, 'number', tag.xz)
   }
-  if (item.xz !== undefined && typeof item.xz !== 'boolean') {
-    return `标签第 ${index + 1} 项的 xz 不是布尔值`
-  }
-  return ''
+  return null
 }
 
 /**
@@ -55,58 +62,61 @@ function tagItemError(tag: unknown, index: number): string {
  * （`{"name":"OPPOSans","star":"3"}` 与 `{"name":"Verdana","star":2}`），
  * 校验与写入都不许规范化成一种。
  */
-function starItemError(star: unknown, index: number): string {
-  if (typeof star !== 'object' || star === null || Array.isArray(star)) {
-    return `评分第 ${index + 1} 项不是对象`
+function starItemFail(star: unknown, index: number): DecodeFail | null {
+  if (!isRecord(star)) return { fail: 'badItem', count: index + 1 }
+  if (typeof star.name !== 'string' || !star.name) {
+    return shapeFail(`[${index}].name`, 'string', star.name)
   }
-  const item = star as Record<string, unknown>
-  if (typeof item.name !== 'string' || !item.name) return `评分第 ${index + 1} 项缺少 name`
-  if (typeof item.star !== 'string' && typeof item.star !== 'number') {
-    return `评分第 ${index + 1} 项的 star 必须是数字或字符串`
+  if (typeof star.star !== 'string' && typeof star.star !== 'number') {
+    return shapeFail(`[${index}].star`, 'number', star.star)
   }
-  return ''
+  return null
+}
+
+/** 导入文件解析出来的形状。`stars` 缺省 = 不覆盖评分 */
+interface TagImport {
+  tags: RawTag[]
+  stars?: RawStar[]
 }
 
 /**
- * 解析导入文件的内容并校验。
+ * 解析导入文件的内容并校验。**校验不过一个字都不写**。
  *
- * 失败返回错误文案——**校验不过一个字都不写**。
+ * 失败是判别联合（`notJson` / `shape` / `badItem`），不是 `{error:'一句中文'}`：
+ * 后者让调用方只能把整句话原样拼进提示，说不出是"哪个字段"错了。
  * 合法时原样返回数组（不重建对象、不补键、不规范化 `star` 的类型）。
  */
-function parseTagImport(text: string): { tags: RawTag[]; stars?: RawStar[] } | { error: string } {
-  let root: unknown
-  try {
-    root = JSON.parse(text)
-  } catch {
-    return { error: '导入文件不是合法的 JSON' }
-  }
+function parseTagImport(text: string): Decoded<TagImport> | DecodeFail {
+  const json = decodeJsonText(text)
+  if (isDecodeFail(json)) return json
+
+  const root = json.value
 
   // 纯标签数组：只覆盖标签，评分不动
   if (Array.isArray(root)) {
     for (let i = 0; i < root.length; i++) {
-      const error = tagItemError(root[i], i)
-      if (error) return { error }
+      const fail = tagItemFail(root[i], i)
+      if (fail) return fail
     }
-    return { tags: root as RawTag[] }
+    return { value: { tags: root as RawTag[] } }
   }
 
-  if (typeof root !== 'object' || root === null) return { error: '导入文件内容不是标签数据' }
-  const record = root as Record<string, unknown>
-  if (!Array.isArray(record.tags)) return { error: '导入文件缺少标签数据（tags）' }
+  if (!isRecord(root)) return shapeFail('', 'object', root)
+  if (!Array.isArray(root.tags)) return shapeFail('tags', 'array', root.tags)
 
-  for (let i = 0; i < record.tags.length; i++) {
-    const error = tagItemError(record.tags[i], i)
-    if (error) return { error }
+  for (let i = 0; i < root.tags.length; i++) {
+    const fail = tagItemFail(root.tags[i], i)
+    if (fail) return fail
   }
 
   // stars 缺省 = 不覆盖评分；给了就必须合法
-  if (record.stars === undefined) return { tags: record.tags as RawTag[] }
-  if (!Array.isArray(record.stars)) return { error: '导入文件的评分数据（stars）不是数组' }
-  for (let i = 0; i < record.stars.length; i++) {
-    const error = starItemError(record.stars[i], i)
-    if (error) return { error }
+  if (root.stars === undefined) return { value: { tags: root.tags as RawTag[] } }
+  if (!Array.isArray(root.stars)) return shapeFail('stars', 'array', root.stars)
+  for (let i = 0; i < root.stars.length; i++) {
+    const fail = starItemFail(root.stars[i], i)
+    if (fail) return fail
   }
-  return { tags: record.tags as RawTag[], stars: record.stars as RawStar[] }
+  return { value: { tags: root.tags as RawTag[], stars: root.stars as RawStar[] } }
 }
 export const fontCommands: Command<unknown>[] = [
   defineCommand({
@@ -269,9 +279,9 @@ export const fontCommands: Command<unknown>[] = [
       const text = read.text
 
       // 先校验：校验不过不碰任何文件
-      const parsed = parseTagImport(text)
-      if ('error' in parsed)
-        throw new CepError('PARSE', msg.command.fn.fontImportError(parsed.error))
+      const decoded = parseTagImport(text)
+      if (isDecodeFail(decoded)) throw new CepError('PARSE', describeDecodeFail(decoded))
+      const parsed = decoded.value
 
       const starsReplaced = parsed.stars !== undefined
       const summary = {
@@ -321,8 +331,8 @@ export const fontCommands: Command<unknown>[] = [
         throw new CepError('IO', msg.command.fn.fontStarReadFailed(starRead.reason))
 
       const payload: TagImportFile = { tags: tagRead.value, stars: starRead.value }
-      // 导出文件是**新文件**，无 `.bak` 概念（`previous: null`）；走唯一落盘入口（原子写）
-      await writeDisk(path, JSON.stringify(payload), {
+      // 导出文件是**新文件**，无 `.bak` 概念（`backup: 'none'`）；走唯一落盘入口（原子写）
+      writeDiskSync(path, JSON.stringify(payload), {
         backup: { mode: 'none', why: '导出产物，无原文可备' },
         cas: { mode: 'skip', why: '用户经系统对话框选定目标路径，覆盖意图已确认' },
       })

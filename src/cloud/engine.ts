@@ -12,31 +12,31 @@ import {
   type SyncUnitAdapter,
   type WriteOutcome,
 } from '@/domain/cloud'
-import { msg } from '@/domain/messages'
 import type {
   CloudDeps,
+  CloudFailure,
+  CloudOutcome,
   CloudPendingPort,
   CloudStatus,
   DownloadOptions,
-  DownloadResult,
+  LedgerBrokenFail,
   PushUnitsOptions,
-  PushUnitsResult,
   UploadOptions,
-  UploadResult,
 } from './types'
+import { describeReadFailure } from '@/cep/fs-read'
 
 export interface CloudEngine {
   /** T-114：台账读取改成三态后要 await（坏台账必须能被区分出来，见 `CloudStatus.ledgerBroken`） */
   getStatus(): Promise<CloudStatus>
-  upload(options?: UploadOptions): Promise<UploadResult>
-  download(options?: DownloadOptions): Promise<DownloadResult>
+  upload(options?: UploadOptions): Promise<CloudOutcome>
+  download(options?: DownloadOptions): Promise<CloudOutcome>
   /**
    * 按 unit 增量推送（T-55/T-56）：pull → 只重算并替换指定 unit → push rev+1 → 写台账。
    *
    * 与 `upload()` 的分工：`upload` 是用户在设置页显式发起的整包同步（可弹冲突确认），
    * `pushUnits` 是后台跟随本地改动触发的局部推送（没有用户在场，冲突只能记痕迹）。
    */
-  pushUnits(ids: string[], options?: PushUnitsOptions): Promise<PushUnitsResult>
+  pushUnits(ids: string[], options?: PushUnitsOptions): Promise<CloudOutcome>
 }
 
 /**
@@ -45,11 +45,9 @@ export interface CloudEngine {
  * 为什么不退一步当"云端为空"继续推：那样 rev 从 1 起算，用户看到的是**一次成功同步**，
  * 而云端原来那份已经被覆盖掉了 —— 不可恢复。宁可这次不同步、把原因交上去。
  */
-function cloudUnreadable(reason: string): { error: string; errorCode: 'CLOUD_BAD_RESPONSE' } {
-  return {
-    error: msg.cloud.fn.cloudUnreadableRefuseOverwrite(reason),
-    errorCode: 'CLOUD_BAD_RESPONSE',
-  }
+/** 云端读不懂：reason 就是底层那句（不再包一层"已拒绝覆盖云端"） */
+function cloudUnreadable(reason: string): CloudFailure {
+  return { fail: 'CLOUD_BAD_RESPONSE', reason }
 }
 
 function adapterMap(entries: SyncUnitAdapter[]): Map<string, SyncUnitAdapter> {
@@ -73,7 +71,7 @@ async function collectUnits(entries: SyncUnitAdapter[]): Promise<Record<string, 
     } catch (error) {
       throw new CloudError(
         'CLOUD_COLLECT_FAILED',
-        msg.cloud.fn.entryReadFailed(entry.id, error instanceof Error ? error.message : '未知错误'),
+        entry.id + ': ' + (error instanceof Error ? error.message : String(error)),
       )
     }
   }
@@ -98,19 +96,16 @@ async function collectUnitsTolerant(
     } catch (error) {
       failed.push({
         id: entry.id,
-        message: error instanceof Error ? error.message : '未知错误',
+        message: error instanceof Error ? error.message : String(error),
       })
     }
   }
   return { units, failed }
 }
 
-function errorResult(error: unknown): { error: string; errorCode: string } {
-  if (error instanceof CloudError) return { error: error.message, errorCode: error.code }
-  return {
-    error: error instanceof Error ? error.message : '云同步失败',
-    errorCode: 'CLOUD_NETWORK',
-  }
+function errorResult(error: unknown): CloudFailure {
+  if (error instanceof CloudError) return { fail: error.code, reason: error.message }
+  return { fail: 'CLOUD_NETWORK', reason: error instanceof Error ? error.message : String(error) }
 }
 
 /**
@@ -132,18 +127,15 @@ function recordNetworkPending(port: CloudPendingPort, units: string[], error: un
  * **没有任何依据**下这个结论。用户会照着错误的原因确认，把云端覆盖掉。
  * 也不按"首次同步"处理：那是"从来没有台账"，会解除"新设备不覆盖云端"的护栏。
  */
-function ledgerBrokenResult(reason: string): {
-  ok: false
-  count: 0
-  error: string
-  errorCode: string
-} {
-  return {
-    ok: false,
-    count: 0,
-    error: msg.cloud.fn.ledgerUnreadableStopUpload(reason),
-    errorCode: 'CLOUD_LEDGER_BROKEN',
-  }
+/**
+ * 台账读不到：读盘失败带**系统原话**（`EPERM: …`），内容失败没有原话可带。
+ *
+ * 不许在这里拼一句中文 —— 那是 UI 的事；也不许把码复制进 `reason`。
+ */
+function ledgerBroken(b: LedgerBrokenFail): CloudFailure {
+  return b.fail === 'readError'
+    ? { fail: 'CLOUD_LEDGER_BROKEN', reason: describeReadFailure(b.failure) }
+    : { fail: 'CLOUD_LEDGER_BROKEN' }
 }
 
 /** unit id → unit hash；台账的 per-unit 指纹 */
@@ -173,13 +165,11 @@ export function createCloudEngine(deps: CloudDeps): CloudEngine {
     }
   }
 
-  async function upload(options: UploadOptions = {}): Promise<UploadResult> {
+  async function upload(options: UploadOptions = {}): Promise<CloudOutcome> {
     if (!deps.config.isConfigured()) {
       return {
-        ok: false,
-        count: 0,
-        error: msg.cloud.text.notConfigured,
-        errorCode: 'CLOUD_NOT_CONFIGURED',
+        status: 'error',
+        failure: { fail: 'CLOUD_NOT_CONFIGURED' },
       }
     }
 
@@ -187,25 +177,25 @@ export function createCloudEngine(deps: CloudDeps): CloudEngine {
     try {
       localUnits = await collectUnits(deps.entries)
     } catch (error) {
-      return { ok: false, count: 0, ...errorResult(error) }
+      return { status: 'error', failure: errorResult(error) }
     }
 
     const localHash = unitsHash(localUnits)
     // T-114：坏台账**不许**当成"没有台账"。后者会让 `decideUpload` 判成 `cloud-newer`，
     // 用户确认后就把云端那一份覆盖掉；而"读不到"根本不是冲突，是**没有依据判断**。
     const read = await deps.ledger.read()
-    if (read.status === 'broken') return ledgerBrokenResult(read.reason)
+    if (read.status === 'broken') return { status: 'error', failure: ledgerBroken(read) }
     const ledger = read.status === 'ok' ? read.ledger : null
 
     let pulled: CloudPullOutcome
     try {
       pulled = await deps.transport.pull()
     } catch (error) {
-      return { ok: false, count: 0, ...errorResult(error) }
+      return { status: 'error', failure: errorResult(error) }
     }
     //读不懂 ≠ 云端为空。后者会以 rev=1 覆盖云端
     if (pulled.status === 'unreadable') {
-      return { ok: false, count: 0, ...cloudUnreadable(pulled.reason) }
+      return { status: 'error', failure: cloudUnreadable(pulled.reason) }
     }
     const cloud = pulled.status === 'ok' ? pulled.snapshot : null
 
@@ -219,25 +209,20 @@ export function createCloudEngine(deps: CloudDeps): CloudEngine {
       cloudHash: cloud ? unitsHash(cloud.units) : '',
     })
 
-    if (decision.inSync) return { ok: true, count: 0, skipped: true }
+    // 内容一致 = 已经对齐（跑完了，没写东西），不是「跳过」：跳过只留给闸门挡下那种「一次请求都没发」
+    if (decision.inSync) return { status: 'ok' }
     if (decision.kind !== 'none' && !options.force) {
       if (!options.onConfirm) {
         return {
-          ok: false,
-          count: 0,
-          cancelled: true,
-          error: '需要确认云端冲突',
-          errorCode: 'CLOUD_REV_CONFLICT',
+          status: 'cancelled',
+          failure: { fail: 'CLOUD_REV_CONFLICT' },
         }
       }
       const confirmed = await options.onConfirm(decision)
       if (!confirmed) {
         return {
-          ok: false,
-          count: 0,
-          cancelled: true,
-          error: '取消操作',
-          errorCode: 'CLOUD_CANCELLED',
+          status: 'cancelled',
+          failure: { fail: 'CLOUD_CANCELLED' },
         }
       }
     }
@@ -255,20 +240,17 @@ export function createCloudEngine(deps: CloudDeps): CloudEngine {
       })
       // 整包上传成功 = 所有 unit 都已对齐，后台留下的待同步痕迹全部失效
       deps.pending.clear()
-      return { ok: true, count: Object.keys(localUnits).length }
+      return { status: 'ok' }
     } catch (error) {
-      return { ok: false, count: 0, ...errorResult(error) }
+      return { status: 'error', failure: errorResult(error) }
     }
   }
 
-  async function download(options: DownloadOptions = {}): Promise<DownloadResult> {
+  async function download(options: DownloadOptions = {}): Promise<CloudOutcome> {
     if (!deps.config.isConfigured()) {
       return {
-        ok: false,
-        count: 0,
-        hasCloud: false,
-        error: msg.cloud.text.notConfigured,
-        errorCode: 'CLOUD_NOT_CONFIGURED',
+        status: 'error',
+        failure: { fail: 'CLOUD_NOT_CONFIGURED' },
       }
     }
 
@@ -276,65 +258,69 @@ export function createCloudEngine(deps: CloudDeps): CloudEngine {
     try {
       pulled = await deps.transport.pull()
     } catch (error) {
-      return { ok: false, count: 0, hasCloud: false, ...errorResult(error) }
+      return { status: 'error', failure: errorResult(error) }
     }
     //读不懂不许说成"云端没有数据"（用户会以为云端真的是空的）
     if (pulled.status === 'unreadable') {
-      return { ok: false, count: 0, hasCloud: false, ...cloudUnreadable(pulled.reason) }
+      return { status: 'error', failure: cloudUnreadable(pulled.reason) }
     }
     const cloud = pulled.status === 'ok' ? pulled.snapshot : null
 
-    if (!cloud) return { ok: false, count: 0, hasCloud: false, error: '云端没有数据' }
+    if (!cloud) {
+      return {
+        status: 'error',
+        failure: { fail: 'CLOUD_EMPTY' },
+      }
+    }
 
     let localUnits: Record<string, SyncUnit>
     try {
       localUnits = await collectUnits(deps.entries)
     } catch (error) {
-      return { ok: false, count: 0, hasCloud: true, ...errorResult(error) }
+      return { status: 'error', failure: errorResult(error) }
     }
 
     const diff: SyncDiff = diffUnits(cloud.units, localUnits)
     if (diff.conflicts.length > 0) {
       if (!options.onConfirm) {
         return {
-          ok: false,
-          count: 0,
-          hasCloud: true,
-          cancelled: true,
-          error: msg.cloud.fn.conflictsNeedConfirm(String(diff.conflicts.length)),
-          errorCode: 'CLOUD_CANCELLED',
+          status: 'cancelled',
+          failure: {
+            fail: 'CLOUD_CANCELLED',
+            reason: String(diff.conflicts.length),
+          },
         }
       }
       const confirmed = await options.onConfirm(diff)
       if (!confirmed) {
-        return { ok: false, count: 0, hasCloud: true, cancelled: true, error: '取消操作' }
+        return {
+          status: 'cancelled',
+          failure: { fail: 'CLOUD_CANCELLED' },
+        }
       }
     }
 
     const adapters = adapterMap(deps.entries)
     const failed: string[] = []
-    let written = 0
 
     for (const [id, unit] of Object.entries(cloud.units)) {
       const adapter = adapters.get(id)
       if (!adapter) {
-        failed.push(`${id}（未注册）`)
+        failed.push(id)
         continue
       }
 
       const result: WriteOutcome = await adapter.write(unit)
-      if (result.ok) written += 1
-      else failed.push(`${id}（${result.message}）`)
+      if (result.status === 'error') failed.push(`${id}（${result.reason}）`)
     }
 
     if (failed.length > 0) {
       return {
-        ok: false,
-        count: written,
-        hasCloud: true,
-        partial: { failed },
-        error: msg.cloud.fn.partialWriteBackFailed(failed.join('、')),
-        errorCode: 'CLOUD_WRITE_FAILED',
+        status: 'error',
+        failure: {
+          fail: 'CLOUD_WRITE_FAILED',
+          reason: failed.join('; '),
+        },
       }
     }
 
@@ -346,11 +332,11 @@ export function createCloudEngine(deps: CloudDeps): CloudEngine {
         units: unitHashes(cloud.units),
       })
     } catch (error) {
-      return { ok: false, count: written, hasCloud: true, ...errorResult(error) }
+      return { status: 'error', failure: errorResult(error) }
     }
 
     deps.pending.clear()
-    return { ok: true, count: written, hasCloud: true }
+    return { status: 'ok' }
   }
 
   /**
@@ -364,23 +350,17 @@ export function createCloudEngine(deps: CloudDeps): CloudEngine {
    * 冲突只按 unit 判：云端 rev 变新时，只有"上次同步后我们又改过"的 unit 才算冲突。
    * 否则别人改别的 unit 就会让本条永远静默 cancelled —— 这正是 T-55/T-56 要修的语义。
    */
-  async function pushUnits(
-    ids: string[],
-    options: PushUnitsOptions = {},
-  ): Promise<PushUnitsResult> {
+  async function pushUnits(ids: string[], options: PushUnitsOptions = {}): Promise<CloudOutcome> {
     const wanted = [...new Set(ids.filter(Boolean))].sort()
-    if (wanted.length === 0) return { ok: true, count: 0, pushed: [], skipped: true }
+    // 没有要推的项 = 跑完了，不算跳过（跳过只留给闸门）
+    if (wanted.length === 0) return { status: 'ok' }
 
     if (!deps.config.isConfigured()) {
       // 不发请求：没有 endpoint，发出去只会是半截请求
       deps.pending.record(wanted, 'not-configured')
       return {
-        ok: false,
-        count: 0,
-        pushed: [],
-        pending: wanted,
-        error: msg.cloud.text.notConfigured,
-        errorCode: 'CLOUD_NOT_CONFIGURED',
+        status: 'error',
+        failure: { fail: 'CLOUD_NOT_CONFIGURED' },
       }
     }
 
@@ -388,11 +368,11 @@ export function createCloudEngine(deps: CloudDeps): CloudEngine {
     const unknown = wanted.filter((id) => !adapters.has(id))
     if (unknown.length > 0) {
       return {
-        ok: false,
-        count: 0,
-        pushed: [],
-        error: msg.cloud.fn.unregisteredUnits(unknown.join('、')),
-        errorCode: 'CLOUD_COLLECT_FAILED',
+        status: 'error',
+        failure: {
+          fail: 'CLOUD_COLLECT_FAILED',
+          reason: unknown.join('; '),
+        },
       }
     }
     const targets = wanted
@@ -408,12 +388,12 @@ export function createCloudEngine(deps: CloudDeps): CloudEngine {
     const ready = wanted.filter((id) => localUnits[id] !== undefined)
     if (ready.length === 0) {
       return {
-        ok: false,
-        count: 0,
-        pushed: [],
-        pending: failedIds,
-        error: `同步项读取失败：${collected.failed.map((f) => `${f.id}（${f.message}）`).join('、')}`,
-        errorCode: 'CLOUD_COLLECT_FAILED',
+        status: 'error',
+        failure: {
+          fail: 'CLOUD_COLLECT_FAILED',
+          // 底层原文：哪一项、它自己说了什么
+          reason: collected.failed.map((f) => `${f.id}: ${f.message}`).join('; '),
+        },
       }
     }
 
@@ -422,13 +402,12 @@ export function createCloudEngine(deps: CloudDeps): CloudEngine {
       pulled = await deps.transport.pull()
     } catch (error) {
       recordNetworkPending(deps.pending, ready, error)
-      return { ok: false, count: 0, pushed: [], pending: ready, ...errorResult(error) }
+      return { status: 'error', failure: errorResult(error) }
     }
-    //读不懂就**不推**。旧版这里 `cloud?.units ?? {}` 把"读不懂"折成"云端空"
-    // 于是每个改过的 unit 都判成"云端没有"直接推上去
+    //读不懂就**不推**（否则读不懂的 unit 会被当成"云端没有"，直接覆盖推上去）
     if (pulled.status === 'unreadable') {
       deps.pending.record(ready, 'conflict')
-      return { ok: false, count: 0, pushed: [], pending: ready, ...cloudUnreadable(pulled.reason) }
+      return { status: 'error', failure: cloudUnreadable(pulled.reason) }
     }
     const cloud: CloudSnapshotView | null = pulled.status === 'ok' ? pulled.snapshot : null
 
@@ -436,7 +415,7 @@ export function createCloudEngine(deps: CloudDeps): CloudEngine {
     // "没有基线不判冲突"会让**每一个改过的 unit 直接推**，别人在另一台机器上的改动被覆盖
     const read = await deps.ledger.read()
     if (read.status === 'broken') {
-      return { ...ledgerBrokenResult(read.reason), pushed: [], pending: ready }
+      return { status: 'error', failure: ledgerBroken(read) }
     }
     const ledger = read.status === 'ok' ? read.ledger : null
     const cloudUnits = cloud?.units ?? {}
@@ -477,21 +456,14 @@ export function createCloudEngine(deps: CloudDeps): CloudEngine {
         // 写盘错是普通 Error（没有 CloudError 码），这里的失败类别由**这一行代码**决定
         deps.pending.record(ready, 'network', 'CLOUD_WRITE_FAILED')
         return {
-          ok: false,
-          count: 0,
-          pushed: [],
-          pending: ready,
-          error: error instanceof Error ? error.message : '同步台账写入失败',
-          errorCode: 'CLOUD_WRITE_FAILED',
+          status: 'error',
+          failure: {
+            fail: 'CLOUD_WRITE_FAILED',
+            reason: error instanceof Error ? error.message : String(error),
+          },
         }
       }
-      return {
-        ok: true,
-        count: 0,
-        pushed: [],
-        skipped: true,
-        ...(failedIds.length > 0 ? { pending: failedIds } : {}),
-      }
+      return { status: 'ok' }
     }
 
     /**
@@ -514,26 +486,19 @@ export function createCloudEngine(deps: CloudDeps): CloudEngine {
       if (!options.onConfirm) {
         deps.pending.record(conflicts, 'conflict')
         return {
-          ok: false,
-          count: 0,
-          pushed: [],
-          pending: conflicts,
-          cancelled: true,
-          error: msg.cloud.fn.cloudNewerRev(String(cloud?.rev ?? 0), conflicts.join('、')),
-          errorCode: 'CLOUD_REV_CONFLICT',
+          status: 'cancelled',
+          failure: {
+            fail: 'CLOUD_REV_CONFLICT',
+            reason: conflicts.join('; '),
+          },
         }
       }
       const confirmed = await options.onConfirm({ units: conflicts, cloudRev: cloud?.rev ?? 0 })
       if (!confirmed) {
         deps.pending.record(conflicts, 'conflict')
         return {
-          ok: false,
-          count: 0,
-          pushed: [],
-          pending: conflicts,
-          cancelled: true,
-          error: '取消操作',
-          errorCode: 'CLOUD_CANCELLED',
+          status: 'cancelled',
+          failure: { fail: 'CLOUD_CANCELLED' },
         }
       }
     }
@@ -551,7 +516,7 @@ export function createCloudEngine(deps: CloudDeps): CloudEngine {
       await deps.transport.push(snapshot)
     } catch (error) {
       recordNetworkPending(deps.pending, changed, error)
-      return { ok: false, count: 0, pushed: [], pending: changed, ...errorResult(error) }
+      return { status: 'error', failure: errorResult(error) }
     }
 
     try {
@@ -563,18 +528,12 @@ export function createCloudEngine(deps: CloudDeps): CloudEngine {
         units: unitHashes(merged),
       })
     } catch (error) {
-      return { ok: false, count: changed.length, pushed: changed, ...errorResult(error) }
+      return { status: 'error', failure: errorResult(error) }
     }
 
     // 只清"这次真的对齐了"的 unit：读失败的那些刚记进 pending，清掉就等于把痕迹抹了
     deps.pending.clear(ready)
-    return {
-      ok: true,
-      count: changed.length,
-      pushed: changed,
-      rev: nextRev,
-      ...(failedIds.length > 0 ? { pending: failedIds } : {}),
-    }
+    return { status: 'ok' }
   }
 
   return { getStatus, upload, download, pushUnits }

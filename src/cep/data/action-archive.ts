@@ -5,6 +5,8 @@ import { writeDiskSync } from '@/cep/disk-write'
 import type { ActionWarehouseIndex } from '@/domain/action'
 import { decodeDzx, encodeDzx, remapDzxFileNames, type DzxFile } from '@/domain/action-dzx'
 import { CepError } from '@/utils/errors'
+import { isDecodeFail } from '@/utils/decode'
+import { describeDecodeFail } from './repo-read'
 import { msg } from '@/domain/messages'
 import { log } from '@/utils/logger'
 import { actionIndexWriter, currentWarehouseFile, selectActionFile } from './actions'
@@ -61,9 +63,9 @@ interface OrphanFile {
 /**
  * 删除一批文件。**不吞失败**：返回删不掉的名单，由调用方决定怎么处理。
  *
- * 旧实现在这里 `catch { log.warn }` —— 索引已经写成功，删不掉的旧文件就成了孤儿，
- * 而"孤儿"在 UI 上不可见（只一条日志，见 35 号 §3.2）。现在它变成返回值，
- * 导入流程把它带到命令层，由 `msg.data.fn.orphanFilesLeft` 说出来。
+ * 不吞失败：删不掉的旧文件会变成孤儿，而"孤儿"在 UI 上不可见（只一条日志，见 35 号 §3.2）。
+ * 所以删不掉的名单作为返回值带出去，由导入流程带到命令层，
+ * 由 `msg.data.fn.orphanFilesLeft` 说出来。
  */
 function removeAll(fileNames: string[]): OrphanFile[] {
   const failed: OrphanFile[] = []
@@ -71,7 +73,7 @@ function removeAll(fileNames: string[]): OrphanFile[] {
     try {
       removeFile(pathOf(name))
     } catch (e) {
-      // **留痕**：日志里有文件名和原因，事后可查（旧实现只有这一条，界面上看不见）。
+      // **留痕**：日志里有文件名和原因，事后可查。
       log.warn('action', `清理旧仓库文件失败（留下孤儿）：${name}`, e)
       // **不静默**：名单返回给调用方，最终由命令层说给用户（`orphanFilesLeft`）。
       failed.push({ name, reason: e instanceof Error ? e.message : String(e) })
@@ -157,11 +159,13 @@ export function importActionArchive(append: boolean, sourcePath: string): Promis
 function importArchiveFromText(append: boolean, text: string): void {
   let imported: DzxFile
   try {
-    imported = remapDzxFileNames(decodeDzx(text))
+    const decoded = decodeDzx(text)
+    if (isDecodeFail(decoded)) throw new CepError('PARSE', describeDecodeFail(decoded))
+    imported = remapDzxFileNames(decoded.value)
     validateImported(imported)
   } catch (e) {
     if (e instanceof CepError) throw e
-    throw new CepError('PARSE', e instanceof Error ? e.message : '导入文件结构不正确')
+    throw new CepError('PARSE', e instanceof Error ? e.message : String(e), undefined, e)
   }
 
   // 任何写之前先确认索引是真实数据：坏索引时下面的 next.list 会基于 fallback 算出来
@@ -178,7 +182,7 @@ function importArchiveFromText(append: boolean, text: string): void {
       // 写失败直接抛（错误信息里带完整路径与原因）；抛之前 `written` 只记成功的，
       // 下面的 catch 用它回滚 —— 这是"只回滚自己写成功的"，不是吞。
       // 导入是用户显式发起的整份替换：同名库文件本来就该被换掉，所以不比。
-      // 但**必须留退路**（旧版这里是裸写，覆盖后没有第二份）。
+      // 但**必须留退路**（覆盖写要有第二份可回滚）。
       writeBase64File(pathOf(entry.name), entry.data, {
         cas: { mode: 'skip', why: '用户显式导入，整份替换同名库文件' },
         backup: { mode: 'keep' },

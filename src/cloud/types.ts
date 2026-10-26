@@ -6,6 +6,7 @@ import type {
   SyncDiff,
   UploadDecision,
 } from '@/domain/cloud'
+import type { ReadFail } from '@/cep/fs-read'
 
 export interface CloudTransportPort {
   push(snapshot: CloudSnapshot): Promise<void>
@@ -36,10 +37,18 @@ export interface CloudLedgerRecord extends CloudLedger {
  * 而设置页显示的是"本地还没有同步记录，先点「从云端拉取」"——用户可能据此
  * 点「上传」，把云端那一份覆盖掉。三态把这两件事分开，`broken` 一律**拒绝上传**。
  */
+/**
+ * 台账读坏的两种形态（与 `RepoReadBad` 同型）：读盘失败**必有现场**，内容失败没有。
+ *
+ * 不许写成 `{ status:'broken'; reason: string }` —— 那个 `reason` 是 `msg` 拼的用户文案，
+ * 上游把它当"底层原话"传下去，等于 UI 文案冒充技术原因。
+ */
+export type LedgerBrokenFail = ReadFail
+
 export type LedgerRead =
   | { status: 'ok'; ledger: CloudLedgerRecord }
   | { status: 'none' }
-  | { status: 'broken'; reason: string }
+  | ({ status: 'broken' } & LedgerBrokenFail)
 
 export interface CloudLedgerPort {
   read(): Promise<LedgerRead>
@@ -133,24 +142,49 @@ export function emptyCloudStatus(): CloudStatus {
   }
 }
 
-export interface UploadResult {
-  ok: boolean
-  count: number
-  skipped?: boolean
-  cancelled?: boolean
-  error?: string
-  errorCode?: string
+/**
+ * 云操作失败的**唯一形状**：码 + 原因原文。
+ *
+ * 生产者不写用户话（判据 3）：用户看到的那句话由 `msg` 渲染，`reason` 只带底层原话。
+ */
+export interface CloudFailure {
+  /** `CLOUD_*` 或 `CepError.code` */
+  fail: string
+  /**
+   * **给用户看的那句话**：底层原话原样带出，不加工、不翻译（与 `RepoReadBad.reason` 同一语义）。
+   *
+   * **没有原话就不写这个字段**：把码复制进 `reason`（`{ fail: 'CLOUD_OFFLINE', reason: 'CLOUD_OFFLINE' }`）
+   * 是同一个值写两遍，读的人分不清"没有原话"还是"原话恰好长这样"。
+   */
+  reason?: string
 }
 
-export interface DownloadResult {
-  ok: boolean
-  count: number
-  hasCloud: boolean
-  cancelled?: boolean
-  partial?: { failed: string[] }
-  error?: string
-  errorCode?: string
+/**
+ * 失败变成**一行技术诊断**（给日志 / 报表，**不是**用户文案）。
+ *
+ * 唯一渲染处：有系统原话就带出来，没有就只报码 —— 不许各调用点自己写
+ * `${fail} · ${reason}`，那样 `reason` 一缺就打出 `undefined`。
+ */
+export function describeCloudFailure(f: CloudFailure): string {
+  return f.reason ? `${f.fail}：${f.reason}` : f.fail
 }
+
+/**
+ * 一次云操作的**唯一结果形状**（上传 / 下载 / 按 unit 推送共用）。
+ *
+ * 判别位是 `status`，取值来自同一张词表：`ok` / `skipped` / `cancelled` / `error`。
+ * 失败臂**取不到**任何业务字段；「跳过」与「取消」各自成臂 —— 它们不是失败，
+ * 混进 `ok: false` 就只能靠 `cancelled?: boolean` / `skipped?: boolean` 猜。
+ */
+export type CloudOutcome =
+  | { status: 'ok' }
+  /**
+   * 什么都没做，也**不算失败**（不消耗退避）。`failure` 只用来记录"为什么跳过"：
+   * 云端已一致 / 自动同步关 / 没有台账 / 离线 / 未配置。
+   */
+  | { status: 'skipped'; failure: CloudFailure }
+  | { status: 'cancelled'; failure: CloudFailure }
+  | { status: 'error'; failure: CloudFailure }
 
 export interface UploadOptions {
   force?: boolean
@@ -172,20 +206,5 @@ export interface PushUnitsOptions {
   onConfirm?: (conflict: PushUnitsConflict) => Promise<boolean>
 }
 
-export interface PushUnitsResult {
-  ok: boolean
-  /** 实际推送的 unit 数（内容一致时为 0） */
-  count: number
-  /** 本次推送涉及的 unit id */
-  pushed: string[]
-  /** 推送后的云端 rev；跳过或失败时不带 */
-  rev?: number
-  /** 云端内容已经一致，什么都没做 */
-  skipped?: boolean
-  /** 冲突未确认 / 用户取消 */
-  cancelled?: boolean
-  /** 记为待同步的 unit（未配置 / 冲突 / 网络失败） */
-  pending?: string[]
-  error?: string
-  errorCode?: string
-}
+/** 按 unit 推送的结果 = 同一个 `CloudOutcome`（旧的 `pushed`/`rev`/`pending` 字段已删，无人读）。 */
+export type PushUnitsResult = CloudOutcome

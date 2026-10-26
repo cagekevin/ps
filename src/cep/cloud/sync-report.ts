@@ -6,6 +6,7 @@
 
 import { log } from '@/utils/logger'
 import type { SyncOutcome } from '@/cloud/change-sync'
+import { describeCloudFailure } from '@/cloud/types'
 
 /**
  * 上一轮的结局签名。
@@ -50,23 +51,26 @@ function notify(signature: string): void {
 }
 
 function signatureOf(outcome: SyncOutcome): string {
-  if (outcome.ok) return 'ok'
-  if (outcome.skip) return `skip:${outcome.errorCode ?? 'unknown'}`
-  return `fail:${outcome.errorCode ?? 'unknown'}`
+  if (outcome.status === 'ok') return 'ok'
+  if (outcome.status === 'skipped') return `skip:${outcome.failure.fail}`
+  return `fail:${outcome.failure.fail}`
 }
 
-/** 失败那句里的原因：错误码是"哪一类"，error 是"PS/网关自己说了什么"，两个都要 */
+/** 失败那句里的原因：错误码是"哪一类"，`reason` 是"PS/网关自己说了什么"，两个都要 */
 function reasonOf(outcome: SyncOutcome): string {
-  const code = outcome.errorCode ?? '未知错误码'
-  return outcome.error ? `${code} · ${outcome.error}` : code
+  if (outcome.status === 'ok') return ''
+  return describeCloudFailure(outcome.failure)
 }
 
 export function reportSyncOutcome(outcome: SyncOutcome, units: string[]): void {
   const signature = signatureOf(outcome)
-  const scope = { units: units.length, errorCode: outcome.errorCode }
+  const scope = {
+    units: units.length,
+    errorCode: outcome.status === 'ok' ? undefined : outcome.failure.fail,
+  }
   const changed = lastSignature !== signature
 
-  if (outcome.ok) {
+  if (outcome.status === 'ok') {
     if (lastSignature && changed) {
       log.info('cloud', `云同步恢复正常（上一次：${lastSignature}）`, scope)
     }
@@ -75,7 +79,7 @@ export function reportSyncOutcome(outcome: SyncOutcome, units: string[]): void {
     return
   }
 
-  if (outcome.skip) {
+  if (outcome.status === 'skipped') {
     if (changed) {
       log.info('cloud', `后台同步本轮跳过：${reasonOf(outcome)}（没发请求，不消耗退避）`, scope)
       notify(signature)

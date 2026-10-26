@@ -70,7 +70,7 @@ describe('标签读取', () => {
   })
 
   it('重试成功会清掉上一次的 tagsError', async () => {
-    meta.readFontTags.mockReturnValueOnce({ ok: false, reason: '读不到文件', fallback: [] })
+    meta.readFontTags.mockReturnValueOnce({ status: 'error', reason: '读不到文件', fallback: [] })
     meta.readFontTags.mockReturnValue({ status: 'ok', value: [tag('收藏')] })
     const store = useFontStore()
 

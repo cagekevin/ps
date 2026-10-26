@@ -18,6 +18,7 @@ import {
   toggleGroupAt,
   type RenamePreset,
 } from '@/domain/rename'
+import { isDecodeFail, type DecodeFail, type Decoded } from '@/utils/decode'
 
 /**
  * 重命名预设的规则层（`domain/rename.ts`）。
@@ -129,24 +130,30 @@ describe('最近使用（原版 addHistory，:56822-56834）', () => {
 })
 
 describe('.cmm 导入导出', () => {
+  /** 只关心成功臂：失败时直接抛（带上 `fail`），不让 `undefined.xxx` 在下一行炸 */
+  function unwrap<T>(out: Decoded<T> | DecodeFail): T {
+    if (isDecodeFail(out)) throw new Error(`预期成功，实际失败：${out.fail}`)
+    return out.value
+  }
+
   it('导出就是 JSON.stringify（原版 :57022）', () => {
     const text = JSON.stringify(preset())
-    expect(parsePreset(text)[1].list).toEqual(['%n', '%%n'])
+    expect(unwrap(parsePreset(text))[1].list).toEqual(['%n', '%%n'])
   })
 
   it('旧格式 `<z>` / `<>` 兼容读取（原版 :57051-57071）', () => {
     // 组之间用 <z>，组名与条目之间用 <>；末尾多一个 <z>，原版 pop 掉
     const legacy = '最近使用<>%n<>%%n<z>序列<z>'
-    expect(parsePreset(legacy)).toEqual([
+    expect(unwrap(parsePreset(legacy))).toEqual([
       { name: '最近使用', show: true, list: ['%n', '%%n'] },
       { name: '序列', show: true, list: [] },
     ])
   })
 
-  it('形状不对或不是预设时报错，不把坏数据当预设用', () => {
-    expect(() => parsePreset('{"a":1}')).toThrow(expect.objectContaining({ code: 'PARSE' }))
-    expect(() => parsePreset('[{"name":1}]')).toThrow(expect.objectContaining({ code: 'PARSE' }))
-    expect(() => parsePreset('随便一段文字')).toThrow('导入失败')
+  it('形状不对或不是预设 → 可枚举失败，不把坏数据当预设用', () => {
+    expect(parsePreset('{"a":1}')).toMatchObject({ fail: 'shape', expected: 'object' })
+    expect(parsePreset('[{"name":1}]')).toMatchObject({ fail: 'shape', expected: 'object' })
+    expect(parsePreset('随便一段文字')).toMatchObject({ fail: 'notJson' })
   })
 })
 

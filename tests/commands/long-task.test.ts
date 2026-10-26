@@ -45,7 +45,7 @@ describe('长任务生命周期', () => {
       },
     })
 
-    await expect(execute('test.long')).resolves.toEqual({ ok: true })
+    await expect(execute('test.long')).resolves.toEqual({ status: 'ok' })
 
     expect(begin).toHaveBeenCalledWith('播放动作')
     expect(update).toHaveBeenCalledWith(0.5, '第 5 个')
@@ -68,7 +68,10 @@ describe('长任务生命周期', () => {
       },
     })
 
-    await expect(execute('test.fail')).resolves.toMatchObject({ ok: false, reason: '导出失败' })
+    await expect(execute('test.fail')).resolves.toMatchObject({
+      status: 'error',
+      reason: '导出失败',
+    })
     expect(end).toHaveBeenCalledTimes(1)
   })
 
@@ -84,7 +87,7 @@ describe('长任务生命周期', () => {
       async invoke() {},
     })
 
-    await expect(execute('test.instant')).resolves.toEqual({ ok: true })
+    await expect(execute('test.instant')).resolves.toEqual({ status: 'ok' })
     expect(begin).not.toHaveBeenCalled()
   })
 })

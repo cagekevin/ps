@@ -97,7 +97,7 @@ const expandMultiple = fontSetting('ztExpandMultiple')
 /**
  * 字体面板三组预设。原版是三个按钮「配置字号 / 配置行间距 / 配置字间距」开 `addcom`
  * （`docs/生成/页面规格/08-设置.md:69-76`），值本身是数组（`domain/font-set-config.ts:67-69`），
- * 原来这里的三个单行输入框只能存一个数，是能力缺失。
+ * 本版三组预设用数组存储，不受"单行输入框只能存一个数"的限制。
  *
  * UNVERIFIED: 原版 `dropOpen` 只写了 `addDataVal` / `addText` 两个 prop（`docs/页面/08-设置.md:81`），
  * 确定后落哪个设置字段未提取；本版按字段名落到 `ztDefaultSize` / `ztDefaultLeading` / `ztDefaultTracking`

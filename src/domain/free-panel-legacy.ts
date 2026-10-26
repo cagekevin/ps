@@ -1,6 +1,7 @@
 ﻿import { CepError } from '@/utils/errors'
 import { msg } from './messages'
 import type { FreePanelItem } from './free-panel'
+import { shapeFail, type DecodeFail, type Decoded } from '@/utils/decode'
 
 /**
  * 自由面板旧数据 key → 命令 id + payload。
@@ -69,7 +70,18 @@ function requireTransformParams(
   ]
 }
 
-export function adaptFreePanelItem(item: FreePanelItem): LegacyCommand | null {
+export function adaptFreePanelItem(item: FreePanelItem): Decoded<LegacyCommand> | DecodeFail {
+  const command = legacyCommandOf(item)
+  // 没有对应命令是**可枚举的失败**（消费侧据此报"这个按钮没法迁移"），不再往外递 `null`
+  return command === undefined ? shapeFail('key', 'string', item.key) : { value: command }
+}
+
+/**
+ * 旧 key → 新命令。`undefined` = **这个 key 没有对应命令**（"不适用"，不是失败）。
+ *
+ * 私有：对外只暴露 `adaptFreePanelItem`，别让调用方拿到"可能没有"的东西自己兜底。
+ */
+function legacyCommandOf(item: FreePanelItem): LegacyCommand | undefined {
   const option = item.option
   // 旧自造 key（`commonUse.embed` 等）先在别名表里换成官方 key，再走同一张 switch。
   // 一张表 = 一处，不为旧 key 再开一套分支（见文件末尾 LEGACY_KEY_ALIASES 的删除条件）。
@@ -208,7 +220,7 @@ export function adaptFreePanelItem(item: FreePanelItem): LegacyCommand | null {
       }
 
     default:
-      return null
+      return undefined
   }
 }
 

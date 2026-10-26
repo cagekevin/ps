@@ -1,6 +1,6 @@
 // 是什么：设置页「预设输入」文本框的解析 / 格式化纯逻辑（无 IO、无 Vue、无提示）
 // 唯一入口：字体面板三组预设（字号 / 行距 / 字距）的文本 ↔ 数组转换只走这里
-// 替代了什么：`pages/set/index.vue` 里原来的 `parseNumbers`（单值输入时代的临时解析，已删）
+// 替代了什么：`pages/set/index.vue` 的 `parseNumbers` 已删除，文本 ↔ 数组转换现由本文件负责。
 // 谁在用：pages/set/components/AddcomDialog.vue、pages/set/index.vue、tests/domain/font-preset-text.test.ts
 // 禁止：这里不读设置、不弹 toast；错误文案怎么显示由调用方决定（命令层统一由 useCommand 提示）
 
@@ -20,7 +20,7 @@ export const PRESET_EMPTY_MESSAGE = '请输入数值'
 export type PresetTextIssue = 'empty' | 'number' | 'count'
 
 export type PresetTextResult =
-  { ok: true; values: number[] } | { ok: false; issue: PresetTextIssue; message: string }
+  { status: 'ok'; values: number[] } | { status: 'error'; fail: PresetTextIssue; reason: string }
 
 /** 按逗号（中英文）、空格、换行切词；空串丢掉——允许尾逗号与「每 6 个换行」的排版文本原样贴回 */
 export function tokenizePresetText(text: string): string[] {
@@ -40,16 +40,16 @@ export function isPresetCountValid(count: number): boolean {
  */
 export function parsePresetText(text: string): PresetTextResult {
   const tokens = tokenizePresetText(text)
-  if (!tokens.length) return { ok: false, issue: 'empty', message: PRESET_EMPTY_MESSAGE }
+  if (!tokens.length) return { status: 'error', fail: 'empty', reason: PRESET_EMPTY_MESSAGE }
   // 只认十进制数字（行距 1.1、字距 -100 都要过）；'' 与 '1,2abc' 这类由这里拦
   if (tokens.some((token) => !/^-?\d+(\.\d+)?$/.test(token))) {
-    return { ok: false, issue: 'number', message: PRESET_NUMBER_MESSAGE }
+    return { status: 'error', fail: 'number', reason: PRESET_NUMBER_MESSAGE }
   }
   const values = tokens.map(Number)
   if (!isPresetCountValid(values.length)) {
-    return { ok: false, issue: 'count', message: PRESET_COUNT_MESSAGE }
+    return { status: 'error', fail: 'count', reason: PRESET_COUNT_MESSAGE }
   }
-  return { ok: true, values }
+  return { status: 'ok', values }
 }
 
 /** 数组 → 文本：每 6 个换行（原版 textarea 的排版），组内逗号分隔 */

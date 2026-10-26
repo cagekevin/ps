@@ -119,7 +119,7 @@ describe('readBase64Outcome · 三态', () => {
     const read = readBase64Outcome('/tmp/a.png')
 
     expect(read.status).toBe('error')
-    expect(read.status === 'error' ? read.reason : '').toContain(code)
+    expect(read.status === 'error' && read.failure.kind === 'errno' && read.failure.code).toBe(code)
   })
 })
 

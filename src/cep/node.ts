@@ -1,12 +1,14 @@
 // 是什么｜替代了什么｜谁在用
 // 是什么：CEP 注入的 Node 内置模块 —— **形状声明 + 唯一的 require 出口**（`hasNode` / `nodeRequire` / `toPosix`）
-// 替代了什么：`cep/fs.ts:13-65`（原来和环境判断、读原语、编码、目录统计混在同一个 415 行文件里）
+// 替代了什么：`cep/fs.ts:13-65` 的 Node 模块声明已迁出，现由本文件负责（与环境判断/读原语/编码/统计解耦）。
 // 谁在用：`cep/paths.ts`（算路径）、`cep/fs-read.ts`（读）、`cep/dir-usage.ts`（统计）、`cep/disk-write.ts`（写）
 // 怎么用：要 Node 模块就 `nodeRequire('fs')`；**表里没有的成员拿不到** —— 用到新成员就在 `NodeModules` 加一行
 // 别这么写：`window.require(...)` / `window.cep_node.require(...)` 直接调 —— 那是绕开 `hasNode` 的第二个入口
+// 读宿主全局只许在 `cep/host.ts`（`getRequire` / `getBridge`）；本文件只留"模块形状 + 出口"
 
 import { CepError } from '@/utils/errors'
 import { msg } from '@/domain/messages'
+import { getRequire } from './host'
 
 /**
  * CEP 注入的 Node 内置模块形状：**只声明本仓真正用到的成员**。
@@ -36,15 +38,6 @@ interface DirentLike {
   name: string
   isDirectory(): boolean
   isFile(): boolean
-}
-
-type RequireFn = (id: string) => unknown
-
-function getRequire(): RequireFn | null {
-  const w = window
-  if (typeof w.require === 'function') return w.require
-  if (typeof w.cep_node?.require === 'function') return w.cep_node.require
-  return null
 }
 
 /** CEP 是否开了 --enable-nodejs */

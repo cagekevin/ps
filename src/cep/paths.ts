@@ -11,6 +11,7 @@
 // `userDir()`         —— 派生：`appDataRoot() + USER_DIR`
 // 谁要"根"就调 `appDataRoot()`，**不许**再 `dirname(userDir())` / `slice(0,-USER_DIR.length)` 反推。
 
+import { getBridge, getEnv } from './host'
 import { nodeRequire, toPosix } from './node'
 import { evalScriptRaw, hasCep } from './transport'
 import { USER_DIR } from './env'
@@ -48,12 +49,12 @@ export function toLocalPath(uri: string): string {
  * 桥不在（vitest / jsdom）返回 `null`，由 `appDataRoot()` 决定退到哪里。
  */
 function hostAppDataRoot(): string | null {
-  const bridge = window.__adobe_cep__
+  const bridge = getBridge()
   if (!bridge) return null
 
   // "方法缺失"也算拿不到：老 CEP / 桥被部分注入时 `getSystemPath` 可能不存在。
   if (typeof bridge.getSystemPath !== 'function') {
-    throw new CepError('IO', msg.ps.fn.userDataUnavailable('CEP 桥没有 getSystemPath'))
+    throw new CepError('IO', msg.ps.fn.userDataUnavailable('getSystemPath unavailable'))
   }
 
   let raw: string
@@ -68,7 +69,7 @@ function hostAppDataRoot(): string | null {
   // `raw` 必须是字符串：桥返 `undefined` 时 `decodeURI(undefined)` 会给出字符串
   // `"undefined"`（truthy），`if (!root)` 挡不住 ⇒ 静默返回 `"undefined/SheJiZhuLi"`。
   if (typeof raw !== 'string') {
-    throw new CepError('IO', msg.ps.fn.userDataUnavailable(`返回的不是字符串（${typeof raw}）`))
+    throw new CepError('IO', msg.ps.fn.userDataUnavailable(`expected string, got ${typeof raw}`))
   }
 
   let root: string
@@ -101,7 +102,7 @@ export function appDataRoot(): string {
   //    用户实际在用的目录）。两个候选各在一个平台正确，删任一个都会让某平台算错。
   //    `process` 由 CEP 的 --enable-nodejs 注入（形状在 types/cep-node.d.ts）；
   //    无 Node 时它不存在，`?? {}` 保留：下一行 `nodeRequire('path')` 会抛 NO_NODE。
-  const env = globalThis.process?.env ?? {}
+  const env = getEnv()
   const path = nodeRequire('path')
   const os = nodeRequire('os')
   const roaming = env.APPDATA ?? path.join(os.homedir(), 'Library', 'Application Support')
@@ -121,7 +122,7 @@ export function userDir(): string {
  * `/preset/…`（`TD-13-3`）。"同一个失败在同一层两种形状"就是 `TD-13-1` 那类分裂。
  */
 export function extensionDir(): string {
-  const bridge = window.__adobe_cep__
+  const bridge = getBridge()
   if (!bridge) throw new CepError('INIT', msg.ps.text.extDirUnavailable)
 
   let uri: string

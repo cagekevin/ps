@@ -10,7 +10,6 @@ import { writeDiskSync } from '@/cep/disk-write'
 import { readRepoFile } from '@/cep/data/repo-read'
 import type { CloudLedgerRecord, LedgerRead } from '@/cloud/types'
 import { CloudError } from '@/domain/cloud'
-import { msg } from '@/domain/messages'
 import { isRecord } from '@/utils/guards'
 import { log } from '@/utils/logger'
 import { shapeFail, type DecodeFail, type Decoded } from '@/utils/decode'
@@ -47,8 +46,16 @@ export async function readCloudLedger(): Promise<LedgerRead> {
   const outcome = readRepoFile(path(), decodeLedger)
   if (outcome.status === 'notSeen') return { status: 'none' }
   if (outcome.status === 'error') {
-    log.error('cloud', `台账读不到：${outcome.reason}`)
-    return { status: 'broken', reason: outcome.reason }
+    // only `readError` 有技术现场；另两种是"内容不对"，本身没有 errno
+    log.error(
+      'cloud',
+      '台账读不到',
+      outcome.fail === 'readError' ? outcome.failure : { fail: outcome.fail },
+    )
+    // 两臂各自成型：读盘失败带现场，内容失败只带子码 —— 不再把 UI 文案当"底层原话"传下去
+    return outcome.fail === 'readError'
+      ? { status: 'broken', fail: 'readError', failure: outcome.failure }
+      : { status: 'broken', fail: outcome.fail }
   }
   return { status: 'ok', ledger: outcome.value }
 }
@@ -92,7 +99,7 @@ export function writeCloudLedger(ledger: CloudLedgerRecord): void {
     } catch (error) {
       throw new CloudError(
         'CLOUD_WRITE_FAILED',
-        msg.cloud.fn.ledgerWriteFailed(error instanceof Error ? error.message : String(error)),
+        error instanceof Error ? error.message : String(error),
       )
     }
   } catch (error) {

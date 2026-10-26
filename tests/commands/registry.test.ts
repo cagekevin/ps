@@ -50,7 +50,7 @@ describe('execute', () => {
     const invoke = vi.fn(async () => {})
     register(makeCommand({ invoke }))
 
-    await expect(execute('test.ok')).resolves.toEqual({ ok: true })
+    await expect(execute('test.ok')).resolves.toEqual({ status: 'ok' })
     expect(invoke).toHaveBeenCalledTimes(1)
   })
 
@@ -65,9 +65,9 @@ describe('execute', () => {
 
     const result = await execute('test.ok')
     expect(result).toEqual({
-      ok: false,
+      status: 'error',
       reason: '请先选择一个文字图层',
-      code: 'NO_SELECTION',
+      fail: 'NO_SELECTION',
     })
   })
 
@@ -77,7 +77,7 @@ describe('execute', () => {
     register(makeCommand({ id: 'need.layer', requires: 'layer', invoke }))
 
     const result = await execute('need.layer')
-    expect(result).toEqual({ ok: false, reason: '请先选择一个图层', code: 'NO_SELECTION' })
+    expect(result).toEqual({ status: 'error', reason: '请先选择一个图层', fail: 'NO_SELECTION' })
     expect(invoke).not.toHaveBeenCalled()
   })
 
@@ -85,14 +85,14 @@ describe('execute', () => {
     selection.typeNumber = 1
     register(makeCommand({ id: 'need.text', requires: 'textLayer', invoke: async () => {} }))
 
-    await expect(execute('need.text')).resolves.toMatchObject({ ok: false })
+    await expect(execute('need.text')).resolves.toMatchObject({ status: 'error' })
   })
 
   it('命令不存在时返回失败而不是抛', async () => {
     await expect(execute('nope')).resolves.toEqual({
-      ok: false,
+      status: 'error',
       reason: '命令不存在：nope',
-      code: 'INTERNAL',
+      fail: 'INTERNAL',
     })
   })
 })

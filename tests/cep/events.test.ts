@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { installHostBridge, removeHostBridge, type StubBridge } from '../helpers/host-stub'
 
 const transport = vi.hoisted(() => ({
   hasCep: vi.fn(() => true),
@@ -16,7 +17,7 @@ import {
   listHostEventIds,
   onAppEvent,
   onPhotoshopCallback,
-  parseEventData,
+  decodeEventPayload,
   registerPhotoshopEvent,
   sendAppEvent,
   subscribeHostEvent,
@@ -30,6 +31,8 @@ const EVENT_ID = '1936483188'
 /** 同一 type 可挂多个 listener：数组而非单个（见 installBridge 注释） */
 let listeners: Map<string, ((event: unknown) => void)[]>
 let dispatched: Record<string, unknown>[]
+/** 本文件装的假桥：走 host-stub 注入，不写 `window`。`getExtensionID` 是那条"故意写错大小写"的用例要的键 */
+let installed: StubBridge & { getExtensionID?: () => string }
 
 function installBridge() {
   listeners = new Map()
@@ -37,7 +40,7 @@ function installBridge() {
   // CEP 桥对 addEventListener 的真实语义未在文档里确认，这里按"广播"建模，
   // 因为色板面板与主面板在同一频道上各挂各的（sf.js:172 / app.v4.js:17773）。
   dispatched = []
-  window.__adobe_cep__ = {
+  installed = installHostBridge({
     evalScript: () => {},
     getSystemPath: () => '',
     getOSInformation: () => '',
@@ -57,7 +60,7 @@ function installBridge() {
       if (next.length > 0) listeners.set(type, next)
       else listeners.delete(type)
     },
-  }
+  })
 }
 
 /** 模拟 PS 推来一个事件 */
@@ -80,7 +83,7 @@ beforeEach(() => {
 })
 
 afterEach(() => {
-  delete window.__adobe_cep__
+  removeHostBridge()
   vi.useRealTimers()
   vi.clearAllMocks()
 })
@@ -133,14 +136,34 @@ describe('EVENT_IDS 表结构', () => {
   })
 })
 
-describe('parseEventData', () => {
+describe('decodeEventPayload · PS 回调载荷的唯一解析入口', () => {
   it('原版约定：跳过前 5 个字符再 JSON.parse', () => {
-    expect(parseEventData('xxxxx{"eventID":123}')).toEqual({ eventID: 123 })
+    expect(decodeEventPayload('xxxxx{"eventID":123}')).toEqual({ value: { eventID: 123 } })
   })
 
-  it('解析失败直接抛，不静默返回 null', () => {
-    expect(() => parseEventData('garbage')).toThrow(SyntaxError)
-    expect(() => parseEventData(42)).toThrow(/不是字符串/)
+  it('不是字符串 → 形状臂带字段观测（不是抛）', () => {
+    expect(decodeEventPayload(42)).toMatchObject({
+      fail: 'shape',
+      field: 'data',
+      expected: 'string',
+    })
+  })
+
+  it('不是合法 JSON → `notJson`，失败臂取不到 value', () => {
+    const out = decodeEventPayload('garbage')
+
+    expect(out).toEqual({ fail: 'notJson' })
+    expect('value' in out).toBe(false)
+  })
+
+  /**
+   * `JSON.parse('null')` 是**合法 JSON**，但 `null` 不是对象。
+   * 收口前是 `as PhotoshopEventPayload` 抹过去，之后 `payload.eventData` 直接 TypeError（TD-18-9）。
+   */
+  it('合法 JSON 但不是对象（null / 数组 / 标量）→ 形状臂，不当载荷用', () => {
+    expect(decodeEventPayload('xxxxxnull')).toMatchObject({ fail: 'shape', expected: 'object' })
+    expect(decodeEventPayload('xxxxx[]')).toMatchObject({ fail: 'shape', expected: 'object' })
+    expect(decodeEventPayload('xxxxx42')).toMatchObject({ fail: 'shape', expected: 'object' })
   })
 })
 
@@ -159,7 +182,7 @@ describe('registerPhotoshopEvent', () => {
   })
 
   it('dispatchEvent 抛错时向外抛', () => {
-    window.__adobe_cep__!.dispatchEvent = () => {
+    installed.dispatchEvent = () => {
       throw new Error('boom')
     }
     expect(() => registerPhotoshopEvent(EVENT_ID)).toThrow('boom')
@@ -177,6 +200,26 @@ describe('onPhotoshopCallback', () => {
 
     off()
     expect(listeners.has(CALLBACK)).toBe(false)
+  })
+
+  /**
+   * 坏载荷**不许**进 handler，也不许抛出去 ——
+   * 以前 `parseEventData` 在宿主 `addEventListener` 里抛，异常被宿主吞掉，
+   * 表现是「事件静默消失」。现在必须：记日志、丢弃这一次、下一次照常。
+   */
+  it('载荷读不懂 → 不调 handler（丢弃这一次，不是抛进宿主）', () => {
+    const handler = vi.fn()
+    const off = onPhotoshopCallback(handler)
+
+    expect(() => listeners.get(CALLBACK)?.[0]({ data: 'garbage' })).not.toThrow()
+
+    expect(handler).not.toHaveBeenCalled()
+
+    // 下一次正常事件照常送达（丢弃是"这一次"，不是把通道关了）
+    listeners.get(CALLBACK)?.[0]({ data: 'xxxxx{"eventID":2}' })
+    expect(handler).toHaveBeenCalledWith({ eventID: 2 })
+
+    off()
   })
 })
 
@@ -242,7 +285,7 @@ describe('subscribeHostEvent', () => {
   })
 
   it('PS 注册失败时向外抛，不静默降级', async () => {
-    window.__adobe_cep__!.dispatchEvent = () => {
+    installed.dispatchEvent = () => {
       throw new Error('boom')
     }
 
@@ -269,11 +312,8 @@ describe('hasCepEvents', () => {
 
   it('只有大写 getExtensionID 不算可用', () => {
     // 这个用例**故意把桥改坏**（把 getExtensionId 换成大小写写错的 getExtensionID）
-    // ⇒ 这里把形状收窄到"这两个键"，好让 `delete` / 赋值都不越界
-    const bridge = window.__adobe_cep__ as {
-      getExtensionId?: () => string
-      getExtensionID?: () => string
-    }
+    // ⇒ 桥句柄的类型里已声明了 `getExtensionID`，`delete` / 赋值都不越界，不需要转型
+    const bridge = installed
     delete bridge.getExtensionId
     bridge.getExtensionID = () => EXT
 
@@ -282,7 +322,7 @@ describe('hasCepEvents', () => {
   })
 
   it('桥上没有 dispatchEvent 时为 false', () => {
-    delete window.__adobe_cep__?.dispatchEvent
+    delete installed.dispatchEvent
     expect(hasCepEvents()).toBe(false)
   })
 })
@@ -318,7 +358,7 @@ describe('sendAppEvent', () => {
   })
 
   it('桥上没有 dispatchEvent 时返回 false，不抛', () => {
-    delete window.__adobe_cep__?.dispatchEvent
+    delete installed.dispatchEvent
     expect(sendAppEvent(APP_EVENT_SEBAN, 'GengXin')).toBe(false)
   })
 })
@@ -387,7 +427,7 @@ describe('onAppEvent', () => {
   })
 
   it('没有 addEventListener 的桥 → no-op，不抛', () => {
-    delete window.__adobe_cep__!.addEventListener
+    delete installed.addEventListener
     const off = onAppEvent(APP_EVENT_SEBAN, () => {})
     off()
   })

@@ -132,10 +132,10 @@ describe('假 PS 全链路：三类宿主失败', () => {
     const result = await execute('e2e.write')
 
     // ① 用户能看见：`useCommand.invoke` 就是把 reason 弹出来
-    expect(result.ok).toBe(false)
-    if (result.ok === false) {
+    expect(result.status === 'ok').toBe(false)
+    if (result.status === 'error') {
       expect(result.reason).toContain('没有选中图层')
-      expect(result.code).toBe('JSX')
+      expect(result.fail).toBe('JSX')
     }
 
     // ② 日志有原因（落盘 → 重开仍可查）
@@ -165,12 +165,12 @@ describe('假 PS 全链路：三类宿主失败', () => {
     await vi.advanceTimersByTimeAsync(60_001)
     const result = await pending
 
-    expect(result.ok).toBe(false)
-    if (result.ok === false) {
+    expect(result.status === 'ok').toBe(false)
+    if (result.status === 'error') {
       expect(result.reason).toContain('可能已经执行')
       expect(result.reason).toContain('请先确认结果')
       expect(result.reason).not.toMatch(/请重试|请稍后重试/)
-      expect(result.code).toBe('TIMEOUT_UNKNOWN')
+      expect(result.fail).toBe('TIMEOUT_UNKNOWN')
     }
 
     vi.advanceTimersByTime(500)

@@ -52,7 +52,7 @@ export const useCommonUseStore = defineStore('common-use', () => {
   /**
    * 两个来源各自的原因，合成一个 `degraded`：
    * `tiles` 读 `sj_commonFunction.json`，`options` 读 `sj_set.json`——**两个文件**，
-   * 后跑的那个不许把前一个的原因抹掉（T-101-1 之前 `loadOptions` 的坏因整个丢掉）。
+   * 后跑的那个不许把前一个的原因抹掉（否则后跑的坏因会整个盖掉前一个）。
    */
   const reasons = ref({ tiles: '', options: '' })
   /** 非空表示读到的是降级数据（文件损坏），仍可渲染但要提示 */
@@ -71,9 +71,14 @@ export const useCommonUseStore = defineStore('common-use', () => {
     // 默认值取生产者给的 `fallback`（`legacySettingsRepo` 的 `{}` 经 `pickCommonUseOptions` 归一），
     // 消费侧不另写一份空对象（T-104 / ADR-24）
     options.value = read.status === 'ok' ? read.value : read.fallback
-    reasons.value.options = read.reason ?? ''
+    reasons.value.options = read.status === 'ok' ? '' : read.reason
     if (read.status !== 'ok') {
-      log.error('common-use', `常用页设置读取失败，子面板参数按缺省显示：${read.reason}`)
+      // 日志拿技术现场：只有读盘失败有 `failure`，内容失败传种类。message 只写事件
+      log.error(
+        'common-use',
+        '常用页设置读取失败，子面板参数按缺省显示',
+        read.fail === 'readError' ? read.failure : { fail: read.fail },
+      )
     }
   }
 
@@ -90,7 +95,7 @@ export const useCommonUseStore = defineStore('common-use', () => {
       // 坏读的默认值取生产者给的 `fallback`（`commonUseRepo` 的 `createEmptyCommonUseFile()` 就是 `[]`，
       // `common-use.ts:31-36`）——`toTiles([])` 与旧写法 `toTiles(null)` 逐项同结果（T-104）
       applyFile(read.status === 'ok' ? read.value : read.fallback)
-      reasons.value.tiles = read.reason ?? ''
+      reasons.value.tiles = read.status === 'ok' ? '' : read.reason
     } catch (e) {
       error.value = describeCepError(e)
       applyFile(null)

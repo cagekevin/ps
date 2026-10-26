@@ -100,7 +100,7 @@ describe('freePanel.execute 嵌套执行（D-33）', () => {
 
     const result = await execute('freePanel.execute', { blockId: 1, btnId: 1 })
 
-    expect(result).toEqual({ ok: true })
+    expect(result).toEqual({ status: 'ok' })
     expect(selection.refresh).toHaveBeenCalledTimes(1)
     expect(jsx.action.callAction).toHaveBeenCalledTimes(1)
   })
@@ -112,7 +112,7 @@ describe('freePanel.execute 嵌套执行（D-33）', () => {
 
     const result = await execute('freePanel.execute', { blockId: 1, btnId: 1 })
 
-    expect(result).toMatchObject({ ok: false, reason: '请先选择一个图层' })
+    expect(result).toMatchObject({ status: 'error', reason: '请先选择一个图层' })
     expect(selection.refresh).toHaveBeenCalledTimes(1)
   })
 
@@ -127,8 +127,8 @@ describe('freePanel.execute 嵌套执行（D-33）', () => {
 
     const result = await execute('freePanel.execute', { blockId: 1, btnId: 1 })
 
-    expect(result).toMatchObject({ ok: false, code: 'PARSE' })
-    if (result.ok === false) {
+    expect(result).toMatchObject({ status: 'error', fail: 'PARSE' })
+    if (result.status === 'error') {
       expect(result.reason).toContain('zt_changeTextBranchMerge')
       expect(result.reason).toContain('不是有效数字')
     }
@@ -141,7 +141,7 @@ describe('freePanel.execute 嵌套执行（D-33）', () => {
 
     await withFailingCommand('action.call', 'FONT_MISSING', '字体缺失', async () => {
       const result = await execute('freePanel.execute', { blockId: 1, btnId: 1 })
-      expect(result).toMatchObject({ ok: false, code: 'FONT_MISSING', reason: '字体缺失' })
+      expect(result).toMatchObject({ status: 'error', fail: 'FONT_MISSING', reason: '字体缺失' })
     })
   })
 

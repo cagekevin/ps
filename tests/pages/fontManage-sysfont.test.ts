@@ -16,7 +16,7 @@ import type { FontItem } from '@/domain/font-item'
 const reads = vi.hoisted(() => ({
   getFontList: vi.fn(),
   readFontTags: vi.fn(async () => []),
-  readFontStars: vi.fn(async () => ({ ok: true, stars: {} })),
+  readFontStars: vi.fn(async () => ({ status: 'ok', stars: {} })),
 }))
 
 const selection = vi.hoisted(() => ({ hasSelection: true, typeNumber: 2 }))

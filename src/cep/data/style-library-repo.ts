@@ -8,7 +8,8 @@
 import { DATA_FILES } from '@/cep/env'
 import { b64ToUtf8 } from '@/cep/codec'
 import { hasNode } from '@/cep/node'
-import { readBase64File, readOwnFileText } from '@/cep/fs-read'
+import { describeReadFailure, readBase64File, readOwnFileText } from '@/cep/fs-read'
+import { badContent, badRead, describeDecodeFail, readTextForWrite } from './repo-read'
 import { userDir } from '@/cep/paths'
 import { removeFile, writeBase64File } from '@/cep/disk-write'
 import { applyItemDrop, applyListDrop, type DropMove, type DropPosition } from '@/domain/reorder'
@@ -25,7 +26,7 @@ import {
 import { CepError } from '@/utils/errors'
 import { msg } from '@/domain/messages'
 import { log } from '@/utils/logger'
-import { decodeStyleWarehouseIndex } from '@/domain/style-library'
+import { decodeKuRawGroupsText, decodeStyleWarehouseIndex } from '@/domain/style-library'
 import { dataRepo } from './data-repo'
 import { REPLACE_WITHOUT_BASELINE } from './types'
 import { repoAt } from './repo-at'
@@ -38,7 +39,7 @@ import { fileNameOf } from '@/domain/style-library'
 import { runExclusive } from './exclusive'
 
 /**
- * 索引仓库。读走 `fileRepo`（失败带 `degraded`，不抛）。
+ * 索引仓库。读走 `fileRepo`（读不懂就抛）。
  * 写只有一个触发点：当前仓库缺某个库文件名时，由 `updateKuGroups` 在库文件**写成功之后**补登记。
  */
 const styleIndexImpl: Repo<StyleWarehouseIndex> = dataRepo(
@@ -65,48 +66,43 @@ export function readKuLibrary(kind: KuKind, fileName: string): RepoRead<KuGroup[
 
   const read = readOwnFileText(`${userDir()}/${fileName}`)
   // T-116：`notSeen`（首次使用，本来就没有库文件）返回空库、`note` 留空；
-  // `error`（文件在、读不到）必须把原因放进 `note`——它经 `readKuLib` 汇进 `degraded`
+  // `error`（文件在、读不到）也必须抛——当空库会让页面显示成"这个库本来就没东西"
   // 由样式页渲染出来。否则用户看到的是"空库"，与"这个库本来就没有组"分不开
   if (read.status === 'error') {
-    log.error('style', `${kind} 库文件读不到：${read.reason}`)
-    return { status: 'error', reason: `库文件读不到（${read.reason}）`, fallback: [] }
+    log.error('style', `${kind} 库文件读不到`, read.failure)
+    return badRead(`库文件读不到（${describeReadFailure(read.failure)}）`, [], read.failure)
   }
   if (read.status === 'notSeen' || read.text === '') return { status: 'ok', value: [] }
 
   // domain 的纯解析走 `Decoded | DecodeFail`；这一层折成 IO 结论 `RepoRead`
   const parsed = readKuGroups(kind, read.text, b64ToUtf8)
-  if (isDecodeFail(parsed)) return { status: 'error', reason: parsed.fail, fallback: [] }
-  return parsed.degraded
-    ? { status: 'ok', value: parsed.value, reason: parsed.degraded }
-    : { status: 'ok', value: parsed.value }
+  if (isDecodeFail(parsed)) {
+    // 内层不是 JSON 单独成臂（消费侧要能分开说"文件坏了"与"结构不认识"）
+    return badContent(parsed.fail === 'notJson' ? 'notJson' : 'badShape', parsed.fail, [])
+  }
+  return { status: 'ok', value: parsed.value }
 }
 
 export interface StyleLibrarySnapshot {
   index: StyleWarehouseIndex
   libraries: Record<KuKind, KuGroup[]>
-  /** 非空 = 读到的不是真数据（索引损坏 / 某个库文件读不到） */
-  degraded: string
 }
 
 /**
- * 索引读取 + 归一 + `degraded` 拼装（原来这段在 `readStyleLibrary`、`usableIndex`
- * `style-library-io.indexState` 三处各写一遍）。
+ * 索引读取 + 归一（读不懂就抛）。
  *
  * 契约：**读坏了也返回**（`value` 是归一后的结果，`degraded` 非空说明为什么不可信），
  * 由调用方决定"照常用 + 提示"还是"中止写入"——两种策略的判据都在调用方，不在这里。
  */
-export function readIndexState(): {
-  value: StyleWarehouseIndex
-  degraded: string
-} {
+export function readIndexState(): StyleWarehouseIndex {
   // 一次同步读：没有队列，不存在"排在自己后面"这回事
   const stored = styleIndexImpl.read()
-  // `styleIndexImpl.read()` 已过 `decodeStyleWarehouseIndex` ⇒ `stored.value` 就是合法索引，
-  // 不需要再归一一次。这里只把「值可用但降级」与「读坏了」都折成一句 degraded（值用 fallback）。
-  return {
-    value: stored.status === 'ok' ? stored.value : stored.fallback,
-    degraded: stored.reason ?? '',
+  // `styleIndexImpl.read()` 已过 `decodeStyleWarehouseIndex` ⇒ `stored.value` 就是合法索引。
+  // 读坏了就抛（索引是整页的地基，拿 fallback 顶上去会让页面显示一个不存在的仓库）
+  if (stored.status !== 'ok') {
+    throw new CepError('IO', msg.data.fn.indexReadFailedAbortReplace(stored.reason))
   }
+  return stored.value
 }
 
 /**
@@ -117,23 +113,18 @@ export function readIndexState(): {
  */
 export function readStyleLibrary(): StyleLibrarySnapshot {
   const state = readIndexState()
-  const current = state.value.list[state.value.index]
+  const current = state.list[state.index]
 
   const libraries = {} as Record<KuKind, KuGroup[]>
-  const notes: string[] = []
 
   for (const kind of KU_KINDS) {
     const read = readKuLibrary(kind, fileNameOf(current, kind))
-    // 读不到时给空库（页面照常渲染其它库），但**原因必须进 notes** —— 不许显示成"这个库没有组"
-    libraries[kind] = read.status === 'ok' ? read.value : read.fallback
-    if (read.reason) notes.push(read.reason)
+    // 读不到就抛：以前给空库 + 一条 note，页面看起来是"这个库没东西"，与实际（坏文件）同形
+    if (read.status !== 'ok') throw new CepError('IO', read.reason)
+    libraries[kind] = read.value
   }
 
-  return {
-    index: state.value,
-    libraries,
-    degraded: [state.degraded, ...notes].filter(Boolean).join('；'),
-  }
+  return { index: state, libraries }
 }
 
 /** 当前仓库某个库的绝对路径；**读**用它（索引里没登记文件名就等于没这个库，不许猜路径） */
@@ -146,7 +137,7 @@ function currentLibPath(kind: KuKind): string {
   }
   // `stored.value` 已过 decode；这里只剩「一个仓库都没有」这一种不可用
   if (!stored.value.list.length) {
-    throw new CepError('IO', msg.data.fn.warehouseIndexUnusableAbort('仓库索引里没有任何仓库'))
+    throw new CepError('IO', msg.data.fn.warehouseIndexEmpty())
   }
   const warehouse = stored.value.list[stored.value.index]
   const fileName = fileNameOf(warehouse, kind)
@@ -160,30 +151,34 @@ function currentLibPath(kind: KuKind): string {
 export function readKuFileText(fileName: string): string | null {
   if (!fileName) return null
   if (/[\\/]/.test(fileName)) throw new CepError('PARSE', msg.data.fn.libFileNameInvalid(fileName))
-  const read = readOwnFileText(`${userDir()}/${fileName}`)
-  // T-107：调用方（导出旁路图）对两种不 ok 的处理相同——跳过这个库，只会少带图片。
-  // 合并是**调用方的语义**，所以留在这里；日志把原因留住，不让它无声消失
-  if (read.status === 'error') log.warn('style', `导出：${fileName} 读不到，跳过`, read.reason)
-  return read.status === 'ok' ? read.text : null
+  // 文件不在 ⇒ null（这个库本来就没导出过）；读不到 ⇒ 抛（不许少带图片还当导出成功）
+  return readTextForWrite(`${userDir()}/${fileName}`)
+}
+
+/** `DecodeFail` → 这个库的专属文案（按码选 `msg`，不在这里造句） */
+function rawGroupsText(kind: KuKind, fail: DecodeFail): string {
+  switch (fail.fail) {
+    case 'notJson':
+      return msg.data.fn.libFileNotJson(kind)
+    case 'badItem':
+      return msg.data.fn.libFileBadItem(kind, String(fail.count ?? 0))
+    default:
+      return msg.data.fn.libFileRootNotArray(kind)
+  }
 }
 
 /** 读库文件里的原始组数组；读不到一律抛（不猜、不补默认） */
 function readRawGroups(kind: KuKind): { path: string; groups: KuRawGroup[] } {
   const path = currentLibPath(kind)
-  const read = readOwnFileText(path)
-  // T-107：两种不 ok 这里同果（都抛）。文案本来就写的是"读不到"，对两种都成立，不改
-  if (read.status !== 'ok') throw new CepError('IO', msg.data.fn.libFileReadFailed(kind, path))
-  const text = read.text
-
-  let groups: unknown
-  try {
-    groups = JSON.parse(text)
-  } catch (e) {
-    log.error('style', msg.data.fn.libFileNotJson(kind), e)
-    throw new CepError('PARSE', msg.data.fn.libFileNotJson(kind))
+  // 文件不存在 = 这个库还没有内容（首次往里写），空数组，不是错
+  const text = readTextForWrite(path)
+  const decoded = text === null ? { value: [] as KuRawGroup[] } : decodeKuRawGroupsText(text)
+  if (isDecodeFail(decoded)) {
+    // 日志写事实（哪个库、坏在哪），错误码原样交给 logger
+    log.error('style', `${kind} 库文件解析失败`, decoded)
+    throw new CepError('PARSE', rawGroupsText(kind, decoded))
   }
-  if (!Array.isArray(groups)) throw new CepError('PARSE', msg.data.fn.libFileRootNotArray(kind))
-  return { path, groups: groups as KuRawGroup[] }
+  return { path, groups: decoded.value }
 }
 
 /**
@@ -292,10 +287,9 @@ function itemList(group: KuRawGroup, groupIndex: number): unknown[] {
 
 function itemAt(groups: KuRawGroup[], groupIndex: number, itemIndex: number): KuRawGroup {
   const item = itemList(groupAt(groups, groupIndex), groupIndex)[itemIndex]
-  if (!item || typeof item !== 'object' || Array.isArray(item)) {
-    throw new CepError('PARSE', msg.data.fn.itemMissing(String(itemIndex)))
-  }
-  return item as KuRawGroup
+  // `isRecord` 本身就是证明 ⇒ 不用 `as` 再声明一次
+  if (!isRecord(item)) throw new CepError('PARSE', msg.data.fn.itemMissing(String(itemIndex)))
+  return item
 }
 
 /**
@@ -306,10 +300,8 @@ function itemAt(groups: KuRawGroup[], groupIndex: number, itemIndex: number): Ku
  * （原件虽在 `.bak`，但用户不该承担这个）。所以这类一律抛。
  */
 function usableIndex(): StyleWarehouseIndex {
-  const state = readIndexState()
-  if (state.degraded)
-    throw new CepError('PARSE', msg.data.fn.warehouseIndexUnusableAbortWrite(state.degraded))
-  return state.value
+  // `readIndexState()` 读不懂就抛，这里不再二次判
+  return readIndexState()
 }
 
 interface KuFileTarget {
@@ -475,27 +467,19 @@ export interface WarehouseDeleteResult {
 
 /**
  * 读某个库文件里的原始组数组。
- * 读不到 / 不是数组 = 这个库没有可枚举的图片，**不抛**：枚举失败只会留下孤儿文件，不会丢数据，
- * 而删仓库这件事本身不该被一个读不动的库文件卡住。
+ * 文件不在 = 这个库没有可枚举的图片（空）；读不到 / 读不懂 ⇒ 抛 ——
+ * 跳过会让仓库"删成功但图片全留"，用户以为清干净了。
  */
 function groupsOfFile(fileName: string | undefined): Record<string, unknown>[] {
   if (!fileName) return []
-  const read = readOwnFileText(`${userDir()}/${fileName}`)
-  // 这里的合并是**有意的**（上面注释：删仓库不该被一个读不动的库文件卡住），不是欠账。
-  // 代价只可能是留下孤儿文件，不会丢数据；原因仍进日志
-  if (read.status === 'error') {
-    log.warn('style', `删除仓库：${fileName} 读不到，跳过它的图片文件`, read.reason)
-    return []
-  }
-  if (read.status === 'notSeen' || read.text === '') return []
+  const text = readTextForWrite(`${userDir()}/${fileName}`)
+  if (!text) return []
 
-  try {
-    const parsed: unknown = JSON.parse(read.text)
-    return Array.isArray(parsed) ? parsed.filter(isRecord) : []
-  } catch (e) {
-    log.warn('style', `删除仓库：${fileName} 不是合法 JSON，跳过它的图片文件`, e)
-    return []
+  const decoded = decodeKuRawGroupsText(text)
+  if (isDecodeFail(decoded)) {
+    throw new CepError('PARSE', msg.data.fn.libFileBadShape(fileName, describeDecodeFail(decoded)))
   }
+  return decoded.value
 }
 
 /**
@@ -551,7 +535,7 @@ function copyToRecycle(relative: string, recycleDir: string): boolean {
   // T-109：读不到 ≠ 没有。返回 `false` 只表示"没东西可移"——原件不会被删，留在原位。
   // 读不到也走这条（不抛）：抛会中止整次删仓库，而留下的只是一个孤儿文件
   if (read.status === 'error') {
-    log.warn('style', `删除仓库：${relative} 读不到，跳过回收（原件保留）`, read.reason)
+    log.warn('style', `删除仓库：${relative} 读不到，跳过回收（原件保留）`, read.failure)
     return false
   }
   if (read.status === 'notSeen') return false
@@ -559,7 +543,7 @@ function copyToRecycle(relative: string, recycleDir: string): boolean {
   // 底层文案已含目标路径（就在 recycleDir 下）与原因，不再二次包装。
   // 回收目录名带时间戳，副本必定是新文件：它还在就说明同名碰撞，停下比覆盖安全
   writeBase64File(`${recycleDir}/${relative}`, read.base64, {
-    cas: { mode: 'compare', expected: null },
+    cas: { mode: 'compare', expected: { status: 'absent' } },
     backup: { mode: 'none', why: '回收副本是新文件，无原文可备' },
   })
   return true
@@ -611,7 +595,7 @@ export function deleteWarehouse(index: number): WarehouseDeleteResult {
       try {
         removeFile(`${userDir()}/${relative}`)
       } catch (e) {
-        // 删不掉要说出来：T-109 之前这里靠 existsSync，EPERM 会被谎报成删成功。
+        // 删不掉要说出来（existsSync 会把 EPERM 谎报成删成功，不能靠它判断）。
         // 现在它是活的：抛出来 → 落日志 + 进 `failed` 返回值（调用方拿得到）。
         log.warn('style', `删除仓库：旧文件删不掉：${relative}`, e)
         failed.push(relative)
@@ -661,12 +645,10 @@ export function addKuGroup(kind: KuKind, name: string, afterIndex?: number): voi
 export function appendKuGroup(kind: KuKind, group: unknown): void {
   // `async` 不是装饰：参数校验必须变成 **rejected promise**，不能同步 throw ——
   // 调用方（`executeInherited` / `style.appendGroup`）只会 `.catch`，同步抛会漏出调用链。
-  if (!group || typeof group !== 'object' || Array.isArray(group)) {
-    throw new CepError('PARSE', msg.data.text.groupMustBeObject)
-  }
+  if (!isRecord(group)) throw new CepError('PARSE', msg.data.text.groupMustBeObject)
 
   return updateKuGroups(kind, (groups) => {
-    groups.push(group as KuRawGroup)
+    groups.push(group)
   })
 }
 
@@ -801,7 +783,10 @@ export function moveKuItem(
 
     const to = itemIndex + (direction === 'up' ? -1 : 1)
     if (to < 0 || to >= list.length) {
-      throw new CepError('PARSE', direction === 'up' ? '已经是第一项' : '已经是最后一项')
+      throw new CepError(
+        'PARSE',
+        direction === 'up' ? msg.data.fn.itemAlreadyFirst() : msg.data.fn.itemAlreadyLast(),
+      )
     }
     const [item] = list.splice(itemIndex, 1)
     list.splice(to, 0, item)

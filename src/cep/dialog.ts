@@ -1,3 +1,4 @@
+import { getCep } from './host'
 import { CepError } from '@/utils/errors'
 import { msg } from '@/domain/messages'
 
@@ -9,9 +10,22 @@ import { msg } from '@/domain/messages'
  * `CepFs` 的形状声明在 `src/env.d.ts`：`window.cep` 是 CEP 运行时注入的第三方形状（ADR-0024）。
  */
 function cepFs(): CepFs {
-  const fs = window.cep?.fs
+  const fs = getCep()?.fs
   if (!fs) throw new CepError('NO_CEP', msg.ps.text.cepDialogUnavailable)
   return fs
+}
+
+/**
+ * 取 CEP `fs` 上的**某一个**方法（每个出口只要它自己用的那个）。
+ *
+ * "方法缺失"也算拿不到：老 CEP / `window.cep` 被部分注入时可能只给一个方法。
+ * 与 `cep/paths.ts` 对桥的判据同一条（那里是 `typeof bridge.getSystemPath !== 'function'` ⇒ 抛）——
+ * 不许让缺方法变成 `fs.showOpenDialogEx is not a function` 这种说不清的 TypeError。
+ */
+function cepMethod<K extends keyof CepFs>(name: K): CepFs[K] {
+  const fn = cepFs()[name]
+  if (typeof fn !== 'function') throw new CepError('NO_CEP', msg.ps.text.cepDialogUnavailable)
+  return fn
 }
 
 function normalizePath(value: string): string {
@@ -31,14 +45,18 @@ function isCepOk(err: number): boolean {
 
 /** 打开单个文件；取消返回 null */
 export function openFile(title: string, extensions: string[]): string | null {
-  const result = cepFs().showOpenDialogEx(false, false, title, '', extensions)
-  if (!isCepOk(result.err) || !result.data.length) return null
+  const showOpen = cepMethod('showOpenDialogEx')
+  const result = showOpen(false, false, title, '', extensions)
+  // `data[0]` 也要判：`{ err: 0, data: [''] }` 是取消的另一种形态，
+  // 空串不是路径 —— 交给调用方去拼目录会拼出 `<空>/xxx`。
+  if (!isCepOk(result.err) || !result.data[0]) return null
   return normalizePath(result.data[0])
 }
 
 /** 保存文件；取消返回 null。扩展名不存在时自动补第一个 */
 export function saveFile(title: string, extensions: string[], defaultName: string): string | null {
-  const result = cepFs().showSaveDialogEx(title, '', extensions, defaultName, '')
+  const showSave = cepMethod('showSaveDialogEx')
+  const result = showSave(title, '', extensions, defaultName, '')
   if (!isCepOk(result.err) || !result.data) return null
 
   let path = normalizePath(result.data)

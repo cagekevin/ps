@@ -32,7 +32,7 @@ export const useActionStore = defineStore('action', () => {
    *
    * 导出 `computed` 而不是 `ref`：`storeToRefs` 对只读 getter 给的是 `ComputedRef`，
    * 页面写 `listType.value = …` 时 `vue-tsc` 直接报只读属性——判据有执行者，
-   * 不再靠"页面记得别赋值"这句注释（那版只是约定，改回去测试照样绿）。
+   * 不再靠"页面记得别赋值"这句注释（只读类型让 `vue-tsc` 直接拦下赋值）。
    */
   const listType = computed(() => listTypeColumns.value)
 

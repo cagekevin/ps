@@ -24,7 +24,7 @@ const open = ref(false)
 const root = ref<HTMLElement | null>(null)
 
 /**
- * 关闭通道接底座：点外部 + Esc（原来只能"再点一次数字按钮"或"选一项"）。
+ * 关闭通道接底座：点外部 + Esc（不再依赖"再点一次数字按钮"或"选一项"）。
  * 定位仍是本组件的 CSS `position: absolute` —— 不接 `useFloatingPosition`，
  * 那会改变位置来源（本页是表格行内浮层，跟着行滚），属视觉迁移，冻结节不许。
  */

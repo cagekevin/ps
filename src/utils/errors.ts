@@ -43,7 +43,7 @@ export type CepErrorCode =
   /**
    * 用户自己取消（点了「取消」/ 在 PS 里放弃了操作）。
    *
-   * **这不是失败**：注册表把它归一成 `CommandOutcome.ok === 'cancelled'`，`useCommand` 因此
+   * **这不是失败**：注册表把它归一成 `CommandOutcome.status === 'cancelled'`，`useCommand` 因此
    * 不弹失败提示。以前取消被写成 PARSE / NETWORK，用户点「取消」会收到一条"故障"。
    */
   | 'CANCELLED'
@@ -60,11 +60,24 @@ export class CepError extends Error {
   readonly code: CepErrorCode
   /** 宿主返回的原始 code（如字体缺失流程靠 `hostCode === 1` 判定）；非 jsx 失败时无此值 */
   readonly hostCode?: number | string
+  /**
+   * **技术原文**：系统 / 宿主给的原因（`EPERM: operation not permitted, unlink '…'`、
+   * `SyntaxError: Unexpected token` 这种），只进日志与 DevTools，**不进用户文案**。
+   *
+   * 与 `message` 的分工是硬边界：
+   * - `message` → `describeCepError()` → toast / 错误条（中文，一句话）；
+   * - `cause` → `utils/logger` 的 `oneLine()` → 日志（原文，不翻译）。
+   *
+   * 自己赋值而不是 `super(message, { cause })`：`Error` 的第二参是 Chrome 93+ 才有的，
+   * CEP 的 Chromium 更老，传了会被**静默丢掉** —— 那种"看起来支持、实际丢信息"最难查。
+   */
+  override readonly cause?: unknown
 
-  constructor(code: CepErrorCode, message: string, hostCode?: number | string) {
+  constructor(code: CepErrorCode, message: string, hostCode?: number | string, cause?: unknown) {
     super(message)
     this.name = 'CepError'
     this.code = code
     this.hostCode = hostCode
+    this.cause = cause
   }
 }

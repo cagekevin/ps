@@ -71,7 +71,7 @@ describe('取消臂：产出点', () => {
   it('命令抛 CANCELLED → 结果是 ok:cancelled，不是 ok:false', async () => {
     const result = await execute('test.cancel')
 
-    expect(result).toEqual({ ok: 'cancelled' })
+    expect(result).toEqual({ status: 'cancelled' })
   })
 
   it('取消记 info，不记 warn（它不是失败）', async () => {
@@ -84,18 +84,15 @@ describe('取消臂：产出点', () => {
 
   it('云同步：引擎回 cancelled（用户在确认框点了取消）→ ok:cancelled', async () => {
     cloud.engine.download.mockResolvedValue({
-      ok: false,
-      count: 0,
-      hasCloud: true,
-      cancelled: true,
-      error: '取消操作',
+      status: 'cancelled',
+      failure: { fail: 'CLOUD_CANCELLED', reason: '取消操作' },
     })
 
     const result = await execute('cloud.download', {
       onConfirm: async () => ({ ok: true, data: true }),
     })
 
-    expect(result).toEqual({ ok: 'cancelled' })
+    expect(result).toEqual({ status: 'cancelled' })
   })
 })
 

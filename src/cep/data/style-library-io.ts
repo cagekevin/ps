@@ -8,9 +8,11 @@
 import { b64ToUtf8, utf8ToB64 } from '@/cep/codec'
 import { readBase64File, readExternalText } from '@/cep/fs-read'
 import { userDir } from '@/cep/paths'
-import { removeFile, writeBase64File, writeDiskSync } from '@/cep/disk-write'
+import { readBefore, removeFile, writeBase64File, writeDiskSync } from '@/cep/disk-write'
 import { isKuLibraryFileName } from '@/domain/ku-format'
 import { isUsableJsonText } from '@/utils/json'
+import { isDecodeFail } from '@/utils/decode'
+import { describeDecodeFail } from './repo-read'
 import {
   encodeKuContainer,
   isSafeKuEntryName,
@@ -53,18 +55,10 @@ export interface KuImportResult {
 
 // `indexPath()` 已不需要：索引的读/备份/写全在 `styleIndexWriter.overwrite` 里。
 
-function parseOrThrow<T>(read: () => T): T {
-  try {
-    return read()
-  } catch (e) {
-    throw new CepError('PARSE', e instanceof Error ? e.message : '导入文件结构不正确')
-  }
-}
-
 /**
  * 把被覆盖的原文件**存成可用的 `.bak`**；原文已经不可用时另存为 `.corrupt-<时间戳>`。
  *
- * 契约：**`.bak` = 可读的上一版**。旧实现只是"被覆盖前的磁盘原文" ——
+ * 契约：**`.bak` = 可读的上一版** ——
  * 原文自己坏了时 `.bak` 存的就是坏的，回滚看着成功、打开还是坏，等于没有退路。
  * 所以这里的判据不是"备份写成功"，而是"这份内容配叫备份"：
  * - 库文件（`sj_ku*`）先过 `isUsableJsonText`（`utils/json.ts`，全仓唯一一份判据）；
@@ -90,7 +84,7 @@ function classifyOriginal(relative: string, path: string, base64: string): 'keep
       // **不在这里再包一层** —— 包了就是"备份失败：x.corrupt（写入失败：x.corrupt（EACCES））"。
       // `.corrupt-<ts>` 是新文件：它还在就说明同一毫秒内撞了，停下比覆盖安全
       writeBase64File(quarantine, base64, {
-        cas: { mode: 'compare', expected: null },
+        cas: { mode: 'compare', expected: { status: 'absent' } },
         backup: { mode: 'none', why: '坏原文的隔离副本就是退路，不再为它留退路' },
       })
       log.warn(
@@ -111,30 +105,28 @@ function classifyOriginal(relative: string, path: string, base64: string): 'keep
  */
 function writeKuFile(relative: string, base64: string): boolean {
   const path = `${userDir()}/${relative}`
-  const read = readBase64File(path)
   // T-109：**读不到 ≠ 没有**。读不到时若当成"本次新建"，回滚会删掉一个本来就存在的文件；
-  // 若照旧覆盖，原文没进 `.bak` 就再也回不去。所以读不到直接中止这次导入
-  if (read.status === 'error') {
-    throw new CepError('IO', msg.data.fn.readOriginalFailedAbortImport(relative, read.reason))
-  }
-  const original = read.status === 'ok' ? read.base64 : null
+  // 若照旧覆盖，原文没进 `.bak` 就再也回不去。所以「读不到 ⇒ 中止这次导入」——但这条判据
+  // 不在本文件：`readBefore` 是全仓唯一构造点，读不到它直接抛（文案含路径与原因）。
+  const before = readBefore(path, 'bytes')
   // **只有判据留在这里**（"这份原文算不算可用库文件"是领域知识）；
   // 写 `.bak` 的机制归落盘入口（`backup: 'keep'`），本文件不再自己写一份。
-  const classified = original === null ? 'none' : classifyOriginal(relative, path, original)
+  const classified =
+    before.status === 'absent' ? 'none' : classifyOriginal(relative, path, before.text)
   // 写不进去就抛（底层文案已含完整路径与原因）。不二次包装。
   // CAS 比的是**本次读到的原文**：读与写之间别的面板可能已经改过这一份库文件。
   writeBase64File(path, base64, {
-    cas: { mode: 'compare', expected: original },
+    cas: { mode: 'compare', expected: before },
     backup:
       classified === 'keep'
         ? // 原文已读到，直接交给落盘入口写 `.bak`，省一次重读
-          { mode: 'keep', previous: original }
+          { mode: 'keep', before }
         : {
             mode: 'none',
             why: classified === 'quarantined' ? '坏原文已另存 .corrupt-*' : '没有原文可备',
           },
   })
-  return read.status === 'ok'
+  return before.status === 'ok'
 }
 
 /**
@@ -171,18 +163,24 @@ function sidecarNamesOf(kind: 'style' | 'gradient', groups: readonly KuRawGroup[
   return [...names]
 }
 
-/** 一个仓库的旁路图清单。库文件读不懂就跳过：只会少带图片，不会导出坏数据 */
+/**
+ * 一个仓库的旁路图清单。
+ *
+ * 库文件**不存在**就跳过（这个库没导出过）；**读不懂就抛** —— 跳过会让导出的包少几张图，
+ * 而用户以为导全了（同一个导出流程里，「读不到」已经抛了，两种失败不该两种待遇）。
+ */
 function sidecarNamesOfWarehouse(warehouse: StyleWarehouse): string[] {
   const names: string[] = []
 
   for (const kind of ['style', 'gradient'] as const) {
-    const text = readKuFileText(fileNameOf(warehouse, kind))
+    const fileName = fileNameOf(warehouse, kind)
+    const text = readKuFileText(fileName)
     if (!text) continue
-    try {
-      names.push(...sidecarNamesOf(kind, parseKuGroups(text)))
-    } catch (e) {
-      log.warn('style', `导出：${fileNameOf(warehouse, kind)} 读不懂，跳过它的旁路图`, e)
+    const groups = parseKuGroups(text)
+    if (isDecodeFail(groups)) {
+      throw new CepError('PARSE', msg.data.fn.libFileBadShape(fileName, describeDecodeFail(groups)))
     }
+    names.push(...sidecarNamesOf(kind, groups.value))
   }
 
   return names
@@ -223,9 +221,8 @@ function validateContainer(file: KuContainerFile): void {
  * 覆盖导入例外（它本来就要整份替换，且替换前会留 `.bak`），见 `importKuArchive`。
  */
 function currentIndex(): StyleWarehouseIndex {
-  const { value, degraded } = readIndexState()
-  if (degraded) throw new CepError('PARSE', msg.data.fn.warehouseIndexUnusable(degraded))
-  return value
+  // `readIndexState()` 读不懂就抛
+  return readIndexState()
 }
 
 export function kuArchiveDefaultName(current: boolean): string {
@@ -268,7 +265,7 @@ export function exportKuArchive(
       // 契约 §2.5：`data` 不是字符串时就是布尔 `false`，语义是"这个文件当时读不到"。
       // 所以这里**有意**把 `notSeen` 与 `error` 合成都写成 `false`（导出格式要求的形状）
       const read = readBase64File(`${userDir()}/${fileName}`)
-      if (read.status === 'error') log.warn('style', `导出：${fileName} 读不到`, read.reason)
+      if (read.status === 'error') log.warn('style', `导出：${fileName} 读不到`, read.failure)
       arrFileData.push({ name: fileName, data: read.status === 'ok' ? read.base64 : false })
     }
 
@@ -277,7 +274,7 @@ export function exportKuArchive(
     for (const name of sidecarNamesOfWarehouse(warehouse)) {
       // 同上：契约 §2.5 要求 `false` 表示"读不到"，这里有意把两态合成 `false`
       const sidecar = readBase64File(`${userDir()}/${name}`)
-      if (sidecar.status === 'error') log.warn('style', `导出：${name} 读不到`, sidecar.reason)
+      if (sidecar.status === 'error') log.warn('style', `导出：${name} 读不到`, sidecar.failure)
       arrFileData.push({ name, data: sidecar.status === 'ok' ? sidecar.base64 : false })
     }
 
@@ -303,7 +300,7 @@ function moveToRecycle(names: readonly string[], keep: ReadonlySet<string>, dir:
     const read = readBase64File(`${userDir()}/${name}`)
     // 读不到就跳过：旧文件留在原位，不会丢；只是没进回收目录（宁留孤儿，不丢原件）
     if (read.status === 'error') {
-      log.warn('style', `替换导入：旧文件读不到，跳过回收：${name}`, read.reason)
+      log.warn('style', `替换导入：旧文件读不到，跳过回收：${name}`, read.failure)
       continue
     }
     if (read.status === 'notSeen') continue
@@ -311,7 +308,7 @@ function moveToRecycle(names: readonly string[], keep: ReadonlySet<string>, dir:
     try {
       // 回收目录名带时间戳，副本必定是新文件
       writeBase64File(`${dir}/${name}`, read.base64, {
-        cas: { mode: 'compare', expected: null },
+        cas: { mode: 'compare', expected: { status: 'absent' } },
         backup: { mode: 'none', why: '回收副本是新文件，无原文可备' },
       })
     } catch (e) {
@@ -376,14 +373,18 @@ function importKuFromText(
   onProgress?: KuIoProgress,
 ): KuImportResult {
   onProgress?.('解析导入文件')
-  const imported = parseOrThrow(() => parseKuContainer(text))
+  const decoded = parseKuContainer(text)
+  if (isDecodeFail(decoded)) throw new CepError('PARSE', describeDecodeFail(decoded))
+  const imported = decoded.value
   validateContainer(imported)
 
-  const remapped = parseOrThrow(() => remapKuContainer(imported, kuGuid, CODEC))
+  const remappedRead = remapKuContainer(imported, kuGuid, CODEC)
+  if (isDecodeFail(remappedRead)) throw new CepError('PARSE', describeDecodeFail(remappedRead))
+  const remapped = remappedRead.value
   validateContainer(remapped)
 
   // 覆盖导入允许索引已损坏：它本来就要整份替换，且替换前会留 `.bak`；追加导入必须能读懂原索引
-  const before = append ? currentIndex() : readIndexState().value
+  const before = append ? currentIndex() : readIndexState()
   const oldFiles = append ? [] : filesOfIndex(before)
   const nextIndex = normalizeStyleIndex(remapped.store)
 
@@ -422,7 +423,7 @@ function importKuFromText(
       try {
         removeFile(`${userDir()}/${name}`)
       } catch (err) {
-        // 回滚删不掉只留下孤儿，但必须留下来历（旧实现丢掉返回值，删没删掉没人知道）
+        // 回滚删不掉只留下孤儿，但必须留下来历（删没删掉得让调用方知道）
         log.warn('style', `回滚：删新建文件失败（留下孤儿）：${name}`, err)
       }
     }

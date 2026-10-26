@@ -5,7 +5,7 @@ import type { CepErrorCode } from './errors'
  *
  * 1. `text` / `prefix` —— 用户文案（`describeCepError` 读）；
  * 2. `toast` —— `useCommand` 是否自动 toast（`FONT_MISSING` 交给页面弹窗，不自动弹）；
- * 3. `cancelled` —— `registry` 是否归一成 `CommandOutcome.ok === 'cancelled'`（用户取消不是失败）。
+ * 3. `cancelled` —— `registry` 是否归一成 `CommandOutcome.status === 'cancelled'`（用户取消不是失败）。
  *
  * **never 收尾（穷尽性证明）**：`Record<CepErrorCode, …>` 保证这张表覆盖所有码 ——
  * 新增 `CepErrorCode` 而不补这张表 ⇒ **编译不过**。以前散在三处（`error-text.ts` 的
@@ -19,7 +19,7 @@ export interface CodeEntry {
   prefix?: string
   /** 是否自动 toast。`false` = 页面自己处理（FONT_MISSING 弹下载确认）或不提示（CANCELLED） */
   toast: boolean
-  /** 是否归一成 `ok: 'cancelled'`（用户取消不是失败） */
+  /** 是否归一成 `status: 'cancelled'`（用户取消不是失败） */
   cancelled?: boolean
 }
 

@@ -48,8 +48,8 @@ describe('选区查询失败时', () => {
 
     const result = await execute('test.layer')
 
-    expect(result).toMatchObject({ ok: false, code: 'PARSE' })
-    if (result.ok === false) {
+    expect(result).toMatchObject({ status: 'error', fail: 'PARSE' })
+    if (result.status === 'error') {
       expect(result.reason).toContain('Layer_getTypeNumber 返回了无法识别的值')
     }
     expect(log.dump()).toContain('前置查询选区失败')
@@ -60,7 +60,7 @@ describe('选区查询失败时', () => {
     const invoke = vi.fn(async () => {})
     register(makeCommand({ id: 'test.export', requires: 'none', invoke }))
 
-    await expect(execute('test.export')).resolves.toEqual({ ok: true })
+    await expect(execute('test.export')).resolves.toEqual({ status: 'ok' })
     expect(invoke).toHaveBeenCalledTimes(1)
     // 用的是上一次快照，而不是"空选区"
     expect(selection.current).toHaveBeenCalled()
@@ -71,7 +71,7 @@ describe('选区查询失败时', () => {
     const invoke = vi.fn(async () => {})
     register(makeCommand({ id: 'test.doc', requires: 'document', invoke }))
 
-    await expect(execute('test.doc')).resolves.toEqual({ ok: true })
+    await expect(execute('test.doc')).resolves.toEqual({ status: 'ok' })
     expect(invoke).toHaveBeenCalledTimes(1)
   })
 
@@ -81,8 +81,8 @@ describe('选区查询失败时', () => {
 
     const result = await execute('test.text')
 
-    expect(result).toMatchObject({ ok: false, code: 'INIT' })
-    if (result.ok === false) {
+    expect(result).toMatchObject({ status: 'error', fail: 'INIT' })
+    if (result.status === 'error') {
       expect(result.reason).toContain('ztgl_initSystemList 不可用')
       expect(result.reason).not.toBe('读取选区失败')
     }

@@ -15,7 +15,7 @@
 import { createRequire } from 'node:module'
 import { afterEach, beforeEach, expect } from 'vitest'
 import { hasNode } from '@/cep/node'
-import { installHostRequire } from './host-stub'
+import { installHostRequire, removeHostRequire } from './host-stub'
 
 const realRequire = createRequire(import.meta.url)
 
@@ -227,8 +227,9 @@ export function installFakeFs(): FakeDisk {
       installHostRequire((id: string) => (id === 'fs' ? fakeFs : realRequire(id)))
     },
     uninstall() {
-      // 卸掉 require（`Reflect.deleteProperty` ⇒ 不用转型，也不受"必填属性不能 delete"的限制）
-      Reflect.deleteProperty(window, 'require')
+      // 与 `install()` 走同一条路（`installHostRequire` / `removeHostRequire`）。
+      // 装卸必须成对：一半动注入、一半动 `window` ⇒ 桩残留 ⇒ 下一个用例带着上一个的桩跑。
+      removeHostRequire()
     },
     read(path: string) {
       // 文本读：字节文件不走这里（用 `readFileSync(p)` 无 encoding 那条路）

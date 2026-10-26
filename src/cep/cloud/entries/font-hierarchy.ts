@@ -5,20 +5,27 @@
 // 禁止：页面/组件不许 import；这里不判断冲突、不发请求
 
 import { hierarchyWriter } from '@/cep/data/font-extra'
-import type { SyncUnitAdapter, WriteOutcome } from '@/domain/cloud'
+import { writeFailed, type SyncUnitAdapter, type WriteOutcome } from '@/domain/cloud'
 import type { HierarchyFile, HierarchyPreset } from '@/domain/font-set-config'
 import { inlineFile, readInlineJson, unitPayload } from './util'
+import { isDecodeFail, shapeFail } from '@/utils/decode'
+import { isRecord } from '@/utils/guards'
+import { describeDecodeFail } from '@/cep/data/repo-read'
 import { REPLACE_WITHOUT_BASELINE } from '@/cep/data/types'
 
 const PATH = '/sj_ztHierarych.json'
 
 function toLevels(value: unknown): number[] {
-  if (!Array.isArray(value) || value.length === 0) throw new Error('层级预设的字号列表为空')
-  const levels = value.map((item) => Number(item))
-  if (levels.some((item) => !Number.isFinite(item) || item < 1)) {
-    throw new Error('层级预设里有非法字号')
+  if (!Array.isArray(value)) throw new Error(describeDecodeFail(shapeFail('', 'array', value)))
+  if (!value.length) throw new Error(describeDecodeFail({ fail: 'emptyContent' }))
+  const bad = value.find((item) => {
+    const n = Number(item)
+    return !Number.isFinite(n) || n < 1
+  })
+  if (bad !== undefined) {
+    throw new Error(describeDecodeFail(shapeFail('list[].data', 'number', bad)))
   }
-  return levels
+  return value.map((item) => Number(item))
 }
 
 /**
@@ -27,16 +34,16 @@ function toLevels(value: unknown): number[] {
  * 真实文件样本未取得，故按「宽松读取、严格拒绝」处理（字段缺失就报错，不猜）。
  */
 function toHierarchyFile(value: unknown): HierarchyFile {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    throw new Error('层级预设不是对象')
-  }
-  const raw = value as { index?: unknown; list?: unknown }
-  if (!Array.isArray(raw.list) || raw.list.length === 0) throw new Error('层级预设没有条目')
+  if (!isRecord(value)) throw new Error(describeDecodeFail(shapeFail('', 'object', value)))
+  const raw = value
+  if (!Array.isArray(raw.list))
+    throw new Error(describeDecodeFail(shapeFail('list', 'array', raw.list)))
+  if (!raw.list.length) throw new Error(describeDecodeFail({ fail: 'emptyContent' }))
 
   const list: HierarchyPreset[] = raw.list.map((item) => {
-    const entry = item as { name?: unknown; data?: unknown }
+    const entry = isRecord(item) ? item : {}
     const name = typeof entry.name === 'string' ? entry.name.trim() : ''
-    if (!name) throw new Error('层级预设缺少名字')
+    if (!name) throw new Error(describeDecodeFail(shapeFail('list[].name', 'string', entry.name)))
     return { name, data: toLevels(entry.data) }
   })
 
@@ -62,14 +69,13 @@ export const fontHierarchyEntry: SyncUnitAdapter = {
 
   async write(payload): Promise<WriteOutcome> {
     try {
-      const file = toHierarchyFile(readInlineJson(payload))
+      const decoded = readInlineJson(payload)
+      if (isDecodeFail(decoded)) return writeFailed(describeDecodeFail(decoded))
+      const file = toHierarchyFile(decoded.value)
       hierarchyWriter.replace(file, REPLACE_WITHOUT_BASELINE)
-      return { ok: true }
+      return { status: 'ok' }
     } catch (error) {
-      return {
-        ok: false,
-        message: error instanceof Error ? error.message : '层级预设写回失败',
-      }
+      return writeFailed(error instanceof Error ? error.message : String(error))
     }
   },
 }

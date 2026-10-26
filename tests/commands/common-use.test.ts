@@ -7,23 +7,23 @@ vi.mock('@/selection', () => ({
 }))
 
 const commonUse = vi.hoisted(() => ({
-  zoom: vi.fn(async () => ({ ok: true, data: null })),
-  flip: vi.fn(async () => ({ ok: true, data: null })),
-  embedImage: vi.fn(async () => ({ ok: true, data: null })),
-  embedMultipleImages: vi.fn(async () => ({ ok: true, data: null })),
-  importMultipleImages: vi.fn(async () => ({ ok: true, data: null })),
+  zoom: vi.fn(async () => ({ status: 'ok', data: null })),
+  flip: vi.fn(async () => ({ status: 'ok', data: null })),
+  embedImage: vi.fn(async () => ({ status: 'ok', data: null })),
+  embedMultipleImages: vi.fn(async () => ({ status: 'ok', data: null })),
+  importMultipleImages: vi.fn(async () => ({ status: 'ok', data: null })),
   getImagePath: vi.fn(async (): Promise<unknown> => -1),
-  optimizeOnce: vi.fn(async () => ({ ok: true, data: null })),
-  optimizeFolder: vi.fn(async () => ({ ok: true, data: null })),
-  transform: vi.fn(async () => ({ ok: true, data: null })),
-  referenceGuide: vi.fn(async () => ({ ok: true, data: null })),
-  referenceSlice: vi.fn(async () => ({ ok: true, data: null })),
-  distribute: vi.fn(async () => ({ ok: true, data: null })),
+  optimizeOnce: vi.fn(async () => ({ status: 'ok', data: null })),
+  optimizeFolder: vi.fn(async () => ({ status: 'ok', data: null })),
+  transform: vi.fn(async () => ({ status: 'ok', data: null })),
+  referenceGuide: vi.fn(async () => ({ status: 'ok', data: null })),
+  referenceSlice: vi.fn(async () => ({ status: 'ok', data: null })),
+  distribute: vi.fn(async () => ({ status: 'ok', data: null })),
   getPsdList: vi.fn(async (): Promise<unknown> => []),
-  exportPsdImage: vi.fn(async () => ({ ok: true, data: null })),
+  exportPsdImage: vi.fn(async () => ({ status: 'ok', data: null })),
 }))
 
-const legacy = vi.hoisted(() => ({ call: vi.fn(async () => ({ ok: true, data: null })) }))
+const legacy = vi.hoisted(() => ({ call: vi.fn(async () => ({ status: 'ok', data: null })) }))
 
 vi.mock('@/cep/jsx', () => ({ jsx: { commonUse, legacy } }))
 
@@ -32,8 +32,8 @@ const { execute } = await import('@/commands/registry')
 
 beforeEach(() => {
   for (const fn of Object.values(commonUse)) fn.mockClear()
-  commonUse.getImagePath.mockResolvedValue({ ok: true, data: -1 })
-  commonUse.getPsdList.mockResolvedValue({ ok: true, data: [] })
+  commonUse.getImagePath.mockResolvedValue({ status: 'ok', data: -1 })
+  commonUse.getPsdList.mockResolvedValue({ status: 'ok', data: [] })
   legacy.call.mockClear()
 })
 
@@ -41,14 +41,14 @@ describe('常用页命令', () => {
   it('zoom 把倍数原样传给 jsx', async () => {
     const result = await execute('commonUse.zoom', { scale: 150 })
 
-    expect(result).toMatchObject({ ok: true })
+    expect(result).toMatchObject({ status: 'ok' })
     expect(commonUse.zoom).toHaveBeenCalledWith(150)
   })
 
   it('zoom 拒绝非正倍数', async () => {
     const result = await execute('commonUse.zoom', { scale: 0 })
 
-    expect(result).toMatchObject({ ok: false })
+    expect(result).toMatchObject({ status: 'error' })
     expect(commonUse.zoom).not.toHaveBeenCalled()
   })
 
@@ -58,7 +58,7 @@ describe('常用页命令', () => {
 
     commonUse.flip.mockClear()
     const bad = await execute('commonUse.flip', { direction: '斜' as never })
-    expect(bad).toMatchObject({ ok: false })
+    expect(bad).toMatchObject({ status: 'error' })
     expect(commonUse.flip).not.toHaveBeenCalled()
   })
 
@@ -79,13 +79,13 @@ describe('常用页命令', () => {
   it('importMultipleImages 未给 path 时先取路径；返回 -1（取消）就不导入', async () => {
     const result = await execute('commonUse.importMultipleImages', { toLinkObject: true })
 
-    expect(result).toMatchObject({ ok: true })
+    expect(result).toMatchObject({ status: 'ok' })
     expect(commonUse.getImagePath).toHaveBeenCalledTimes(1)
     expect(commonUse.importMultipleImages).not.toHaveBeenCalled()
   })
 
   it('importMultipleImages 把取到的 path 原样透传（数组与单张都行）', async () => {
-    commonUse.getImagePath.mockResolvedValueOnce({ ok: true, data: ['a.png', 'b.png'] })
+    commonUse.getImagePath.mockResolvedValueOnce({ status: 'ok', data: ['a.png', 'b.png'] })
     await execute('commonUse.importMultipleImages', { toLinkObject: false })
     expect(commonUse.importMultipleImages).toHaveBeenCalledWith({
       path: ['a.png', 'b.png'],
@@ -109,7 +109,7 @@ describe('常用页命令', () => {
       options: { optimizeAll: true, deleteAllEmpty: false, deleteAllHide: true },
     })
 
-    expect(result).toMatchObject({ ok: true })
+    expect(result).toMatchObject({ status: 'ok' })
     expect(commonUse.optimizeOnce).toHaveBeenCalledWith({
       optimizeAll: true,
       deleteAllEmpty: false,
@@ -118,23 +118,23 @@ describe('常用页命令', () => {
   })
 
   it('optimizeFolder：列表由 cy_getPsdForFolder 取，逐张调、全成才 ok', async () => {
-    commonUse.getPsdList.mockResolvedValueOnce({ ok: true, data: ['a.psd', 'b.psd'] })
+    commonUse.getPsdList.mockResolvedValueOnce({ status: 'ok', data: ['a.psd', 'b.psd'] })
 
     const result = await execute('commonUse.optimizeFolder', { options: { optimizeAll: true } })
 
-    expect(result).toMatchObject({ ok: true })
+    expect(result).toMatchObject({ status: 'ok' })
     expect(commonUse.optimizeFolder).toHaveBeenCalledTimes(2)
     expect(commonUse.optimizeFolder).toHaveBeenNthCalledWith(1, { optimizeAll: true }, 'a.psd')
     expect(commonUse.optimizeFolder).toHaveBeenNthCalledWith(2, { optimizeAll: true }, 'b.psd')
   })
 
   it('optimizeFolder 全败：一个 ok:true 都不给，文案带比例', async () => {
-    commonUse.getPsdList.mockResolvedValueOnce({ ok: true, data: ['a.psd', 'b.psd'] })
+    commonUse.getPsdList.mockResolvedValueOnce({ status: 'ok', data: ['a.psd', 'b.psd'] })
     commonUse.optimizeFolder.mockRejectedValue(new Error('锁文件'))
 
     const result = await execute('commonUse.optimizeFolder', { options: {} })
 
-    expect(result).toMatchObject({ ok: false })
+    expect(result).toMatchObject({ status: 'error' })
     expect((result as { reason: string }).reason).toContain('成功 0/2')
     expect((result as { reason: string }).reason).toContain('失败 2 张')
     // 一个失败不中断：两张都试过
@@ -142,15 +142,15 @@ describe('常用页命令', () => {
   })
 
   it('optimizeFolder 一半成功：抛错并写清成功 2/3、失败 1 张', async () => {
-    commonUse.getPsdList.mockResolvedValueOnce({ ok: true, data: ['a.psd', 'b.psd', 'c.psd'] })
+    commonUse.getPsdList.mockResolvedValueOnce({ status: 'ok', data: ['a.psd', 'b.psd', 'c.psd'] })
     commonUse.optimizeFolder
-      .mockResolvedValueOnce({ ok: true, data: null })
+      .mockResolvedValueOnce({ status: 'ok', data: null })
       .mockRejectedValueOnce(new Error('文件损坏'))
-      .mockResolvedValueOnce({ ok: true, data: null })
+      .mockResolvedValueOnce({ status: 'ok', data: null })
 
     const result = await execute('commonUse.optimizeFolder', { options: {} })
 
-    expect(result).toMatchObject({ ok: false })
+    expect(result).toMatchObject({ status: 'error' })
     const reason = (result as { reason: string }).reason
     expect(reason).toContain('成功 2/3')
     expect(reason).toContain('失败 1 张')
@@ -158,21 +158,21 @@ describe('常用页命令', () => {
   })
 
   it('optimizeFolder 列表为空时直接报「文件夹内没有PSD文件」', async () => {
-    commonUse.getPsdList.mockResolvedValueOnce({ ok: true, data: [] })
+    commonUse.getPsdList.mockResolvedValueOnce({ status: 'ok', data: [] })
 
     const result = await execute('commonUse.optimizeFolder', { options: {} })
 
-    expect(result).toMatchObject({ ok: false })
+    expect(result).toMatchObject({ status: 'error' })
     expect((result as { reason: string }).reason).toContain('文件夹内没有PSD文件')
     expect(commonUse.optimizeFolder).not.toHaveBeenCalled()
   })
 
   it('exportPsdFolder：>30 张未确认时抛，确认后逐张导出', async () => {
     const files = Array.from({ length: 31 }, (_, i) => `f${i}.psd`)
-    commonUse.getPsdList.mockResolvedValue({ ok: true, data: files })
+    commonUse.getPsdList.mockResolvedValue({ status: 'ok', data: files })
 
     const blocked = await execute('commonUse.exportPsdFolder', { options: { a: 1 } })
-    expect(blocked).toMatchObject({ ok: false })
+    expect(blocked).toMatchObject({ status: 'error' })
     expect((blocked as { reason: string }).reason).toContain('文件夹内超过30个psd')
     expect(commonUse.exportPsdImage).not.toHaveBeenCalled()
 
@@ -180,40 +180,40 @@ describe('常用页命令', () => {
       options: { a: 1 },
       confirmed: true,
     })
-    expect(confirmed).toMatchObject({ ok: true })
+    expect(confirmed).toMatchObject({ status: 'ok' })
     expect(commonUse.exportPsdImage).toHaveBeenCalledTimes(31)
     expect(commonUse.exportPsdImage).toHaveBeenNthCalledWith(1, 'f0.psd', { a: 1 })
   })
 
   it('exportPsdFolder 部分成功同样不许吞', async () => {
-    commonUse.getPsdList.mockResolvedValueOnce({ ok: true, data: ['a.psd', 'b.psd'] })
+    commonUse.getPsdList.mockResolvedValueOnce({ status: 'ok', data: ['a.psd', 'b.psd'] })
     commonUse.exportPsdImage
-      .mockResolvedValueOnce({ ok: true, data: null })
+      .mockResolvedValueOnce({ status: 'ok', data: null })
       .mockRejectedValueOnce(new Error('炸了'))
 
     const result = await execute('commonUse.exportPsdFolder', { options: {} })
 
-    expect(result).toMatchObject({ ok: false })
+    expect(result).toMatchObject({ status: 'error' })
     expect((result as { reason: string }).reason).toContain('成功 1/2')
   })
   it('transform 参数数量必须是 7（原版参数顺序）', async () => {
     const short = await execute('commonUse.transform', {
       params: [1, 0, '0px', '0px', 0, 100, 0].slice(0, 6) as never,
     })
-    expect(short).toMatchObject({ ok: false })
+    expect(short).toMatchObject({ status: 'error' })
     expect(commonUse.transform).not.toHaveBeenCalled()
 
     const ok = await execute('commonUse.transform', { params: [1, 0, '0px', '0px', 0, 100, 0] })
-    expect(ok).toMatchObject({ ok: true })
+    expect(ok).toMatchObject({ status: 'ok' })
     expect(commonUse.transform).toHaveBeenCalledWith([1, 0, '0px', '0px', 0, 100, 0])
   })
 
   it('distribute 参数数量必须是 3', async () => {
     const bad = await execute('commonUse.distribute', { params: [0, 10] as never })
-    expect(bad).toMatchObject({ ok: false })
+    expect(bad).toMatchObject({ status: 'error' })
 
     const ok = await execute('commonUse.distribute', { params: [0, 10, 1] })
-    expect(ok).toMatchObject({ ok: true })
+    expect(ok).toMatchObject({ status: 'ok' })
     expect(commonUse.distribute).toHaveBeenCalledWith([0, 10, 1])
   })
 
@@ -248,6 +248,6 @@ describe('常用页命令', () => {
 
     const result = await execute('commonUse.zoom', { scale: 200 })
 
-    expect(result).toMatchObject({ ok: false })
+    expect(result).toMatchObject({ status: 'error' })
   })
 })

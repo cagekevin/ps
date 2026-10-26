@@ -65,8 +65,9 @@ describe('云端读不懂 → 拒绝覆盖（TD-11-5）', () => {
 
     const result = await engine.upload()
 
-    expect(result).toMatchObject({ ok: false, errorCode: 'CLOUD_BAD_RESPONSE' })
-    expect(result.ok === false && result.error).toContain('读不懂')
+    expect(result).toMatchObject({ status: 'error', failure: { fail: 'CLOUD_BAD_RESPONSE' } })
+    // 不再包中文：reason 就是底层那句（响应原文片段）
+    expect(result).toMatchObject({ failure: { reason: expect.any(String) } })
     // 「云端原内容不变」的可观察证据：一次写都没有发生
     expect(push).not.toHaveBeenCalled()
     expect(ledgerWrite).not.toHaveBeenCalled()
@@ -77,8 +78,10 @@ describe('云端读不懂 → 拒绝覆盖（TD-11-5）', () => {
 
     const result = await engine.download()
 
-    expect(result).toMatchObject({ ok: false, errorCode: 'CLOUD_BAD_RESPONSE' })
-    expect(result.ok === false && result.error).not.toContain('云端没有数据')
+    expect(result).toMatchObject({ status: 'error', failure: { fail: 'CLOUD_BAD_RESPONSE' } })
+    expect(result).toMatchObject({
+      failure: { reason: expect.any(String) },
+    })
   })
 
   it('pushUnits（后台单 unit）也不推', async () => {
@@ -86,7 +89,7 @@ describe('云端读不懂 → 拒绝覆盖（TD-11-5）', () => {
 
     const result = await engine.pushUnits(['font.tags'])
 
-    expect(result).toMatchObject({ ok: false, errorCode: 'CLOUD_BAD_RESPONSE' })
+    expect(result).toMatchObject({ status: 'error', failure: { fail: 'CLOUD_BAD_RESPONSE' } })
     expect(push).not.toHaveBeenCalled()
   })
 
@@ -105,7 +108,7 @@ describe('云端读不懂 → 拒绝覆盖（TD-11-5）', () => {
 
     const result = await engine.upload()
 
-    expect(result).toMatchObject({ ok: false, errorCode: 'CLOUD_BAD_RESPONSE' })
+    expect(result).toMatchObject({ status: 'error', failure: { fail: 'CLOUD_BAD_RESPONSE' } })
     expect(push).not.toHaveBeenCalled()
   })
 
@@ -114,7 +117,7 @@ describe('云端读不懂 → 拒绝覆盖（TD-11-5）', () => {
 
     const result = await engine.upload()
 
-    expect(result).toMatchObject({ ok: true, count: 1 })
+    expect(result).toMatchObject({ status: 'ok' })
     expect(push.mock.calls[0][0].rev).toBe(1)
     expect(ledgerWrite).toHaveBeenCalledWith(expect.objectContaining({ rev: 1 }))
   })
@@ -132,8 +135,8 @@ describe('云端读不懂 → 拒绝覆盖（TD-11-5）', () => {
 
     const result = await engine.upload()
 
-    // 同一份内容 → 判"已同步"，不推
-    expect(result).toMatchObject({ ok: true, skipped: true })
+    // 同一份内容 → 判"已同步"：跑完了，没推（`ok` 与「闸门挡下的 skipped」是两件事）
+    expect(result).toMatchObject({ status: 'ok' })
     expect(push).not.toHaveBeenCalled()
   })
 })

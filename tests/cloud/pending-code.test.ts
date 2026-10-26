@@ -52,13 +52,12 @@ describe('pending 痕迹的错误码', () => {
     ])
   })
 
-  it('码同时写进日志，并带一句"用户该做什么"（权限错别让人干等重试）', () => {
+  it('码写进日志；日志只留事实（原因 · 码 · 项），不带「该怎么办」的中文', () => {
     recordPendingChanges(['font.tags'], 'network', 'CLOUD_PERMISSION')
 
     const dumped = log.dump()
     expect(dumped).toContain('CLOUD_PERMISSION')
-    expect(dumped).toContain('不会自己好')
-    expect(dumped).toContain('部署权限')
+    // 不再有"用户该做什么"的中文后缀：日志只留事实（原因 · 码 · 项）
   })
 
   it('没有码时不多写字段（老调用处 / 老痕迹照旧）', () => {

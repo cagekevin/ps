@@ -26,7 +26,7 @@ const rootRef = ref<HTMLElement | null>(null)
 
 /**
  * 开关态在父级（`v-if="distribution > 0"`），所以组件**存在即"开着"**。
- * Esc 统一交给 `useDismiss`：原来只把 `keydown.esc` 绑在 `<input>` 上，
+ * Esc 统一交给 `useDismiss`：若只把 `keydown.esc` 绑在 `<input>` 上，
  * 焦点一离开输入框（Tab 到"高级用法"）就关不掉了。遮罩点击仍是自己的关闭通道（`outside: false`）。
  */
 useDismiss(

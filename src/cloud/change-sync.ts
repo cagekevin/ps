@@ -9,21 +9,16 @@ import {
   CLOUD_SYNC_DEBOUNCE_MS,
   CLOUD_SYNC_MAX_WAIT_MS,
 } from '@/config/cloud'
+import type { CloudOutcome } from './types'
 
-/** 一次同步的结果；只关心"成没成"，细节由调用方在自己的 onOutcome 里处理 */
-export interface SyncOutcome {
-  ok: boolean
-  cancelled?: boolean
-  errorCode?: string
-  /** 具体原因原文（引擎/闸门给的），日志里必须带得上——只有码等于只说"失败了" */
-  error?: string
-  /**
-   * 根本没发请求（自动同步关 / 没有台账 / 离线 / 未配置）。
-   *
-   * 与"失败"必须分开：这类原因退避 15 分钟毫无意义——用户点一下开关就好了，
-   * 而且退避额度是给真网络错误用的，被闸门吃掉之后会把"网络恢复"也拖到 15 分钟。
-   */
-  skip?: boolean
+/**
+ * 一次后台同步的结局 = 引擎结果（`CloudOutcome`）+ 队列的重试策略。
+ *
+ * 判别位沿用 `status`：`ok` / `skipped` / `cancelled` / `error`，失败细节在 `failure`。
+ * `skipped` 与 `error` **必须是两臂**：跳过一次请求都没发，吃退避毫无意义
+ * （用户点一下开关就好了，退避额度是留给真网络错误的）。
+ */
+export type SyncOutcome = CloudOutcome & {
   /**
    * 失败后要不要**自己**再排一轮（默认 true）。
    *
@@ -172,13 +167,13 @@ export function createSyncQueue(deps: SyncQueueDeps): SyncQueue {
     const units = sweeping ? [] : dirtyAtStart
     try {
       const outcome = await serial(() => deps.sync(units, sweeping ? 'sweep' : 'dirty'))
-      if (outcome.ok) {
+      if (outcome.status === 'ok') {
         attempts = 0
         retryAt = 0
         // 全量 sweep 成功 ⇒ 所有 unit 都同步过了，本轮开始时的脏集随之作废
         for (const unit of sweeping ? dirtyAtStart : units) dirty.delete(unit)
         firstDirtyAt = dirty.size > 0 ? Date.now() : 0
-      } else if (outcome.skip) {
+      } else if (outcome.status === 'skipped') {
         // 没发请求：脏留着，但不计失败、不进退避
         skipped = true
         // 闸门挡下说明 sweep 根本没跑过，意图不能丢（否则打开自动同步后也补不上）

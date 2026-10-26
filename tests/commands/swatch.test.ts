@@ -154,11 +154,11 @@ beforeEach(async () => {
   )
   fsMock.files.set(COLOR_LIB, JSON.stringify([{ name: '灰白', show: true, list: [] }]))
 
-  jsx.style.getForegroundColor.mockResolvedValue({ ok: true, data: RED })
-  jsx.style.useStyleColor.mockResolvedValue({ ok: true, data: null })
-  jsx.style.setForegroundColor.mockResolvedValue({ ok: true, data: null })
-  jsx.style.setBorderColor.mockResolvedValue({ ok: true, data: null })
-  jsx.legacy.call.mockResolvedValue({ ok: true, data: null })
+  jsx.style.getForegroundColor.mockResolvedValue({ status: 'ok', data: RED })
+  jsx.style.useStyleColor.mockResolvedValue({ status: 'ok', data: null })
+  jsx.style.setForegroundColor.mockResolvedValue({ status: 'ok', data: null })
+  jsx.style.setBorderColor.mockResolvedValue({ status: 'ok', data: null })
+  jsx.legacy.call.mockResolvedValue({ status: 'ok', data: null })
 
   appEvents.sent.length = 0
   appEvents.handlers.clear()
@@ -170,7 +170,7 @@ beforeEach(async () => {
 
 describe('按钮 1：seban.addForegroundColor（原版 TianJia，sf.js:377-382）', () => {
   it('读前景色 → 追加到 userColor.ini（不碰库文件）', async () => {
-    await expect(execute('seban.addForegroundColor')).resolves.toEqual({ ok: true })
+    await expect(execute('seban.addForegroundColor')).resolves.toEqual({ status: 'ok' })
 
     expect(json(CUSTOM)).toEqual([RED])
     // 库文件不动
@@ -182,22 +182,22 @@ describe('按钮 1：seban.addForegroundColor（原版 TianJia，sf.js:377-382�
 
     const result = await execute('seban.addForegroundColor')
 
-    expect(result.ok).toBe(false)
-    expect(result.ok === false && result.reason).toContain('已经有这个颜色')
+    expect(result.status === 'ok').toBe(false)
+    expect(result.status === 'error' && result.reason).toContain('已经有这个颜色')
     expect(json(CUSTOM)).toEqual([RED])
   })
 
   it('jsx 读不到前景色（null）→ ok:false，色板不动', async () => {
-    jsx.style.getForegroundColor.mockResolvedValue({ ok: true, data: null })
+    jsx.style.getForegroundColor.mockResolvedValue({ status: 'ok', data: null })
 
-    await expect(execute('seban.addForegroundColor')).resolves.toMatchObject({ ok: false })
+    await expect(execute('seban.addForegroundColor')).resolves.toMatchObject({ status: 'error' })
     expect(fsMock.files.has(CUSTOM)).toBe(false)
   })
 })
 
 describe('按钮 2：seban.openAuthorSite（原版 GuanYu，sf.js:394-396）', () => {
   it('走系统浏览器打开 pszhuli.com（title 写"站酷"，URL 照抄不改）', async () => {
-    await expect(execute('seban.openAuthorSite')).resolves.toEqual({ ok: true })
+    await expect(execute('seban.openAuthorSite')).resolves.toEqual({ status: 'ok' })
     expect(openUrl.openUrlInDefaultBrowser).toHaveBeenCalledWith('http://pszhuli.com')
   })
 })
@@ -207,7 +207,7 @@ describe('按钮 3：seban.setRecentLimit（原版 SheZhi，sf.js:398-423）', (
     const items = ['A', 'B', 'C', 'D', 'E'].map((hex) => ({ name: '未命名', color: { hex } }))
     fsMock.files.set(RECENT, JSON.stringify(items))
 
-    await expect(execute('seban.setRecentLimit', { limit: 3 })).resolves.toEqual({ ok: true })
+    await expect(execute('seban.setRecentLimit', { limit: 3 })).resolves.toEqual({ status: 'ok' })
 
     expect(fsMock.files.get(LIMIT)).toBe('3')
     const kept = json(RECENT) as Array<{ color: { hex: string } }>
@@ -217,7 +217,7 @@ describe('按钮 3：seban.setRecentLimit（原版 SheZhi，sf.js:398-423）', (
   it('0 合法：清空最近色', async () => {
     fsMock.files.set(RECENT, JSON.stringify([{ name: '未命名', color: { hex: 'AABBCC' } }]))
 
-    await expect(execute('seban.setRecentLimit', { limit: 0 })).resolves.toEqual({ ok: true })
+    await expect(execute('seban.setRecentLimit', { limit: 0 })).resolves.toEqual({ status: 'ok' })
 
     expect(fsMock.files.get(LIMIT)).toBe('0')
     expect(json(RECENT)).toEqual([])
@@ -228,11 +228,15 @@ describe('按钮 3：seban.setRecentLimit（原版 SheZhi，sf.js:398-423）', (
     fsMock.files.set(RECENT, items)
 
     const tooBig = await execute('seban.setRecentLimit', { limit: 16 })
-    expect(tooBig.ok).toBe(false)
-    expect(tooBig.ok === false && tooBig.reason).toBe('最近使用记录不允许少于0或者多于15个颜色')
+    expect(tooBig.status === 'ok').toBe(false)
+    expect(tooBig.status === 'error' && tooBig.reason).toBe(
+      '最近使用记录不允许少于0或者多于15个颜色',
+    )
 
     const negative = await execute('seban.setRecentLimit', { limit: -1 })
-    expect(negative.ok === false && negative.reason).toBe('最近使用记录不允许少于0或者多于15个颜色')
+    expect(negative.status === 'error' && negative.reason).toBe(
+      '最近使用记录不允许少于0或者多于15个颜色',
+    )
 
     expect(fsMock.files.has(LIMIT)).toBe(false)
     expect(fsMock.files.get(RECENT)).toBe(items)
@@ -240,8 +244,8 @@ describe('按钮 3：seban.setRecentLimit（原版 SheZhi，sf.js:398-423）', (
 
   it('不是整数 → "请输入数字"（官方 parseInt 后 isNaN 那条）', async () => {
     const result = await execute('seban.setRecentLimit', { limit: 2.5 })
-    expect(result.ok).toBe(false)
-    expect(result.ok === false && result.reason).toBe('请输入数字')
+    expect(result.status === 'ok').toBe(false)
+    expect(result.status === 'error' && result.reason).toBe('请输入数字')
   })
 })
 
@@ -251,7 +255,7 @@ describe('按钮 5：seban.sendToAssistant（原版 faSongDaoZhuLi，sf.js:426-4
 
     await expect(
       execute('seban.sendToAssistant', { name: '  客户色  ', kind: 'color' }),
-    ).resolves.toEqual({ ok: true })
+    ).resolves.toEqual({ status: 'ok' })
 
     const groups = json(COLOR_LIB) as Array<{ name: string; show?: boolean; list: unknown[] }>
     expect(groups.map((group) => group.name)).toEqual(['灰白', '客户色'])
@@ -263,8 +267,8 @@ describe('按钮 5：seban.sendToAssistant（原版 faSongDaoZhuLi，sf.js:426-4
 
     const result = await execute('seban.sendToAssistant', { name: '   ', kind: 'color' })
 
-    expect(result.ok).toBe(false)
-    expect(result.ok === false && result.reason).toBe('组名不能为空')
+    expect(result.status === 'ok').toBe(false)
+    expect(result.status === 'error' && result.reason).toBe('组名不能为空')
     expect(fsMock.files.get(COLOR_LIB)).toBe(before)
   })
 
@@ -279,14 +283,14 @@ describe('按钮 5：seban.sendToAssistant（原版 faSongDaoZhuLi，sf.js:426-4
 
 describe('按钮 7：seban.swapWireframeFill（原版 DiaoHuanXingZhuangZhuanTai，sf.js:478-480）', () => {
   it('本地执行 cy_swapWireframeFill（不发事件：官方主面板也监听那个频道，两边都做会抵消）', async () => {
-    await expect(execute('seban.swapWireframeFill')).resolves.toEqual({ ok: true })
+    await expect(execute('seban.swapWireframeFill')).resolves.toEqual({ status: 'ok' })
     expect(jsx.legacy.call).toHaveBeenCalledWith('cy_swapWireframeFill', [], '填充线框互换')
   })
 
   it('没有选区 → 被 requires 拦下，不调 jsx', async () => {
     selection.hasSelection = false
     try {
-      await expect(execute('seban.swapWireframeFill')).resolves.toMatchObject({ ok: false })
+      await expect(execute('seban.swapWireframeFill')).resolves.toMatchObject({ status: 'error' })
       expect(jsx.legacy.call).not.toHaveBeenCalled()
     } finally {
       selection.hasSelection = true
@@ -302,9 +306,9 @@ describe('按钮 4 / 6：依赖色板面板自带 jsx 的两条，补不到就�
   it('seban.addLayerColor 报错并指向 jsx/main.jsx', async () => {
     const result = await execute('seban.addLayerColor')
 
-    expect(result.ok).toBe(false)
-    expect(result.ok === false && result.reason).toContain('sb_cy_HuoQuYanSe')
-    expect(result.ok === false && result.reason).toContain('jsx/main.jsx')
+    expect(result.status === 'ok').toBe(false)
+    expect(result.status === 'error' && result.reason).toContain('sb_cy_HuoQuYanSe')
+    expect(result.status === 'error' && result.reason).toContain('jsx/main.jsx')
     // 失败不能有副作用
     expect(fsMock.files.has(CUSTOM)).toBe(false)
   })
@@ -312,9 +316,9 @@ describe('按钮 4 / 6：依赖色板面板自带 jsx 的两条，补不到就�
   it('seban.setShapeFill 报错并指向 jsx/main.jsx', async () => {
     const result = await execute('seban.setShapeFill', { target: 'fill' })
 
-    expect(result.ok).toBe(false)
-    expect(result.ok === false && result.reason).toContain('sb_SheZhiXingZhuang')
-    expect(result.ok === false && result.reason).toContain('jsx/main.jsx')
+    expect(result.status === 'ok').toBe(false)
+    expect(result.status === 'error' && result.reason).toContain('sb_SheZhiXingZhuang')
+    expect(result.status === 'error' && result.reason).toContain('jsx/main.jsx')
   })
 })
 
@@ -326,7 +330,7 @@ describe('按钮 4 / 6：依赖色板面板自带 jsx 的两条，补不到就�
  */
 describe('联动 1：色板侧只发事件（左键 setColor / 右键 setWireframeColor）', () => {
   it('左键发 setColor，且**不**调任何填色 jsx（执行在主面板）', async () => {
-    await expect(execute('seban.sendColor', { item: RED })).resolves.toEqual({ ok: true })
+    await expect(execute('seban.sendColor', { item: RED })).resolves.toEqual({ status: 'ok' })
 
     expect(appEvents.sent).toEqual([
       { channel: 'com.fengzi.event.seban', data: { type: 'setColor', data: RED } },
@@ -336,7 +340,9 @@ describe('联动 1：色板侧只发事件（左键 setColor / 右键 setWirefra
   })
 
   it('右键发 setWireframeColor', async () => {
-    await expect(execute('seban.sendWireframeColor', { item: BLUE })).resolves.toEqual({ ok: true })
+    await expect(execute('seban.sendWireframeColor', { item: BLUE })).resolves.toEqual({
+      status: 'ok',
+    })
 
     expect(appEvents.sent).toEqual([
       { channel: 'com.fengzi.event.seban', data: { type: 'setWireframeColor', data: BLUE } },
@@ -347,14 +353,14 @@ describe('联动 1：色板侧只发事件（左键 setColor / 右键 setWirefra
   it('项里没有 color → 报错且不发事件（不能让主面板收到脏数据）', async () => {
     const result = await execute('seban.sendColor', { item: { name: '未命名' } })
 
-    expect(result.ok).toBe(false)
+    expect(result.status === 'ok').toBe(false)
     expect(appEvents.sent).toEqual([])
   })
 })
 
 describe('联动 2：主面板侧执行（开关在 /commonUse，不在色板）', () => {
   it('智能填色**开**（缺键按开，官方默认 :65784）→ useStyleColor 且补 isFill:true', async () => {
-    await expect(execute('seban.applyColor', { item: RED })).resolves.toEqual({ ok: true })
+    await expect(execute('seban.applyColor', { item: RED })).resolves.toEqual({ status: 'ok' })
 
     expect(jsx.style.useStyleColor).toHaveBeenCalledWith({ ...RED, isFill: true })
     expect(jsx.style.setForegroundColor).not.toHaveBeenCalled()
@@ -365,7 +371,7 @@ describe('联动 2：主面板侧执行（开关在 /commonUse，不在色板）
     const { legacySettingsWriter } = await import('@/cep/data/legacy-settings')
     await legacySettingsWriter.replace({ cyAutoFillColor: false }, SEED)
 
-    await expect(execute('seban.applyColor', { item: RED })).resolves.toEqual({ ok: true })
+    await expect(execute('seban.applyColor', { item: RED })).resolves.toEqual({ status: 'ok' })
 
     expect(jsx.style.setForegroundColor).toHaveBeenCalledWith(RED)
     expect(jsx.style.useStyleColor).not.toHaveBeenCalled()
@@ -373,7 +379,7 @@ describe('联动 2：主面板侧执行（开关在 /commonUse，不在色板）
 
   it('右键 → setBorderColor，**不补** isFill（官方 :17902-17906 只传项）', async () => {
     await expect(execute('seban.applyWireframeColor', { item: BLUE })).resolves.toEqual({
-      ok: true,
+      status: 'ok',
     })
 
     expect(jsx.style.setBorderColor).toHaveBeenCalledWith(BLUE)

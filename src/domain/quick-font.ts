@@ -100,10 +100,19 @@ export function toQuickFont(font: FontItem): QuickFont {
 }
 
 /** 原版 addFont 的三条前置：上限 15、同家族去重、找不到系统信息 */
-export function canAddQuickFont(list: QuickFont[], family: string): string | null {
-  if (list.length >= QUICK_FONT_LIMIT) return '最多添加15个字体哦'
-  if (list.some((item) => item.family === family)) return '已存在同名字体'
-  return null
+/** 能否再加一个：`ok` = 能加；`why` 是**原因码**（`limit` 满了 / `duplicate` 同名） */
+export type QuickFontGate = { status: 'ok' } | { status: 'error'; fail: 'limit' | 'duplicate' }
+
+/**
+ * 能不能再往快速字体里加一个。
+ *
+ * 返回**原因码**而不是一句话：文案归 `domain/messages`（生产者不写用户文案）。
+ * 也不用 `string | null` —— `null` 表示"成功"是反的，读代码的人得先想一遍才敢用。
+ */
+export function canAddQuickFont(list: QuickFont[], family: string): QuickFontGate {
+  if (list.length >= QUICK_FONT_LIMIT) return { status: 'error', fail: 'limit' }
+  if (list.some((item) => item.family === family)) return { status: 'error', fail: 'duplicate' }
+  return { status: 'ok' }
 }
 
 /** 原版 weightLen 的计算属性：超过 7 个截断 */

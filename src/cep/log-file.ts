@@ -1,12 +1,12 @@
 // 是什么：日志落盘口（磁盘实现）——把每条日志追加进用户目录下的一份文本文件
-// 替代了什么：原来只有 200 条内存环形缓冲（PS 一关全没、刷几十条 warn 就把关键那条挤掉）
+// 替代了什么：内存环形缓冲（PS 一关全没、刷几十条 warn 就把关键那条挤掉）已删除，现落盘到文本文件
 // 谁在用：`src/utils/logger.ts` **自己 import 本模块并在模块顶层装上**（反向注册）。
 //   外面（业务层 / main.ts）不需要、也没有任何 API 可以参与装配。
 // 禁止：不在这里判业务；不 import 业务模块；**不 import logger**（那会成环）；
 //   写失败**不许**抛给调用方（观测设施不能反噬业务）—— 由 logger 接住并记成一条 warn。
 
 import { hasNode } from './node'
-import { readOwnFileText } from './fs-read'
+import { describeReadFailure, readOwnFileText } from './fs-read'
 import { userDir } from './paths'
 import { DATA_FILES } from './env'
 import { writeDiskSync } from './disk-write'
@@ -135,7 +135,8 @@ export function createLogFileSink(onError?: (reason: string) => void): DiskLogSi
       const read = readOwnFileText(filePath())
       if (read.status === 'notSeen') return []
       // 读不到就交给调用方决定（logger 会把它记成一条 warn，不静默）
-      if (read.status === 'error') throw new Error(`${FILE} 读不到：${read.reason}`)
+      if (read.status === 'error')
+        throw new Error(`${FILE} 读不到：${describeReadFailure(read.failure)}`)
       const persisted = read.text.split('\n').filter((line) => line.trim() !== '')
       // 只回最近的：文件被外部改大过也不把内存撑爆
       return persisted.slice(-MAX_LINES)

@@ -18,7 +18,7 @@ import {
   type CommonUseItem,
 } from '@/domain/common-use'
 import { applyListDrop, type DropPosition } from '@/domain/reorder'
-import { shapeFail, type DecodeFail, type Decoded } from '@/utils/decode'
+import { isDecodeFail, shapeFail, type DecodeFail, type Decoded } from '@/utils/decode'
 import { CepError } from '@/utils/errors'
 import { isRecord } from '@/utils/guards'
 import { msg } from '@/domain/messages'
@@ -66,8 +66,8 @@ export function ensureCommonUseFile(): EnsureResult {
     // 无 CEP（浏览器 / jsdom）：内存仓库没有"文件不存在"这个概念，按"进程内首次"算
     if (memoryEnsured) return { created: false }
     memoryEnsured = true
-    // 种子只在"文件确实不存在"时写 ⇒ `expected: null` = 「这个路径上应当没有文件」
-    base.replace(createCommonUseSeed(), { mode: 'compare', expected: null })
+    // 种子只在"文件确实不存在"时写 ⇒ `expected: { status: 'absent' }` = 「这个路径上应当没有文件」
+    base.replace(createCommonUseSeed(), { mode: 'compare', expected: { status: 'absent' } })
     return { created: true }
   }
 
@@ -77,16 +77,16 @@ export function ensureCommonUseFile(): EnsureResult {
 
   // 查不到 = 首次使用，写种子（`requireExisting` 在这条路上是"文件确实没有"，不是"读不出"）
   if (outcome.status === 'notSeen') {
-    // 种子只在"文件确实不存在"时写 ⇒ `expected: null` = 「这个路径上应当没有文件」
-    base.replace(createCommonUseSeed(), { mode: 'compare', expected: null })
+    // 种子只在"文件确实不存在"时写 ⇒ `expected: { status: 'absent' }` = 「这个路径上应当没有文件」
+    base.replace(createCommonUseSeed(), { mode: 'compare', expected: { status: 'absent' } })
     return { created: true }
   }
 
   // 读不到 / 不是合法 JSON / 根不是数组：三种都拒绝写，但三句文案不同（用户下一步动作不同）
   if (outcome.status === 'error') {
-    throw outcome.why === 'readError'
+    throw outcome.fail === 'readError'
       ? new CepError('IO', msg.data.fn.commonUseReadFailedRefuseWrite(FILE_NAME))
-      : outcome.why === 'notJson'
+      : outcome.fail === 'notJson'
         ? new CepError('IO', msg.data.fn.commonUseNotJsonRefuse(FILE_NAME))
         : new CepError('IO', msg.data.fn.commonUseRootNotArrayRefuse(FILE_NAME))
   }
@@ -116,9 +116,9 @@ function decodeCommonUseRoot(raw: unknown): Decoded<unknown> | DecodeFail {
 function requireItems(file: unknown): CommonUseItem[] {
   // 解包判据只有一份：`domain/common-use.toCommonUseItems`（读边界与写路径共用同一条）
   const items = toCommonUseItems(file)
-  if (items === null)
+  if (isDecodeFail(items))
     throw new CepError('PARSE', msg.data.fn.commonUseRootNotArrayRewrite(FILE_NAME))
-  return items
+  return items.value
 }
 
 /**

@@ -6,14 +6,14 @@
 //   `cep/data/style-library-repo.ts`（只 import 队列）
 // 禁止：页面/组件不许 import；读不到不许当"没有"；不许新增同步读（ADR-26 ④）
 
-import { readOwnFileText } from '@/cep/fs-read'
+import { describeReadFailure, readOwnFileText } from '@/cep/fs-read'
 import { appDataRoot } from '@/cep/paths'
 import { CepError } from '@/utils/errors'
 import { msg } from '@/domain/messages'
 import { isUnknownArray } from '@/utils/guards'
 import { repoAt } from './repo-at'
 import { REPLACE_WITHOUT_BASELINE } from './types'
-import { readRepoFile } from './repo-read'
+import { badContent, badRead, readRepoFile } from './repo-read'
 import { writeProtectedText } from './protected-text'
 import type { Repo, RepoRead } from './types'
 import { shapeFail, type DecodeFail, type Decoded } from '@/utils/decode'
@@ -71,17 +71,13 @@ export function readSwatchItems(path: string): RepoRead<unknown[]> {
   if (outcome.text === '') return { status: 'ok', value: [] }
   // T-112：读不到时**不许**返回 `[]`——调用方会把追加后的内容整份写回，等于把一份读不到的
   // 色板抹平。`status:'error'` 分支上没有 `.value`，调用方**必须**显式处理（抛或提示），吞不掉。
-  if (outcome.why === 'readError') {
-    return {
-      status: 'error',
-      reason: msg.data.fn.swatchReadFailed(path, outcome.reason),
-      fallback: [],
-    }
+  if (outcome.fail === 'readError') {
+    return badRead(msg.data.fn.swatchReadFailed(path, outcome.reason), [], outcome.failure)
   }
-  if (outcome.why === 'notJson') {
-    return { status: 'error', reason: msg.data.fn.swatchNotJson(path), fallback: [] }
+  if (outcome.fail === 'notJson') {
+    return badContent('notJson', msg.data.fn.swatchNotJson(path), [])
   }
-  return { status: 'error', reason: msg.data.fn.swatchRootNotArray(path), fallback: [] }
+  return badContent('badShape', msg.data.fn.swatchRootNotArray(path), [])
 }
 
 /**
@@ -176,11 +172,11 @@ export function readRecentLimit(): RepoRead<number> {
   // 这个文件是 `.txt`（纯文本整数，不是 JSON）⇒ 走纯文本档；数据文件才走 `readRepoFile`
   const read = readOwnFileText(recentLimitPath())
   if (read.status === 'error') {
-    return {
-      status: 'error',
-      reason: msg.data.fn.swatchReadFailed(recentLimitPath(), read.reason),
-      fallback: DEFAULT_RECENT_LIMIT,
-    }
+    return badRead(
+      msg.data.fn.swatchReadFailed(recentLimitPath(), describeReadFailure(read.failure)),
+      DEFAULT_RECENT_LIMIT,
+      read.failure,
+    )
   }
   if (read.status === 'notSeen') return { status: 'ok', value: DEFAULT_RECENT_LIMIT }
 

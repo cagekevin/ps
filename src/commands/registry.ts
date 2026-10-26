@@ -116,12 +116,12 @@ async function runWith(
   const command = registry.get(id)
   if (!command)
     // UNVERIFIED: `命令不存在` 是开发者诊断还是用户提示待定；若是提示语应归 msg.command
-    return { ok: false, reason: `命令不存在：${id}`, code: 'INTERNAL' }
+    return { status: 'error', fail: 'INTERNAL', reason: `命令不存在：${id}` }
 
   // requires 检查放在 invoke 之前：没选区就不该调 jsx，否则只会拿到一句看不懂的 evalScript 错
   if (!canRun(command.requires, selection)) {
     // `unmetReason` 只产选区类文案（"请先选择…"）⇒ 归 `NO_SELECTION`
-    return { ok: false, reason: unmetReason(command.requires), code: 'NO_SELECTION' }
+    return { status: 'error', fail: 'NO_SELECTION', reason: unmetReason(command.requires) }
   }
 
   // 长任务由 registry 统一管理生命周期，命令只管上报进度
@@ -135,19 +135,20 @@ async function runWith(
     // 这里不再写 `as never`：那会把"形状不确定"说成"确定"，让类型检查在这个口子上彻底失效。
     await command.invoke(context(selection, progress), payload)
     log.info('cmd', `${id} ${Date.now() - started}ms`)
-    return { ok: true }
+    return { status: 'ok' }
   } catch (e) {
     // 非 `CepError` 统一落 `INTERNAL`：失败臂 `code` 必填，不许"失败但没码"
     const code = e instanceof CepError ? e.code : 'INTERNAL'
     // 用户自己取消不是失败——是否 cancelled 由 `CODE_REGISTRY` 一张表决定
     if (CODE_REGISTRY[code].cancelled) {
       log.info('cmd', `${id} 已被用户取消`)
-      return { ok: 'cancelled' }
+      return { status: 'cancelled' }
     }
+    // `reason` 只给调用方（→ 页面），是用户话术；日志只写"哪个命令失败"，
+    // PS 侧原话由 `logger.oneLine` 从 `error.code` / `error.cause` 渲染成 `[CODE] 原文`
     const reason = describeCepError(e)
-    // 带上原 error：文案层只给用户看「能看懂的那句」，日志必须留 PS 侧原话
-    log.warn('cmd', `${id} 失败：${reason}`, e)
-    return { ok: false, reason, code }
+    log.warn('cmd', `${id} 失败`, e)
+    return { status: 'error', fail: code, reason }
   } finally {
     progress.end()
   }
@@ -165,7 +166,7 @@ export async function execute(id: string, payload?: unknown): Promise<CommandOut
 export async function execute(id: string, payload?: unknown): Promise<CommandOutcome> {
   // 命令不存在就不必去问 PS 要选区（保持"未知 id 不 refresh"的旧行为）
   const command = registry.get(id)
-  if (!command) return { ok: false, reason: `命令不存在：${id}`, code: 'INTERNAL' }
+  if (!command) return { status: 'error', fail: 'INTERNAL', reason: `命令不存在：${id}` }
 
   // 一次执行只查一次选区，不再让每个命令自己调 getLayerState
   let selection: SelectionSnapshot
@@ -176,9 +177,9 @@ export async function execute(id: string, payload?: unknown): Promise<CommandOut
     // 以前 `.catch(() => null)` 把 code 和原文都丢了，用户只看到一句「读取选区失败」
     const reason = describeCepError(e)
     const code = e instanceof CepError ? e.code : 'INTERNAL'
-    log.warn('cmd', `${id} 前置查询选区失败：${reason}`, e)
+    log.warn('cmd', `${id} 前置查询选区失败`, e)
     if (needsSelection(command.requires)) {
-      return { ok: false, reason: msg.command.fn.readSelectionFailed(reason), code }
+      return { status: 'error', fail: code, reason: msg.command.fn.readSelectionFailed(reason) }
     }
     // requires 为 none / document 的命令本来就不看选区，不能被无关失败连坐；
     // 继续用上一次快照（`canRun` 对这两档不看内容，命令拿到的 selection 只是转发）

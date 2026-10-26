@@ -50,9 +50,19 @@ export async function postText(
     return { status: response.status, text: await response.text() }
   } catch (error) {
     if (error instanceof Error && error.name === 'AbortError') {
-      throw new CepError('TIMEOUT', msg.ps.fn.requestTimeout(String(Math.round(timeoutMs / 1000))))
+      throw new CepError(
+        'TIMEOUT',
+        msg.ps.fn.requestTimeout(String(Math.round(timeoutMs / 1000))),
+        undefined,
+        error,
+      )
     }
-    throw new CepError('NETWORK', error instanceof Error ? error.message : '网络请求失败')
+    throw new CepError(
+      'NETWORK',
+      error instanceof Error ? error.message : '网络请求失败',
+      undefined,
+      error,
+    )
   } finally {
     if (timer) clearTimeout(timer)
   }

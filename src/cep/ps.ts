@@ -78,8 +78,8 @@ export async function getLayerState(): Promise<LayerState> {
   await initJsx()
 
   const selectedOutcome = await jsx.layer.isSelectLayer()
-  if (!selectedOutcome.ok) {
-    throw new CepError(selectedOutcome.code, selectedOutcome.reason || 'Layer_isSelectLayer 失败')
+  if (selectedOutcome.status !== 'ok') {
+    throw new CepError(selectedOutcome.fail, selectedOutcome.reason || selectedOutcome.fail)
   }
   const selected = selectedOutcome.data
   if (selected !== true && selected !== false && selected !== 'true' && selected !== 'false') {
@@ -87,11 +87,8 @@ export async function getLayerState(): Promise<LayerState> {
   }
 
   const typeNumberOutcome = await jsx.layer.getTypeNumber()
-  if (!typeNumberOutcome.ok) {
-    throw new CepError(
-      typeNumberOutcome.code,
-      typeNumberOutcome.reason || 'Layer_getTypeNumber 失败',
-    )
+  if (typeNumberOutcome.status !== 'ok') {
+    throw new CepError(typeNumberOutcome.fail, typeNumberOutcome.reason || typeNumberOutcome.fail)
   }
   const parsed = parseTypeNumber(typeNumberOutcome.data)
   if (parsed === null) {

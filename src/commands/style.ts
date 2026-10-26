@@ -24,7 +24,6 @@ import {
   setKuGroupShow,
 } from '@/cep/data/style-library-repo'
 import { APP_EVENT_SEBAN, classifySetd, sendAppEvent, subscribeHostEvent } from '@/cep/events'
-import { type JsxOutcome } from '@/utils/jsx-result'
 import { encodeText } from '@/domain/translate'
 import { CepError } from '@/utils/errors'
 import { msg } from '@/domain/messages'
@@ -113,21 +112,12 @@ async function pickColorToGroup(ctx: CommandContext, groupIndex: number): Promis
 
   // 与 `style.addColor` 同一条路径：读前景色 → 追加到该组
   const outcome = await ctx.jsx.style.getForegroundColor()
-  if (!outcome.ok)
-    throw new CepError(outcome.code, outcome.reason || msg.command.text.styleReadForegroundFailed)
+  if (outcome.status !== 'ok')
+    throw new CepError(outcome.fail, outcome.reason || msg.command.text.styleReadForegroundFailed)
   // 原版 `:50196` 判 `a != null`：两臂下 `data` 为空（null/undefined）就是"没读到"，不是空项
   if (outcome.data === null || outcome.data === undefined)
     throw new CepError('JSX', msg.command.text.styleReadForegroundFailed)
   addKuItem('color', groupIndex, outcome.data)
-}
-
-/** 把 jsx 两臂归一成"成功 / 失败 + 原因"；调用方只判 ok 与 data */
-function check(
-  result: JsxOutcome<unknown>,
-  fallback: string,
-): { ok: boolean; data?: unknown; msg: string } {
-  if (!result.ok) return { ok: false, data: undefined, msg: result.reason || fallback }
-  return { ok: true, data: result.data, msg: fallback }
 }
 
 export const styleCommands: Command<unknown>[] = [
@@ -215,9 +205,9 @@ export const styleCommands: Command<unknown>[] = [
     async invoke(ctx, { groupIndex }) {
       // UNVERIFIED: 原版 `:50196` 只判 `a != null`；返回结构未实测
       const outcome = await ctx.jsx.style.getForegroundColor()
-      if (!outcome.ok)
+      if (outcome.status !== 'ok')
         throw new CepError(
-          outcome.code,
+          outcome.fail,
           outcome.reason || msg.command.text.styleReadForegroundFailed,
         )
       if (outcome.data === null || outcome.data === undefined)
@@ -236,21 +226,19 @@ export const styleCommands: Command<unknown>[] = [
       // 原版 `:50755-50771`：`false` 直接返回；`err == 1` 报错；
       // 成功后包成 `{ name: "未命名", gradient: data }` 再入库
       const raw = await ctx.jsx.style.getGradientInfo()
-      if (!raw.ok)
-        throw new CepError(raw.code, raw.reason || msg.command.text.styleReadGradientFailed)
+      if (raw.status !== 'ok')
+        throw new CepError(raw.fail, raw.reason || msg.command.text.styleReadGradientFailed)
       if (raw.data === false) throw new CepError('JSX', msg.command.text.styleReadGradientFailed)
-      const result = check(raw, msg.command.text.styleReadGradientFailed)
-      if (!result.ok) throw new CepError('JSX', result.msg)
 
       // UNVERIFIED: `data` 的形状按 `app.v4.js:50767-50769` 是渐变项里的 gradient 载荷；
       // 这里是 `undefined`（mock/未取到时）也照样写"未命名"空壳，还是报错？
       // 原版没判，我们不补默认值 → 判空后报错，让调用方看见。
-      if (result.data === null || result.data === undefined) {
+      if (raw.data === null || raw.data === undefined) {
         throw new CepError('JSX', msg.command.text.styleReadGradientEmpty)
       }
       addKuItem('gradient', groupIndex, {
         name: '未命名',
-        gradient: result.data,
+        gradient: raw.data,
       })
     },
   }),
@@ -306,14 +294,12 @@ export const styleCommands: Command<unknown>[] = [
       // 理由：点了「添加字体」却毫无反应（无 toast、按钮不变化）比报错更难排查，
       // 用户会以为面板卡住。偏离记录见 docs/页面/06-样式.md 段 2。
       const raw = await ctx.jsx.font.getFontInfo()
-      if (!raw.ok) throw new CepError(raw.code, raw.reason || '读取字体属性失败')
-      // 原版的 `false`（没有字体）现在由解码器判成"结构不认识"⇒ 已经是失败臂，不再单独判 `=== false`
-      const result = check(raw, '读取字体属性失败')
-      if (!result.ok) throw new CepError('JSX', result.msg)
+      if (raw.status !== 'ok') throw new CepError(raw.fail, raw.reason || raw.fail)
+      // 原版的 `false`（没有字体）已由解码器判成"结构不认识"⇒ 落在失败臂，不再单独判 `=== false`
 
       // UNVERIFIED: `data` 的形状按原版调用侧是 `{ fonts: [...] }`（`:51258` 读 `data.fonts.length`），
       // 其余字段未实测 → 只判 fonts 非空，然后整份原样入库（不补键、不改写）。
-      const data = result.data as { fonts?: unknown } | null | undefined
+      const data = raw.data
       if (!data || !Array.isArray(data.fonts) || data.fonts.length === 0) {
         throw new CepError('PARSE', msg.command.text.styleReadFontAttrEmpty)
       }

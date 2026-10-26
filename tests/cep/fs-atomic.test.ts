@@ -37,8 +37,8 @@ const fakeFs = {
   readFileSync: (p: string) => fs.readFileSync(p, 'utf8'),
 }
 
-// 导出文件的写已收进唯一落盘入口 `writeDisk`（`saveExportedText` 已删）
-const { writeDisk } = await import('@/cep/disk-write')
+// 导出文件的写已收进唯一落盘入口 `writeDiskSync`（`saveExportedText` 已删；旧 async `writeDisk` 亦已删）
+const { writeDiskSync } = await import('@/cep/disk-write')
 
 function installRequire() {
   installHostRequire((id: string) => (id === 'fs' ? fakeFs : realRequire(id)))
@@ -61,11 +61,11 @@ afterAll(() => {
   fs.rmSync(dir, { recursive: true, force: true })
 })
 
-describe('writeDisk（原子写：tmp 名唯一 / 不留 tmp / 失败必抛）', () => {
+describe('writeDiskSync（原子写：tmp 名唯一 / 不留 tmp / 失败必抛）', () => {
   it('落盘内容正确，且不在目录里留下 tmp', async () => {
     const target = path.join(dir, 'sj_appFreePanel.json')
 
-    await writeDisk(target, '{"a":1}', {
+    writeDiskSync(target, '{"a":1}', {
       backup: { mode: 'none' as const, why: '测试：新建文件' },
       cas: { mode: 'skip' as const, why: '测试：不涉及并发' },
     })
@@ -77,11 +77,11 @@ describe('writeDisk（原子写：tmp 名唯一 / 不留 tmp / 失败必抛）',
   it('每次调用的 tmp 名都不同，且不再是固定的 <目标>.tmp', async () => {
     const target = path.join(dir, 'sj_appFreePanel.json')
 
-    await writeDisk(target, '{"a":2}', {
+    writeDiskSync(target, '{"a":2}', {
       backup: { mode: 'none' as const, why: '测试：新建文件' },
       cas: { mode: 'skip' as const, why: '测试：不涉及并发' },
     })
-    await writeDisk(target, '{"a":3}', {
+    writeDiskSync(target, '{"a":3}', {
       backup: { mode: 'none' as const, why: '测试：新建文件' },
       cas: { mode: 'skip' as const, why: '测试：不涉及并发' },
     })
@@ -102,7 +102,7 @@ describe('writeDisk（原子写：tmp 名唯一 / 不留 tmp / 失败必抛）',
     const otherProcessTmp = `${target}.tmp`
     fs.writeFileSync(otherProcessTmp, '对方进程写到一半的内容', 'utf8')
 
-    await writeDisk(target, '{"a":4}', {
+    writeDiskSync(target, '{"a":4}', {
       backup: { mode: 'none' as const, why: '测试：新建文件' },
       cas: { mode: 'skip' as const, why: '测试：不涉及并发' },
     })
@@ -111,36 +111,36 @@ describe('writeDisk（原子写：tmp 名唯一 / 不留 tmp / 失败必抛）',
     expect(fs.readFileSync(target, 'utf8')).toBe('{"a":4}')
   })
 
-  it('rename 失败时抛（带原因），并清掉自己的 tmp', async () => {
+  it('rename 失败时抛（带原因），并清掉自己的 tmp', () => {
     const target = path.join(dir, 'sj_appFreePanel.json')
     behavior.failRename = true
 
     // 失败必须**抛**（boolean 说不出为什么，调用方只能猜着退回普通写）
-    await expect(
-      writeDisk(target, '{"a":5}', {
+    expect(() =>
+      writeDiskSync(target, '{"a":5}', {
         backup: { mode: 'none' as const, why: '测试：新建文件' },
         cas: { mode: 'skip' as const, why: '测试：不涉及并发' },
       }),
-    ).rejects.toThrow('EACCES')
+    ).toThrow('EACCES')
     expect(fs.readdirSync(dir)).toEqual([])
   })
 
-  it('无 node（未装 window.require）时抛，不静默', async () => {
+  it('无 node（未装 window.require）时抛，不静默', () => {
     removeHostRequire()
-    await expect(
-      writeDisk(path.join(dir, 'x.json'), '{}', {
+    expect(() =>
+      writeDiskSync(path.join(dir, 'x.json'), '{}', {
         backup: { mode: 'none' as const, why: '测试：新建文件' },
         cas: { mode: 'skip' as const, why: '测试：不涉及并发' },
       }),
-    ).rejects.toThrow('Node 不可用')
+    ).toThrow('Node 不可用')
   })
 })
 
-describe('writeDisk（导出到用户选的路径）', () => {
+describe('writeDiskSync（导出到用户选的路径）', () => {
   it('写入用户选的路径，同样不留 tmp', async () => {
     const out = path.join(dir, '导出', '字体.json')
 
-    await writeDisk(out, '{}', {
+    writeDiskSync(out, '{}', {
       backup: { mode: 'none' as const, why: '测试：新建文件' },
       cas: { mode: 'skip' as const, why: '测试：不涉及并发' },
     })
@@ -149,16 +149,16 @@ describe('writeDisk（导出到用户选的路径）', () => {
     expect(fs.readdirSync(path.dirname(out))).toEqual(['字体.json'])
   })
 
-  it('失败时抛错（不许假装写成功），临时文件不留', async () => {
+  it('失败时抛错（不许假装写成功），临时文件不留', () => {
     const out = path.join(dir, '导出.json')
     behavior.failRename = true
 
-    await expect(
-      writeDisk(out, '[]', {
+    expect(() =>
+      writeDiskSync(out, '[]', {
         backup: { mode: 'none' as const, why: '测试：新建文件' },
         cas: { mode: 'skip' as const, why: '测试：不涉及并发' },
       }),
-    ).rejects.toThrow(expect.objectContaining({ code: 'IO' }))
+    ).toThrow(expect.objectContaining({ code: 'IO' }))
     expect(fs.readdirSync(dir)).toEqual([])
   })
 })

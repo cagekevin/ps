@@ -55,7 +55,7 @@ describe('rename.reorderGroup（组排序）', () => {
   it('组 2 拖到组 1 之前 → 最近使用 / 第二组 / 序列', async () => {
     await expect(
       execute('rename.reorderGroup', { from: 2, to: 1, position: 'before' }),
-    ).resolves.toEqual({ ok: true })
+    ).resolves.toEqual({ status: 'ok' })
 
     expect((await read()).map((group) => group.name)).toEqual(['最近使用', '第二组', '序列'])
   })
@@ -69,10 +69,10 @@ describe('rename.reorderGroup（组排序）', () => {
   it('第 0 组不可拖：from 0 或 to 0 都失败，文件不变', async () => {
     await expect(
       execute('rename.reorderGroup', { from: 0, to: 1, position: 'after' }),
-    ).resolves.toMatchObject({ ok: false })
+    ).resolves.toMatchObject({ status: 'error' })
     await expect(
       execute('rename.reorderGroup', { from: 1, to: 0, position: 'before' }),
-    ).resolves.toMatchObject({ ok: false })
+    ).resolves.toMatchObject({ status: 'error' })
 
     expect((await read()).map((group) => group.name)).toEqual(['最近使用', '序列', '第二组'])
   })
@@ -88,7 +88,7 @@ describe('rename.reorderItem（项排序）', () => {
         toIndex: 1,
         position: 'after',
       }),
-    ).resolves.toEqual({ ok: true })
+    ).resolves.toEqual({ status: 'ok' })
 
     expect((await read())[1].list).toEqual(['%%n', '%n'])
   })
@@ -116,7 +116,7 @@ describe('rename.reorderItem（项排序）', () => {
         toIndex: 0,
         position: 'before',
       }),
-    ).resolves.toMatchObject({ ok: false })
+    ).resolves.toMatchObject({ status: 'error' })
     await expect(
       execute('rename.reorderItem', {
         fromGroup: 1,
@@ -125,7 +125,7 @@ describe('rename.reorderItem（项排序）', () => {
         toIndex: 0,
         position: 'before',
       }),
-    ).resolves.toMatchObject({ ok: false })
+    ).resolves.toMatchObject({ status: 'error' })
 
     expect((await read())[0].list).toEqual(['%n背景层', '收%nn'])
   })

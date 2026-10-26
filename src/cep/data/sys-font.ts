@@ -4,7 +4,8 @@ import { userDir } from '@/cep/paths'
 import { normalizeFontList } from '@/domain/font-normalize'
 import { isRecord } from '@/utils/guards'
 import type { FontItem } from '@/domain/font-item'
-import { readRepoFile } from './repo-read'
+import { readRepoFile, type RepoFileOutcome } from './repo-read'
+import type { ReadFail } from '@/cep/fs-read'
 import { shapeFail, type DecodeFail, type Decoded } from '@/utils/decode'
 import { readFontStars } from './font-meta'
 
@@ -33,8 +34,11 @@ export type SysFontRead =
   | { status: 'ok'; list: FontItem[] }
   /** 文件不在：首次使用 / 还没生成，不是失败 */
   | { status: 'notSeen' }
-  /** 读不到或读不懂：**调用方不许当成"没有字体"** */
-  | { status: 'error'; reason: string }
+  /**
+   * 读不到：**必有现场**（`kind` + errno + 原始错误），调用方要取它得先判 `why`。
+   * **调用方不许把这一臂当成"没有字体"**。
+   */
+  | ({ status: 'error'; reason: string } & ReadFail)
 
 /**
  * `SysFont2.json` 的 decode。
@@ -46,6 +50,18 @@ function decodeSysFont(raw: unknown): Decoded<unknown[]> | DecodeFail {
   if (!isRecord(raw)) return shapeFail('', 'object', raw)
   if (!Array.isArray(raw.arr)) return shapeFail('arr', 'array', raw.arr)
   return { value: raw.arr }
+}
+
+/**
+ * `RepoFileOutcome` → `SysFontRead` 失败臂的**唯一构造点**（别处只调，不写字面量）。
+ *
+ * 这个形状**没有 `fallback`** —— 读不到不许顶成"没有字体"（T-114）。所以它用不了
+ * `repo-read` 的 `badRead` / `badContent`（那两个都带 `fallback`）。
+ */
+function badSysFont(outcome: Extract<RepoFileOutcome<unknown>, { status: 'error' }>): SysFontRead {
+  return outcome.fail === 'readError'
+    ? { status: 'error', fail: 'readError', reason: outcome.reason, failure: outcome.failure }
+    : { status: 'error', fail: outcome.fail, reason: outcome.reason }
 }
 
 /** 读 SysFont2.json；浏览器没有 userDir，按"文件不在"处理（不是失败） */
@@ -60,12 +76,7 @@ export function readSysFontFile(): SysFontRead {
   if (outcome.status === 'error') {
     // 空文件按"还没生成"处理（原实现如此：零字节 SysFont2.json 不是坏文件）
     if (outcome.text === '') return { status: 'notSeen' }
-    // 读不到报原始原因；读到了但读不懂报固定那句 —— 文案保持原样
-    return {
-      status: 'error',
-      reason:
-        outcome.why === 'readError' ? outcome.reason : '内容读不懂（不是合法 JSON 或结构不符）',
-    }
+    return badSysFont(outcome)
   }
   return { status: 'ok', list: mergeFontStars(normalizeFontList(outcome.value)) }
 }

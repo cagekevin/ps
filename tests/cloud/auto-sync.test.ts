@@ -22,7 +22,7 @@ const fetchGuard = vi.fn(() => {
   throw new Error('契约测试，非实机：禁止真实网络请求')
 })
 
-const ok: SyncOutcome = { ok: true }
+const ok: SyncOutcome = { status: 'ok' }
 
 type Queue = ReturnType<typeof createSyncQueue>
 /** 队列只认这个签名（`cloud/change-sync.ts` 的 `sync`）；mock 也要按它标注 */

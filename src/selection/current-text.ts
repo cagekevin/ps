@@ -97,7 +97,7 @@ export async function refreshTypeUnits(): Promise<void> {
     // 这条读路径是独立的，必须自己保证
     await initJsx()
     const rawOutcome = await jsx.font.getTypeUnits()
-    if (rawOutcome.ok && typeof rawOutcome.data === 'string' && rawOutcome.data) {
+    if (rawOutcome.status === 'ok' && typeof rawOutcome.data === 'string' && rawOutcome.data) {
       typeUnitsRef.value = rawOutcome.data
     }
   } catch (e) {
@@ -159,7 +159,7 @@ export async function refreshTextInfo(): Promise<TextInfo | null> {
     return textInfoRef.value
   }
 
-  if (!result.ok) {
+  if (result.status !== 'ok') {
     textInfoError.value = result.reason || msg.selection.text.textInfoReadFailed
     log.warn('selection', '读取文字属性失败', { err: result.hostCode, msg: textInfoError.value })
     return textInfoRef.value

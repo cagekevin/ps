@@ -55,7 +55,7 @@ beforeEach(async () => {
   setActivePinia(pinia)
 
   vi.clearAllMocks()
-  jsx.action.callAction.mockResolvedValue({ ok: true, data: null })
+  jsx.action.callAction.mockResolvedValue({ status: 'ok', data: null })
   await actionLibraryWriter.replace(JSON.parse(JSON.stringify(seed)), SEED)
 })
 

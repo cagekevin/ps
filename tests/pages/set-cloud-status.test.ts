@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import type { CloudStatus, PendingChange } from '@/cloud/types'
+import type { CloudStatus, LedgerBrokenFail, PendingChange } from '@/cloud/types'
 import { describeCloudStatus, formatSyncedAt } from '@/pages/set/cloud-status'
 
 /**
@@ -8,6 +8,13 @@ import { describeCloudStatus, formatSyncedAt } from '@/pages/set/cloud-status'
  * 1. 「队列里等自动同步」和「推失败过」是两个数，不能混；
  * 2. 「没配置地址」和「冲突」文案必须分开——用户要做的事完全不同。
  */
+/** 坏台账：读盘失败（带 errno 现场）—— 页面只关心"读不到"，不关心 errno */
+const BROKEN_LEDGER: { status: 'broken' } & LedgerBrokenFail = {
+  status: 'broken',
+  fail: 'readError',
+  failure: { kind: 'errno', code: 'EPERM', raw: new Error('EPERM: operation not permitted') },
+}
+
 function status(over: Partial<CloudStatus> = {}): CloudStatus {
   return {
     configured: true,
@@ -129,7 +136,7 @@ describe('describeCloudStatus', () => {
   it('坏台账：说的是"读不到 + 已停止上传"，不是"还没有同步记录"', () => {
     const view = describeCloudStatus({
       status: status({
-        ledgerState: { status: 'broken', reason: 'EPERM: operation not permitted' },
+        ledgerState: BROKEN_LEDGER,
       }),
       queuedUnits: 0,
     })
@@ -197,7 +204,7 @@ describe('云同步文案与真实行为一致（TD-11-12）', () => {
 
   it('坏台账的提示不指向不存在的「上传」按钮', () => {
     const view = describeCloudStatus({
-      status: status({ ledgerState: { status: 'broken', reason: 'EPERM' } }),
+      status: status({ ledgerState: BROKEN_LEDGER }),
       queuedUnits: 0,
     })
 

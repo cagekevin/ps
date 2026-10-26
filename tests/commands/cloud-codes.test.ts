@@ -54,7 +54,7 @@ const ENGINE_CODES: CloudErrorCode[] = [
 beforeEach(() => {
   setActivePinia(createPinia())
   vi.clearAllMocks()
-  cloud.engine.download.mockResolvedValue({ ok: true, count: 0, hasCloud: true })
+  cloud.engine.download.mockResolvedValue({ status: 'ok' })
 })
 
 describe('云同步错误码折成命令层码', () => {
@@ -63,85 +63,55 @@ describe('云同步错误码折成命令层码', () => {
       if (code === 'CLOUD_CANCELLED') continue
       const message = `${code} 的具体原因`
       cloud.engine.download.mockResolvedValue({
-        ok: false,
-        count: 0,
-        hasCloud: true,
-        error: message,
-        errorCode: code,
+        status: 'error',
+        failure: { fail: code, reason: message },
       })
 
       const result = await execute('cloud.download', {
         onConfirm: async () => ({ ok: true, data: true }),
       })
 
-      expect(result, code).toMatchObject({ ok: false, code: 'NETWORK', reason: message })
+      expect(result, code).toMatchObject({ status: 'error', fail: 'NETWORK', reason: message })
     }
   })
 
   it('取消 → CANCELLED（用户自己按的，不弹失败）', async () => {
     cloud.engine.download.mockResolvedValue({
-      ok: false,
-      count: 0,
-      hasCloud: true,
-      cancelled: true,
-      error: '取消操作',
-      errorCode: 'CLOUD_CANCELLED',
+      status: 'cancelled',
+      failure: { fail: 'CLOUD_CANCELLED', reason: '取消操作' },
     })
 
     const result = await execute('cloud.download', {
       onConfirm: async () => ({ ok: true, data: true }),
     })
 
-    expect(result).toEqual({ ok: 'cancelled' })
+    expect(result).toEqual({ status: 'cancelled' })
   })
 
-  it('只有 cancelled 位、没有 errorCode 也算取消（引擎两处写法不同）', async () => {
+  it('未配置 → 原话透传（不许被包成「Photoshop 脚本初始化失败」，误导人去查 PS 脚本）', async () => {
     cloud.engine.download.mockResolvedValue({
-      ok: false,
-      count: 0,
-      hasCloud: true,
-      cancelled: true,
-      error: '取消操作',
-    })
-
-    await expect(
-      execute('cloud.download', { onConfirm: async () => ({ ok: true, data: true }) }),
-    ).resolves.toEqual({
-      ok: 'cancelled',
-    })
-  })
-
-  it('未配置 → 原话透传（以前被包成「Photoshop 脚本初始化失败」，误导人去查 PS 脚本）', async () => {
-    cloud.engine.download.mockResolvedValue({
-      ok: false,
-      count: 0,
-      hasCloud: false,
-      error: '未配置同步地址',
-      errorCode: 'CLOUD_NOT_CONFIGURED',
+      status: 'error',
+      failure: { fail: 'CLOUD_NOT_CONFIGURED', reason: '未配置同步地址' },
     })
 
     const result = await execute('cloud.download', {
       onConfirm: async () => ({ ok: true, data: true }),
     })
 
-    expect(result).toMatchObject({ ok: false, code: 'NETWORK', reason: '未配置同步地址' })
-    if (result.ok === false) expect(result.reason).not.toContain('脚本初始化失败')
+    expect(result).toMatchObject({ status: 'error', fail: 'NETWORK', reason: '未配置同步地址' })
+    if (result.status === 'error') expect(result.reason).not.toContain('脚本初始化失败')
   })
 
-  it('冲突（引擎置 cancelled 位但同时带码）不是用户取消，仍按失败处理', async () => {
+  it('冲突未确认（`cancelled` 臂带 `CLOUD_REV_CONFLICT`）不是用户取消，仍按失败处理', async () => {
     cloud.engine.download.mockResolvedValue({
-      ok: false,
-      count: 0,
-      hasCloud: true,
-      cancelled: true,
-      error: '有 2 个同步项会被覆盖，需要确认',
-      errorCode: 'CLOUD_REV_CONFLICT',
+      status: 'cancelled',
+      failure: { fail: 'CLOUD_REV_CONFLICT', reason: '有 2 个同步项会被覆盖，需要确认' },
     })
 
     const result = await execute('cloud.download', {
       onConfirm: async () => ({ ok: true, data: true }),
     })
 
-    expect(result).toMatchObject({ ok: false, code: 'NETWORK' })
+    expect(result).toMatchObject({ status: 'error', fail: 'NETWORK' })
   })
 })

@@ -72,7 +72,6 @@
  * | 2 | 命令失败（`commands/*`，含 `stores/*`、`utils/*`、`composables/*` 里抛错的） | `msg.command` | 121 / 10 |
  * | 3 | 数据读写失败（`cep/data/*`） | `msg.data` | 84 / 11 |
  * | 4 | PS 能力失败（`cep/jsx`、`cep/transport`、`cep/fs|http|ps|dialog|open-url`） | `msg.ps` | 19 / 6 |
- * | 5 | 云同步失败（`cloud/*`、`cep/cloud/*`） | `msg.cloud` | 10 / 4 |
  * | 6 | 选区/文字属性失败（`selection/*`） | `msg.selection` | 收口 4 处引用（1 text + 2 fn）；基线无 CepError/CloudError 字面量，真身是含 `${}` 的拼句，已归本行 P2 收口 |
  * | 7 | 确认问句 + 成功回报（`command.title`、`useCommand.invoke` 第二参、`CepModal`/`ConfirmHost` 默认值、模板 title 属性） | `msg.confirm` + `msg.success` | confirm 12 键 / 13 引用；success 30 键 / 36 引用（原 9/24 是窄口径漏数，实际含 fn 形态与模板属性） |
  * | 8 | **页面/组件层多处引用的自拼句**（同文案在 >1 处出现的页面级提示语——**只收多引用**；单引用页面私有文案留页面不进这里） | `msg.page` | P3 口径订正后：仅 `noActionsInGroup` 1 键（2 处引用）；45 个单引用键已搬回页面 |
@@ -160,7 +159,7 @@
  *
  * **减二·复杂度实减度量（改前 vs 改后并列）**：
  *   - 重复份数：同一句话的定义份数 **27 条重复（79 处次散落）→ 0 条重复（全部收敛到本文件 1 份定义）**；
- *   - fan-in：`msg.*` 被 **47 个文件**引用（真相源 `messages.ts` 的上游面），替代了原先 253 处散落字面量各自为政；
+ *   - fan-in：`msg.*` 被 **47 个文件**引用（真相源 `messages.ts` 的上游面），散落字面量已收敛到本文件一处；
  *   - 改动半径：改一句提示语从"全仓 grep N 处逐个改"→"只改 `messages.ts` 一处"。
  *
  * **4.2 是单一去重数，不是"页面 47 + C 项 9"相加**：脚本把 C 项已核定行并进 `union`（`文件:行` Set）自动去重，
@@ -203,7 +202,6 @@ export interface Msg {
   command: { text: MsgText; fn: MsgFn }
   data: { text: MsgText; fn: MsgFn }
   ps: { text: MsgText; fn: MsgFn }
-  cloud: { text: MsgText; fn: MsgFn }
   selection: { text: MsgText; fn: MsgFn }
   confirm: { text: MsgText; fn: MsgFn }
   success: { text: MsgText; fn: MsgFn }
@@ -341,12 +339,16 @@ export const msg: Msg = {
       fontTagMissing: (tag: string) => `标签不存在：${tag}`,
       fontTagReadFailed: (reason: string) => `标签读取失败：${reason}`,
       fontStarReadFailed: (reason: string) => `评分读取失败：${reason}`,
+      quickFontBlocked: (fail: string) =>
+        fail === 'limit' ? '最多添加15个字体哦' : '已存在同名字体',
       fontImportError: (error: string) => `导入失败：${error}`,
       // fontSet.ts
       fontSetUnknownAlign: (axis: string) =>
         `未知的对齐方向：${axis}（合法值：h / v / bg-h / bg-v）`,
       fontSetSettingsCorrupt: (reason: string) => `字体设置文件损坏（${reason}），按间距分布已中止`,
       fontSetTranslateDailyLimit: (max: string) => `每天最多使用${max}次翻译功能`,
+      /** `reason` 是百度返回的原话（没有就传空串）；生产者自己的话只在这里（判据 3） */
+      fontSetTranslateFailed: (reason: string) => (reason ? `翻译失败（${reason}）` : '翻译失败'),
       fontSetTextTooLong: (max: string) => `文本长度不能超过${max}个字符`,
       // freePanel.ts
       freePanelFileCorrupt: (reason: string) => `自由面板文件损坏（${reason}），执行已中止`,
@@ -360,8 +362,6 @@ export const msg: Msg = {
       copyFileError: (error: string) => `拷贝文件错误：${error}。请手动复制或者开启管理员权限`,
       optimizingDoc: (cur: string, total: string) => `正在优化文档：${cur}/${total}`,
       exporting: (cur: string, total: string) => `正在导出：${cur}/${total}`,
-      commonUseSettingsCorrupt: (reason: string, name: string) =>
-        `常用页设置文件损坏（${reason}），${name} 未处理：请到设置页修复 sj_set.json 后重试`,
       readSelectionFailed: (reason: string) => `读取选区失败：${reason}`,
       applyFontFailed: (family: string) => `设置字体失败：${family}`,
       addedToFreePanel: (text: string) => `已加入自由面板「${text}」`,
@@ -439,6 +439,10 @@ export const msg: Msg = {
       decodeNoItemsParsed: (count: string) => `有 ${count} 个条目，但一个都没解析出来`,
       decodeBadItem: (count: string) => `有 ${count} 个条目形状不对`,
       // font-list.ts
+      // classification-repo.ts：两种原因**不许合并成一句**（T-107：读不到 ≠ 读不懂）
+      classificationReadFailed: () => '分类数据读取失败',
+      classificationBadShape: () => '分类数据格式不正确',
+      classificationNotSeen: () => '分类数据文件不存在',
       sysFontReadFailed: (reason: string) => `读不到系统字体：${reason}（SysFont2.json）`,
       sysFontUnrecognized: (data: string) => `ztgl_initSystemList 返回了无法识别的数据：${data}`,
       // legacy-settings.ts
@@ -456,27 +460,30 @@ export const msg: Msg = {
       // 写盘失败（含备份 / 隔离副本 / 库文件本体）统一由 `disk-write` 的 `fileWriteFailed` 出：
       // 它的文案已含完整路径（`.bak` / `.corrupt-*` 都在路径里）与原因。
       // 在这里再包一层会变成「备份失败：x.bak（写入失败：x.bak（EACCES））」—— 同一句话套两遍。
-      readOriginalFailedAbortImport: (relative: string, reason: string) =>
-        `读取原文件失败，已中止导入：${relative}（${reason}）`,
-      warehouseIndexUnusable: (degraded: string) => `仓库索引不可用：${degraded}`,
       indexReadFailedAbortReplace: (reason: string) =>
         `索引读不到，已中止替换（没有 .bak 的替换等于没有退路）：${reason}`,
       // style-library-repo.ts
       warehouseIndexCorruptAbort: (reason: string) =>
         `仓库索引文件损坏（${reason}），已中止：不猜库文件路径`,
-      warehouseIndexUnusableAbort: (degraded: string) =>
-        `仓库索引不可用（${degraded}），已中止：不猜库文件路径`,
+      warehouseIndexEmpty: () => '仓库索引里没有任何仓库',
+      warehouseIndexUnusableAbort: (reason: string) =>
+        `仓库索引不可用（${reason}），已中止：不猜库文件路径`,
       indexNoKindFileName: (kind: string) => `索引里没有当前仓库的${kind}库文件名`,
       libFileNameInvalid: (fileName: string) => `库文件名不合法：${fileName}`,
       libFileReadFailed: (kind: string, path: string) => `${kind} 库文件读不到：${path}`,
       libFileNotJson: (kind: string) => `${kind} 库文件不是合法 JSON`,
       libFileRootNotArray: (kind: string) => `${kind} 库文件顶层不是数组`,
+      libFileBadItem: (kind: string, count: string) =>
+        `${kind} 库文件里有 ${count} 项不是对象（顶层是数组，但组不是）`,
       groupNoId: (groupIndex: string) => `分组 ${groupIndex} 没有 id`,
       groupMissing: (groupIndex: string) => `分组 ${groupIndex} 不存在`,
       groupNoList: (groupIndex: string) => `分组 ${groupIndex} 没有 list`,
       itemMissing: (itemIndex: string) => `第 ${itemIndex} 项不存在`,
-      warehouseIndexUnusableAbortWrite: (degraded: string) =>
-        `仓库索引不可用，已中止写入：${degraded}`,
+      actionWarehouseMissing: () => '仓库不存在',
+      actionWarehouseLastOne: () => '至少保留一个仓库',
+      itemAlreadyFirst: () => '已经是第一项',
+      itemAlreadyLast: () => '已经是最后一项',
+
       libFileReadFailedAbortWrite: (kind: string, fileName: string, reason: string) =>
         `${kind} 库文件读不到，已中止写入：${fileName}（${reason}）`,
       libFileNotJsonAbortWrite: (kind: string, fileName: string) =>
@@ -520,6 +527,10 @@ export const msg: Msg = {
       cepDialogUnavailable: 'CEP 文件对话框不可用',
       // fs.ts
       nodeUnavailable: 'Node 不可用，检查 manifest 里的 --enable-nodejs',
+      /** cep/fs-read.ts：异步读既没有 Node 也没有 CEP（两条路都没有，不是"读不到文件"） */
+      noNodeNoCep: '当前环境既没有 Node，也没有 CEP，读不到任何文件',
+      /** cep/events.ts：宿主没给可用的回调频道（挂不上监听，事件永远收不到） */
+      psEventListenerUnavailable: 'CEP 回调监听不可用',
       // http.ts
       networkUnsupported: '当前环境不支持网络请求',
       connectServerTimeout: '连接服务器超时',
@@ -534,6 +545,8 @@ export const msg: Msg = {
     },
     fn: {
       // paths.ts
+      psEventRegisterFailed: (name: string, typeId: string) =>
+        `注册 PS 事件失败：${name}（${typeId}）`,
       userDataUnavailable: (reason: string) =>
         `拿不到用户数据目录（getSystemPath("userData") 失败：${reason}）`,
       // http.ts
@@ -554,40 +567,6 @@ export const msg: Msg = {
       jsxThrow: (label: string, raw: string) => `${label}：${raw}`,
       resultNotJson: (label: string, raw: string) =>
         `${label}：返回值不是 JSON（也不是成功哨兵 ok）：${raw}`,
-    },
-  },
-  cloud: {
-    text: {
-      // cloud/transport.ts
-      gatewayRateLimited: '云同步网关限流（HTTP 429）：会等更久再自动重试',
-      notConfigured: '未配置同步地址',
-      gasPermissionPage: 'GAS 返回了权限页，请确认部署权限为“所有人”',
-      gasNotJson: 'GAS 返回不是合法 JSON',
-      syncTimeout: '同步超时',
-    },
-    fn: {
-      // cloud/entries/action-library.ts
-      actionLibWriteBackFailed: (fileName: string, reason: string) =>
-        `动作库写回失败：${fileName}（${reason}）`,
-      // cloud/ledger.ts
-      ledgerWriteFailed: (reason: string) => `台账写入失败：${reason}`,
-      // cloud/transport.ts
-      gatewayDenied: (status: string) =>
-        `云同步网关拒绝访问（HTTP ${status}）：请确认 GAS 部署权限是「所有人」，并检查同步地址`,
-      gasHttpError: (status: string) => `GAS HTTP ${status}`,
-      // cloud/engine.ts
-      entryReadFailed: (id: string, error: string) => `${id} 读取失败：${error}`,
-      cloudUnreadableRefuseOverwrite: (reason: string) =>
-        `云端返回读不懂（${reason}），已拒绝覆盖云端`,
-      ledgerUnreadableStopUpload: (reason: string) =>
-        `本地同步台账读不到（${reason}），已停止上传：没有它就无法判断云端和本地谁更新`,
-      conflictsNeedConfirm: (n: string) => `有 ${n} 个同步项会被覆盖，需要确认`,
-      partialWriteBackFailed: (failed: string) => `部分同步项写回失败：${failed}`,
-      unregisteredUnits: (unknown: string) => `未注册的同步项：${unknown}`,
-      cloudNewerRev: (rev: string, conflicts: string) =>
-        `云端有更新的版本（rev ${rev}），${conflicts} 未推送`,
-      syncIncomplete: (reason: string, codeSuffix: string, units: string) =>
-        `云同步未完成（${reason}${codeSuffix}）：${units} 已记为待同步`,
     },
   },
   selection: {

@@ -4,8 +4,11 @@ import {
   readFontSetSettingsForSync,
 } from '@/cep/data/legacy-settings'
 import type { FontSetSettings } from '@/domain/font-set-config'
-import type { SyncUnitAdapter, WriteOutcome } from '@/domain/cloud'
+import { writeFailed, type SyncUnitAdapter, type WriteOutcome } from '@/domain/cloud'
 import { inlineFile, readInlineJson, unitPayload } from './util'
+import { isDecodeFail, shapeFail } from '@/utils/decode'
+import { isRecord } from '@/utils/guards'
+import { describeDecodeFail } from '@/cep/data/repo-read'
 
 const PATH = '/sj_set.json'
 
@@ -30,14 +33,16 @@ export const fontSettingsEntry: SyncUnitAdapter = {
 
   async write(payload): Promise<WriteOutcome> {
     try {
-      const value = readInlineJson(payload)
-      if (!value || typeof value !== 'object' || Array.isArray(value)) {
-        return { ok: false, message: '字体设置不是对象' }
+      const decoded = readInlineJson(payload)
+      if (isDecodeFail(decoded)) return writeFailed(describeDecodeFail(decoded))
+      const value = decoded.value
+      if (!isRecord(value)) {
+        return writeFailed(describeDecodeFail(shapeFail('', 'object', value)))
       }
       await patchFontSetSettings(value as Partial<FontSetSettings>)
-      return { ok: true }
+      return { status: 'ok' }
     } catch (error) {
-      return { ok: false, message: error instanceof Error ? error.message : '字体设置写回失败' }
+      return writeFailed(error instanceof Error ? error.message : String(error))
     }
   },
 }

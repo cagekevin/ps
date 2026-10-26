@@ -25,7 +25,7 @@ export const useClassificationStore = defineStore('classification', () => {
     // `status: 'error'` 表示整份不可用。两种情况页面都要提示，所以这里不判判别位就能取 reason。
     // 坏读的默认值取生产者的 `fallback`，不在这里再写一份空分类（T-103 / ADR-24）
     data.value = result.status === 'ok' ? result.value : result.fallback
-    degraded.value = result.reason ?? ''
+    degraded.value = result.status === 'ok' ? '' : result.reason
     loaded.value = true
   }
 

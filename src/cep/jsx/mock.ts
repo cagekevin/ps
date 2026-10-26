@@ -32,18 +32,18 @@ export function createMockJsx(): JsxPort {
   return {
     font: {
       // 返回已归一化的 FontItem[]，调用方的 normalizeFont 是幂等的
-      initSystemList: async () => ({ ok: true, data: await getFontList() }),
+      initSystemList: async () => ({ status: 'ok', data: await getFontList() }),
 
       setFont: async (postScriptName, name, weight) => {
         log.info('mock', `设置字体 ${name} / ${weight}（${postScriptName}）`)
         return
       },
 
-      getTypeUnits: () => Promise.resolve({ ok: true, data: 'TypeUnits.POINTS' }),
-      getFontSimpleInfo: () => Promise.resolve({ ok: true, data: { ...FONT_INFO } }),
+      getTypeUnits: () => Promise.resolve({ status: 'ok', data: 'TypeUnits.POINTS' }),
+      getFontSimpleInfo: () => Promise.resolve({ status: 'ok', data: { ...FONT_INFO } }),
       getCurrentFontInfo: () =>
         Promise.resolve({
-          ok: true,
+          status: 'ok',
           data: {
             family: '思源黑体 CN',
             name: 'Source Han Sans CN Regular',
@@ -51,10 +51,13 @@ export function createMockJsx(): JsxPort {
           },
         }),
       getCurrentText: () =>
-        Promise.resolve({ ok: true, data: [{ text: '设计助理' }, { text: 'Design Assistant' }] }),
+        Promise.resolve({
+          status: 'ok',
+          data: [{ text: '设计助理' }, { text: 'Design Assistant' }],
+        }),
       getFontInfo: () =>
         Promise.resolve({
-          ok: true,
+          status: 'ok',
           data: {
             fonts: [
               {
@@ -73,7 +76,7 @@ export function createMockJsx(): JsxPort {
       setHierarchySize: okVoid,
       setLeading: okVoid,
       setTracking: okVoid,
-      setColor: () => Promise.resolve({ ok: true, data: { rgb: { r: 110, g: 120, b: 255 } } }),
+      setColor: () => Promise.resolve({ status: 'ok', data: { rgb: { r: 110, g: 120, b: 255 } } }),
       setFontName: async (postScriptName, name) => {
         log.info('mock', `字体面板换字体 ${name}（${postScriptName}）`)
       },
@@ -100,8 +103,8 @@ export function createMockJsx(): JsxPort {
     },
 
     layer: {
-      isSelectLayer: () => Promise.resolve({ ok: true, data: true }),
-      getTypeNumber: () => Promise.resolve({ ok: true, data: 2 }),
+      isSelectLayer: () => Promise.resolve({ status: 'ok', data: true }),
+      getTypeNumber: () => Promise.resolve({ status: 'ok', data: 2 }),
     },
 
     env: {
@@ -112,7 +115,7 @@ export function createMockJsx(): JsxPort {
       // 与真实 dz_getActionList 同形：{ name, children:[{ name }] }
       getActionList: () =>
         Promise.resolve({
-          ok: true,
+          status: 'ok',
           data: [
             { name: '修图', children: [{ name: '一键磨皮' }] },
             { name: '新建文档', children: [{ name: '800x800' }] },
@@ -170,13 +173,13 @@ export function createMockJsx(): JsxPort {
       },
       getForegroundColor: () =>
         Promise.resolve({
-          ok: true,
+          status: 'ok',
           data: { name: '未命名', color: { hex: 'FF0000', c: 0, m: 100, y: 100, k: 0 } },
         }),
       setForegroundColor: async (color) => {
         log.info('mock', 'ys_setForegroundColor', color)
       },
-      getGradientInfo: () => Promise.resolve({ ok: true, data: null }),
+      getGradientInfo: () => Promise.resolve({ status: 'ok', data: null }),
       setTool: async (tool) => {
         log.info('mock', 'Tool_set', tool)
         return
@@ -222,7 +225,7 @@ export function createMockJsx(): JsxPort {
       },
       getImagePath: async () => {
         log.info('mock', 'cy_getImagePath', null)
-        return { ok: true, data: -1 }
+        return { status: 'ok', data: -1 }
       },
       optimizeOnce: async (options) => {
         log.info('mock', 'cy_optimizeDoc', options)
@@ -275,7 +278,7 @@ export function createMockJsx(): JsxPort {
       },
       getPsdList: async () => {
         log.info('mock', 'cy_getPsdForFolder', null)
-        return { ok: true, data: [] }
+        return { status: 'ok', data: [] }
       },
     },
   }

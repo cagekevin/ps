@@ -22,7 +22,7 @@ vi.mock('@/selection', () => ({
 vi.mock('@/cep/data/font-list', () => ({ getFontList: async () => [] }))
 vi.mock('@/cep/data/font-meta', () => ({
   readFontTags: async () => [],
-  readFontStars: async () => ({ ok: true, stars: {} }),
+  readFontStars: async () => ({ status: 'ok', stars: {} }),
 }))
 
 vi.mock('@/cep/jsx', () => ({

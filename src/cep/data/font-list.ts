@@ -29,8 +29,8 @@ export async function getFontList(opts: { refresh?: boolean } = {}): Promise<Fon
 
   const res = await jsx.font.initSystemList()
 
-  if (!res.ok) {
-    throw new CepError(res.code, res.reason || 'ztgl_initSystemList 失败')
+  if (res.status !== 'ok') {
+    throw new CepError(res.fail, res.reason || res.fail)
   }
   const data = res.data
 
@@ -38,8 +38,13 @@ export async function getFontList(opts: { refresh?: boolean } = {}): Promise<Fon
   if (isJsxOkSentinel(data)) {
     const fromFile = readSysFontFile()
     if (fromFile.status === 'error') {
-      //把**为什么**读不到带出去，别让页面只写"读不到系统字体"却查不到原因
-      throw new CepError('IO', msg.data.fn.sysFontReadFailed(fromFile.reason))
+      // 把**为什么**读不到带出去：读盘失败有现场（进日志原文），内容失败带种类
+      throw new CepError(
+        'IO',
+        msg.data.fn.sysFontReadFailed(fromFile.reason),
+        undefined,
+        fromFile.fail === 'readError' ? fromFile.failure : { fail: fromFile.fail },
+      )
     }
     if (fromFile.status === 'notSeen' || !fromFile.list.length) {
       throw new CepError('PARSE', msg.data.text.sysFontEmpty)

@@ -98,9 +98,9 @@ describe('cloud engine', () => {
     vi.stubGlobal('fetch', fetchGuard)
     fetchGuard.mockClear()
     readA = vi.fn<SyncUnitAdapter['read']>().mockResolvedValue(payloadA)
-    writeA = vi.fn<SyncUnitAdapter['write']>().mockResolvedValue({ ok: true })
+    writeA = vi.fn<SyncUnitAdapter['write']>().mockResolvedValue({ status: 'ok' })
     readB = vi.fn<SyncUnitAdapter['read']>().mockResolvedValue(payloadB)
-    writeB = vi.fn<SyncUnitAdapter['write']>().mockResolvedValue({ ok: true })
+    writeB = vi.fn<SyncUnitAdapter['write']>().mockResolvedValue({ status: 'ok' })
     pull = vi.fn<CloudDeps['transport']['pull']>().mockResolvedValue({ status: 'empty' })
     push = vi.fn<CloudDeps['transport']['push']>().mockResolvedValue(undefined)
     ledgerRead = vi.fn<() => CloudLedgerRecord | null | typeof BROKEN>().mockReturnValue(null)
@@ -118,7 +118,15 @@ describe('cloud engine', () => {
         read: async () => {
           const raw = ledgerRead()
           if (typeof raw === 'symbol') {
-            return { status: 'broken' as const, reason: 'EPERM: operation not permitted' }
+            return {
+              status: 'broken' as const,
+              fail: 'readError' as const,
+              failure: {
+                kind: 'errno' as const,
+                code: 'EPERM',
+                raw: new Error('EPERM: operation not permitted'),
+              },
+            }
           }
           return raw === null ? { status: 'none' as const } : { status: 'ok' as const, ledger: raw }
         },
@@ -143,7 +151,7 @@ describe('cloud engine', () => {
   it('云端为空时首次上传 rev=1，并写台账', async () => {
     const result = await engine.upload()
 
-    expect(result).toMatchObject({ ok: true, count: 2 })
+    expect(result).toMatchObject({ status: 'ok' })
     const snapshot = push.mock.calls[0][0]
     expect(snapshot.rev).toBe(1)
     expect(ledgerWrite).toHaveBeenCalledWith(
@@ -158,7 +166,7 @@ describe('cloud engine', () => {
 
     const result = await engine.upload()
 
-    expect(result).toMatchObject({ ok: false, errorCode: 'CLOUD_COLLECT_FAILED' })
+    expect(result).toMatchObject({ status: 'error', failure: { fail: 'CLOUD_COLLECT_FAILED' } })
     expect(push).not.toHaveBeenCalled()
     expect(ledgerWrite).not.toHaveBeenCalled()
   })
@@ -171,7 +179,7 @@ describe('cloud engine', () => {
 
     const result = await engine.upload()
 
-    expect(result).toMatchObject({ ok: true, skipped: true })
+    expect(result).toMatchObject({ status: 'ok' })
     expect(push).not.toHaveBeenCalled()
   })
 
@@ -185,7 +193,7 @@ describe('cloud engine', () => {
 
     const result = await engine.upload()
 
-    expect(result).toMatchObject({ ok: false, cancelled: true, errorCode: 'CLOUD_REV_CONFLICT' })
+    expect(result).toMatchObject({ status: 'cancelled', failure: { fail: 'CLOUD_REV_CONFLICT' } })
     expect(push).not.toHaveBeenCalled()
   })
 
@@ -194,7 +202,7 @@ describe('cloud engine', () => {
 
     const result = await engine.upload()
 
-    expect(result.ok).toBe(false)
+    expect(result.status).toBe('error')
     expect(ledgerWrite).not.toHaveBeenCalled()
   })
 
@@ -205,7 +213,7 @@ describe('cloud engine', () => {
 
     const result = await engine.download()
 
-    expect(result).toMatchObject({ ok: true, count: 2 })
+    expect(result).toMatchObject({ status: 'ok' })
     expect(ledgerWrite).toHaveBeenCalled()
     expect(pendingClear).toHaveBeenCalled()
   })
@@ -214,15 +222,11 @@ describe('cloud engine', () => {
     pull.mockResolvedValue(
       cloudView({ 'font.stars': toUnit(payloadA), 'font.tags': toUnit(payloadB) }),
     )
-    writeB.mockResolvedValue({ ok: false, message: '写失败' })
+    writeB.mockResolvedValue({ status: 'error', reason: '写失败' })
 
     const result = await engine.download()
 
-    expect(result).toMatchObject({
-      ok: false,
-      count: 1,
-      partial: { failed: ['font.tags（写失败）'] },
-    })
+    expect(result).toMatchObject({ status: 'error', failure: { fail: 'CLOUD_WRITE_FAILED' } })
     expect(ledgerWrite).not.toHaveBeenCalled()
   })
 
@@ -238,11 +242,7 @@ describe('cloud engine', () => {
     const result = await engine.pushUnits(['font.tags'])
 
     // 契约测试，非实机：只断言"端口没被调用"，真实服务端行为未验
-    expect(result).toMatchObject({
-      ok: false,
-      errorCode: 'CLOUD_NOT_CONFIGURED',
-      pending: ['font.tags'],
-    })
+    expect(result).toMatchObject({ status: 'error', failure: { fail: 'CLOUD_NOT_CONFIGURED' } })
     expect(pull).not.toHaveBeenCalled()
     expect(push).not.toHaveBeenCalled()
     expect(pendingRecord).toHaveBeenCalledWith(['font.tags'], 'not-configured')
@@ -260,7 +260,7 @@ describe('cloud engine', () => {
 
     const result = await engine.pushUnits(['font.tags'])
 
-    expect(result).toMatchObject({ ok: true, count: 1, pushed: ['font.tags'], rev: 4 })
+    expect(result).toMatchObject({ status: 'ok' })
     const snapshot = push.mock.calls[0][0]
     expect(snapshot.rev).toBe(4)
     // 别的 unit 没被重算，也不会从快照里消失
@@ -284,7 +284,7 @@ describe('cloud engine', () => {
 
     const result = await engine.pushUnits(['font.tags'])
 
-    expect(result).toMatchObject({ ok: true, skipped: true, count: 0 })
+    expect(result).toMatchObject({ status: 'ok' })
     expect(push).not.toHaveBeenCalled()
     expect(ledgerWrite).not.toHaveBeenCalled()
   })
@@ -309,11 +309,7 @@ describe('cloud engine', () => {
 
     const result = await engine.pushUnits(['font.tags'])
 
-    expect(result).toMatchObject({
-      ok: false,
-      errorCode: 'CLOUD_WRITE_FAILED',
-      pending: ['font.tags'],
-    })
+    expect(result).toMatchObject({ status: 'error', failure: { fail: 'CLOUD_WRITE_FAILED' } })
     expect(pendingRecord).toHaveBeenCalledWith(['font.tags'], 'network', 'CLOUD_WRITE_FAILED')
   })
 
@@ -329,7 +325,7 @@ describe('cloud engine', () => {
 
     const result = await engine.pushUnits(['font.tags'])
 
-    expect(result).toMatchObject({ ok: true, pushed: ['font.tags'], rev: 6 })
+    expect(result).toMatchObject({ status: 'ok' })
     const written = ledgerWrite.mock.calls[0][0]
     expect(written.units?.['font.tags']).toBe(toUnit(payloadB).hash)
   })
@@ -348,7 +344,7 @@ describe('cloud engine', () => {
 
     const result = await engine.pushUnits(['font.tags'])
 
-    expect(result).toMatchObject({ ok: true, skipped: true, count: 0 })
+    expect(result).toMatchObject({ status: 'ok' })
     expect(push).not.toHaveBeenCalled()
     const written = ledgerWrite.mock.calls[0][0]
     expect(written.rev).toBe(5)
@@ -361,7 +357,7 @@ describe('cloud engine', () => {
 
     const result = await engine.pushUnits(['font.stars', 'font.tags'])
 
-    expect(result).toMatchObject({ ok: true, pushed: ['font.stars'] })
+    expect(result).toMatchObject({ status: 'ok' })
     expect(pendingRecord).toHaveBeenCalledWith(['font.tags'], 'collect-failed')
     const snapshot = push.mock.calls[0][0]
     expect(snapshot.units['font.stars']).toBeDefined()
@@ -374,7 +370,7 @@ describe('cloud engine', () => {
 
     const result = await engine.pushUnits(['font.stars', 'font.tags'])
 
-    expect(result).toMatchObject({ ok: false, errorCode: 'CLOUD_COLLECT_FAILED' })
+    expect(result).toMatchObject({ status: 'error', failure: { fail: 'CLOUD_COLLECT_FAILED' } })
     expect(pendingRecord).toHaveBeenCalledWith(['font.stars', 'font.tags'], 'collect-failed')
     expect(push).not.toHaveBeenCalled()
   })
@@ -390,7 +386,7 @@ describe('cloud engine', () => {
     ledgerRead.mockReturnValue({ rev: 3, syncedAt: 100, localHash: 'legacy' })
 
     const first = await engine.pushUnits(['font.tags'])
-    expect(first).toMatchObject({ ok: true, pushed: ['font.tags'] })
+    expect(first).toMatchObject({ status: 'ok' })
 
     // 模拟推送生效：云端 = 刚推上去的快照；台账 = 刚写入的记录
     const snapshot = push.mock.calls[0][0]
@@ -407,7 +403,7 @@ describe('cloud engine', () => {
 
     const second = await engine.pushUnits(['font.tags'])
 
-    expect(second).toMatchObject({ ok: true, skipped: true, count: 0 })
+    expect(second).toMatchObject({ status: 'ok' })
     expect(push).toHaveBeenCalledTimes(1)
     expect(ledgerWrite.mock.calls[1][0].units?.['font.tags']).toBe(toUnit(payloadB).hash)
   })
@@ -428,12 +424,7 @@ describe('cloud engine', () => {
 
     const result = await engine.pushUnits(['font.tags'])
 
-    expect(result).toMatchObject({
-      ok: false,
-      cancelled: true,
-      errorCode: 'CLOUD_REV_CONFLICT',
-      pending: ['font.tags'],
-    })
+    expect(result).toMatchObject({ status: 'cancelled', failure: { fail: 'CLOUD_REV_CONFLICT' } })
     expect(push).not.toHaveBeenCalled()
     expect(pendingRecord).toHaveBeenCalledWith(['font.tags'], 'conflict')
   })
@@ -456,7 +447,7 @@ describe('cloud engine', () => {
     const result = await engine.pushUnits(['font.tags'], { onConfirm })
 
     expect(onConfirm).toHaveBeenCalledWith({ units: ['font.tags'], cloudRev: 5 })
-    expect(result).toMatchObject({ ok: true, rev: 6 })
+    expect(result).toMatchObject({ status: 'ok' })
     expect(push).toHaveBeenCalled()
   })
 
@@ -479,7 +470,7 @@ describe('cloud engine', () => {
 
     const result = await engine.pushUnits(['font.tags'])
 
-    expect(result).toMatchObject({ ok: true, pushed: ['font.tags'], rev: 8 })
+    expect(result).toMatchObject({ status: 'ok' })
   })
 
   it('push 失败时记 pending(network)，不写台账', async () => {
@@ -488,7 +479,7 @@ describe('cloud engine', () => {
 
     const result = await engine.pushUnits(['font.tags'], { force: true })
 
-    expect(result).toMatchObject({ ok: false, errorCode: 'CLOUD_NETWORK', pending: ['font.tags'] })
+    expect(result).toMatchObject({ status: 'error', failure: { fail: 'CLOUD_NETWORK' } })
     expect(ledgerWrite).not.toHaveBeenCalled()
     expect(pendingRecord).toHaveBeenCalledWith(['font.tags'], 'network')
   })
@@ -505,14 +496,14 @@ describe('cloud engine', () => {
 
     const result = await engine.pushUnits(['font.tags'], { force: true })
 
-    expect(result).toMatchObject({ ok: false, errorCode: 'CLOUD_PERMISSION' })
+    expect(result).toMatchObject({ status: 'error', failure: { fail: 'CLOUD_PERMISSION' } })
     expect(pendingRecord).toHaveBeenCalledWith(['font.tags'], 'network', 'CLOUD_PERMISSION')
   })
 
   it('未注册的 unit 直接报错，不 pull 不 push', async () => {
     const result = await engine.pushUnits(['nope'])
 
-    expect(result).toMatchObject({ ok: false, errorCode: 'CLOUD_COLLECT_FAILED' })
+    expect(result).toMatchObject({ status: 'error', failure: { fail: 'CLOUD_COLLECT_FAILED' } })
     expect(pull).not.toHaveBeenCalled()
     expect(push).not.toHaveBeenCalled()
   })
@@ -540,7 +531,7 @@ describe('cloud engine', () => {
     readB.mockResolvedValue(payloadB2)
 
     const pushed = await engine.pushUnits(['font.tags'])
-    expect(pushed).toMatchObject({ ok: true, pushed: ['font.tags'] })
+    expect(pushed).toMatchObject({ status: 'ok' })
 
     // 模拟推送生效：云端 = 刚 push 的快照；台账 = 刚写入的记录
     const snapshot = push.mock.calls[0][0]
@@ -557,7 +548,7 @@ describe('cloud engine', () => {
 
     const second = await engine.upload()
 
-    expect(second).toMatchObject({ ok: true, skipped: true })
+    expect(second).toMatchObject({ status: 'ok' })
     // 整包上传没有第二次 push：per-unit 台账没有破坏 inSync 判定
     expect(push).toHaveBeenCalledTimes(1)
   })
@@ -576,9 +567,12 @@ describe('cloud engine', () => {
       const status = await engine.getStatus()
 
       expect(status.ledgerState.status).toBe('broken')
-      expect(status.ledgerState.status === 'broken' ? status.ledgerState.reason : '').toContain(
-        'EPERM',
-      )
+      // 断结构不断文案：是读盘失败、码是 EPERM。文案归 `msg`，这里钉它等于钉死措辞。
+      expect(
+        status.ledgerState.status === 'broken' && status.ledgerState.fail === 'readError'
+          ? status.ledgerState.failure
+          : null,
+      ).toMatchObject({ kind: 'errno', code: 'EPERM' })
     })
 
     it('判据 A：文件不在（ENOENT）→ 才是 none', async () => {
@@ -592,9 +586,10 @@ describe('cloud engine', () => {
 
       const result = await engine.upload()
 
-      expect(result.ok).toBe(false)
-      expect(result.errorCode).toBe('CLOUD_LEDGER_BROKEN')
-      expect(result.error).toContain('台账读不到')
+      expect(result.status).toBe('error')
+      expect(result).toMatchObject({ failure: { fail: 'CLOUD_LEDGER_BROKEN' } })
+      // `reason` 是台账底层的读失败原文（系统给的），不是拼出来的中文
+      expect(result).toMatchObject({ failure: { reason: 'EPERM: operation not permitted' } })
       expect(push).not.toHaveBeenCalled()
     })
 
@@ -603,8 +598,8 @@ describe('cloud engine', () => {
 
       const result = await engine.pushUnits(['font.tags'])
 
-      expect(result.ok).toBe(false)
-      expect(result.errorCode).toBe('CLOUD_LEDGER_BROKEN')
+      expect(result.status).toBe('error')
+      expect(result).toMatchObject({ failure: { fail: 'CLOUD_LEDGER_BROKEN' } })
       expect(push).not.toHaveBeenCalled()
     })
   })

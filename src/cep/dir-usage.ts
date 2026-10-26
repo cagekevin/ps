@@ -1,6 +1,6 @@
 // 是什么｜替代了什么｜谁在用
 // 是什么：**目录占用的唯一统计处** —— 递归求和，并如实报出"少算了几个"（`skipped`）
-// 替代了什么：`cep/fs.ts:263-311`（原来挂在"文件系统"文件里，与读原语共享 `nodeRequire`，但判据完全不同）
+// 替代了什么：`cep/fs.ts:263-311` 的目录统计已迁出，现由本文件负责（判据与读原语不同，不再共享 nodeRequire）。
 // 谁在用：`cep/readonly.ts`（`pages/set/components/ClearCacheDialog.vue` 显示缓存占用）
 // 别这么写：`return 0` 兜"读不到" —— 那会把读失败说成"空缓存"（本文件返回 `null`，调用方显示「无法读取」）
 
@@ -10,7 +10,7 @@ import { hasNode, nodeRequire } from './node'
  * 目录占用（递归求和）；`bytes` 只算普通文件，不跟符号链接。
  *
  * `skipped` = 统计时读不到（`EPERM` / 被占用）而**少算**的文件数。它不是装饰：
- * 有值时 `bytes` 只是下限，UI 必须让用户看出"这个数字不准"（之前是空 catch，少算了多少没人知道）。
+ * 有值时 `bytes` 只是下限，UI 必须让用户看出"这个数字不准"（空 catch 会让少算无人察觉）。
  */
 export interface DirUsage {
   bytes: number

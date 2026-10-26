@@ -4,9 +4,16 @@
 // 谁在用：`cep/data/style-library-io.ts`
 // 禁止：不读文件、不碰 CEP；base64 编解码由调用方注入（与 `ku-format` 的 `decode` 同口径）
 
-import { decodeKuData, isKuLibraryFileName } from './ku-format'
+import { decodeKuData, isKuLibraryFileName, kuLibraryKind } from './ku-format'
 import type { KuKind, StyleWarehouseIndex } from './style-library'
-import { isRecord } from '@/utils/guards'
+import { isArrayOf, isRecord } from '@/utils/guards'
+import {
+  decodeJsonText,
+  isDecodeFail,
+  shapeFail,
+  type Decoded,
+  type DecodeFail,
+} from '@/utils/decode'
 
 /** 导出文件里的一个条目。`data` 是布尔 `false` 时表示「这个文件当时读不到」（契约 §2.5/§2.6） */
 export interface KuFileEntry {
@@ -37,43 +44,54 @@ export const KU_CONTAINER_ORDER: readonly KuKind[] = ['color', 'style', 'font', 
 
 const KU_LIBRARY_FIELDS = ['color', 'gradient', 'font', 'style'] as const
 
-function parseJson(text: string): unknown {
-  try {
-    return JSON.parse(text)
-  } catch {
-    throw new Error('文件不是合法的 JSON')
-  }
-}
-
-function normalizeEntry(raw: unknown): KuFileEntry {
-  if (!isRecord(raw)) throw new Error('条目不是对象')
-  if (typeof raw.name !== 'string' || !raw.name) throw new Error('条目缺少 name')
+function normalizeEntry(raw: unknown, index: number): Decoded<KuFileEntry> | DecodeFail {
+  if (!isRecord(raw)) return { fail: 'badItem', count: index + 1 }
+  if (typeof raw.name !== 'string' || !raw.name) return shapeFail('name', 'string', raw.name)
 
   // `data` 不是字符串（实测是布尔 `false`）= 文件缺失；绝不丢给 base64 解码（契约 §2.5 第 3 点）
-  return { name: raw.name, data: typeof raw.data === 'string' ? raw.data : false }
+  return { value: { name: raw.name, data: typeof raw.data === 'string' ? raw.data : false } }
 }
 
-/** `.kux` / `.dzx` 容器：`{ arrFileData, store }` */
-export function parseKuContainer(text: string): KuContainerFile {
-  const parsed = parseJson(text)
-  if (!isRecord(parsed)) throw new Error('文件顶层不是对象，不是仓库容器')
+function entriesOf(raw: unknown[]): Decoded<KuFileEntry[]> | DecodeFail {
+  const out: KuFileEntry[] = []
+  for (let i = 0; i < raw.length; i++) {
+    const one = normalizeEntry(raw[i], i)
+    if (isDecodeFail(one)) return one
+    out.push(one.value)
+  }
+  return { value: out }
+}
 
-  const rawEntries = parsed.arrFileData
-  if (!Array.isArray(rawEntries)) throw new Error('缺少 arrFileData')
+/** `.kux` / `.dzx` 容器：`{ arrFileData, store }`。失败带码，成功才给值 */
+export function parseKuContainer(text: string): Decoded<KuContainerFile> | DecodeFail {
+  const parsed = decodeJsonText(text)
+  if (isDecodeFail(parsed)) return parsed
+  if (!isRecord(parsed.value)) return shapeFail('', 'object', parsed.value)
 
-  const store = parsed.store
-  if (!isRecord(store) || !Array.isArray(store.list)) throw new Error('缺少 store.list')
+  const rawEntries = parsed.value.arrFileData
+  if (!Array.isArray(rawEntries)) return shapeFail('arrFileData', 'array', rawEntries)
 
-  const list = store.list.filter(isRecord) as StyleWarehouseIndex['list']
-  if (!list.length) throw new Error('store.list 是空的')
+  const store = parsed.value.store
+  if (!isRecord(store)) return shapeFail('store', 'object', store)
+
+  const rawList = store.list
+  if (!Array.isArray(rawList)) return shapeFail('store.list', 'array', rawList)
+
+  const list = rawList.filter(isRecord) as StyleWarehouseIndex['list']
+  if (!list.length) return { fail: 'emptyContent' }
+
+  const entries = entriesOf(rawEntries)
+  if (isDecodeFail(entries)) return entries
 
   return {
-    arrFileData: rawEntries.map(normalizeEntry),
-    store: {
-      ...store,
-      index: typeof store.index === 'number' ? store.index : 0,
-      list,
-    } as StyleWarehouseIndex,
+    value: {
+      arrFileData: entries.value,
+      store: {
+        ...store,
+        index: typeof store.index === 'number' ? store.index : 0,
+        list,
+      } as StyleWarehouseIndex,
+    },
   }
 }
 
@@ -82,11 +100,12 @@ export function encodeKuContainer(file: KuContainerFile): string {
 }
 
 /** `.kus` / `.kug`：扁平 `[{ name, data }]`，`[0]` 是库文件、其余是旁路图（契约 §2.6） */
-export function parseKuFlatList(text: string): KuFileEntry[] {
-  const parsed = parseJson(text)
-  if (!Array.isArray(parsed)) throw new Error('文件顶层不是数组，不是单库清单')
-  if (!parsed.length) throw new Error('单库清单是空的')
-  return parsed.map(normalizeEntry)
+export function parseKuFlatList(text: string): Decoded<KuFileEntry[]> | DecodeFail {
+  const parsed = decodeJsonText(text)
+  if (isDecodeFail(parsed)) return parsed
+  if (!Array.isArray(parsed.value)) return shapeFail('', 'array', parsed.value)
+  if (!parsed.value.length) return { fail: 'emptyContent' }
+  return entriesOf(parsed.value)
 }
 
 export function encodeKuFlatList(entries: readonly KuFileEntry[]): string {
@@ -94,13 +113,12 @@ export function encodeKuFlatList(entries: readonly KuFileEntry[]): string {
 }
 
 /** `.kuc` / `.kuf`：数组本身就是组数据（契约 §0.1） */
-export function parseKuGroups(text: string): KuRawGroup[] {
-  const parsed = parseJson(text)
-  if (!Array.isArray(parsed)) throw new Error('库文件顶层不是数组')
-  return parsed.map((group) => {
-    if (!isRecord(group)) throw new Error('库文件里有非对象的组')
-    return group
-  })
+export function parseKuGroups(text: string): Decoded<KuRawGroup[]> | DecodeFail {
+  const parsed = decodeJsonText(text)
+  if (isDecodeFail(parsed)) return parsed
+  if (!Array.isArray(parsed.value)) return shapeFail('', 'array', parsed.value)
+  if (!isArrayOf(parsed.value, isRecord)) return { fail: 'badItem', count: parsed.value.length }
+  return { value: parsed.value }
 }
 
 export function encodeKuGroups(groups: readonly KuRawGroup[]): string {
@@ -132,23 +150,6 @@ function renameLibraryFile(name: string, guid: KuGuid): string {
   return `${name.slice(0, 8)}${guid().toUpperCase()}${extOf(name)}`
 }
 
-/** `sj_kuCol` 的后三位 → 库类型；`Fot` 实测无样本，按白名单归到字体（契约 §2.2） */
-function libraryKind(name: string): KuKind | null {
-  switch (name.slice(5, 8)) {
-    case 'Col':
-      return 'color'
-    case 'Gra':
-      return 'gradient'
-    case 'Fon':
-    case 'Fot':
-      return 'font'
-    case 'Sty':
-      return 'style'
-    default:
-      return null
-  }
-}
-
 export interface KuIdRewrite {
   groups: KuRawGroup[]
   /** 旧 id → 新 id（样式组 id 带 `YS` 前缀；渐变是去掉扩展名的文件名） */
@@ -167,7 +168,7 @@ export function rewriteKuIds(
   kind: KuKind,
   groups: readonly KuRawGroup[],
   guid: KuGuid,
-): KuIdRewrite {
+): Decoded<KuIdRewrite> | DecodeFail {
   const ids = new Map<string, string>()
 
   const nextId = (key: string): string => {
@@ -179,13 +180,14 @@ export function rewriteKuIds(
     return value
   }
 
-  const next = structuredClone(groups) as KuRawGroup[]
+  // `structuredClone` 保留元素类型，但入参是 `readonly` ⇒ 展开成可变数组，不用 `as`
+  const next: KuRawGroup[] = [...structuredClone(groups)]
 
   for (const group of next) {
     if (kind === 'style') {
       // 组 / 项的 id 是原版校验的必含键（契约 §2.3 的 `checkError`）；
       // 缺了原版会把整组 / 单项 splice 掉，我们宁可整份拒绝，也不静默丢数据
-      if (typeof group.id !== 'string' || !group.id) throw new Error('样式组缺少 id')
+      if (typeof group.id !== 'string' || !group.id) return shapeFail('id', 'string', group.id)
       group.id = nextId(group.id)
     }
 
@@ -194,7 +196,8 @@ export function rewriteKuIds(
       if (!isRecord(item)) continue
 
       if (kind === 'style') {
-        if (typeof item.id !== 'string' || !item.id) throw new Error('样式项缺少 id')
+        if (typeof item.id !== 'string' || !item.id)
+          return shapeFail('list[].id', 'string', item.id)
         item.id = nextId(item.id)
       }
       if (kind !== 'gradient') continue
@@ -208,7 +211,7 @@ export function rewriteKuIds(
     }
   }
 
-  return { groups: next, ids }
+  return { value: { groups: next, ids } }
 }
 
 /** 按 id 映射改旁路图文件名；映射里没有的（不属于这个库的）不动 */
@@ -246,7 +249,7 @@ export function remapKuContainer(
   file: KuContainerFile,
   guid: KuGuid,
   codec: KuCodec,
-): KuContainerFile {
+): Decoded<KuContainerFile> | DecodeFail {
   const sidecarNames = file.arrFileData
     .filter((entry) => !isKuLibraryFileName(entry.name))
     .map((entry) => entry.name)
@@ -256,28 +259,39 @@ export function remapKuContainer(
   const rewritten = new Map<string, KuFileEntry>()
 
   for (const entry of file.arrFileData) {
-    if (!isKuLibraryFileName(entry.name)) continue
+    const kind = kuLibraryKind(entry.name)
+    // 旁路图（`kuStyle/*` / `Gradient/*`）不是库文件 ⇒ 内容不动，改名由 `sidecarMap` 统一处理
+    if (kind === 'sidecar') continue
 
-    const kind = libraryKind(entry.name)
     const name = renameLibraryFile(entry.name, guid)
     nameMap.set(entry.name, name)
 
-    if (!kind || typeof entry.data !== 'string') {
+    if (typeof entry.data !== 'string') {
       rewritten.set(entry.name, { name, data: entry.data })
       continue
     }
 
-    const text = decodeKuData(entry.data, codec.decode)
-    if (text === null) {
+    // 没有内容（`data:false` / 空串）⇒ 原样保留，不重写
+    const content = decodeKuData(entry.data, codec.decode)
+    if (isDecodeFail(content)) {
       rewritten.set(entry.name, { name, data: entry.data })
       continue
     }
 
-    const result = rewriteKuIds(kind, parseKuGroups(text), guid)
-    for (const [oldName, newName] of renameKuSidecars(sidecarNames, result.ids)) {
+    // 内层库文件的失败**原样上抛**（同一个 `DecodeFail`）：本文件只表达一次"读不懂"，
+    // 不为写侧另造一种说法（`shape:xxx` 那种字符串谁都不认）。
+    const groups = parseKuGroups(content.value)
+    if (isDecodeFail(groups)) return groups
+
+    const result = rewriteKuIds(kind, groups.value, guid)
+    if (isDecodeFail(result)) return result
+    for (const [oldName, newName] of renameKuSidecars(sidecarNames, result.value.ids)) {
       if (!sidecarMap.has(oldName)) sidecarMap.set(oldName, newName)
     }
-    rewritten.set(entry.name, { name, data: codec.encode(encodeKuGroups(result.groups)) })
+    rewritten.set(entry.name, {
+      name,
+      data: codec.encode(encodeKuGroups(result.value.groups)),
+    })
   }
 
   const arrFileData = file.arrFileData.map((entry) => {
@@ -297,7 +311,7 @@ export function remapKuContainer(
     return next as StyleWarehouseIndex['list'][number]
   })
 
-  return { arrFileData, store: { ...file.store, list } }
+  return { value: { arrFileData, store: { ...file.store, list } } }
 }
 
 export interface KuAppendPayload {
@@ -312,18 +326,22 @@ export function prepareKuAppend(
   groups: readonly KuRawGroup[],
   sidecars: readonly KuFileEntry[],
   guid: KuGuid,
-): KuAppendPayload {
+): Decoded<KuAppendPayload> | DecodeFail {
   const rewritten = rewriteKuIds(kind, groups, guid)
+  if (isDecodeFail(rewritten)) return rewritten
+
   const renamed = renameKuSidecars(
     sidecars.map((entry) => entry.name),
-    rewritten.ids,
+    rewritten.value.ids,
   )
 
   return {
-    groups: rewritten.groups,
-    sidecars: sidecars.map((entry) => ({
-      name: renamed.get(entry.name) ?? renameKuSidecar(entry.name, guid),
-      data: entry.data,
-    })),
+    value: {
+      groups: rewritten.value.groups,
+      sidecars: sidecars.map((entry) => ({
+        name: renamed.get(entry.name) ?? renameKuSidecar(entry.name, guid),
+        data: entry.data,
+      })),
+    },
   }
 }

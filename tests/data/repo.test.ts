@@ -75,28 +75,21 @@ describe('fileRepo 读', () => {
   it('文件不存在时返回 fallback，且不算 degraded（首次使用是正常状态）', () => {
     const read = createRepo().read()
     const value = readValue(read)
-    const degraded = read.reason
     expect(value).toEqual([])
-    expect(degraded).toBeUndefined()
   })
 
   it('内容损坏时报坏因、不交出 fallback（坏读没有 value）', () => {
     disk.files.set(PATH, '{oops')
     const read = createRepo().read()
-    const degraded = read.reason
-    // 旧断言是 `value` 等于 fallback `[]`；4a96f63 的 src/cep/data/types.ts 把 `value`
-    // 从失败臂上删了，同一个意图变成「业务根本拿不到值」
     expect(read).not.toHaveProperty('value')
-    expect(degraded).toBeTruthy()
+    expect(read.status === 'error' && read.reason).toBeTruthy()
   })
 
   it('合法 JSON 原样返回', () => {
     disk.files.set(PATH, JSON.stringify([{ name: 'MiSans', star: 3 }]))
     const read = createRepo().read()
     const value = readValue(read)
-    const degraded = read.reason
     expect(value).toEqual([{ name: 'MiSans', star: 3 }])
-    expect(degraded).toBeUndefined()
   })
 })
 
@@ -168,7 +161,7 @@ describe('fileRepo 写', () => {
 
   /**
    * T2：`Repo.write` 与 `Repo.overwrite` 合并成 `replace(value, cas)` 后，
-   * 「只在新装机时写种子」这件事终于有结构保证 —— 传 `expected: null` 就是
+   * 「只在新装机时写种子」这件事终于有结构保证 —— 传 `expected: { status: 'absent' }` 就是
    * 「这个路径上应当没有文件」，文件已被别的面板/用户写出来就抛 `CONFLICT`，不覆盖。
    *
    * 旧 `Repo.write` 没有这个能力：它恒 `previous: null`、恒不比对，种子会盖掉用户数据。
@@ -179,7 +172,10 @@ describe('fileRepo 写', () => {
 
     let code = ''
     try {
-      createRepo().replace([{ name: '种子' }], { mode: 'compare', expected: null })
+      createRepo().replace([{ name: '种子' }], {
+        mode: 'compare',
+        expected: { status: 'absent' },
+      })
     } catch (e) {
       code = (e as { code?: string }).code ?? ''
     }

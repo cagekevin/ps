@@ -5,12 +5,13 @@
 // 禁止：不要在这里做业务判断（哪个失败该提示什么），只归一形状
 import type { CepErrorCode } from './errors'
 import { isRecord } from './guards'
+import { isDecodeFail, type DecodeFail, type Decoder } from './decode'
 
 /**
  * jsx 调用的结果：**两臂**。
  *
  * - 成功臂 `{ ok: true; data }` —— `data` 是**域层解码后**的形状（不是 `unknown`）。
- * - 失败臂 `{ ok: false; code; reason }` —— `code` 是本仓错误码，命令层直接抛它。
+ * - 失败臂 `{ status: 'error'; fail; reason }` —— `fail` 是本仓错误码，命令层直接抛它。
  *
  * 为什么两臂（而不是 `unknown` 让调用点自己判）：
  * ① `unknown` 会让每个调用点各自 `as` 猜形状 —— 旧 `requireJsxOk` 返回 `unknown`，于是 4 处 `as`；
@@ -18,8 +19,8 @@ import { isRecord } from './guards'
  * 两臂之后：**判定只在这里一次**，失败一定带 code（没有 code 的失败在 R3 里也写不出来）。
  */
 export type JsxOutcome<T> =
-  | { ok: true; data: T }
-  | { ok: false; code: CepErrorCode; reason: string; hostCode?: number | string }
+  | { status: 'ok'; data: T }
+  | { status: 'error'; fail: CepErrorCode; reason: string; hostCode?: number | string }
 
 /**
  * 宿主**认识的** err 值：`0` 成功、`1` 失败。其余（`2` / `-1` / `NaN`）是未知状态 ——
@@ -44,36 +45,36 @@ export function isJsxOkSentinel(raw: unknown): raw is 'ok' | 'OK' {
  * 一律失败并报出原值，不再当成功。
  */
 export function asJsxOutcome(raw: unknown): JsxOutcome<unknown> {
-  if (raw === null || raw === undefined) return { ok: true, data: undefined }
+  if (raw === null || raw === undefined) return { status: 'ok', data: undefined }
   if (typeof raw === 'string') {
     // 空哨兵（'' / 'undefined'）= 什么都没返回 → data 为 undefined；
     // **'ok' / 'OK' 保留原值**（旧 transport 就是这么给的）——
     // 有调用方靠它区分"宿主说 ok"与"宿主真的给了数据"（`cep/data/font-list.ts`）。
-    return isJsxEmpty(raw) ? { ok: true, data: undefined } : { ok: true, data: raw }
+    return isJsxEmpty(raw) ? { status: 'ok', data: undefined } : { status: 'ok', data: raw }
   }
-  if (typeof raw !== 'object') return { ok: true, data: raw }
-  if (Array.isArray(raw)) return { ok: true, data: raw }
-  if (!isRecord(raw)) return { ok: true, data: raw }
-  if (!('err' in raw)) return { ok: true, data: raw }
+  if (typeof raw !== 'object') return { status: 'ok', data: raw }
+  if (Array.isArray(raw)) return { status: 'ok', data: raw }
+  if (!isRecord(raw)) return { status: 'ok', data: raw }
+  if (!('err' in raw)) return { status: 'ok', data: raw }
 
   const err = Number(raw.err)
-  if (err === 0) return { ok: true, data: raw.data }
+  if (err === 0) return { status: 'ok', data: raw.data }
 
   const msg = typeof raw.msg === 'string' ? raw.msg : undefined
   const hostCode =
     typeof raw.code === 'number' || typeof raw.code === 'string' ? raw.code : undefined
   if (!KNOWN_JSX_ERR.has(err)) {
     return {
-      ok: false,
+      status: 'error',
       // 未知状态 = **读不懂返回值**（不是"宿主说失败"）⇒ 归 `PARSE`，不归 `JSX`
-      code: 'PARSE',
+      fail: 'PARSE',
       reason: `宿主返回未知状态 err=${String(raw.err)}`,
       hostCode,
     }
   }
   return {
-    ok: false,
-    code: 'JSX',
+    status: 'error',
+    fail: 'JSX',
     reason: msg ?? (hostCode !== undefined ? `宿主返回 code=${String(hostCode)}` : '宿主返回失败'),
     hostCode,
   }
@@ -82,7 +83,8 @@ export function asJsxOutcome(raw: unknown): JsxOutcome<unknown> {
 /**
  * 带数据形状的版本：**成功臂的 `data` 由 `decode` 证明**。
  *
- * `decode` 返回 `null` = 结构不认识 ⇒ 失败臂带 `PARSE`（不静默丢、不补默认值）。
+ * `decode` 是 `Decoder<T>`（`Decoded | DecodeFail`）：**"结构不认识"不再是一个说不出口的 `null`**，
+ * 失败臂带上码与观测（`shape.top(expected=array)` 这种），失败在类型上取不到值。
  * 域层用它把 `unknown` 收成自己那一域的形状（判据放在域文件里，不放这里）。
  *
  * 入参是**已经解释过的两臂**（`transport` 产的），不是裸值 —— 这样"宿主失败"这一层
@@ -90,12 +92,28 @@ export function asJsxOutcome(raw: unknown): JsxOutcome<unknown> {
  */
 export function typedOutcome<T>(
   outcome: JsxOutcome<unknown>,
-  decode: (data: unknown) => T | null,
+  decode: Decoder<T>,
   label: string,
 ): JsxOutcome<T> {
-  if (!outcome.ok) return outcome
+  if (outcome.status !== 'ok') return outcome
+
   const decoded = decode(outcome.data)
-  return decoded === null
-    ? { ok: false, code: 'PARSE', reason: `${label}：返回结构不认识` }
-    : { ok: true, data: decoded }
+  if (isDecodeFail(decoded)) {
+    return { status: 'error', fail: 'PARSE', reason: `${label}: ${failCode(decoded)}` }
+  }
+  return { status: 'ok', data: decoded.value }
+}
+
+/** `DecodeFail` → 无中文的短码：`notJson` / `shape.top(expected=array)` / `badItem(3)` */
+function failCode(fail: DecodeFail): string {
+  switch (fail.fail) {
+    case 'shape':
+      return `shape.${fail.field || 'top'}(expected=${fail.expected})`
+    case 'badItem':
+      return fail.count === undefined ? 'badItem' : `badItem(${fail.count})`
+    case 'noItemsParsed':
+      return `noItemsParsed(${fail.count})`
+    default:
+      return fail.fail
+  }
 }

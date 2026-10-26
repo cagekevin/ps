@@ -24,7 +24,7 @@ vi.mock('@/cep/data/sys-font', () => ({
 vi.mock('@/cep/jsx', () => ({
   jsx: {
     // 两臂：`'ok'` 是成功哨兵且**保留原值**（`font-list` 靠它判"去读 SysFont2.json"）
-    font: { initSystemList: vi.fn(async () => ({ ok: true, data: 'ok' as const })) },
+    font: { initSystemList: vi.fn(async () => ({ status: 'ok', data: 'ok' as const })) },
     env: { setEnv: async () => undefined },
   },
 }))
@@ -33,7 +33,12 @@ const { getFontList } = await import('@/cep/data/font-list')
 
 describe('getFontList 遇到读不到', () => {
   it('SysFont2.json 读不到 → 抛 IO 且带上原因（页面据此显示"读不到"）', async () => {
-    sys.readSysFontFile.mockReturnValue({ status: 'error', reason: 'EACCES: 拒绝访问' })
+    sys.readSysFontFile.mockReturnValue({
+      status: 'error',
+      why: 'readError',
+      reason: 'EACCES: 拒绝访问',
+      failure: { kind: 'errno', code: 'EACCES', raw: new Error('EACCES: 拒绝访问') },
+    })
 
     await expect(getFontList({ refresh: true })).rejects.toMatchObject({ code: 'IO' })
     await expect(getFontList({ refresh: true })).rejects.toThrow('读不到系统字体：EACCES')

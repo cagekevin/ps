@@ -44,6 +44,7 @@ describe('free-panel store · degraded', () => {
   it('读坏时 blocks 为空列表，degraded 带原因', async () => {
     repo.read.mockReturnValue({
       status: 'error',
+      fail: 'badShape',
       reason: '内容结构不认识',
       // 坏读臂必带默认值（T-102）。本条要钉的正是"投影**不**用这个默认区域"（`stores/free-panel.ts:26`）
       fallback: createEmptyFreePanel(),

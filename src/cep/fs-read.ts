@@ -1,20 +1,23 @@
 // 是什么｜替代了什么｜谁在用
 // 是什么：**读的观测层** —— 三态骨架、`ENOENT` 判据、多来源合并策略，各一份；只报观测，不下结论
-// 替代了什么：`cep/fs.ts:103-213` 与 `:317-415`（原来和写原语、环境判断、编码、目录统计混在一个文件里）
-// 谁在用：四个档各有固定消费者 ——
-//   `readOwnFileText` → `data/style-library-repo.ts`(4) / `cloud/entries/action-library.ts` / `data/swatch-repo.ts` / `cep/log-file.ts`
-//   `readExternalText` → `commands/{font,rename}.ts` / `data/{action-archive,style-library-io}.ts`
-//   `readBase64File` → `data/{style-library-repo,style-library-io,action-archive}.ts`
-//   原语 `readTextSync` / `readTextAsync` → **只有** `cep/disk-write.ts` 与 `data/repo-read.ts`
+// 替代了什么：`cep/fs.ts` 的读原语段（:103-213 / :317-415）已迁出，读观测现由本文件负责。
+// 谁在用（2026-10-26 实测 `git grep -c`）：
+//   `readOwnFileText`  → `data/style-library-repo.ts`(4) · `cloud/entries/action-library.ts` · `data/swatch-repo.ts` · `cep/log-file.ts`
+//   `readExternalText` → `commands/{font,rename}.ts` · `data/{action-archive,style-library-io}.ts`
+//   `readBase64File`   → `data/{style-library-repo,style-library-io(5),action-archive}.ts` · `cep/disk-write.ts`(2)
+//   原语 `readTextSync` → **只有** `data/repo-read.ts` 与 `cep/disk-write.ts`（含本模块内 `readOwnFileText`）
+//   原语 `readTextAsync` → **只有**本模块内的 `readExternalText`
 // 禁止：这里**不许**判"读到坏数据该怎么办"（那是数据层的 `decode`）；也不许把三态压成 `boolean` / `string` / `null`
 //
-// ── `readTextSync` 的四个具名消费者（**加第五个之前先改 ADR-0026**）─────────────────────
-// 它导出是因为"同步读"这件事本身有四个正当用途，不是因为它是通用读入口：
-//   ① `cep/disk-write.ts`  —— 落盘前的 CAS 比对与写完回读（`await` 会多一个 microtask 边界 = D-26 丢更新处）
-//   ② `data/file-repo.ts`  —— `rawOverwrite` 取原文（坏原文照写但要隔离，所以不能走 `readRepoFile` 的结论）
-//   ③ `data/settings.ts`   —— 界面偏好在 store setup / computed 里读，不能 `await`
-//   ④ `cep/log-file.ts`    —— 日志 dump 读回全文
-// **面板数据文件（JSON）一律走 `data/repo-read.ts` 的 `readRepoFile(target, decode, fallback)`** ——
+// ── `readTextSync` 的两个跨模块消费者（**加第三个之前先改 ADR-0026**）──────────────────
+// 它导出是因为"同步读"这件事本身有正当用途，不是因为它是通用读入口：
+//   ① `data/repo-read.ts`  —— 档 1 的唯一读入口（`readRepoFile`：三态 → JSON → `decode`）
+//   ② `cep/disk-write.ts`  —— 备份取原文 / CAS 比对 / 写完回读（3 处；`await` 会多一个
+//      microtask 边界 = D-26 丢更新处）
+// 模块内另有 `readOwnFileText`（守卫后转一手）。**`data/file-repo.ts` 与 `data/settings.ts` 已不在名单上**：
+// 前者把「上一版原文」交给 `disk-write` 的 `DiskBefore`，后者走 `readRepoFile` 的结论。
+
+// **面板数据文件（JSON）一律走 `data/repo-read.ts` 的 `readRepoFile(target, decode)`** ——
 // 自己 `readTextSync` + `JSON.parse` + 当数据用，就绕过了 `decode`，"文件坏了"在页面上会变成"空面板"。
 
 import { hasNode, nodeRequire, toPosix, type NodeModules } from './node'
@@ -36,12 +39,58 @@ import { ERR_PREFIX } from '@/utils/errors'
  *
  * 压成两态（`string | null`）就会让写路径拿 fallback 派生值覆盖用户文件（D-42 / T-105）。
  */
+/**
+ * 读取失败的**结构**（不是一句话）。
+ *
+ * ①观测层只许说"我看到什么"，仅此四种：
+ * - `errno`：系统 errno（`EPERM`/`EACCES`/`EBUSY`/`ENOSPC`…）或 jsx 侧的 `JSX`；`raw` 是原始现场；
+ * - `noNode`：没开 `--enable-nodejs`；
+ * - `noCep`：既没有 Node 也没有 CEP 桥 —— 两条路都断；
+ * - `pathEscape`：目录守卫没过（`target` + 哪条守卫），**话由消费方说**。
+ *
+ * **①层不写用户文案**：谁说给用户听、怎么说，由消费方经 `msg` 决定。
+ */
+export type ReadFailure =
+  | { kind: 'errno'; code: string; raw: unknown }
+  | { kind: 'noNode' }
+  | { kind: 'noCep' }
+  | { kind: 'pathEscape'; guard: 'ownDir' | 'outsideDir'; target: string }
+
+/**
+ * 观测失败 → 一行**技术原文**（给日志与诊断，**不是**用户文案）。
+ *
+ * `switch` 完备：新增 `kind` 而这里不补分支 ⇒ 编译不过。这是"唯一渲染处"的类型保证。
+ */
+/**
+ * 「**这份数据为什么不可用**」的唯一定义：读盘失败（有现场）/ 内容失败（无现场）。
+ *
+ * 仓库结论（`RepoReadBad`）、台账（`LedgerBrokenFail`）、系统字体（`SysFontRead`）都用这一份 ——
+ * 各写一遍会长出"有的带 `failure` 有的不带"的缝，而那种缝**不报错**，只是安静地少一个字段。
+ */
+export type ReadFail =
+  { fail: 'readError'; failure: ReadFailure } | { fail: 'notJson' | 'badShape' }
+
+export function describeReadFailure(f: ReadFailure): string {
+  switch (f.kind) {
+    case 'errno':
+      return typeof f.raw === 'string' ? f.raw : f.raw instanceof Error ? f.raw.message : f.code
+    case 'noNode':
+      return 'NO_NODE：没有 --enable-nodejs'
+    case 'noCep':
+      return 'NO_CEP：既没有 Node 也没有 CEP 桥'
+    case 'pathEscape':
+      return `PATH_ESCAPE(${f.guard})：${f.target}`
+  }
+}
+
 export type TextRead =
-  { status: 'ok'; text: string } | { status: 'notSeen' } | { status: 'error'; reason: string }
+  { status: 'ok'; text: string } | { status: 'notSeen' } | { status: 'error'; failure: ReadFailure }
 
 /** base64 读取的三态（与 `TextRead` 同形：**观测**，不是结论） */
 export type Base64Read =
-  { status: 'ok'; base64: string } | { status: 'notSeen' } | { status: 'error'; reason: string }
+  | { status: 'ok'; base64: string }
+  | { status: 'notSeen' }
+  | { status: 'error'; failure: ReadFailure }
 
 /** Node 系统错误的 `code`（`ENOENT` / `EPERM` / `EACCES` / `EBUSY` …）；取不到返回空串 */
 function errCode(e: unknown): string {
@@ -60,11 +109,12 @@ function errCode(e: unknown): string {
  */
 export function classifyFsError(
   e: unknown,
-): { status: 'error'; reason: string } | { status: 'notSeen' } {
+): { status: 'error'; failure: ReadFailure } | { status: 'notSeen' } {
   const code = errCode(e)
+  // 只认 ENOENT 是"查不到"；其余一律进 error，**原样**带上 errno 与原始错误对象
+  // （拼成人话是消费方的事：`describeReadFailure()` 只给技术原文，用户文案归 `msg`）
   if (code === 'ENOENT') return { status: 'notSeen' }
-  const message = e instanceof Error ? e.message : String(e)
-  return { status: 'error', reason: code ? `${code}: ${message}` : message }
+  return { status: 'error', failure: { kind: 'errno', code: code || 'UNKNOWN', raw: e } }
 }
 
 /**
@@ -76,8 +126,8 @@ export function classifyFsError(
  */
 function readNodeOutcome<T>(
   take: (fs: NodeModules['fs']) => T,
-): { status: 'ok'; value: T } | { status: 'notSeen' } | { status: 'error'; reason: string } {
-  if (!hasNode()) return { status: 'error', reason: 'Node 不可用（--enable-nodejs 未开）' }
+): { status: 'ok'; value: T } | { status: 'notSeen' } | { status: 'error'; failure: ReadFailure } {
+  if (!hasNode()) return { status: 'error', failure: { kind: 'noNode' } }
   try {
     return { status: 'ok', value: take(nodeRequire('fs')) }
   } catch (e) {
@@ -149,9 +199,9 @@ async function readTextViaJsxOutcome(absPath: string): Promise<TextRead> {
     if (!raw.startsWith(ERR_PREFIX)) return { status: 'ok', text: raw }
     const message = raw.slice(ERR_PREFIX.length)
     if (message.startsWith(JSX_MISSING_PREFIX)) return { status: 'notSeen' }
-    return { status: 'error', reason: message }
+    return { status: 'error', failure: { kind: 'errno', code: 'JSX', raw: message } }
   } catch (e) {
-    return { status: 'error', reason: e instanceof Error ? e.message : String(e) }
+    return { status: 'error', failure: { kind: 'errno', code: 'JSX', raw: e } }
   }
 }
 
@@ -174,10 +224,11 @@ function combineReads(node: TextRead | null, viaJsx: TextRead): TextRead {
  * 读入口（ADR-26 ④）：Node 优先，失败退 jsx `File`。
  *
  * ── 本仓一共**两个**读入口（别再把这里读成"唯一"）──────────────────────────
- * 1. **同步**：`readTextSync`（Node-only 快路径）。消费者**三个**：
- *    `file-repo` 的 CAS 比对（D-26 硬需求）、`settings` 的同步偏好链（不能 `await`）、
- *    `log-file` 的 dump（`grep -rn "readTextSync(" src` = 3 处）。
- * 2. **异步**：就是本函数（Node 优先 + jsx `File` 回退）。
+ * 1. **同步**：`readTextSync`（Node-only 快路径）。跨模块消费者**两个**：
+ *    `data/repo-read.ts`（档 1 唯一读入口）与 `cep/disk-write.ts`（备份取原文 / CAS 比对 /
+ *    回读校验，3 处）。`grep -rn "readTextSync(" src` 去掉定义与注释 = **5 处调用**：
+ *    跨模块 4（`repo-read` 1 + `disk-write` 3）+ 本模块 `readOwnFileText` 1。
+ * 2. **异步**：就是本函数（Node 优先 + jsx `File` 回退）。消费者只有 `readExternalText`。
  * 两者共用 `readTextNode` + `classifyFsError` ⇒ **一个判据，两个入口**。
  *
  * **为什么同步入口唯一**：CEP 里能"同步读文件"的能力只有 Node `readFileSync` 一种；
@@ -199,7 +250,7 @@ function combineReads(node: TextRead | null, viaJsx: TextRead): TextRead {
 export async function readTextAsync(absPath: string): Promise<TextRead> {
   const node = hasNode() ? readTextNode(absPath) : null
   if (node?.status === 'ok') return node
-  if (!hasCep()) return node ?? { status: 'error', reason: '当前环境没有 Node，也没有 CEP' }
+  if (!hasCep()) return node ?? { status: 'error', failure: { kind: 'noCep' } }
   return combineReads(node, await readTextViaJsxOutcome(absPath))
 }
 
@@ -239,7 +290,8 @@ export function readOwnFileText(target: string): TextRead {
   const own = userDir()
   const targets = [`${own}/`, `${appDataRoot()}/`]
   if (!targets.some((root) => target.startsWith(root))) {
-    return { status: 'error', reason: `readOwnFileText 只读本应用目录下的文件：${target}` }
+    // 只报"哪个 target 撞了哪条守卫"这个事实，**话由消费方说**（刀 3：①层不写用户文案）
+    return { status: 'error', failure: { kind: 'pathEscape', guard: 'ownDir', target } }
   }
   return readTextSync(target)
 }
@@ -256,7 +308,7 @@ export function readExternalText(target: string): Promise<TextRead> {
   if (target.startsWith(`${userDir()}/`)) {
     return Promise.resolve({
       status: 'error',
-      reason: `readExternalText 只读用户目录外的文件；面板自己的文件走 readOwnFileText / readRepoFile：${target}`,
+      failure: { kind: 'pathEscape', guard: 'outsideDir', target },
     })
   }
   return readTextAsync(target)

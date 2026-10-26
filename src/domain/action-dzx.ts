@@ -1,4 +1,12 @@
 import type { ActionWarehouseIndex } from './action'
+import { isRecord } from '@/utils/guards'
+import {
+  decodeJsonText,
+  isDecodeFail,
+  shapeFail,
+  type Decoded,
+  type DecodeFail,
+} from '@/utils/decode'
 
 /**
  * `.dzx` 动作仓库交换格式。
@@ -11,33 +19,54 @@ export interface DzxFile {
   store: ActionWarehouseIndex
 }
 
-export function decodeDzx(text: string): DzxFile {
-  let raw: unknown
-  try {
-    raw = JSON.parse(text)
-  } catch {
-    throw new Error('文件不是合法的 JSON')
-  }
+/**
+ * `.dzx` → 判别联合：失败是可枚举的码（`notJson` / `shape` / `badItem`），不是中文 throw。
+ * 与 `ku-io` 的 `parseKuContainer` 同一套口径（同一件事不该两种失败表达）。
+ */
+export function decodeDzx(text: string): Decoded<DzxFile> | DecodeFail {
+  const json = decodeJsonText(text)
+  if (isDecodeFail(json)) return json
 
-  if (!raw || typeof raw !== 'object') throw new Error('文件结构不正确')
-  const file = raw as Record<string, unknown>
-  if (!Array.isArray(file.arrFileData) || !file.store || typeof file.store !== 'object') {
-    throw new Error('缺少 arrFileData 或 store')
-  }
+  const raw = json.value
+  if (!isRecord(raw)) return shapeFail('', 'object', raw)
 
-  const arrFileData = file.arrFileData.map((entry) => {
-    if (!entry || typeof entry !== 'object') throw new Error('arrFileData 项不正确')
-    const item = entry as Record<string, unknown>
-    if (typeof item.name !== 'string' || typeof item.data !== 'string') {
-      throw new Error('arrFileData 项缺少 name/data')
+  const rawEntries = raw.arrFileData
+  if (!Array.isArray(rawEntries)) return shapeFail('arrFileData', 'array', rawEntries)
+
+  const store = raw.store
+  if (!isRecord(store)) return shapeFail('store', 'object', store)
+  if (!Array.isArray(store.list)) return shapeFail('store.list', 'array', store.list)
+
+  // `store.list` 的每一项都要真有 name/fileName：后面 id 重写按文件名做映射，
+  // 只断言"是对象"不够（`isRecord` 只证是对象，不证字段）
+  const list: ActionWarehouseIndex['list'] = []
+  for (const item of store.list) {
+    if (!isRecord(item)) return { fail: 'badItem', count: store.list.length }
+    if (typeof item.name !== 'string' || typeof item.fileName !== 'string') {
+      return shapeFail('store.list[].fileName', 'string', item.fileName)
     }
-    return { name: item.name, data: item.data }
-  })
+    list.push({ ...item, name: item.name, fileName: item.fileName })
+  }
 
-  const store = file.store as ActionWarehouseIndex
-  if (!Array.isArray(store.list)) throw new Error('store.list 不正确')
+  const arrFileData: DzxFile['arrFileData'] = []
+  for (const entry of rawEntries) {
+    if (!isRecord(entry)) return { fail: 'badItem', count: rawEntries.length }
+    if (typeof entry.name !== 'string' || typeof entry.data !== 'string') {
+      return shapeFail('arrFileData[].name', 'string', entry.name)
+    }
+    arrFileData.push({ name: entry.name, data: entry.data })
+  }
 
-  return { arrFileData, store }
+  return {
+    value: {
+      arrFileData,
+      store: {
+        ...store,
+        index: typeof store.index === 'number' ? store.index : 0,
+        list,
+      },
+    },
+  }
 }
 
 export function encodeDzx(file: DzxFile): string {

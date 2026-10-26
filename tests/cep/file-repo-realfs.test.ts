@@ -1,6 +1,11 @@
 import fs from 'node:fs'
 import { SEED } from '../helpers/cas-seed'
-import { installHostBridge, installHostRequire, removeHostRequire } from '../helpers/host-stub'
+import {
+  installHostBridge,
+  installHostRequire,
+  removeHostBridge,
+  removeHostRequire,
+} from '../helpers/host-stub'
 import { hasNode } from '@/cep/node'
 import { createRequire } from 'node:module'
 import os from 'node:os'
@@ -99,7 +104,7 @@ beforeEach(() => {
 
 afterEach(() => {
   removeHostRequire()
-  delete window.__adobe_cep__
+  removeHostBridge()
   // 桩不许留在环境里：卸完必须"没有 node"（留着 → 下一个用例带着上一个的桩跑 → 假绿）
   expect(hasNode()).toBe(false)
 })

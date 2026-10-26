@@ -5,6 +5,7 @@ import { join } from 'node:path'
 import { afterAll, afterEach, describe, expect, it } from 'vitest'
 import { installFakeCepBridge, type FakeCepBridgeHandle } from '../helpers/fake-cep-bridge'
 import { installHostRequire } from '../helpers/host-stub'
+import { getBridge } from '@/cep/host'
 import { toPosix } from '@/cep/node'
 import { appDataRoot, extensionDir, toLocalPath, userDir } from '@/cep/paths'
 import { CepError } from '@/utils/errors'
@@ -130,7 +131,7 @@ describe('userDir() 的分支', () => {
   })
 
   it('无桥 ⇒ 走平台公式；Windows 上必须是 %APPDATA%，不许出现 macOS 那段', () => {
-    expect(window.__adobe_cep__).toBeUndefined()
+    expect(getBridge()).toBeUndefined()
 
     const ap = process.env.APPDATA
     expect(userDir().endsWith('/SheJiZhuLi')).toBe(true)
@@ -156,7 +157,7 @@ describe('userDir() 的分支', () => {
 
 describe('extensionDir() 的失败形状', () => {
   it('无桥 ⇒ 抛 CepError(INIT)，不再返空串（返空串会被 action.ts:306 静默拼成 /preset/…）', () => {
-    expect(window.__adobe_cep__).toBeUndefined()
+    expect(getBridge()).toBeUndefined()
 
     let caught: unknown
     try {

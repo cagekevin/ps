@@ -167,21 +167,21 @@ describe('jsxRead', () => {
 
   it('空串与 undefined 返回 undefined', async () => {
     setBridge((_script, cb) => cb(''))
-    await expect(jsxRead('cy_zoom')).resolves.toEqual({ ok: true, data: undefined })
+    await expect(jsxRead('cy_zoom')).resolves.toEqual({ status: 'ok', data: undefined })
     setBridge((_script, cb) => cb('undefined'))
-    await expect(jsxRead('cy_zoom')).resolves.toEqual({ ok: true, data: undefined })
+    await expect(jsxRead('cy_zoom')).resolves.toEqual({ status: 'ok', data: undefined })
   })
 
   it('合法 JSON 解析', async () => {
     setBridge((_script, cb) => cb('{"ok":true}'))
-    await expect(jsxRead('cy_zoom')).resolves.toEqual({ ok: true, data: { ok: true } })
+    await expect(jsxRead('cy_zoom')).resolves.toEqual({ status: 'ok', data: { ok: true } })
   })
 
   it('jsxbin 的成功哨兵 ok / OK 原样返回（不是"读不懂"）', async () => {
     setBridge((_script, cb) => cb('ok'))
-    await expect(jsxRead('cy_zoom')).resolves.toEqual({ ok: true, data: 'ok' })
+    await expect(jsxRead('cy_zoom')).resolves.toEqual({ status: 'ok', data: 'ok' })
     setBridge((_script, cb) => cb('OK'))
-    await expect(jsxRead('cy_zoom')).resolves.toEqual({ ok: true, data: 'OK' })
+    await expect(jsxRead('cy_zoom')).resolves.toEqual({ status: 'ok', data: 'OK' })
   })
 
   /**

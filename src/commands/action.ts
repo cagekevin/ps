@@ -17,8 +17,8 @@ import type { Command } from './types'
  * 本文件**不导出读函数**。
  *
  * 读 PS 动作面板走 `stores/action` 的 `loadPsActions()`：
- * 命令层是"写 + 编排"，读模型归 store。上一轮这里导出过 `readPsActions`，
- * 页面直接 import 它，于是"页面只经 useCommand"这条约束立刻失效。
+ * 命令层是"写 + 编排"，读模型归 store——读接口不在此导出，否则页面直接 import 会破了
+ * "页面只经 useCommand"这条约束。
  */
 
 /**

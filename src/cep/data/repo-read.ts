@@ -19,11 +19,12 @@
 // 判据边界（ADR-26 ②）：本文件**只**做"磁盘内容能不能当 T 用"这一个判断。
 //   "文件系统说了什么"（`ok/notSeen/error`）由 `cep/fs-read` 的 `classifyFsError` 定，本文件不重判。
 
-import { readTextSync } from '../fs-read'
+import { describeReadFailure, readTextSync, type ReadFail, type ReadFailure } from '../fs-read'
 import { log } from '@/utils/logger'
 import { msg } from '@/domain/messages'
 import { isDecodeFail, type DecodeFail, type Decoder } from '@/utils/decode'
-import type { RepoRead } from './types'
+import type { RepoRead, RepoReadBad } from './types'
+import { CepError } from '@/utils/errors'
 
 /**
  * 档 1 的**结论**（三态）。每一臂都带 `text`，所以取原文做 CAS 比对不用分支。
@@ -35,7 +36,7 @@ import type { RepoRead } from './types'
  * （T-114 原始症状）。需要两臂的调用方用 `foldAbsent` 折。
  */
 export type RepoFileOutcome<T> =
-  | { status: 'ok'; value: T; text: string; degraded?: string }
+  | { status: 'ok'; value: T; text: string }
   /** 文件系统明确说那个路径上没有东西（只认 `ENOENT`） */
   | { status: 'notSeen'; text: null }
   /**
@@ -45,12 +46,7 @@ export type RepoFileOutcome<T> =
    * 「根不是数组」（两句不同的话）；台账/系统字体要区分「读不到」与「读不懂」。
    * 拿 `reason` 做字符串比较来分档是脆的，所以单列这个位。
    */
-  | {
-      status: 'error'
-      why: 'readError' | 'notJson' | 'badShape'
-      reason: string
-      text: string | null
-    }
+  | ({ status: 'error'; reason: string; text: string | null } & ReadFail)
 
 /**
  * **档 1 的唯一读入口**。四种结局各自一条出路（不许合并）：
@@ -68,12 +64,14 @@ export function readRepoFile<T>(target: string, decode: Decoder<T>): RepoFileOut
   const outcome = readTextSync(target)
 
   if (outcome.status === 'error') {
-    log.error('repo', `${target} 读取失败`, outcome.reason)
+    // 日志收观测结构本身（`kind` + errno + 原始错误），不经任何人的翻译
+    log.error('repo', `${target} 读取失败`, outcome.failure)
     return {
       status: 'error',
-      why: 'readError',
-      reason: msg.data.fn.readFailed(outcome.reason),
+      fail: 'readError',
+      reason: msg.data.fn.readFailed(describeReadFailure(outcome.failure)),
       text: null,
+      failure: outcome.failure,
     }
   }
 
@@ -85,7 +83,13 @@ export function readRepoFile<T>(target: string, decode: Decoder<T>): RepoFileOut
     parsed = JSON.parse(text)
   } catch (e) {
     log.error('repo', `${target} 不是合法 JSON`, e)
-    return { status: 'error', why: 'notJson', reason: '内容不是合法 JSON', text }
+    // 文案走**唯一渲染处**（判据 3）：这里只报"不是合法 JSON"这个码，中文由 `describeDecodeFail` 出
+    return {
+      status: 'error',
+      fail: 'notJson',
+      reason: describeDecodeFail({ fail: 'notJson' }),
+      text,
+    }
   }
 
   // 唯一的形状通道：`decode` 是必填参数，解析结果没有"直接当 T"这条路。
@@ -96,62 +100,103 @@ export function readRepoFile<T>(target: string, decode: Decoder<T>): RepoFileOut
   if (isDecodeFail(decoded)) {
     // **`DecodeFail` 的唯一渲染处**：decode 层只报观测（字段/期望/实际）或码，
     // 用户话只从这里出、只从 `msg` 取 —— 12 个 decoder 不再各写一句中文。
+    // `reason` 是**给用户**的那句（`describeDecodeFail` 是 UI 文案生成器）；
+    // 日志要的是观测对象本身（`{ fail, field, expected, received }`），原样进 detail ⇒
+    // `logger.oneLine` 会把它序列化成结构化的失败现场，不需要任何人翻译。
     const reason = describeDecodeFail(decoded)
-    log.error('repo', `${target} 内容结构不认识：${reason}`)
-    return { status: 'error', why: 'badShape', reason, text }
+    log.error('repo', `${target} 内容结构不认识`, decoded)
+    return { status: 'error', fail: 'badShape', reason, text }
   }
 
-  // 值可用但不完整 → 带上 degraded（ADR-14：读可降级但必须标记）
-  return decoded.degraded
-    ? { status: 'ok', value: decoded.value, text, degraded: decoded.degraded }
-    : { status: 'ok', value: decoded.value, text }
-}
-
-/** 折叠时可选的差异。只有一处真差异，不是"万能开关"：见 `notSeenReason`。 */
-export interface FoldOptions {
-  /**
-   * `classification.json` 不随面板分发，首次使用确实没有 —— 它要 `status:'ok'` **+ 一句 reason**
-   * （去掉 reason 就是静默回退，ADR-0014 扩展二）。其余仓库不要。
-   */
-  notSeenReason?: string
+  return { status: 'ok', value: decoded.value, text }
 }
 
 /**
- * **把三态折成两臂**（纯函数，无 IO、无判断）。
+ * **把三态折成两臂**（纯函数，无 IO、无判断）。读模型的唯一折法。
  *
- * `notSeen` → `status:'ok'` + `fallback()`：首次使用是**正常状态**，不是失败（ADR-26 ②）。
+ * `notSeen` → `status:'ok'` + `fallback()`：文件本来就不存在是**正常状态**，不是失败（ADR-26 ②）。
  * `error` → `status:'error'` + `reason` + `fallback()`（`fallback` 是生产者给的默认值，消费侧不许自己再造）。
  *
- * **"文件不在就顶上默认值"这件事只在这里决定一次** —— 12 个有默认值的仓库都调它，
+ * **"文件不在就顶上默认值"只在这里决定一次** —— 有默认值的仓库都调它，
  * 谁也不许在自己文件里再写一遍 `status === 'notSeen' ? fallback() : …`。
  * 没有默认值的文件（台账 / 系统字体）**不调它**，直接看 `status`。
+ *
+ * 没有「值可用但不完整」这一臂：读不懂就是 `error`，半成品值不许流到业务层。
  */
-export function foldAbsent<T>(
-  outcome: RepoFileOutcome<T>,
-  fallback: () => T,
-  opts: FoldOptions = {},
-): RepoRead<T> {
+/**
+ * 造失败臂的**唯一入口（读盘失败）**：`fail:'readError'` **必带现场**。
+ *
+ * 别处不许写 `{ status:'error', fail:'readError', … }` 字面量 —— 手写这一臂最容易
+ * 把 `failure` 忘掉，而忘掉**不会报错**（少个可选字段而已，现在字段必填才报）。
+ */
+export function badRead<T>(reason: string, fallback: T, failure: ReadFailure): RepoReadBad<T> {
+  return { status: 'error', fail: 'readError', reason, fallback, failure }
+}
+
+/**
+ * 造失败臂的**唯一入口（内容失败）**：不是合法 JSON / 结构不认识。
+ *
+ * 这两种**没有系统错误可带**，所以这一臂上不存在 `failure` 字段 —— 不是"可选"，是"没有"。
+ */
+export function badContent<T>(
+  fail: 'notJson' | 'badShape',
+  reason: string,
+  fallback: T,
+): RepoReadBad<T> {
+  return { status: 'error', fail, reason, fallback }
+}
+
+/**
+ * 把**另一个**失败的 `RepoRead` 重包成新 payload 类型（只换 `fallback` 的类型）。
+ *
+ * 唯一用途是"`fallback` 类型变了"。**字段一个不丢** —— 手写这个重包是本仓最容易
+ * 悄悄丢掉 `failure` 的地方（`readError` 的现场会整段消失，而且不报错）。
+ */
+export function rebad<T>(src: RepoReadBad<unknown>, fallback: T): RepoReadBad<T> {
+  return src.fail === 'readError'
+    ? { status: 'error', fail: 'readError', reason: src.reason, fallback, failure: src.failure }
+    : { status: 'error', fail: src.fail, reason: src.reason, fallback }
+}
+
+export function foldAbsent<T>(outcome: RepoFileOutcome<T>, fallback: () => T): RepoRead<T> {
   switch (outcome.status) {
     case 'notSeen':
-      return opts.notSeenReason
-        ? { status: 'ok', value: fallback(), reason: opts.notSeenReason }
-        : { status: 'ok', value: fallback() }
+      return { status: 'ok', value: fallback() }
     case 'error':
-      return { status: 'error', reason: outcome.reason, fallback: fallback() }
+      // 折叠也走工厂：**失败臂的字面量只在 `badRead` / `badContent` 里**，这里不重写一遍
+      return outcome.fail === 'readError'
+        ? badRead(outcome.reason, fallback(), outcome.failure)
+        : badContent(outcome.fail, outcome.reason, fallback())
     case 'ok':
-      return outcome.degraded
-        ? { status: 'ok', value: outcome.value, reason: outcome.degraded }
-        : { status: 'ok', value: outcome.value }
+      return { status: 'ok', value: outcome.value }
   }
 }
 
 /**
- * `DecodeFail` 的**唯一渲染处**。
+ * 只要原文（不过 decode）时的唯一入口：文件不在 ⇒ `null`，读不到 ⇒ 抛。
+ *
+ * 给"本来就可能没有这个文件"的路径用（导出时按索引逐个读库文件、删仓库时枚举图片名）。
+ */
+export function readTextForWrite(target: string): string | null {
+  const read = readTextSync(target)
+  if (read.status === 'ok') return read.text
+  if (read.status === 'notSeen') return null
+  throw new CepError(
+    'IO',
+    msg.data.fn.fileReadFailedAbortWrite(target, describeReadFailure(read.failure)),
+    undefined,
+    read.failure,
+  )
+}
+
+/**
+ * `DecodeFail` 的**唯一渲染处**（两个消费者：本文件 + `cloud/entries/*` 的云载荷内层）。
  *
  * 形状臂拼「字段 / 期望 / 实际」；语义臂按码取文案。decode 层因此不需要知道
  * "用户该看到什么" —— 它只报它真正知道的东西（哪个字段不对，或者内容空/没解析出条目）。
+ * 消费者变多不改变"唯一渲染处"：**中文只从这里出**，别处只传码。
  */
-function describeDecodeFail(fail: DecodeFail): string {
+export function describeDecodeFail(fail: DecodeFail): string {
   if (fail.fail === 'shape') {
     return msg.data.fn.decodeShapeFail(fail.field, fail.expected, fail.actual)
   }

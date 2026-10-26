@@ -15,7 +15,7 @@
 import { CepError } from '@/utils/errors'
 import { msg } from '@/domain/messages'
 import { foldAbsent, readRepoFile } from './repo-read'
-import { writeDiskSync, type CasMode } from '@/cep/disk-write'
+import { writeDiskSync, type CasMode, type DiskBefore } from '@/cep/disk-write'
 import { log } from '@/utils/logger'
 import type { Decoder } from '@/utils/decode'
 import type { Repo, RepoRead } from './types'
@@ -28,7 +28,12 @@ import type { Repo, RepoRead } from './types'
 export interface FileRepoOptions {
   /** 写之前把原文备份成 .bak，默认开（ADR-12） */
   backup?: boolean
-  /** 文件不存在时 update 直接报错，禁止用 fallback 覆盖写 */
+  /**
+   * 「文件必须已经存在」：`update` 读到 `notSeen` 就抛，**禁止用 fallback 覆盖写**（D-20）。
+   *
+   * 这是**构造期声明**，不是写盘时的开关：判断本身仍是 `DiskBefore` 的 `absent` 臂
+   * （与「首次使用」同一套词表），不再自带第二种判别语法。
+   */
   requireExisting?: boolean
   /** 写前发现文件被别的面板改过时的重试次数，默认 5（D-26） */
   retries?: number
@@ -59,29 +64,18 @@ export function fileRepo<T>(
   }
 
   /**
-   * 读一次盘。**判据不在这里** —— 三态 → JSON → `decode` → `RepoRead` 全在 `./repo-read`
-   * （档 1 的唯一结论入口）。本文件只负责两件它自己才有的事：
-   * ① 把 `resolvePath()` 的结果喂进去；② 把原文 `text` 留给 CAS 比对（D-26）。
-   */
-  function readRaw(): { read: RepoRead<T>; text: string | null } {
-    const outcome = readRepoFile(resolvePath(), decode)
-    // 折叠只在 `foldAbsent` 里发生一次；本文件只把原文 `text` 留给 CAS（D-26）
-    return { read: foldAbsent(outcome, fallback), text: outcome.text }
-  }
-
-  /**
    * 落盘。写失败必须抛：这里不做任何兜底（ADR-14）。
    *
    * `cas` 由调用方表态：`rawUpdate` 传「与读到的原文比」，`write` 传「不比 + 理由」。
    * 具体顺序（备份 → CAS → 原子写）在 `./disk-write` 的 `writeDiskSync` 里，本文件不再重写一遍。
    */
-  function persist(value: T, previous: string | null, cas: CasMode): void {
+  function persist(value: T, before: DiskBefore, cas: CasMode): void {
     // **同步**落盘：原语本来就是 `renameSync`；异步只多一个 microtask 边界，
     // 而那正是 D-26 丢更新的窗口。
     // 失败一律抛（含 CAS 冲突 ⇒ `CONFLICT`），本函数没有返回值可丢。
     writeDiskSync(resolvePath(), JSON.stringify(value), {
       backup: backup
-        ? { mode: 'keep', previous }
+        ? { mode: 'keep', before }
         : { mode: 'none', why: '仓库构造时 opts.backup=false' },
       cas,
     })
@@ -91,23 +85,23 @@ export function fileRepo<T>(
    * 整份替换：备份恒定开（`backup: false` 的仓库除外）+ 读不到原文就抛（T-112），CAS 由调用方表态。
    *
    * 与 `rawUpdate` 的区别：`rawUpdate` 是读→改→写并自己重试；这里调用方已经算好完整内容。
-   * 本文件**不自己读原文**（交给 `requireReadable`），所以 `readTextSync` 的消费者只有 `disk-write`。
+   * 本文件**不自己读原文** ⇒ `readTextSync` 的消费者只有 `disk-write` 一处。
+   * 「读不到就抛」不再靠开关：`backup: 'keep'` 省略 `before` 时由 `backupStep` 现读，
+   * 读不到**类型上折不出 `DiskBefore`** ⇒ 直接抛（T-112 的保证不变，且不再能被忘传关掉）。
    */
   function replace(value: T, cas: CasMode): void {
-    // `backup` 关掉时不读原文 ⇒ `requireReadable` 这一步也不存在（没有原文可判）
     writeDiskSync(resolvePath(), JSON.stringify(value), {
       backup: backup ? { mode: 'keep' } : { mode: 'none', why: '仓库构造时 opts.backup=false' },
       cas,
       quarantineOnCorrupt: true,
-      requireReadable: true,
     })
     emit(value)
   }
 
   /** 读一次：写是原子 rename，读到的要么旧值要么新值，不会看到半截 */
   function rawRead(): RepoRead<T> {
-    const { read } = readRaw()
-    return read
+    // 对外只暴露**一个**形状（`RepoRead`）；三态里的 `notSeen` 由 `foldAbsent` 折成「首次使用」
+    return foldAbsent(readRepoFile(resolvePath(), decode), fallback)
   }
 
   /**
@@ -121,23 +115,46 @@ export function fileRepo<T>(
     let attempts = 0
 
     for (;;) {
-      const { read, text } = readRaw()
+      const outcome = readRepoFile(target, decode)
 
-      // D-42：读到的不是真实数据（损坏 / 读不到）时**禁止写**。以前这里会拿 fallback
-      // 继续 update，一次点击就把用户文件覆盖成默认值——原文只剩 .bak 里那一份。
-      if (read.status !== 'ok')
-        throw new CepError('IO', msg.data.fn.fileReadReasonRefuseOverwrite(target, read.reason))
-      if (opts.requireExisting && text === null) {
-        throw new CepError('IO', msg.data.fn.fileNotExistsRefuseWrite(target))
+      /**
+       * 写前置的**唯一判据**：一个 switch 判完三态，每条臂自己「给值 / 给形状 / 抛」。
+       *
+       * 以前这里是两份结论并排（先 `foldAbsent` 得 `RepoRead`，再从 `outcome` 折一次 `DiskBefore`），
+       * 同一件事折两次、一个入口产两个形状 ⇒ 消费侧要在两个形状间对照（判据一：入口数 = 形状数）。
+       */
+      let value: T
+      let before: DiskBefore
+      switch (outcome.status) {
+        case 'error':
+          // D-42：读到的不是真实数据（损坏 / 读不到）时**禁止写**。以前这里会拿 fallback
+          // 继续 update，一次点击就把用户文件覆盖成默认值——原文只剩 .bak 里那一份。
+          throw new CepError(
+            'IO',
+            msg.data.fn.fileReadReasonRefuseOverwrite(target, outcome.reason),
+          )
+        case 'notSeen':
+          // 「文件必须已存在」：与「首次使用」是同一个形状的同一臂，不再自带一个布尔判据
+          if (opts.requireExisting) {
+            throw new CepError('IO', msg.data.fn.fileNotExistsRefuseWrite(target))
+          }
+          // 首次使用是正常状态（不是失败）：用仓库自己的默认值，与 `foldAbsent` 同一规则
+          value = fallback()
+          before = { status: 'absent' }
+          break
+        case 'ok':
+          value = outcome.value
+          before = { status: 'ok', text: outcome.text }
+          break
       }
 
-      const result = mutator(read.value)
-      const next = (result === undefined ? read.value : result) as T
+      const result = mutator(value)
+      const next = (result === undefined ? value : result) as T
 
       // D-26：读 → 改 的窗口里，另一个面板（独立面板）可能已经写过。
       // 落盘前同步比对；不一致时 `writeDiskSync` 抛 `CONFLICT` 且**不写**，我们在新值上重跑 mutator。
       try {
-        persist(next, text, { mode: 'compare', expected: text })
+        persist(next, before, { mode: 'compare', expected: before })
       } catch (e) {
         // **只接「CAS 冲突」这一种** —— 它不是失败，是"该重跑"。
         // 其余（IO 错 / 无 Node）一律往上抛：那是真失败，不许在这里变成"再试一次"。

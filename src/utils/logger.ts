@@ -28,6 +28,7 @@ interface Entry {
 const MAX_ENTRIES = 200
 const buffer: Entry[] = []
 
+import { exposeDebugDump } from '@/cep/host'
 import { createLogFileSink, type DiskLogSink } from '@/cep/log-file'
 
 let sink: DiskLogSink | null = null
@@ -43,16 +44,27 @@ function stamp(): string {
   return `${pad(d.getHours())}:${pad(d.getMinutes())}:${pad(d.getSeconds())}.${pad(d.getMilliseconds(), 3)}`
 }
 
+/**
+ * 一条错误在日志里的技术形态：带 `code` 的按 `[CODE] 原因` 输出，**原文不翻译**。
+ *
+ * 为什么不打 `name: message`：`CepError` 的 `message` 是给用户看的中文（"读不到"这类），
+ * 日志里只剩那句话等于"有痕迹、查不出原因"。技术原因在 `cause` 里（系统给的 `EPERM: …` /
+ * `SyntaxError: …`），`cause` 缺时才退回 `message`。这是日志与 UI 的分叉点。
+ */
+function renderError(e: Error): string {
+  const code = 'code' in e && typeof e.code === 'string' ? e.code : ''
+  const cause = 'cause' in e && e.cause !== undefined ? String(e.cause) : ''
+  const reason = cause || e.message
+  return code ? `[${code}] ${reason}` : `${e.name}: ${reason}`
+}
+
 /** 一条日志的落盘/展示形态（**唯一一份**：dump 与落盘共用，改格式只改这里） */
 function oneLine(entry: Entry): string {
   const head = `${entry.time} ${entry.level.toUpperCase()} [${entry.scope}] ${entry.message}`
   if (entry.detail === undefined) return head
   // Error 单独处理：`JSON.stringify(new Error('x'))` 是 `{}`，原因会被序列化吃掉
   // （"有痕迹但没原因"等于又要用户复现一次）
-  if (entry.detail instanceof Error) {
-    const { name, message } = entry.detail
-    return `${head} ${name}: ${message}`
-  }
+  if (entry.detail instanceof Error) return `${head} ${renderError(entry.detail)}`
   try {
     // 事件回调的 data 可能很长，截断到 500 字符，够定位即可
     const text = JSON.stringify(entry.detail)
@@ -154,4 +166,5 @@ export const log = {
 // 方便在 CEP 的 devtools 里直接敲 __pszDump()（类型在 src/env.d.ts 的 Window）
 // 它是 `log.dump()` 的**别名**（外部读日志的第二条路，不是第二份实现）：
 // 外部（DevTools / 宿主脚本）用 `window.__pszDump()`，内部一律 `log.dump()`。
-window.__pszDump = () => log.dump()
+// 挂载本身走 `cep/host.ts` 的 `exposeDebugDump()`（宿主边界的唯一写入口）。
+exposeDebugDump(() => log.dump())

@@ -10,8 +10,8 @@ import { describe, expect, it, vi } from 'vitest'
  */
 const jsxCall = vi.hoisted(() =>
   vi.fn<
-    (script: string, args?: unknown[], opts?: { timeout?: number }) => Promise<{ ok: boolean }>
-  >(async () => ({ ok: true })),
+    (script: string, args?: unknown[], opts?: { timeout?: number }) => Promise<{ status: 'ok' }>
+  >(async () => ({ status: 'ok' })),
 )
 vi.mock('@/cep/transport', () => ({
   // 唯一入口的公开面是 `jsxRead`/`jsxWrite`；内部 `jsxCall` 不导出。

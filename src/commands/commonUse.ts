@@ -1,7 +1,6 @@
 import { buildOptionPatch, FLIP_DIRECTIONS, type FlipDirection } from '@/domain/common-use'
 import { CepError } from '@/utils/errors'
 import { msg } from '@/domain/messages'
-import { describeCepError } from '@/utils/error-text'
 import { log } from '@/utils/logger'
 import { commonUseRepo } from '@/cep/data/common-use'
 import { readCommonUseOptions } from '@/cep/data/legacy-settings'
@@ -52,8 +51,11 @@ export interface BatchFailure {
   reason: string
 }
 
+/**
+ * 批量结果。**没有 `ok` 字段**：它恒等于 `failed.length === 0`，是可忽略字段
+ * （`ok: true` 与"部分成功"能同时成立，判据 4）。判据只看 `failed`，`done` 只用于算比例。
+ */
 export interface BatchOutcome {
-  ok: boolean
   /** 成功处理的文件数（分母由调用方给 files.length） */
   done: number
   failed: BatchFailure[]
@@ -107,7 +109,7 @@ async function runPerFile(
     }
   }
   // 末次进度由循环最后一次 `update` 给（i = total-1 时已是 100%），不再补一次
-  return { ok: failed.length === 0, done, failed }
+  return { done, failed }
 }
 
 /**
@@ -181,8 +183,8 @@ export const commonUseCommands: Command<unknown>[] = [
       let picked = options?.path
       if (!picked) {
         const gotOutcome = await ctx.jsx.commonUse.getImagePath()
-        if (!gotOutcome.ok) {
-          throw new CepError(gotOutcome.code, gotOutcome.reason || '选择图片失败')
+        if (gotOutcome.status !== 'ok') {
+          throw new CepError(gotOutcome.fail, gotOutcome.reason || gotOutcome.fail)
         }
         const got = gotOutcome.data
         if (got === -1) return
@@ -266,8 +268,8 @@ export const commonUseCommands: Command<unknown>[] = [
       let picked = path
       if (picked === undefined) {
         const gotOutcome = await ctx.jsx.commonUse.getImagePath()
-        if (!gotOutcome.ok) {
-          throw new CepError(gotOutcome.code, gotOutcome.reason || '选择图片失败')
+        if (gotOutcome.status !== 'ok') {
+          throw new CepError(gotOutcome.fail, gotOutcome.reason || gotOutcome.fail)
         }
         // 官方 `!== -1` 判取消并静默返回（`:38096-38106`）
         if (gotOutcome.data === -1) return
@@ -303,8 +305,8 @@ export const commonUseCommands: Command<unknown>[] = [
       // 官方是**前端循环**（`:36024-36046`）：先 `cy_getPsdForFolder()`（无参，jsx 自己弹选目录），
       // 再逐张 `cy_batchOptimizeDoc([配置, 文件])`。循环搬到命令层（C-1），页面不再自己 for。
       const psdOutcome = await ctx.jsx.commonUse.getPsdList()
-      if (!psdOutcome.ok) {
-        throw new CepError(psdOutcome.code, psdOutcome.reason || '读取 PSD 列表失败')
+      if (psdOutcome.status !== 'ok') {
+        throw new CepError(psdOutcome.fail, psdOutcome.reason || psdOutcome.fail)
       }
       const files = toFileList(psdOutcome.data)
       if (!files.length) throw new CepError('PARSE', msg.command.text.commonUseNoPsdInFolder)
@@ -330,8 +332,8 @@ export const commonUseCommands: Command<unknown>[] = [
       // `> 30` 张原版弹确认（`:17157-17158` 文案「文件夹内超过30个psd，导出时间较长是否继续？」）；
       // 命令层不引 UI，改为**没有 `confirmed` 就抛**，由页面显示 CepModal 后再带 `confirmed: true` 重试。
       const psdOutcome = await ctx.jsx.commonUse.getPsdList()
-      if (!psdOutcome.ok) {
-        throw new CepError(psdOutcome.code, psdOutcome.reason || '读取 PSD 列表失败')
+      if (psdOutcome.status !== 'ok') {
+        throw new CepError(psdOutcome.fail, psdOutcome.reason || psdOutcome.fail)
       }
       const files = toFileList(psdOutcome.data)
       if (!files.length) throw new CepError('PARSE', msg.command.text.commonUseNoPsdInFolder)
@@ -619,7 +621,12 @@ export async function dispatchPlaceImage(
   // 事件回调没有 `useCommand` 接住，弹不了 toast（命令层不许 import 视图层，ADR-16），
   // 所以按本文件既有口径落 error 日志（`设置页 → 打开日志` 能看到），并且**不按默认值猜**。
   if (read.status !== 'ok') {
-    log.error('commonUse.placeImage', msg.command.fn.commonUseSettingsCorrupt(read.reason, name))
+    // message 只写事件；技术原因走 detail（读盘失败有现场，内容失败传种类）
+    log.error(
+      'commonUse.placeImage',
+      `${name} 未处理：常用页设置读不到`,
+      read.fail === 'readError' ? read.failure : { fail: read.fail },
+    )
     return 'none'
   }
   const action = placeImageAction(name, read.value)
@@ -661,7 +668,7 @@ export async function startPlaceImageWatch(ctx: {
         // 事件回调是"发出去就没人接"的路径：这里抛错不会有 `useCommand.invoke` 接住，
         // 所以必须自己落日志（`设置页 → 打开日志` 能看到），不许再 `void` 静默吞掉。
         void dispatchPlaceImage(name, payload, deps).catch((e: unknown) => {
-          log.warn('commonUse.placeImage', `${name} 处理失败：${describeCepError(e)}`)
+          log.warn('commonUse.placeImage', `${name} 处理失败`, e)
         })
       }),
     ),

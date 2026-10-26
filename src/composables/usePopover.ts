@@ -22,7 +22,7 @@ export interface UsePopoverOptions {
  *
  * **关闭（点外部 / Esc）不在这里** —— 统一交给 `useDismiss`。
  * 想改"点外面关不关、Esc 关几个"，改 `useDismiss` 一处；**不要在这里再挂监听**，
- * 否则同一个 Esc 会有两条路各关各的 —— 一次按下去关掉两层（历史上就是这么坏的）。
+ * 否则同一个 Esc 会有两条路各关各的 —— 一次按下去关掉两层。
  *
  * 结构上拦不住：`document.addEventListener` 是 DOM API，类型层没有约束，
  * 本仓**不建**扫描型闸（不写白名单、不设上限）⇒ 这条规矩只靠注释和 code review。

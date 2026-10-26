@@ -49,16 +49,16 @@ describe('自由面板命令', () => {
       blockId: 999,
       items: [{ text: 'A', key: 'action.call' }],
     })
-    expect(result).toMatchObject({ ok: false })
+    expect(result).toMatchObject({ status: 'error' })
   })
 
   it('空名字 / 空 key 被拒绝', async () => {
     await expect(
       execute('freePanel.add', { blockId: 1, items: [{ text: ' ', key: 'x' }] }),
-    ).resolves.toMatchObject({ ok: false })
+    ).resolves.toMatchObject({ status: 'error' })
     await expect(
       execute('freePanel.add', { blockId: 1, items: [{ text: 'x', key: ' ' }] }),
-    ).resolves.toMatchObject({ ok: false })
+    ).resolves.toMatchObject({ status: 'error' })
   })
 
   it('remove 按 blockId + btnId 删除', async () => {

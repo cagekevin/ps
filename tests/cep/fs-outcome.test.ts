@@ -1,3 +1,4 @@
+// @vitest-environment node
 import { createRequire } from 'node:module'
 import { installHostRequire, removeHostRequire } from '../helpers/host-stub'
 import { hasNode } from '@/cep/node'
@@ -97,17 +98,22 @@ describe('readTextSync · 三态（不是 string | null）', () => {
   it('EACCES → error + 原因（旧的两态在这里压成 null，于是"读不到"被当成"没有"）', () => {
     fake.denied.add('/u/secret.json')
     const read = readTextSync('/u/secret.json')
-    expect(read.status).toBe('error')
-    expect(read.status === 'error' && read.reason).toContain('EACCES')
+    // 断到**结构**：是 errno 臂、码是 EACCES、原始现场没被丢掉
+    expect(read).toEqual({
+      status: 'error',
+      failure: { kind: 'errno', code: 'EACCES', raw: expect.anything() },
+    })
   })
 
   it('无 Node → error（不是 notSeen：没有 Node 不等于文件不存在）', () => {
-    // 这一例要"没有 Node"⇒ 临时卸掉（下一例由 helper 自动重装）
-    Reflect.deleteProperty(window, 'require')
-    expect(readTextSync('/u/a.json')).toEqual({
-      status: 'error',
-      reason: 'Node 不可用（--enable-nodejs 未开）',
-    })
+    // 这一例要"没有 Node"⇒ 临时卸掉（下一例由 beforeEach 的 installNode() 重装）
+    removeHostRequire()
+
+    const read = readTextSync('/u/a.json')
+
+    // 断语义不断措辞：文案归 `domain/messages.ts` 管，这里只钉两件事 ——
+    // ① 是 error（不是 notSeen / ok）；② 原因说的是"没有 Node"，不是"文件不存在"。
+    expect(read).toEqual({ status: 'error', failure: { kind: 'noNode' } })
   })
 })
 

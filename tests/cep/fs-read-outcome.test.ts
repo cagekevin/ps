@@ -1,6 +1,11 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { ERR_PREFIX } from '@/utils/errors'
-import { installHostBridge, installHostRequire, removeHostRequire } from '../helpers/host-stub'
+import {
+  installHostBridge,
+  installHostRequire,
+  removeHostBridge,
+  removeHostRequire,
+} from '../helpers/host-stub'
 
 /**
  * T-105 / T-108：读取原语必须是**三态**（`ok` / `notSeen` / `error`），而且 `notSeen` 要精确。
@@ -46,7 +51,7 @@ function installCep() {
 
 function clearBridges() {
   removeHostRequire()
-  delete window.__adobe_cep__
+  removeHostBridge()
 }
 
 // `fs.ts` 已拆：异步三态读在 `fs-read`，且 `readTextOutcome` 已改名 `readTextAsync`
@@ -84,7 +89,9 @@ describe('readTextOutcome · Node 路', () => {
     const outcome = await readTextOutcome('/tmp/a.json')
 
     expect(outcome.status).toBe('error')
-    expect(outcome.status === 'error' ? outcome.reason : '').toContain(code)
+    expect(
+      outcome.status === 'error' && outcome.failure.kind === 'errno' && outcome.failure.code,
+    ).toBe(code)
   })
 
   it('存在但读不到（EPERM）与查不到（ENOENT）的 status 必须不同', async () => {
@@ -115,13 +122,13 @@ describe('readTextOutcome · jsx 路（Node 不可用）', () => {
     await expect(readTextOutcome('/tmp/a.json')).resolves.toEqual({ status: 'notSeen' })
   })
 
-  it('脚本里的其它错误 → error，reason 是 e.message 原文', async () => {
+  it('脚本里的其它错误 → error，原始 message 留在 raw 里（不再压成一句话）', async () => {
     installCep()
     jsx.reply = `${ERR_PREFIX}拒绝访问`
 
     await expect(readTextOutcome('/tmp/a.json')).resolves.toEqual({
       status: 'error',
-      reason: '拒绝访问',
+      failure: { kind: 'errno', code: 'JSX', raw: '拒绝访问' },
     })
   })
 
@@ -143,11 +150,13 @@ describe('readTextOutcome · jsx 路（Node 不可用）', () => {
     const outcome = await readTextOutcome('/tmp/a.json')
 
     expect(outcome.status).toBe('error')
-    expect(outcome.status === 'error' ? outcome.reason : '').toContain('EBUSY')
+    expect(
+      outcome.status === 'error' && outcome.failure.kind === 'errno' && outcome.failure.code,
+    ).toBe('EBUSY')
   })
 })
 
-// `combineReads` 这个**具名策略**已随 `fs.ts` 一起消失：两条路的合并规则现在内联在
-// `readTextAsync` 里，由上面「jsx 路」那 4 条断言覆盖（它们测的正是同一条策略：
-// jsx 读到就赢 / Node 读不到 + jsx 查不到 → error / 两条都查不到 → notSeen）。
+// 两条路的合并规则在 `fs-read.ts` 的 `combineReads`（**具名策略**，不是观测）：
+// Node 的 `error` 压过 jsx 的 `notSeen`。上面「jsx 路」那 4 条断言测的正是它：
+// jsx 读到就赢 / Node 读不到 + jsx 查不到 → error / 两条都查不到 → notSeen。
 // 策略本身没有消失，只是不再单独导出 —— 所以断言合并到行为层，不再测那个符号。

@@ -201,8 +201,8 @@ export const fontSetCommands: Command<unknown>[] = [
     kind: 'instant',
     async invoke(ctx) {
       const raw = await ctx.jsx.font.getFontInfo()
-      if (!raw.ok) {
-        throw new CepError(raw.code, raw.reason || msg.command.text.fontSetCopyAttrFailed)
+      if (raw.status !== 'ok') {
+        throw new CepError(raw.fail, raw.reason || msg.command.text.fontSetCopyAttrFailed)
       }
       // 解码器已证 `data` 是 `{ fonts: [...] }`（不可能是 undefined/null）⇒ 不再判空
       setFontClipboard(raw.data)
@@ -260,7 +260,12 @@ export const fontSetCommands: Command<unknown>[] = [
       // 是判断不是渲染，所以默认值也不在消费侧拼：取坏读臂的 `fallback`（仓库自己给的），坏因自己落日志
       const counterRead = translateCounterWriter.read()
       if (counterRead.status !== 'ok') {
-        log.warn('fontSet.translate', `翻译计数读取失败，本次按 0 次处理：${counterRead.reason}`)
+        log.warn(
+          'fontSet.translate',
+          '翻译计数读取失败，本次按 0 次处理',
+          // 只有读盘失败有现场；内容失败本身没有 errno，传种类
+          counterRead.fail === 'readError' ? counterRead.failure : { fail: counterRead.fail },
+        )
       }
       const counter = normalizeCounter(
         counterRead.status === 'ok' ? counterRead.value : counterRead.fallback,
@@ -271,8 +276,8 @@ export const fontSetCommands: Command<unknown>[] = [
       }
 
       const textOutcome = await ctx.jsx.font.getCurrentText()
-      if (!textOutcome.ok) {
-        throw new CepError(textOutcome.code, textOutcome.reason || '读取选中文字失败')
+      if (textOutcome.status !== 'ok') {
+        throw new CepError(textOutcome.fail, textOutcome.reason || textOutcome.fail)
       }
       // 解码器已证是数组，条目 `text` 若在必是字符串 ⇒ 不需要 `Array.isArray` + `as`
       const list = textOutcome.data
@@ -302,8 +307,9 @@ export const fontSetCommands: Command<unknown>[] = [
         }
 
         const parsed = parseTranslateResponse(raw)
-        if (!parsed.ok || !parsed.text) {
-          throw new CepError('NETWORK', parsed.message || '翻译失败')
+        if (parsed.status !== 'ok') {
+          // 文案从 `msg` 出（`reason` 只带外部原话，可能没有）
+          throw new CepError('NETWORK', msg.command.fn.fontSetTranslateFailed(parsed.reason ?? ''))
         }
 
         item.dst = encodeText(parsed.text)
@@ -408,8 +414,8 @@ export const fontSetCommands: Command<unknown>[] = [
     async invoke(ctx) {
       // 原版 setFontColor：jsx 返回 data 后直接 fontInfo.color = data，不回读
       const colorOutcome = await ctx.jsx.font.setColor()
-      if (!colorOutcome.ok) {
-        throw new CepError(colorOutcome.code, colorOutcome.reason || '设置字体颜色失败')
+      if (colorOutcome.status !== 'ok') {
+        throw new CepError(colorOutcome.fail, colorOutcome.reason || colorOutcome.fail)
       }
       // 解码器已证 `data` 是 `{ rgb: { r, g, b } }`（恒真）⇒ 不再判空
       applyTextPatch({ color: normalizeTextColor(colorOutcome.data) })
@@ -518,8 +524,8 @@ export const fontSetCommands: Command<unknown>[] = [
 
       // add：读当前图层字体 → 在系统字体里补全字重 → 去重/上限 → 落盘
       const infoOutcome = await ctx.jsx.font.getCurrentFontInfo()
-      if (!infoOutcome.ok) {
-        throw new CepError(infoOutcome.code, infoOutcome.reason || '读取当前图层字体失败')
+      if (infoOutcome.status !== 'ok') {
+        throw new CepError(infoOutcome.fail, infoOutcome.reason || infoOutcome.fail)
       }
       // 解码器已证 `family` 若在必是字符串 ⇒ 不需要 `as Record<string, unknown>`
       const family = infoOutcome.data.family ?? ''
@@ -530,8 +536,9 @@ export const fontSetCommands: Command<unknown>[] = [
       if (!hit) throw new CepError('PARSE', msg.command.text.fontSetFindFontInfoFailed)
 
       quickFontWriter.update((file) => {
-        const blocked = canAddQuickFont(file.list, family)
-        if (blocked) throw new CepError('PARSE', blocked)
+        const gate = canAddQuickFont(file.list, family)
+        if (gate.status === 'error')
+          throw new CepError('PARSE', msg.command.fn.quickFontBlocked(gate.fail))
 
         const next: QuickFont = toQuickFont(hit)
         file.list.push(next)

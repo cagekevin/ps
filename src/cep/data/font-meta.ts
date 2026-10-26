@@ -1,6 +1,7 @@
 import type { FontTag } from '@/cep/types'
 import { starsRepo, tagsRepo } from './index'
 import type { RepoRead } from './types'
+import { rebad } from './repo-read'
 
 /**
  * 读字体标签（我的标签那一排）。
@@ -11,7 +12,10 @@ import type { RepoRead } from './types'
  */
 export function readFontTags(): RepoRead<FontTag[]> {
   const read = tagsRepo.read()
-  if (read.status !== 'ok') return { status: 'error', reason: read.reason, fallback: [] }
+  // 透传失败种类：只换 `fallback` 的类型，不许把 `why` / `failure` 丢掉
+  if (read.status !== 'ok') {
+    return rebad(read, [])
+  }
 
   return {
     status: 'ok',
@@ -34,7 +38,9 @@ export function readFontTags(): RepoRead<FontTag[]> {
  */
 export function readFontStars(): RepoRead<Record<string, number>> {
   const read = starsRepo.read()
-  if (read.status !== 'ok') return { status: 'error', reason: read.reason, fallback: {} }
+  if (read.status !== 'ok') {
+    return rebad(read, {})
+  }
 
   const map: Record<string, number> = {}
   for (const item of read.value) {

@@ -1,5 +1,6 @@
 import { jsxRead, jsxWrite } from '@/cep/transport'
 import { typedOutcome } from '@/utils/jsx-result'
+import { decoderOf } from '@/utils/decode'
 import { isRecord } from '@/utils/guards'
 import { READ, WRITE } from './timeouts'
 import type { JsxName } from './names'
@@ -64,7 +65,7 @@ export function createStyleJsx(): StyleJsx {
     getForegroundColor: async () =>
       typedOutcome(
         await read('ys_getForegroundColor', [], '读取前景色'),
-        (data) => (isForegroundColorData(data) ? data : null),
+        decoderOf(isForegroundColorData),
         '读取前景色',
       ),
     // 智能填色关时的退路（`app.v4.js:17899`）：色板点色只设前景色，不动图层

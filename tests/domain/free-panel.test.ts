@@ -1,11 +1,12 @@
 import { describe, expect, it } from 'vitest'
 import {
   createEmptyFreePanel,
+  decodeFreePanelFile,
   findBlock,
   normalizeFreePanel,
-  readFreePanelFile,
   walkBlocks,
 } from '@/domain/free-panel'
+import { isDecodeFail, type DecodeFail, type Decoded } from '@/utils/decode'
 
 const realShape = {
   uid: 2,
@@ -144,30 +145,31 @@ describe('free-panel domain', () => {
 
 /**
  * T-99-2：读边界归一器。它和 `normalizeFreePanel` 共用同一份形状判据，
- * 唯一区别是**形状不认识时返回 `null`**（由 repo 转成 degraded），不补空面板。
+ * 形状不认识时给**可枚举的失败**（由 repo 转成 degraded），不补空面板。
  */
-describe('readFreePanelFile', () => {
+describe('decodeFreePanelFile', () => {
+  /** 只关心成功臂：失败时直接抛（带上 `fail`），不让 `undefined.xxx` 在下一行炸 */
+  function unwrap<T>(out: Decoded<T> | DecodeFail): T {
+    if (isDecodeFail(out)) throw new Error(`预期成功，实际失败：${out.fail}`)
+    return out.value
+  }
+
   it('认得真实形状：交给 normalizeFreePanel 归一', () => {
-    const file = readFreePanelFile(realShape)
-    expect(file?.obj.list).toHaveLength(1)
-    expect(file?.obj.list[0].data[0].text).toBe('ps批量导出')
+    const file = unwrap(decodeFreePanelFile(realShape))
+    expect(file.obj.list).toHaveLength(1)
+    expect(file.obj.list[0].data[0].text).toBe('ps批量导出')
   })
 
-  it('缺 obj / obj.list 不是数组 / 顶层不是对象 → null（不静默补默认面板）', () => {
-    expect(readFreePanelFile({})).toBeNull()
-    expect(readFreePanelFile({ obj: { list: '不是数组' } })).toBeNull()
-    expect(readFreePanelFile({ obj: null })).toBeNull()
-    expect(readFreePanelFile(null)).toBeNull()
-    expect(readFreePanelFile([{ id: 1 }])).toBeNull()
-    expect(readFreePanelFile('{}')).toBeNull()
+  it('缺 obj / obj.list 不是数组 / 顶层不是对象 → 可枚举失败（不静默补默认面板）', () => {
+    for (const raw of [{}, { obj: { list: '不是数组' } }, { obj: null }, null, [{ id: 1 }], '{}']) {
+      expect(decodeFreePanelFile(raw)).toMatchObject({ fail: 'shape', field: 'obj.list' })
+    }
   })
 
-  it('空 list 是合法状态：不返回 null', () => {
-    const file = readFreePanelFile({
-      uid: 0,
-      btnId: 0,
-      obj: { version: '1.0', type: 'row', list: [] },
-    })
-    expect(file?.obj.list).toEqual([])
+  it('空 list 是合法状态：成功且列表为空', () => {
+    const file = unwrap(
+      decodeFreePanelFile({ uid: 0, btnId: 0, obj: { version: '1.0', type: 'row', list: [] } }),
+    )
+    expect(file.obj.list).toEqual([])
   })
 })

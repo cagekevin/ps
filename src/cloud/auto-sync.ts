@@ -14,7 +14,7 @@ let bootTimer: ReturnType<typeof setTimeout> | null = null
 /**
  * 可见性当**信号**用，不当禁止用（ADR-21）。
  *
- * 原来 `document.hidden` 是"隐藏就跳过上传"——Chromium 的 Page Visibility 只节流定时器、
+ * `document.hidden` 不能当"隐藏就跳过上传"用——Chromium 的 Page Visibility 只节流定时器、
  * 不阻止 `fetch`，那条判断的实际效果是"用户没盯着面板时永远不同步"，而 PS 里面板常驻后台是常态。
  * 现在改成两个方向各做一件事：
  * - 变隐藏：有脏立刻推一次（页面随时可能随 PS 一起被销毁）；

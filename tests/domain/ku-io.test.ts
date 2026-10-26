@@ -12,6 +12,7 @@ import {
   type KuContainerFile,
   type KuGuid,
 } from '@/domain/ku-io'
+import { isDecodeFail, type DecodeFail, type Decoded } from '@/utils/decode'
 
 /**
  * 库文件编解码（台账 T-48 尾部 / T-57）。
@@ -20,6 +21,16 @@ import {
  * §5.2 的「导入必须换新 id」。不测 CEP、不测对话框。
  */
 const enc = (text: string) => Buffer.from(text, 'utf8').toString('base64')
+
+/**
+ * 取**成功臂**：`remapKuContainer` / `prepareKuAppend` 返回 `Decoded<T> | DecodeFail`。
+ * 这些用例只关心成功路径 ⇒ 失败时直接抛（带上 `fail`），不让 `undefined.xxx`
+ * 在下一行炸出一句与被测行为无关的话。
+ */
+function unwrap<T>(out: Decoded<T> | DecodeFail): T {
+  if (isDecodeFail(out)) throw new Error(`预期成功，实际失败：${out.fail}`)
+  return out.value
+}
 const dec = (base64: string) => Buffer.from(base64, 'base64').toString('utf8')
 const codec = { encode: enc, decode: dec }
 
@@ -83,10 +94,14 @@ function sampleContainer(): KuContainerFile {
 describe('三种顶层形态的编解码（契约 §0.1）', () => {
   it('.kuc / .kuf：裸组数组往返，未知键原样保留', () => {
     const text = JSON.stringify(COLOR_GROUPS)
-    expect(encodeKuGroups(parseKuGroups(text))).toBe(text)
+    // 往返两头分开断：解析给 `{ value }`，编码从原数组出发（不靠 `.value` 再取一次）
+    expect(parseKuGroups(text)).toEqual({ value: COLOR_GROUPS })
+    expect(encodeKuGroups(COLOR_GROUPS)).toBe(text)
 
     const withUnknown = [{ name: '组', show: true, list: [], 未来字段: { a: 1 } }]
-    expect(parseKuGroups(JSON.stringify(withUnknown))[0].未来字段).toEqual({ a: 1 })
+    expect(parseKuGroups(JSON.stringify(withUnknown))).toMatchObject({
+      value: [{ 未来字段: { a: 1 } }],
+    })
   })
 
   it('.kus / .kug：扁平清单往返，data:false 不丢也不改成空串', () => {
@@ -95,9 +110,7 @@ describe('三种顶层形态的编解码（契约 §0.1）', () => {
       { name: 'kuStyle/YS5B2C4C06B1029543.psd', data: false as const },
     ]
 
-    const parsed = parseKuFlatList(encodeKuFlatList(entries))
-    expect(parsed).toEqual(entries)
-    expect(parsed[1].data).toBe(false)
+    expect(parseKuFlatList(encodeKuFlatList(entries))).toEqual({ value: entries })
   })
 
   it('.kux：容器往返，store 原样保留', () => {
@@ -105,32 +118,36 @@ describe('三种顶层形态的编解码（契约 §0.1）', () => {
     const text = encodeKuContainer(file)
     expect(text.startsWith('{"arrFileData":')).toBe(true)
 
-    const parsed = parseKuContainer(text)
-    expect(parsed.store).toEqual(file.store)
-    expect(parsed.arrFileData).toEqual(file.arrFileData)
-    expect(encodeKuContainer(parsed)).toBe(text)
+    expect(parseKuContainer(text)).toMatchObject({
+      value: { store: file.store, arrFileData: file.arrFileData },
+    })
+    expect(encodeKuContainer(file)).toBe(text)
   })
 
-  it('容器缺 arrFileData / store.list 时报错，不静默当空库', () => {
-    expect(() => parseKuContainer('{}')).toThrow('arrFileData')
-    expect(() => parseKuContainer('{"arrFileData":[]}')).toThrow('store.list')
-    expect(() => parseKuContainer('{"arrFileData":[],"store":{"index":0,"list":[]}}')).toThrow(
-      'store.list 是空的',
-    )
-    expect(() => parseKuContainer('[]')).toThrow('不是仓库容器')
-    expect(() => parseKuContainer('not json')).toThrow('不是合法的 JSON')
+  /**
+   * 失败是**可枚举的码**（`shape` + 字段名 / `emptyContent` / `notJson`），不是一句中文 throw：
+   * 中文由 `describeDecodeFail` 渲染，解析层只说它真正知道的东西。
+   */
+  it('容器缺 arrFileData / store.list 时给码，不静默当空库', () => {
+    expect(parseKuContainer('{}')).toMatchObject({ fail: 'shape', field: 'arrFileData' })
+    expect(parseKuContainer('{"arrFileData":[]}')).toMatchObject({ fail: 'shape', field: 'store' })
+    expect(parseKuContainer('{"arrFileData":[],"store":{"index":0,"list":[]}}')).toEqual({
+      fail: 'emptyContent',
+    })
+    expect(parseKuContainer('[]')).toMatchObject({ fail: 'shape', expected: 'object' })
+    expect(parseKuContainer('not json')).toEqual({ fail: 'notJson' })
   })
 
-  it('库文件里有非对象组时报错', () => {
-    expect(() => parseKuGroups('[1]')).toThrow('非对象')
-    expect(() => parseKuGroups('{"name":"x"}')).toThrow('不是数组')
+  it('库文件里有非对象组时给码', () => {
+    expect(parseKuGroups('[1]')).toMatchObject({ fail: 'badItem' })
+    expect(parseKuGroups('{"name":"x"}')).toMatchObject({ fail: 'shape', expected: 'array' })
   })
 })
 
 describe('导入时的 id 重写（契约 §5.2 第 3 点）', () => {
   it('.kux 容器：库文件名 / 样式组与项 id / 渐变预览图一起换新，store 引用同步', () => {
     const guid = guidSeq()
-    const remapped = remapKuContainer(sampleContainer(), guid, codec)
+    const remapped = unwrap(remapKuContainer(sampleContainer(), guid, codec))
 
     const names = remapped.arrFileData.map((entry) => entry.name)
     // 库文件名：同前缀 + 16 位大写 hex + 原扩展名
@@ -170,7 +187,7 @@ describe('导入时的 id 重写（契约 §5.2 第 3 点）', () => {
   })
 
   it('data:false 的旁路项保持 false，不变成空串也不解码', () => {
-    const remapped = remapKuContainer(sampleContainer(), guidSeq(), codec)
+    const remapped = unwrap(remapKuContainer(sampleContainer(), guidSeq(), codec))
     const sidecars = remapped.arrFileData.filter((entry) => !entry.name.startsWith('sj_ku'))
     expect(sidecars).toHaveLength(3)
     for (const entry of sidecars) expect(entry.data).toBe(false)
@@ -185,11 +202,13 @@ describe('导入时的 id 重写（契约 §5.2 第 3 点）', () => {
         list: [{ name: '项', id: 'BBBBBBBBBBBBBBBB', layerId: 1 }],
       },
     ]
-    const payload = prepareKuAppend(
-      'style',
-      groups,
-      [{ name: 'kuStyle/YSAAAAAAAAAAAAAAAA.psd', data: false }],
-      guidSeq(),
+    const payload = unwrap(
+      prepareKuAppend(
+        'style',
+        groups,
+        [{ name: 'kuStyle/YSAAAAAAAAAAAAAAAA.psd', data: false }],
+        guidSeq(),
+      ),
     )
 
     expect(payload.groups[0].id).toMatch(/^YS[0-9A-F]{16}$/)
@@ -197,11 +216,13 @@ describe('导入时的 id 重写（契约 §5.2 第 3 点）', () => {
   })
 
   it('单库追加：没被库引用的旁路图也换名，避免覆盖本地', () => {
-    const payload = prepareKuAppend(
-      'style',
-      STYLE_GROUPS,
-      [{ name: 'kuStyle/FFFFFFFFFFFFFFFF.png', data: 'AAAA' }],
-      guidSeq(),
+    const payload = unwrap(
+      prepareKuAppend(
+        'style',
+        STYLE_GROUPS,
+        [{ name: 'kuStyle/FFFFFFFFFFFFFFFF.png', data: 'AAAA' }],
+        guidSeq(),
+      ),
     )
 
     expect(payload.sidecars[0].name).toMatch(/^kuStyle\/[0-9A-F]{16}\.png$/)

@@ -1,4 +1,5 @@
 import type { CasMode } from '@/cep/disk-write'
+import type { ReadFail } from '@/cep/fs-read'
 
 /**
  * `Repo.replace` 拿不到 CAS 基准时的**统一表态**。
@@ -43,10 +44,8 @@ export interface RepoReadOk<T> {
    *   状态，不算读失败」同一条规则。原版 `app.v4.js:45717-45721` 对 `ENOENT` 也是去下载、
    *   不报错；`classification.json` 不随面板分发（`getClassificationURL` → `v1/font/link`，
    *   `:49501`），首次使用真的不存在。值给空分类，但 reason 保留——不留就是静默回退（20(b)）。
-   * **其余仓库一律 `status: 'error'` 表示"`value` 不可用"**；新增 `status: 'ok'` + `reason` 要先证明
-   * "丢掉 value 就是功能变化"。
+   * **其余仓库一律 `status: 'error'` 表示"`value` 不可用"**。
    */
-  reason?: string
 }
 
 /**
@@ -59,11 +58,12 @@ export interface RepoReadOk<T> {
  * 代价（ADR-14 扩展二）：`fallback` 与"文件不存在"在**值上不可分辨**，
  * 要区分只能看 `status`——所以 `status` 是唯一判别位，不是调试字段。
  */
-export interface RepoReadBad<T> {
-  status: 'error'
-  reason: string
-  fallback: T
-}
+/**
+ * 仓库结论的失败臂 = 「为什么读不了」（`ReadFail`，唯一定义）+ 本层的 `reason` / `fallback`。
+ *
+ * `ReadFail` 是交叉进来的，不是重写一遍：重写会长出"这层带 `failure`、那层不带"的缝。
+ */
+export type RepoReadBad<T> = { status: 'error'; reason: string; fallback: T } & ReadFail
 
 /**
  * 判别联合：取 `.value` 前必须先判 `status`；坏读时展示 `fallback`（生产者给的）。

@@ -45,10 +45,10 @@ describe('sortQuickFont', () => {
 
 describe('canAddQuickFont', () => {
   it('重复家族与超过 15 个都拒绝', () => {
-    expect(canAddQuickFont([font()], '思源黑体 CN')).toBe('已存在同名字体')
+    expect(canAddQuickFont([font()], '思源黑体 CN')).toEqual({ status: 'error', fail: 'duplicate' })
     const full = Array.from({ length: QUICK_FONT_LIMIT }, (_, i) => font({ family: `F${i}` }))
-    expect(canAddQuickFont(full, '新字体')).toBe('最多添加15个字体哦')
-    expect(canAddQuickFont([], '新字体')).toBeNull()
+    expect(canAddQuickFont(full, '新字体')).toEqual({ status: 'error', fail: 'limit' })
+    expect(canAddQuickFont([], '新字体')).toEqual({ status: 'ok' })
   })
 })
 

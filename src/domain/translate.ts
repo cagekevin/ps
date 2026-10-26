@@ -5,6 +5,7 @@
 // 禁止：这里不发起请求、不读写文件、不弹提示（IO 在 cep/http.ts 与 data/）
 
 import { md5 } from '@/utils/md5'
+import { isRecord } from '@/utils/guards'
 
 /** 原版硬编码，app.v4.js:42816-42818 */
 export const TRANSLATE_URL = 'http://api.fanyi.baidu.com/api/trans/vip/translate'
@@ -87,40 +88,38 @@ export function buildTranslateParams(input: {
   }
 }
 
-export interface TranslateResult {
-  ok: boolean
-  text?: string
-  message?: string
-}
+/**
+ * 翻译结果：**判别联合**（`ok` 是判别位，`text` 仅在成功臂可取，`reason` 只放外部原话）。
+ * `ok` 是裸布尔、`text` 永远可取、`message` 是自由文本，三样都不合格）。
+ *
+ * `fail` 是可枚举的码；`reason` **只放外部原话**（百度的 `error_msg`）。
+ * 生产者自己的那句话由 `msg` 渲染（判据 3：生产者不写用户话）。
+ */
+export type TranslateResult =
+  | { status: 'ok'; text: string }
+  | { status: 'error'; fail: 'badResponse' | 'badCode' | 'noResult'; reason?: string }
 
 /**
- * 防御性解析。百度接口成功时 `error_code` 为 `"52000"`；
+ * 防御性解析。百度接口成功时 `error_code` 为 `"52000"`（旧版用 `"0"`，两种都认）；
  * 原版只判 `trans_result[0].dst` 是否存在，这里两种都兜。
  */
 export function parseTranslateResponse(raw: unknown): TranslateResult {
-  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
-    return { ok: false, message: '翻译失败' }
-  }
+  if (!isRecord(raw)) return { status: 'error', fail: 'badResponse' }
 
-  const payload = raw as Record<string, unknown>
-  const code = payload.error_code
+  const code = raw.error_code
   if (code !== undefined && String(code) !== '0' && String(code) !== '52000') {
-    return {
-      ok: false,
-      message: typeof payload.error_msg === 'string' ? payload.error_msg : '翻译失败',
-    }
+    const reason = typeof raw.error_msg === 'string' ? raw.error_msg : undefined
+    return reason
+      ? { status: 'error', fail: 'badCode', reason }
+      : { status: 'error', fail: 'badCode' }
   }
 
-  const results = payload.trans_result
-  if (!Array.isArray(results) || results.length === 0) {
-    return { ok: false, message: '翻译失败' }
-  }
+  const results = raw.trans_result
+  if (!Array.isArray(results) || results.length === 0) return { status: 'error', fail: 'noResult' }
 
-  const first = results[0] as Record<string, unknown> | null
-  const dst = first?.dst
-  if (typeof dst !== 'string' || !dst) {
-    return { ok: false, message: '翻译失败' }
-  }
+  const first = results[0]
+  const dst = isRecord(first) ? first.dst : undefined
+  if (typeof dst !== 'string' || !dst) return { status: 'error', fail: 'noResult' }
 
-  return { ok: true, text: dst }
+  return { status: 'ok', text: dst }
 }

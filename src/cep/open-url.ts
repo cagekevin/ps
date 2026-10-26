@@ -1,3 +1,4 @@
+import { getCep } from './host'
 import { CepError } from '@/utils/errors'
 import { msg } from '@/domain/messages'
 
@@ -11,7 +12,7 @@ import { msg } from '@/domain/messages'
  *   保留只是因为字体面板已经接了它（`pages/fontSet/index.vue:72`）。
  */
 export function openUrlInDefaultBrowser(url: string): void {
-  const util = window.cep?.util
+  const util = getCep()?.util
   if (!util?.openURLInDefaultBrowser) {
     throw new CepError('NO_CEP', msg.ps.text.cepOpenUrlUnavailable)
   }

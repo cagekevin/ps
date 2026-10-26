@@ -31,18 +31,26 @@ describe('翻译响应解析', () => {
   it('成功取 trans_result[0].dst', () => {
     expect(
       parseTranslateResponse({ error_code: '52000', trans_result: [{ dst: 'hello' }] }),
-    ).toEqual({ ok: true, text: 'hello' })
+    ).toEqual({ status: 'ok', text: 'hello' })
   })
 
-  it('错误码与空结果都算失败', () => {
+  /**
+   * 收口后失败是**可枚举的码** + 外部原话（`reason`），不再是一句 `message`：
+   * 「翻译失败」这句生产者的话由 `msg.command.fn.fontSetTranslateFailed` 渲染（判据 3）。
+   */
+  it('错误码 → badCode + 百度原话', () => {
     expect(parseTranslateResponse({ error_code: '54003', error_msg: '频率超限' })).toEqual({
-      ok: false,
-      message: '频率超限',
+      status: 'error',
+      fail: 'badCode',
+      reason: '频率超限',
     })
+  })
+
+  it('空结果 / 没有 dst → noResult；不是对象 → badResponse', () => {
     expect(parseTranslateResponse({ trans_result: [] })).toEqual({
-      ok: false,
-      message: '翻译失败',
+      status: 'error',
+      fail: 'noResult',
     })
-    expect(parseTranslateResponse(null)).toEqual({ ok: false, message: '翻译失败' })
+    expect(parseTranslateResponse(null)).toEqual({ status: 'error', fail: 'badResponse' })
   })
 })

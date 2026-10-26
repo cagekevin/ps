@@ -1,3 +1,4 @@
+import { getBridge } from './host'
 import { CepError, ERR_PREFIX } from '@/utils/errors'
 import { msg } from '@/domain/messages'
 import type { JsxName } from './jsx/names'
@@ -7,7 +8,7 @@ import { log } from '@/utils/logger'
 const DEFAULT_TIMEOUT = 30000
 
 export function hasCep(): boolean {
-  return typeof window.__adobe_cep__?.evalScript === 'function'
+  return typeof getBridge()?.evalScript === 'function'
 }
 
 /**
@@ -64,7 +65,7 @@ function runScript(
   script: string,
   timeout: number,
 ): { result: Promise<string>; returned: Promise<void> } {
-  const bridge = window.__adobe_cep__
+  const bridge = getBridge()
   if (!bridge) {
     return {
       result: Promise.reject(new CepError('NO_CEP', msg.ps.text.notInCep)),
@@ -160,10 +161,10 @@ export async function jsxWrite(
   opts: { timeout?: number; label?: string } = {},
 ): Promise<void> {
   const outcome = await jsxCall(fn, args, opts)
-  if (!outcome.ok) {
+  if (outcome.status !== 'ok') {
     // `hostCode` 带到错误上（字体缺失流程靠 `CepError.hostCode === 1` 判定）——
     // 这样消费侧 catch 就够了，不需要单独开一个"返回失败臂"的入口
-    throw new CepError(outcome.code, outcome.reason || opts.label || fn, outcome.hostCode)
+    throw new CepError(outcome.fail, outcome.reason || opts.label || fn, outcome.hostCode)
   }
 }
 
@@ -219,14 +220,14 @@ async function jsxCall(
 
   // **两类失败，两条路（语义不同，不是两份真相）**：
   // ① 宿主/环境层失败（脚本抛异常、返回值不是 JSON）→ **抛**。这类失败连"宿主返回了什么"
-  //    都没有，命令层原来就是靠 throw 感知它；不抛的话所有不判 ok 的调用点会静默成功。
+  //    都没有，不抛的话所有不判 ok 的调用点会静默成功。
   // ② 宿主明确返回了 `{err}` → 走**失败臂**（`asJsxOutcome` 解释），失败一定带 code。
   if (raw.startsWith(ERR_PREFIX)) {
     throw new CepError('JSX', msg.ps.fn.jsxThrow(opts.label ?? fn, raw.slice(ERR_PREFIX.length)))
   }
   // 哨兵：空 → 无数据；'ok' → 原值（调用方靠它区分"宿主说 ok"与"宿主给了数据"）
-  if (isJsxEmpty(raw)) return { ok: true, data: undefined }
-  if (isJsxOkSentinel(raw)) return { ok: true, data: raw }
+  if (isJsxEmpty(raw)) return { status: 'ok', data: undefined }
+  if (isJsxOkSentinel(raw)) return { status: 'ok', data: raw }
   let parsed: unknown
   try {
     parsed = JSON.parse(raw)

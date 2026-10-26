@@ -1,4 +1,6 @@
 import { md5 } from '@/utils/md5'
+import { isDecodeFail, shapeFail, type DecodeFail, type Decoded } from '@/utils/decode'
+import { isRecord } from '@/utils/guards'
 
 export type FileEncoding = 'json' | 'text' | 'base64'
 
@@ -62,17 +64,26 @@ export interface SyncUnitAdapter {
   /**
    * 这个同步项的**本地触发源**：仓库写成功后回调 `markDirty()`，返回取消订阅。
    *
-   * 必填是判据，不是形式：触发源原先手列在 `cep/cloud/change-sync.ts`
-   * 与同步项注册地（`cep/cloud/entries/index.ts`）分成两处，5 个 unit 只订了 2 个 ——
-   * 少的三个改了不标脏、不自动同步、也不报错。并到 adapter 上之后，
-   * **漏声明 = `npm run typecheck` 不过**，新增同步项不可能再静默漏订阅。
+   * 必填是判据，不是形式：触发源必须声明在各 unit 的 adapter 上，否则漏订阅会静默不标脏、
+   * 不自动同步、也不报错。并到 adapter 上之后，**漏声明 = `npm run typecheck` 不过**，
+   * 新增同步项不可能再静默漏订阅。
    *
    * 订阅是"全局只做一次"的装配动作，只许 `cep/cloud/change-sync.ts` 遍历调用。
    */
   watch(markDirty: () => void): () => void
 }
 
-export type WriteOutcome = { ok: true } | { ok: false; message: string }
+export type WriteOutcome = { status: 'ok' } | { status: 'error'; reason: string }
+
+/**
+ * `WriteOutcome` 失败臂的**唯一构造点**。
+ *
+ * 每个 adapter 各写一遍 `{ status: 'error', reason }` 就是五个构造点 —— 加字段时要改五处，
+ * 漏一处**不会报错**（`reason` 还在，新字段悄悄成了可选）。
+ */
+export function writeFailed(reason: string): WriteOutcome {
+  return { status: 'error', reason }
+}
 
 export type UploadConflictKind = 'none' | 'cloud-newer' | 'both-changed' | 'cloud-unknown'
 
@@ -167,10 +178,10 @@ export function unitsHash(units: Record<string, SyncUnit>): string {
   return contentHash({ units })
 }
 
-function normalizeUnit(raw: unknown): SyncUnit | null {
-  if (!raw || typeof raw !== 'object') return null
-  const unit = raw as Record<string, unknown>
-  if (!Array.isArray(unit.files)) return null
+function normalizeUnit(raw: unknown): Decoded<SyncUnit> | DecodeFail {
+  if (!isRecord(raw)) return shapeFail('', 'object', raw)
+  const unit = raw
+  if (!Array.isArray(unit.files)) return shapeFail('files', 'array', unit.files)
 
   const files: SyncFile[] = []
   for (const file of unit.files) {
@@ -216,9 +227,11 @@ function normalizeUnit(raw: unknown): SyncUnit | null {
   }
 
   return {
-    schema: typeof unit.schema === 'number' ? unit.schema : 1,
-    hash: typeof unit.hash === 'string' ? unit.hash : '',
-    files,
+    value: {
+      schema: typeof unit.schema === 'number' ? unit.schema : 1,
+      hash: typeof unit.hash === 'string' ? unit.hash : '',
+      files,
+    },
   }
 }
 
@@ -282,10 +295,10 @@ export function normalizeCloudPayload(raw: unknown): CloudPullOutcome {
   const dropped: string[] = []
   for (const [id, value] of Object.entries(candidate.units as Record<string, unknown>)) {
     const unit = normalizeUnit(value)
-    // 坏 unit 不再静默丢弃：丢掉它 = 下一次 push 的整包会**少一个 unit**，
-    // 云端那份就被我们这次写入抹掉了（同一条母体）。
-    if (unit) units[id] = unit
-    else dropped.push(id)
+    // 坏 unit 不许静默丢弃：丢掉它 = 下一次 push 的整包会**少一个 unit**，
+    // 云端那份就被我们这次写入抹掉了（同一条母体）。所以这里记 key，整份判 unreadable。
+    if (isDecodeFail(unit)) dropped.push(id)
+    else units[id] = unit.value
   }
   if (dropped.length) {
     return { status: 'unreadable', reason: `云端有读不懂的 unit：${dropped.join('、')}` }

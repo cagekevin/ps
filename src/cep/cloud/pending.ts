@@ -5,7 +5,6 @@
 // 禁止：这里不发请求、不弹提示（提示归 UI 层）；也不要用 console 顶替记录
 
 import { getPref, setPref } from '@/cep/data/settings'
-import { msg } from '@/domain/messages'
 import type { PendingChange, PendingReason } from '@/cloud/types'
 import { log } from '@/utils/logger'
 
@@ -29,18 +28,6 @@ function read(): PendingChange[] {
   return out
 }
 
-/**
- * 错误码 → 日志里那句"用户该做什么"。
- *
- * 只给**动作不同**的码写：权限错不会自己好，不写清就等于让人干等重试
- * （页面文案的分支属页面轮次，这里先把原因留在日志里）。
- */
-const CODE_HINT: Record<string, string> = {
-  CLOUD_PERMISSION: '；这是权限问题，不会自己好——请检查 GAS 部署权限，本项不会自动重试',
-  CLOUD_RATE_LIMITED: '；网关限流，会按最长间隔重试',
-  CLOUD_OFFLINE: '；当前离线，联网后会自动重试',
-}
-
 /** 进程内只警告一次：同一条原因反复刷屏没有信息量，痕迹本身靠记录 */
 let warned = false
 
@@ -54,11 +41,7 @@ export function recordPendingChanges(units: string[], reason: PendingReason, cod
 
   if (!warned) {
     warned = true
-    log.warn(
-      'cloud',
-      msg.cloud.fn.syncIncomplete(reason, code ? ` · ${code}` : '', units.join('、')) +
-        `${CODE_HINT[code ?? ''] ?? ''}`,
-    )
+    log.warn('cloud', `pending(${reason}${code ? ` · ${code}` : ''}): ${units.join('; ')}`)
   }
 }
 

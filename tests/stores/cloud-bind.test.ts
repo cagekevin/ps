@@ -57,29 +57,36 @@ describe('后台结局 → 状态刷新（TD-11-9）', () => {
       }),
     )
 
-    reportSyncOutcome({ ok: false, errorCode: 'CLOUD_PERMISSION', error: 'HTTP 403' }, [
-      'font.tags',
-    ])
+    reportSyncOutcome(
+      { status: 'error', failure: { fail: 'CLOUD_PERMISSION', reason: 'HTTP 403' } },
+      ['font.tags'],
+    )
     await vi.waitFor(() => expect(useCloudStore().status.pendingItems).toHaveLength(1))
 
     expect(useCloudStore().status.pendingItems[0]).toMatchObject({ unit: 'font.tags' })
   })
 
   it('同一失败连发两次只刷一次（别把跃迁判据退化成心跳）', async () => {
-    reportSyncOutcome({ ok: false, errorCode: 'CLOUD_NETWORK', error: 'boom' }, ['font.tags'])
+    reportSyncOutcome({ status: 'error', failure: { fail: 'CLOUD_NETWORK', reason: 'boom' } }, [
+      'font.tags',
+    ])
     await vi.waitFor(() => expect(engine.getStatus).toHaveBeenCalledTimes(1))
 
-    reportSyncOutcome({ ok: false, errorCode: 'CLOUD_NETWORK', error: 'boom' }, ['font.tags'])
+    reportSyncOutcome({ status: 'error', failure: { fail: 'CLOUD_NETWORK', reason: 'boom' } }, [
+      'font.tags',
+    ])
     await Promise.resolve()
     expect(engine.getStatus).toHaveBeenCalledTimes(1)
   })
 
   it('从失败恢复正常也刷一次（页面要能把"没同步成功"收回去）', async () => {
-    reportSyncOutcome({ ok: false, errorCode: 'CLOUD_NETWORK', error: 'boom' }, ['font.tags'])
+    reportSyncOutcome({ status: 'error', failure: { fail: 'CLOUD_NETWORK', reason: 'boom' } }, [
+      'font.tags',
+    ])
     await vi.waitFor(() => expect(engine.getStatus).toHaveBeenCalledTimes(1))
 
     engine.getStatus.mockResolvedValue(status())
-    reportSyncOutcome({ ok: true }, ['font.tags'])
+    reportSyncOutcome({ status: 'ok' }, ['font.tags'])
     await vi.waitFor(() => expect(engine.getStatus).toHaveBeenCalledTimes(2))
   })
 })

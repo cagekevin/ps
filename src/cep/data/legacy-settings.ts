@@ -11,7 +11,7 @@ import { userDir } from '@/cep/paths'
 import { FONT_SET_DEFAULTS, type FontSetSettings } from '@/domain/font-set-config'
 import { isRecord } from '@/utils/guards'
 import { dataRepo } from './data-repo'
-import { readRepoFile } from './repo-read'
+import { readRepoFile, rebad } from './repo-read'
 import type { Repo, RepoRead, RepoView } from './types'
 import { shapeFail, type DecodeFail, type Decoded } from '@/utils/decode'
 
@@ -115,8 +115,9 @@ export function readFontSetSettings(): RepoRead<FontSetSettings> {
   const read = legacySettingsRepo.read()
   // 坏文件的默认值由 `legacySettingsRepo` 的 fallback `{}` 经**同一条**归一产生，
   // 消费侧直接取 `fallback`，不再自己调 `mergeFontSetSettings({})`（ADR-24）
-  if (read.status !== 'ok')
-    return { status: 'error', reason: read.reason, fallback: mergeFontSetSettings(read.fallback) }
+  if (read.status !== 'ok') {
+    return rebad(read, mergeFontSetSettings(read.fallback))
+  }
   return { status: 'ok', value: mergeFontSetSettings(read.value) }
 }
 
@@ -129,12 +130,12 @@ export function readFontSetSettingsForSync(): FontSetSettings {
   const outcome = readRepoFile(`${userDir()}/${DATA_FILES.ztSet}`, decodeSettingsRecord)
   // T-116：四种坏法都中止，但原因必须分开报 ——
   // "不存在"会让用户以为设置丢了要去重建，"读不到"是关掉占用文件的程序再试
-  if (outcome.status === 'notSeen') throw new Error(`${DATA_FILES.ztSet} 不存在`)
+  if (outcome.status === 'notSeen') throw new Error(`ENOENT: ${DATA_FILES.ztSet}`)
   if (outcome.status === 'error') {
     throw new Error(
-      outcome.why === 'readError'
+      outcome.fail === 'readError'
         ? `${DATA_FILES.ztSet} 读不到：${outcome.reason}`
-        : outcome.why === 'notJson'
+        : outcome.fail === 'notJson'
           ? `${DATA_FILES.ztSet} 不是合法 JSON`
           : `${DATA_FILES.ztSet} 内容结构不认识`,
     )
@@ -214,7 +215,7 @@ function pickCommonUseOptions(all: Record<string, unknown>): Partial<CommonUseOp
 export function readCommonUseOptions(): RepoRead<Partial<CommonUseOptions>> {
   const read = legacySettingsRepo.read()
   if (read.status !== 'ok') {
-    return { status: 'error', reason: read.reason, fallback: pickCommonUseOptions(read.fallback) }
+    return rebad(read, pickCommonUseOptions(read.fallback))
   }
   return { status: 'ok', value: pickCommonUseOptions(read.value) }
 }

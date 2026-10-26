@@ -1,6 +1,7 @@
 import { setAutoSyncEnabled, setCloudUrl } from '@/cep/cloud/config'
 import { cloudEngine } from '@/cep/cloud/setup'
 import { CepError, type CepErrorCode } from '@/utils/errors'
+import type { CloudOutcome } from '@/cloud/types'
 import { defineCommand } from './registry'
 import type { Command } from './types'
 
@@ -21,20 +22,19 @@ const COMMAND_CODE: Record<string, CepErrorCode> = {
   // INIT 也没有任何按码分流的消费者，所以它和其余码一样走 NETWORK + 原话透传。
 }
 
-function throwIfFailed(result: {
-  ok: boolean
-  error?: string
-  errorCode?: string
-  cancelled?: boolean
-}): void {
-  if (result.ok) return
-  const fallback = result.error ?? '云同步失败'
-  // `cancelled` 位与 `CLOUD_CANCELLED` 码是同一件事的两种写法（引擎两处都置），任一条都算
+/**
+ * 云结果 → 命令结果。判据是 `status`（唯一判别位）：
+ * `ok` / `skipped` 都不报错；`cancelled` 与 `error` 各自带 `failure`（码 + 原因原文）。
+ */
+function throwIfFailed(result: CloudOutcome): void {
+  if (result.status === 'ok' || result.status === 'skipped') return
+  // 只有「用户自己按的取消」不提示：`cancelled` 臂还可能带别的码（冲突未确认），那要报
   const code: CepErrorCode =
-    result.cancelled && !result.errorCode
+    result.status === 'cancelled' && result.failure.fail === 'CLOUD_CANCELLED'
       ? 'CANCELLED'
-      : (COMMAND_CODE[result.errorCode ?? ''] ?? 'NETWORK')
-  throw new CepError(code, fallback)
+      : (COMMAND_CODE[result.failure.fail] ?? 'NETWORK')
+  // 用户看到的是**引擎原话**，一个字不加；只有原话缺失时才退回码（那时也没有更好的话可说）
+  throw new CepError(code, result.failure.reason ?? result.failure.fail)
 }
 
 export const cloudCommands: Command<unknown>[] = [

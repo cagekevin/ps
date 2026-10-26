@@ -85,7 +85,7 @@ beforeEach(() => {
   resetMissingFontPort()
   setMissingFontPort({ signal: (name) => useFontMissingStore().signal(name) })
   useFontMissingStore().clear()
-  for (const fn of Object.values(font)) fn.mockResolvedValue({ ok: true, data: null })
+  for (const fn of Object.values(font)) fn.mockResolvedValue({ status: 'ok', data: null })
   vi.mocked(getFontList).mockResolvedValue([])
 })
 
@@ -113,8 +113,8 @@ describe('fontSet.align', () => {
 
     const result = await execute('fontSet.align', { axis: 'diagonal', index: 0 })
 
-    expect(result).toMatchObject({ ok: false, code: 'PARSE' })
-    if (result.ok === false) {
+    expect(result).toMatchObject({ status: 'error', fail: 'PARSE' })
+    if (result.status === 'error') {
       expect(result.reason).toContain('diagonal')
       expect(result.reason).toContain('h / v / bg-h / bg-v')
     }
@@ -125,7 +125,7 @@ describe('fontSet.align', () => {
   it('缺 axis 也拒绝（不是当成某个默认方向）', async () => {
     const result = await execute('fontSet.align', { index: 0 })
 
-    expect(result).toMatchObject({ ok: false, code: 'PARSE' })
+    expect(result).toMatchObject({ status: 'error', fail: 'PARSE' })
     expect(font.setBackgroundAlign).not.toHaveBeenCalled()
   })
 
@@ -142,8 +142,8 @@ describe('fontSet.createButton 配置缺失（TD-12-25 后半）', () => {
   it('没有 config → PARSE 说清缺什么，不是英文 TypeError', async () => {
     const result = await execute('fontSet.createButton', {})
 
-    expect(result).toMatchObject({ ok: false, code: 'PARSE' })
-    if (result.ok === false) {
+    expect(result).toMatchObject({ status: 'error', fail: 'PARSE' })
+    if (result.status === 'error') {
       expect(result.reason).toContain('生成按钮缺少配置')
       expect(result.reason).not.toContain('Cannot read')
     }
@@ -155,8 +155,8 @@ describe('fontSet.createButton 配置缺失（TD-12-25 后半）', () => {
       config: { type: 'wrong', isLine: true, padding: '10' },
     })
 
-    expect(result).toMatchObject({ ok: false, code: 'PARSE' })
-    if (result.ok === false) expect(result.reason).toContain('type')
+    expect(result).toMatchObject({ status: 'error', fail: 'PARSE' })
+    if (result.status === 'error') expect(result.reason).toContain('type')
     expect(font.createButton).not.toHaveBeenCalled()
   })
 
@@ -165,7 +165,7 @@ describe('fontSet.createButton 配置缺失（TD-12-25 后半）', () => {
       config: { type: 1, isLine: false, padding: '10,20' },
     })
 
-    expect(result).toMatchObject({ ok: true })
+    expect(result).toMatchObject({ status: 'ok' })
     expect(font.createButton).toHaveBeenCalledTimes(1)
   })
 })
@@ -189,12 +189,12 @@ describe('fontSet.quickFont：平行数组不等长不许落盘（TD-12-27）', 
         star: 0,
       },
     ])
-    font.getCurrentFontInfo.mockResolvedValue({ ok: true, data: { family: '坏字体' } })
+    font.getCurrentFontInfo.mockResolvedValue({ status: 'ok', data: { family: '坏字体' } })
 
     const result = await execute('fontSet.quickFont', { action: 'add' })
 
-    expect(result).toMatchObject({ ok: false, code: 'PARSE' })
-    if (result.ok === false) {
+    expect(result).toMatchObject({ status: 'error', fail: 'PARSE' })
+    if (result.status === 'error') {
       expect(result.reason).toContain('坏字体')
       expect(result.reason).toContain('已拒绝写入快选')
     }
@@ -232,7 +232,7 @@ describe('fontSet.fontName 字体缺失', () => {
       weight: 'Regular',
     })
 
-    expect(result).toMatchObject({ ok: false, code: 'FONT_MISSING' })
+    expect(result).toMatchObject({ status: 'error', fail: 'FONT_MISSING' })
     expect(useFontMissingStore().missingFont).toBe('Missing Font')
   })
 })
@@ -243,7 +243,7 @@ describe('fontSet.split', () => {
 
     const result = await execute('fontSet.split', { mode: 1 })
 
-    expect(result).toMatchObject({ ok: false, reason: '请选择文本' })
+    expect(result).toMatchObject({ status: 'error', reason: '请选择文本' })
     expect(font.textBranchMerge).not.toHaveBeenCalled()
   })
 
@@ -259,13 +259,13 @@ describe('复制 / 粘贴文字属性', () => {
   it('没有复制过时直接失败，不调 jsx', async () => {
     const result = await execute('fontSet.pasteFont', { keeps })
 
-    expect(result).toMatchObject({ ok: false, reason: '请先复制字体样式' })
+    expect(result).toMatchObject({ status: 'error', reason: '请先复制字体样式' })
     expect(font.useFont).not.toHaveBeenCalled()
   })
 
   it('勾掉的字段被写成 null，且不改剪贴板原件', async () => {
     font.getFontInfo.mockResolvedValue({
-      ok: true,
+      status: 'ok',
       data: { fonts: [{ color: { r: 1, g: 2, b: 3 }, size: 12 }] },
     })
     await execute('fontSet.copyFont')
@@ -284,12 +284,12 @@ describe('复制 / 粘贴文字属性', () => {
 
 describe('fontSet.translate', () => {
   it('成功后写回 dst 并把每日计数 +1', async () => {
-    font.getCurrentText.mockResolvedValue({ ok: true, data: [{ text: '设计' }] })
+    font.getCurrentText.mockResolvedValue({ status: 'ok', data: [{ text: '设计' }] })
     vi.mocked(jsonp).mockResolvedValue({ trans_result: [{ dst: 'design' }] })
 
     const result = await execute('fontSet.translate', { from: 'zh', to: 'en', replace: true })
 
-    expect(result.ok).toBe(true)
+    expect(result.status === 'ok').toBe(true)
     const list = vi.mocked(font.setTranslateText).mock.calls[0][0] as Array<{ dst: string }>
     expect(decodeText(list[0].dst)).toBe('design')
     expect(font.setTranslateText).toHaveBeenCalledWith(expect.any(Array), true)
@@ -300,13 +300,13 @@ describe('fontSet.translate', () => {
 
   it('超过 1000 字不发起请求', async () => {
     font.getCurrentText.mockResolvedValue({
-      ok: true,
+      status: 'ok',
       data: [{ text: 'x'.repeat(1001) }],
     })
 
     const result = await execute('fontSet.translate', { from: 'zh', to: 'en', replace: true })
 
-    expect(result).toMatchObject({ ok: false })
+    expect(result).toMatchObject({ status: 'error' })
     expect(jsonp).not.toHaveBeenCalled()
   })
 })

@@ -67,7 +67,7 @@ describe('cloud transport', () => {
    * 不能报"云端是空的"（后者会让引擎以 rev=1 覆盖云端）。
    */
   it('pull_data 回 {"ok":true}（无 units）→ unreadable，不是 empty', async () => {
-    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(JSON.stringify({ ok: true }))))
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(JSON.stringify({ status: 'ok' }))))
     expect(await pullSnapshot()).toMatchObject({ status: 'unreadable' })
   })
 
@@ -89,12 +89,12 @@ describe('cloud transport', () => {
    * - 429 → 限流（可以好，但要慢）→ `CLOUD_RATE_LIMITED`
    * - 500 / 其它 → 与网络失败同待遇 → 仍是 `CLOUD_NETWORK`
    */
-  it('401 / 403 报 CLOUD_PERMISSION，且文案指出去查部署权限', async () => {
+  it('401 / 403 报 CLOUD_PERMISSION，message 只有 HTTP 状态', async () => {
     for (const status of [401, 403]) {
       vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response('', false, status)))
       const error = await pullSnapshot().catch((e: unknown) => e)
       expect(error).toMatchObject({ code: 'CLOUD_PERMISSION' })
-      expect((error as Error).message).toContain('部署权限')
+      expect((error as Error).message).toBe(`HTTP ${status}`)
     }
   })
 
@@ -115,13 +115,14 @@ describe('cloud transport', () => {
    * **码与重试语义必须和 11-8 一字不变**。下面两条钉住换出口时最容易漂的两种：
    * 超时（以前自己 abort，现在由 http 层抛 TIMEOUT）与"发不出去"（fetch reject）。
    */
-  it('超时（abort）→ CLOUD_NETWORK「同步超时」，与 11-8 一致', async () => {
+  it('超时（abort）→ CLOUD_NETWORK，message 是底层超时原文', async () => {
     const abort = Object.assign(new Error('aborted'), { name: 'AbortError' })
     vi.stubGlobal('fetch', vi.fn().mockRejectedValue(abort))
 
     await expect(pushSnapshot(buildSnapshot({}, 1, 1))).rejects.toMatchObject({
       code: 'CLOUD_NETWORK',
-      message: '同步超时',
+      // 底层 postText 把 abort 归成 CepError('TIMEOUT', …)，message 原样上抛
+      message: expect.stringMatching(/超时|timeout|abort/i),
     })
   })
 
@@ -139,6 +140,23 @@ describe('cloud transport', () => {
 
     await expect(pullSnapshot()).rejects.toMatchObject({ code: 'CLOUD_BAD_RESPONSE' })
   })
+
+  /**
+   * `null` / 数组 / 标量都是**合法 JSON**，但不是对象。
+   * 收口前是 `JSON.parse(text) as Record<string, unknown>`，断言之下的
+   * `json.error` / `json.ok` 会直接 TypeError（TD-18-9）；现在由 `isRecord` 真判，message 是响应原文片段。
+   */
+  it.each(['null', '[]', '42'])(
+    '合法 JSON 但不是对象（%s）→ CLOUD_BAD_RESPONSE + 响应原文',
+    async (body) => {
+      vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(body)))
+
+      await expect(pullSnapshot()).rejects.toMatchObject({
+        code: 'CLOUD_BAD_RESPONSE',
+        message: body,
+      })
+    },
+  )
 
   it('error 字段原样上抛', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response('{"error":"云端错误"}')))

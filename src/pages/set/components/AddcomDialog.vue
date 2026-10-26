@@ -38,7 +38,7 @@ const emit = defineEmits<{
 const draft = ref(props.text)
 const showError = ref(false)
 const parsed = computed(() => parsePresetText(draft.value))
-const errorMessage = computed(() => (parsed.value.ok ? '' : parsed.value.message))
+const errorMessage = computed(() => (parsed.value.status === 'ok' ? '' : parsed.value.reason))
 const blockClose = ref(false)
 
 watch(
@@ -53,12 +53,12 @@ watch(
 
 /** 确定：不合法就留在弹窗里并把文案显示出来（文案见 `domain/font-preset-text.ts`） */
 function onSubmit() {
-  if (!parsed.value.ok) {
+  if (parsed.value.status !== 'ok') {
     showError.value = true
     blockClose.value = true
     return
   }
-  emit('submit', parsed.value.values)
+  emit('submit', parsed.value.status === 'ok' ? parsed.value.values : [])
 }
 
 /** CepModal 的确定 / 取消 / × / 点遮罩最终都走这里 */
@@ -84,7 +84,9 @@ function onReset() {
       <!-- 有意偏离：原版 `.reset` 是绝对定位盖在 textarea 右上角（`生成/页面规格/08-设置.md:312`，
            right:30px + margin-top:-30px），这里放成行尾文字按钮，避免浮在输入框上挡住内容 -->
       <GButton class="addcom__reset" type="text" size="small" @click="onReset">重置</GButton>
-      <p v-if="showError && !parsed.ok" class="addcom__err" role="alert">{{ errorMessage }}</p>
+      <p v-if="showError && parsed.status !== 'ok'" class="addcom__err" role="alert">
+        {{ errorMessage }}
+      </p>
     </div>
   </CepModal>
 </template>

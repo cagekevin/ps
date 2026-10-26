@@ -4,10 +4,17 @@
 // 谁在用：`commands/rename.ts`、`stores/rename.ts`、`tests/domain/rename.test.ts`
 // 禁止：不许在这里实现表达式求值，求值交给 PS 的 `cmm_batchName`（见下方 UNVERIFIED）
 
-import { CepError } from '@/utils/errors'
 import { msg } from './messages'
+import { CepError } from '@/utils/errors'
 import { isRecord } from '@/utils/guards'
-import { decodeList, type DecodeFail, type Decoded } from '@/utils/decode'
+import {
+  decodeJsonText,
+  decodeList,
+  isDecodeFail,
+  shapeFail,
+  type DecodeFail,
+  type Decoded,
+} from '@/utils/decode'
 
 /** 一个重命名分组。第 0 组是固定组（最近使用），不可改名/删除 */
 export interface RenameGroup {
@@ -252,17 +259,15 @@ export function parseLegacyPreset(text: string): RenamePreset {
  * 有意偏离：原版直接 `this.data.info = JSON.parse(e)`，不做任何结构校验（:57037-57038），
  * 文件坏了就是白屏。这里校验形状，不合法就报错。
  */
-export function parsePreset(text: string): RenamePreset {
-  let parsed: unknown
-  try {
-    parsed = JSON.parse(text)
-  } catch {
-    const legacy = parseLegacyPreset(text)
-    if (!legacy.length) throw new CepError('PARSE', msg.validate.text.renameImportFailed)
-    return legacy
+export function parsePreset(text: string): Decoded<RenamePreset> | DecodeFail {
+  const json = decodeJsonText(text)
+  // JSON 读得动 ⇒ 只认新格式；形状不对就是形状臂（说不出字段就别说"格式不对"了事）
+  if (!isDecodeFail(json)) {
+    return isPreset(json.value) ? { value: json.value } : shapeFail('', 'object', json.value)
   }
-  if (!isPreset(parsed)) throw new CepError('PARSE', msg.validate.text.renameImportBadFormat)
-  return parsed
+  // 旧格式兼容：**只有 JSON 读不动时**才轮到它（换的是解析语义，不是失败表达）
+  const legacy = parseLegacyPreset(text)
+  return legacy.length ? { value: legacy } : json
 }
 
 /** 导出 `.cmm`：原版 `JSON.stringify(this.data.info)`（:57022） */

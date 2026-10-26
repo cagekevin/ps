@@ -1,39 +1,33 @@
-import { readOwnFileText } from '@/cep/fs-read'
+import { describeReadFailure, readOwnFileText } from '@/cep/fs-read'
 import { userDir } from '@/cep/paths'
 import { writeDiskSync } from '@/cep/disk-write'
 import { actionIndexWriter, actionLibraryRepo } from '@/cep/data/actions'
 import { REPLACE_WITHOUT_BASELINE } from '@/cep/data/types'
 import { runExclusive } from '@/cep/data/exclusive'
 import type { ActionWarehouseIndex } from '@/domain/action'
-import type { SyncFile, SyncUnitAdapter, WriteOutcome } from '@/domain/cloud'
+import { writeFailed, type SyncFile, type SyncUnitAdapter, type WriteOutcome } from '@/domain/cloud'
 import { CepError } from '@/utils/errors'
-import { msg } from '@/domain/messages'
-import { inlineFile, unitPayload } from './util'
+import { isDecodeFail, shapeFail } from '@/utils/decode'
+import { isRecord } from '@/utils/guards'
+import { describeDecodeFail } from '@/cep/data/repo-read'
+import { decodeInlineJson, inlineFile, unitPayload } from './util'
 
 const INDEX_PATH = '/sj_dzStoreInfo.json'
 
 function safeName(name: unknown): string {
   if (typeof name !== 'string' || !name || /[\\/]/.test(name)) {
-    throw new Error(`动作仓库文件名不合法：${String(name)}`)
+    // 机器话：哪个值不合格（含路径分隔符也算不合格，不许拼进用户目录）
+    throw new Error(`EINVALID_NAME: ${String(name)}`)
   }
   return name
 }
 
-function parseFile(file: SyncFile | undefined, label: string): unknown {
-  if (!file || file.content.kind !== 'inline') throw new Error(`${label}没有内联内容`)
-  try {
-    return JSON.parse(file.content.data)
-  } catch {
-    throw new Error(`${label}不是合法 JSON`)
-  }
-}
-
 function readIndex(value: unknown): ActionWarehouseIndex {
-  if (!value || typeof value !== 'object' || Array.isArray(value)) {
-    throw new Error('动作仓库索引不是对象')
-  }
-  const raw = value as { index?: unknown; list?: unknown }
-  if (!Array.isArray(raw.list) || !raw.list.length) throw new Error('动作仓库索引没有仓库')
+  if (!isRecord(value)) throw new Error(describeDecodeFail(shapeFail('', 'object', value)))
+  const raw = value
+  if (!Array.isArray(raw.list))
+    throw new Error(describeDecodeFail(shapeFail('list', 'array', raw.list)))
+  if (!raw.list.length) throw new Error(describeDecodeFail({ fail: 'emptyContent' }))
 
   const list = raw.list.map((item) => {
     const entry = item as { name?: unknown; fileName?: unknown }
@@ -60,7 +54,7 @@ export const actionLibraryEntry: SyncUnitAdapter = {
 
   /**
    * 一个 unit 两个写入口：仓库索引（列表 / 当前仓库）与仓库文件（分组 / 动作）分开存，
-   * 所以两边都要订。原来这两行手写在 `cep/cloud/change-sync.ts`，现在跟着 unit 走。
+   * 所以两边都要订。这两行的订阅跟着 unit 走（见 `SyncUnitAdapter`）。
    */
   watch: (markDirty) => {
     const offs = [actionIndexWriter.onChange(markDirty), actionLibraryRepo.onChange(markDirty)]
@@ -78,7 +72,7 @@ export const actionLibraryEntry: SyncUnitAdapter = {
     const seen = new Set<string>()
     for (const entry of read.value.list) {
       const name = safeName(entry.fileName)
-      if (seen.has(name)) throw new Error(`动作仓库文件名重复：${name}`)
+      if (seen.has(name)) throw new Error(`EDUP_NAME: ${name}`)
       seen.add(name)
 
       const read = await readOwnFileText(`${userDir()}/${name}`)
@@ -86,9 +80,11 @@ export const actionLibraryEntry: SyncUnitAdapter = {
       // T-116：两种不 ok 的**动作相同**（都中止上传），但**用户该做什么不同**——
       // 文件不在 = 索引指向了一个已删的仓库；读不到 = 关掉占用它的程序再试。
       // 以前都说"不存在"，后者会让用户去重建仓库，白折腾
-      if (read.status === 'notSeen') throw new Error(`动作仓库文件不存在：${name}`)
+      // 两臂必须分开（T-116）：`ENOENT` = 索引指向一个已删的仓库；errno = 文件被占用 / 权限。
+      // 只带机器话，句子由渲染层出 —— 上游要能靠码判断该做什么
+      if (read.status === 'notSeen') throw new Error(`ENOENT: ${name}`)
       if (read.status === 'error') {
-        throw new Error(`动作仓库文件读不到：${name}（${read.reason}）`)
+        throw new Error(`${describeReadFailure(read.failure)}: ${name}`)
       }
       files.push(inlineFile(`/${name}`, read.text))
     }
@@ -100,7 +96,7 @@ export const actionLibraryEntry: SyncUnitAdapter = {
    * 云下载写回：写 N 个 `sj_dz*.json` + 写索引。
    *
    * **两条纪律，缺一条这个洞就还在**（35 号 P1）：
-   * ① 落盘段**同步**（`writeDiskSync` + 同步索引写）—— 原来两个 `await` 之间有 microtask 边界，
+   * ① 落盘段**同步**（`writeDiskSync` + 同步索引写）—— 两个 IO 之间不容 microtask 边界，
    *    `importActionArchive` / `deleteWarehouse` 能插进去，留下「索引指向不存在的库」或孤儿文件；
    * ② 进 `action-files` **互斥域** —— 和导入/删仓库写同一批 `sj_dz*`，不许并发。
    *
@@ -111,11 +107,16 @@ export const actionLibraryEntry: SyncUnitAdapter = {
     try {
       return runExclusive('action-files', '动作库写回', () => {
         const indexFile = payload.files.find((file) => file.path === INDEX_PATH)
-        const index = readIndex(parseFile(indexFile, '动作仓库索引'))
+        // 判据在 `decodeInlineJson`（云载荷内层唯一入口）；这里只把失败翻成云写回结果
+        const indexDecoded = decodeInlineJson(indexFile)
+        if (isDecodeFail(indexDecoded)) throw new Error(describeDecodeFail(indexDecoded))
+        const index = readIndex(indexDecoded.value)
 
+        // 先逐份校验：账本里每个仓库对应的文件都得能解析，缺一份就不写（半写 = 索引指向空文件）
         for (const entry of index.list) {
           const file = payload.files.find((item) => item.path === `/${entry.fileName}`)
-          parseFile(file, `动作仓库 ${entry.fileName}`)
+          const decoded = decodeInlineJson(file)
+          if (isDecodeFail(decoded)) throw new Error(describeDecodeFail(decoded))
         }
 
         // 先写仓库文件，最后写索引。
@@ -135,21 +136,17 @@ export const actionLibraryEntry: SyncUnitAdapter = {
           } catch (error) {
             throw new CepError(
               'IO',
-              msg.cloud.fn.actionLibWriteBackFailed(
-                entry.fileName,
-                error instanceof Error ? error.message : String(error),
-              ),
+              error instanceof Error ? error.message : String(error),
+              undefined,
+              error,
             )
           }
         }
         actionIndexWriter.replace(index, REPLACE_WITHOUT_BASELINE)
-        return { ok: true }
+        return { status: 'ok' }
       })
     } catch (error) {
-      return {
-        ok: false,
-        message: error instanceof Error ? error.message : '动作库写回失败',
-      }
+      return writeFailed(error instanceof Error ? error.message : String(error))
     }
   },
 }

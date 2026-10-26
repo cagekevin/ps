@@ -21,7 +21,7 @@ afterEach(() => {
 describe('jsx 端口按调用期判环境', () => {
   it('同一实例：先 mock，补上 CEP 桥后下一次调用走真实实现', async () => {
     // 模块已在本文件顶部求值完毕——此刻没有桥
-    await expect(jsx.layer.isSelectLayer()).resolves.toEqual({ ok: true, data: true }) // mock 恒真
+    await expect(jsx.layer.isSelectLayer()).resolves.toEqual({ status: 'ok', data: true }) // mock 恒真
     expect(log.dump()).toContain('走 mock')
 
     const scripts: string[] = []
@@ -33,7 +33,7 @@ describe('jsx 端口按调用期判环境', () => {
     })
 
     // 真实实现：Layer_isSelectLayer 回 'false' → false（与 mock 的 true 可区分）
-    await expect(jsx.layer.isSelectLayer()).resolves.toEqual({ ok: true, data: false })
+    await expect(jsx.layer.isSelectLayer()).resolves.toEqual({ status: 'ok', data: false })
     expect(scripts).toHaveLength(1)
     expect(scripts[0]).toContain('Layer_isSelectLayer')
   })
@@ -44,10 +44,10 @@ describe('jsx 端口按调用期判环境', () => {
         cb('false')
       },
     })
-    await expect(jsx.layer.isSelectLayer()).resolves.toEqual({ ok: true, data: false })
+    await expect(jsx.layer.isSelectLayer()).resolves.toEqual({ status: 'ok', data: false })
 
     removeHostBridge()
-    await expect(jsx.layer.isSelectLayer()).resolves.toEqual({ ok: true, data: true })
+    await expect(jsx.layer.isSelectLayer()).resolves.toEqual({ status: 'ok', data: true })
     expect(log.dump()).toContain('当前不在 CEP 环境')
   })
 })
