@@ -11,3 +11,7 @@ Thumbs.db
 probe-*
 # 探针 journal（存源码全文，临时产物，禁止提交）
 scripts/.probe/
+# 临时扫描清单（可重生成，禁止提交）
+filelist.txt
+srclist.txt
+literal-report.txt
