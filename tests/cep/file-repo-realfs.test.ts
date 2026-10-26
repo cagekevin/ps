@@ -1,9 +1,11 @@
 import fs from 'node:fs'
 import { SEED } from '../helpers/cas-seed'
+import { installHostBridge, installHostRequire, removeHostRequire } from '../helpers/host-stub'
+import { hasNode } from '@/cep/node'
 import { createRequire } from 'node:module'
 import os from 'node:os'
 import path from 'node:path'
-import { afterAll, beforeEach, describe, expect, it } from 'vitest'
+import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { decodeList } from '@/utils/decode'
 
 /**
@@ -56,17 +58,13 @@ const wrappedFs = {
 }
 
 function installRealEnv(): void {
-  const w = window as unknown as {
-    require?: (id: string) => unknown
-    __adobe_cep__?: { evalScript?: (script: string, cb?: (res: string) => void) => void }
-  }
-  // 断言理由：`window.require` / `__adobe_cep__` 由 CEP 运行时注入，测试里手工补上真实现
-  w.require = (id: string) => (id === 'fs' ? wrappedFs : realRequire(id))
+  // `window.require` / `__adobe_cep__` 由 CEP 运行时注入，测试里手工补上真实现
+  installHostRequire((id: string) => (id === 'fs' ? wrappedFs : realRequire(id)))
   // 真机上文件不存在时 `readTextOutcome` 会再问一次 jsx `File`（fs.ts:493）；
   // 让假桥对"文件不存在"回 notSeen（`ERR:` + `文件不存在: `），否则该分支永不回包 → 挂。
-  w.__adobe_cep__ = {
-    evalScript: (_script: string, cb?: (res: string) => void) => cb?.(`ERR:文件不存在: fake`),
-  }
+  installHostBridge({
+    evalScript: (_script, cb) => cb?.(`ERR:文件不存在: fake`),
+  })
 }
 
 // `dataRepo` 的实现是**首次调用**时才求值（T-113），所以顶层 import 安全：
@@ -99,10 +97,15 @@ beforeEach(() => {
   target = path.join(dir, 'sj_probe.json')
 })
 
+afterEach(() => {
+  removeHostRequire()
+  delete window.__adobe_cep__
+  // 桩不许留在环境里：卸完必须"没有 node"（留着 → 下一个用例带着上一个的桩跑 → 假绿）
+  expect(hasNode()).toBe(false)
+})
+
 afterAll(() => {
   fs.rmSync(dir, { recursive: true, force: true })
-  delete (window as unknown as { require?: unknown }).require
-  delete (window as unknown as { __adobe_cep__?: unknown }).__adobe_cep__
 })
 
 describe('fileRepo（真机装法：真 node:fs + 真 __adobe_cep__）', () => {
@@ -125,7 +128,7 @@ describe('fileRepo（真机装法：真 node:fs + 真 __adobe_cep__）', () => {
     behavior.halfWrite = true
     // `Repo<T>` 已全同步 ⇒ 失败是**同步抛**，`await expect(...).rejects` 接不到
     // （抛在 `expect` 被调用之前）。判据不变：写失败必须抛、目标文件必须还是旧内容。
-    expect(() => repo.replace([2, 3, 4], SEED)).toThrow()
+    expect(() => repo.replace([2, 3, 4], SEED)).toThrow(expect.objectContaining({ code: 'IO' }))
 
     // 非原子直写会在抛错前把目标截成半截 —— 半截 JSON 会让整库读不回来
     expect(readTarget()).toBe(before)
@@ -180,7 +183,7 @@ describe('fileRepo（真机装法：真 node:fs + 真 __adobe_cep__）', () => {
     fs.writeFileSync(target, '{ 半截', 'utf8')
 
     // 同上：`update` 同步抛。判据不变：坏原文不许被当成"首次使用"覆盖掉（D-42）。
-    expect(() => repo.update((value) => [...value, 1])).toThrow()
+    expect(() => repo.update((value) => [...value, 1])).toThrow(/不是合法 JSON/)
 
     expect(readTarget()).toBe('{ 半截')
   }, 5000)

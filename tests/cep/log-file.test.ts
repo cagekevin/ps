@@ -1,4 +1,6 @@
 import { createRequire } from 'node:module'
+import { installHostRequire, removeHostRequire } from '../helpers/host-stub'
+import { hasNode } from '@/cep/node'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
 
 /**
@@ -50,8 +52,7 @@ function fakeFs() {
 }
 
 function installRequire() {
-  const w = window as unknown as { require?: (id: string) => unknown }
-  w.require = (id: string) => (id === 'fs' ? fakeFs() : realRequire(id))
+  installHostRequire((id: string) => (id === 'fs' ? fakeFs() : realRequire(id)))
 }
 
 /** 真路径由 `userDir()` 算（jsdom 下没有 APPDATA，会落到 homedir），所以动态取 */
@@ -71,7 +72,9 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.useRealTimers()
-  delete (window as unknown as { require?: unknown }).require
+  removeHostRequire()
+  // 桩不许留在环境里：卸完必须"没有 node"（留着 → 下一个用例带着上一个的桩跑 → 假绿）
+  expect(hasNode()).toBe(false)
   vi.resetModules()
 })
 

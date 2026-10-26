@@ -62,9 +62,10 @@ export interface ActionListRead {
 
 /** 详细解析结果；页面用 `shape` 区分"真的没有"和"结构不认识" */
 export function readActionList(raw: unknown): ActionListRead {
-  const info = (raw as { info?: unknown } | null)?.info
+  const info = isRecord(raw) ? raw.info : undefined
   const isArray = Array.isArray(raw)
-  const list = isArray ? (raw as unknown[]) : Array.isArray(info) ? info : []
+  // `isArray` 是 const 布尔（TS 4.4+ 的别名条件收窄）⇒ 真分支里 `raw` 已被收窄成数组，不用转型
+  const list: unknown[] = isArray ? raw : Array.isArray(info) ? info : []
 
   const shape: ActionListRead['shape'] = isArray
     ? 'array'

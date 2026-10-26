@@ -78,11 +78,11 @@ describe('第 0 组是固定组', () => {
 
   it('改名 / 删除 / 加项 / 改项 / 删项 全部拒绝组 0', () => {
     const data = preset()
-    expect(() => renameGroupAt(data, 0, 'x')).toThrow()
-    expect(() => deleteGroupAt(data, 0)).toThrow()
-    expect(() => addItemAt(data, 0, '%n')).toThrow()
-    expect(() => changeItemAt(data, 0, 0, 'x')).toThrow()
-    expect(() => deleteItemAt(data, 0, 0)).toThrow()
+    expect(() => renameGroupAt(data, 0, 'x')).toThrow(expect.objectContaining({ code: 'PARSE' }))
+    expect(() => deleteGroupAt(data, 0)).toThrow(expect.objectContaining({ code: 'PARSE' }))
+    expect(() => addItemAt(data, 0, '%n')).toThrow(expect.objectContaining({ code: 'PARSE' }))
+    expect(() => changeItemAt(data, 0, 0, 'x')).toThrow(expect.objectContaining({ code: 'PARSE' }))
+    expect(() => deleteItemAt(data, 0, 0)).toThrow(expect.objectContaining({ code: 'PARSE' }))
   })
 
   it('组 1 的同类操作正常生效', () => {
@@ -144,8 +144,8 @@ describe('.cmm 导入导出', () => {
   })
 
   it('形状不对或不是预设时报错，不把坏数据当预设用', () => {
-    expect(() => parsePreset('{"a":1}')).toThrow()
-    expect(() => parsePreset('[{"name":1}]')).toThrow()
+    expect(() => parsePreset('{"a":1}')).toThrow(expect.objectContaining({ code: 'PARSE' }))
+    expect(() => parsePreset('[{"name":1}]')).toThrow(expect.objectContaining({ code: 'PARSE' }))
     expect(() => parsePreset('随便一段文字')).toThrow('导入失败')
   })
 })

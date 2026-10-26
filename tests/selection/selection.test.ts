@@ -42,7 +42,7 @@ describe('选区快照', () => {
     ps.getLayerState.mockRejectedValue(new Error('EvalScript error.'))
     __pushForTest({ hasSelection: true, typeNumber: 2 })
 
-    await expect(refresh()).rejects.toThrow()
+    await expect(refresh()).rejects.toThrow(/EvalScript/)
     expect(current()).toEqual({ hasSelection: true, typeNumber: 2 })
   })
 

@@ -1,7 +1,6 @@
 // 是什么：测试用的**唯一**假文件系统 —— 装到 `window.require('fs')` 上，让真代码（`disk-write` / `fs`）跑在内存盘上
-// 替代了什么：31 个测试各自 `vi.mock('@/cep/fs-read', () => ({
-//   createRequire,
-// }))` 假**写原语** + 14 个测试各自手写的 `installRequire`
+// 替代了什么：早先 31 个测试各自 `vi.mock('@/cep/fs-read', …)` 假**写原语** + 14 个测试各自手写的 `installRequire`
+//   （**这两类现在都不存在了**：写原语一律不 mock，宿主 require 一律走 `tests/helpers/host-stub.ts` 的 `installHostRequire`）
 // 谁在用：所有需要落盘 / 注入读写失败的测试
 // 禁止：再 `vi.mock('@/cep/fs-read', () => ({
 //   createRequire,
@@ -14,6 +13,9 @@
 // `rename` 语义按真实现模拟（键移动），所以"不留 tmp"这类断言仍然有效。
 
 import { createRequire } from 'node:module'
+import { afterEach, beforeEach, expect } from 'vitest'
+import { hasNode } from '@/cep/node'
+import { installHostRequire } from './host-stub'
 
 const realRequire = createRequire(import.meta.url)
 
@@ -59,7 +61,7 @@ export interface FakeDisk {
 
 /** 建一个内存假文件系统（**不自动安装**，调 `install()` 才生效） */
 export function installFakeFs(): FakeDisk {
-  const files = new Map<string, string>()
+  const files = new Map<string, string | Buffer>()
   const writes: WriteRecord[] = []
   const dirs = new Set<string>(['/'])
 
@@ -112,10 +114,10 @@ export function installFakeFs(): FakeDisk {
         state.failRename = false
         throw new Error('EACCES: 模拟 rename 失败')
       }
-      const text = files.get(from)
-      if (text === undefined) throw new Error(`ENOENT: no such file, rename '${from}'`)
+      const content = files.get(from)
+      if (content === undefined) throw new Error(`ENOENT: no such file, rename '${from}'`)
       files.delete(from)
-      files.set(to, text)
+      files.set(to, content)
     },
     unlinkSync: (p: string) => {
       if (state.failUnlinkFor.some((frag) => p.includes(frag))) {
@@ -125,7 +127,7 @@ export function installFakeFs(): FakeDisk {
       files.delete(p)
     },
     existsSync: (p: string) => files.has(p) || dirs.has(p),
-    readFileSync: (p: string) => {
+    readFileSync: (p: string, encoding?: 'utf8') => {
       // `failReadAfter = n`：前 n 次读成功，之后抛（用来让"异步读 ok、同步 CAS 比对读不到"）
       if (state.failReadArmed) {
         const error = Object.assign(new Error('EACCES: permission denied'), { code: 'EACCES' })
@@ -139,14 +141,18 @@ export function installFakeFs(): FakeDisk {
         const error = Object.assign(new Error('EACCES: permission denied'), { code: 'EACCES' })
         throw error
       }
-      const text = files.get(p)
-      if (text === undefined) {
+      const content = files.get(p)
+      if (content === undefined) {
         const error = Object.assign(new Error(`ENOENT: no such file, open '${p}'`), {
           code: 'ENOENT',
         })
         throw error
       }
-      return text
+      // **有 encoding 给文本，没 encoding 给字节**（真 fs 的规矩）：
+      // `readBase64File` 走的是"无 encoding"那条路，它要的是 Buffer；
+      // 文本文件走"有 encoding"那条路（src 期望 string）。
+      if (encoding) return typeof content === 'string' ? content : content.toString(encoding)
+      return typeof content === 'string' ? Buffer.from(content) : content
     },
     readdirSync: (p: string) => {
       const prefix = p.endsWith('/') ? p : `${p}/`
@@ -218,14 +224,16 @@ export function installFakeFs(): FakeDisk {
       state.failReadArmed = false
       state.corruptNextWrite = false
       state.failUnlinkFor = []
-      const w = window as unknown as { require?: (id: string) => unknown }
-      w.require = (id: string) => (id === 'fs' ? fakeFs : realRequire(id))
+      installHostRequire((id: string) => (id === 'fs' ? fakeFs : realRequire(id)))
     },
     uninstall() {
-      delete (window as unknown as { require?: unknown }).require
+      // 卸掉 require（`Reflect.deleteProperty` ⇒ 不用转型，也不受"必填属性不能 delete"的限制）
+      Reflect.deleteProperty(window, 'require')
     },
     read(path: string) {
-      return files.get(path)
+      // 文本读：字节文件不走这里（用 `readFileSync(p)` 无 encoding 那条路）
+      const content = files.get(path)
+      return typeof content === 'string' ? content : undefined
     },
     seed(path: string, text: string) {
       ensureDir(path.slice(0, path.lastIndexOf('/')) || '/')
@@ -235,6 +243,14 @@ export function installFakeFs(): FakeDisk {
       return fakeFs.readdirSync(dir)
     },
   }
+
+  // 生命周期集中在这里：每例自动装、每例自动卸、每例后断言"环境里没有 node"
+  // （桩残留 ⇒ 下一个用例带着上一个的桩跑 ⇒ 假绿；一次实现、全域生效）
+  beforeEach(() => handle.install())
+  afterEach(() => {
+    handle.uninstall()
+    expect(hasNode()).toBe(false)
+  })
 
   return handle
 }

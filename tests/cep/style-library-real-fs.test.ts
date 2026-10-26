@@ -1,9 +1,11 @@
 import fs from 'node:fs'
 import { SEED } from '../helpers/cas-seed'
+import { installHostBridge, installHostRequire, removeHostRequire } from '../helpers/host-stub'
+import { hasNode } from '@/cep/node'
 import { createRequire } from 'node:module'
 import os from 'node:os'
 import path from 'node:path'
-import { afterAll, beforeEach, describe, expect, it } from 'vitest'
+import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 /**
  * 真机路径（`fileRepo`）下的样式库写盘与串行化 —— 凭证 +反向对照。
@@ -19,24 +21,16 @@ const realRequire = createRequire(import.meta.url)
 let dir = ''
 
 function installRealEnv(): void {
-  const w = window as unknown as {
-    require?: (id: string) => unknown
-    __adobe_cep__?: {
-      evalScript?: (script: string, cb?: (res: string) => void) => void
-      getSystemPath?: (name: string) => string
-    }
-  }
-  // 断言理由：`window.require` / `__adobe_cep__` 由 CEP 运行时注入，测试里手工补上真实现
-  w.require = (id) => realRequire(id)
+  installHostRequire((id: string) => realRequire(id))
   // 真机上 `readTextOutcome` 在 node 报 notSeen 时会再问一次 jsx `File`（fs.ts:493）；
   // 这里让假桥对"文件不存在"回 notSeen（`ERR:` + `文件不存在: `），否则该分支永不回包 → 挂。
-  w.__adobe_cep__ = {
+  installHostBridge({
     // 真桥一定有 `getSystemPath`；`userDir()` 现在"桥在就只认宿主"（拿不到就抛，不静默回落）。
     // 指到本用例的 `dir`（闭包，beforeEach 才赋值）—— 与 `process.env.APPDATA = dir`
     // 那条平台公式等价，所以各用例期望的路径不变。
     getSystemPath: () => `file://${dir}`,
-    evalScript: (_script: string, cb?: (res: string) => void) => cb?.(`ERR:文件不存在: fake`),
-  }
+    evalScript: (_script, cb) => cb?.(`ERR:文件不存在: fake`),
+  })
 }
 
 // 顶层 import：`fs.ts` 的 `nodeRequire` 是运行时惰性调用（见 `fs.ts:getRequire`），
@@ -76,10 +70,15 @@ beforeEach(() => {
   fs.mkdirSync(userDir(), { recursive: true })
 })
 
+afterEach(() => {
+  removeHostRequire()
+  delete window.__adobe_cep__
+  // 桩不许留在环境里：卸完必须"没有 node"（留着 → 下一个用例带着上一个的桩跑 → 假绿）
+  expect(hasNode()).toBe(false)
+})
+
 afterAll(() => {
   fs.rmSync(dir, { recursive: true, force: true })
-  delete (window as unknown as { require?: unknown }).require
-  delete (window as unknown as { __adobe_cep__?: unknown }).__adobe_cep__
 })
 
 /**

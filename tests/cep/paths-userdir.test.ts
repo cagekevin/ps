@@ -4,6 +4,7 @@ import { homedir, tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { afterAll, afterEach, describe, expect, it } from 'vitest'
 import { installFakeCepBridge, type FakeCepBridgeHandle } from '../helpers/fake-cep-bridge'
+import { installHostRequire } from '../helpers/host-stub'
 import { toPosix } from '@/cep/node'
 import { appDataRoot, extensionDir, toLocalPath, userDir } from '@/cep/paths'
 import { CepError } from '@/utils/errors'
@@ -39,10 +40,9 @@ afterAll(() => {
 })
 
 // `nodeRequire('path' / 'os')` 要走真模块：jsdom 里没有 CEP 注入的 require。
-// 断言理由：`window.require` 由 CEP 运行时注入（第三方边界），`@types/node` 把它声明成
-// `NodeRequire`，与 CEP 实际给的裸函数不同形；tests 层不装 node_modules 解析器，只借真 require。
-const win = window as unknown as { require?: (id: string) => unknown }
-win.require = (id: string) => realRequire(id)
+// （为什么不是直接 `window.require = …`：`@types/node` 的全局 `require` 是 NodeRequire，
+//   与 CEP 的裸函数合并成交集 ⇒ 编译不过。理由与那处唯一的转型都在 `tests/helpers/host-stub.ts`。）
+installHostRequire((id: string) => realRequire(id))
 
 let bridge: FakeCepBridgeHandle | null = null
 

@@ -103,7 +103,7 @@ beforeEach(() => {
   setActivePinia(createPinia())
   // pinia setup store 的形态：状态一律是 ref，storeToRefs 才拿得到
   store = {
-    tiles: ref([] as unknown[]),
+    tiles: ref<unknown[]>([]),
     collapsed: ref({}),
     loading: ref(false),
     error: ref(''),

@@ -140,7 +140,7 @@ describe('坏读拒绝覆盖写（D-42）', () => {
       repo.update((value) => {
         value.list.push('写不进去')
       }),
-    ).toThrow()
+    ).toThrow(/不是合法 JSON/)
 
     expect(fs.readFileSync(FILE(), 'utf8')).toBe('{oops')
     expect(fs.existsSync(`${FILE()}.bak`)).toBe(false)
@@ -150,7 +150,7 @@ describe('坏读拒绝覆盖写（D-42）', () => {
     fs.writeFileSync(FILE(), '{oops', 'utf8')
     const result = createRepo().read()
 
-    expect(result.ok).toBe(false)
+    expect(result.status).toBe('error')
     expect(result).not.toHaveProperty('value')
   })
 })

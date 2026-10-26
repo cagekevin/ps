@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { hasNode } from '@/cep/node'
 import { installFakeFs } from '../helpers/fake-fs'
 import { SEED } from '../helpers/cas-seed'
 import { ERR_PREFIX } from '@/utils/errors'
@@ -47,6 +48,12 @@ function seedOldWarehouse(): void {
   })
 }
 
+afterEach(() => {
+  disk.uninstall()
+  // 桩不许留在环境里：卸完必须"没有 node"（留着 → 下一个用例带着上一个的桩跑 → 假绿）
+  expect(hasNode()).toBe(false)
+})
+
 beforeEach(() => {
   disk.files.clear()
   disk.install()
@@ -61,10 +68,11 @@ describe('动作库导入 · 旧文件删不掉时要说出来（35 号 §3.2）
     await expect(importActionArchive(false, SRC)).rejects.toThrow(/没删掉/)
 
     // 旧文件确实还在盘上 —— 这就是"孤儿"，不是"我调用失败了"
-    expect(disk.read(`${userDir()}/${OLD}`)).toBeDefined()
+    // 用 `files.has` 而不是 `read`：旧库文件是**字节**（base64 落盘），`read` 是文本读，读不到不代表不在
+    expect(disk.files.has(`${userDir()}/${OLD}`)).toBe(true)
     // 索引已经指向新仓库：导入本身是成功的，错的只是收尾
     const read = actionIndexWriter.read()
-    expect(read.ok && read.value.list.map((item) => item.name)).toEqual(['新仓库'])
+    expect(read.status === 'ok' && read.value.list.map((item) => item.name)).toEqual(['新仓库'])
   })
 
   it('删得掉 → 不抛（正常路径不受影响）', async () => {

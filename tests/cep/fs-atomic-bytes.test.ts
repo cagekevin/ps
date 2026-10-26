@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { installHostRequire, removeHostRequire } from '../helpers/host-stub'
+import { hasNode } from '@/cep/node'
 import { createRequire } from 'node:module'
 
 /**
@@ -67,17 +69,18 @@ function codeOf(fn: () => void): string {
   }
 }
 
+afterEach(() => {
+  removeHostRequire()
+  // 桩不许留在环境里：卸完必须"没有 node"（留着 → 下一个用例带着上一个的桩跑 → 假绿）
+  expect(hasNode()).toBe(false)
+})
+
 beforeEach(() => {
   store.clear()
   pending.clear()
   corruptNextWrite = false
-  const w = window as unknown as { require?: (id: string) => unknown }
-  w.require = (id: string) => (id === 'fs' ? fakeFs : realRequire(id))
+  installHostRequire((id: string) => (id === 'fs' ? fakeFs : realRequire(id)))
   store.set(target, Buffer.from('别的面板写的'))
-})
-
-afterEach(() => {
-  delete (window as unknown as { require?: unknown }).require
 })
 
 describe('writeBase64File · 库文件被别的面板改过（T1）', () => {

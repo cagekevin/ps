@@ -2,7 +2,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi, type Mock } from 'vitest'
 import type { SyncIntent, SyncOutcome } from '@/cloud/change-sync'
 
-const holder = vi.hoisted(() => ({ queue: undefined as unknown }))
+const holder = vi.hoisted((): { queue: unknown } => ({ queue: undefined }))
 
 vi.mock('@/cep/cloud/setup', () => ({
   get cloudSyncQueue() {

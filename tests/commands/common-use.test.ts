@@ -12,14 +12,14 @@ const commonUse = vi.hoisted(() => ({
   embedImage: vi.fn(async () => ({ ok: true, data: null })),
   embedMultipleImages: vi.fn(async () => ({ ok: true, data: null })),
   importMultipleImages: vi.fn(async () => ({ ok: true, data: null })),
-  getImagePath: vi.fn(async () => -1 as unknown),
+  getImagePath: vi.fn(async (): Promise<unknown> => -1),
   optimizeOnce: vi.fn(async () => ({ ok: true, data: null })),
   optimizeFolder: vi.fn(async () => ({ ok: true, data: null })),
   transform: vi.fn(async () => ({ ok: true, data: null })),
   referenceGuide: vi.fn(async () => ({ ok: true, data: null })),
   referenceSlice: vi.fn(async () => ({ ok: true, data: null })),
   distribute: vi.fn(async () => ({ ok: true, data: null })),
-  getPsdList: vi.fn(async () => [] as unknown),
+  getPsdList: vi.fn(async (): Promise<unknown> => []),
   exportPsdImage: vi.fn(async () => ({ ok: true, data: null })),
 }))
 

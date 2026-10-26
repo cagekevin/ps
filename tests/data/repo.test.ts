@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { hasNode } from '@/cep/node'
 import { isRecord } from '@/utils/guards'
 import { decodeList } from '@/utils/decode'
 import { ERR_PREFIX } from '@/utils/errors'
@@ -36,6 +37,12 @@ interface Row {
 }
 
 const PATH = '/user/sj_ztglStar.ini'
+
+afterEach(() => {
+  disk.uninstall()
+  // 桩不许留在环境里：卸完必须"没有 node"（留着 → 下一个用例带着上一个的桩跑 → 假绿）
+  expect(hasNode()).toBe(false)
+})
 
 beforeEach(() => {
   disk.install()
@@ -99,7 +106,9 @@ const SKIP = { mode: 'skip', why: '用例：只测写盘与通知，不涉及并
 describe('fileRepo 写', () => {
   it('写失败必须抛，不许吞掉', () => {
     disk.failWrite = true
-    expect(() => createRepo().replace([{ name: 'A' }], SKIP)).toThrow()
+    expect(() => createRepo().replace([{ name: 'A' }], SKIP)).toThrow(
+      expect.objectContaining({ code: 'IO' }),
+    )
   })
 
   /**
@@ -176,7 +185,7 @@ describe('fileRepo 写', () => {
     }
 
     expect(code).toBe('CONFLICT')
-    expect(JSON.parse(disk.files.get(PATH)!)).toEqual(userData)
+    expect(JSON.parse(disk.read(PATH)!)).toEqual(userData)
   })
 })
 
@@ -196,7 +205,9 @@ describe('fileRepo 连续调用', () => {
   it('前一次写失败不影响后续', () => {
     const repo = createRepo()
     disk.failWrite = true
-    expect(() => repo.replace([{ name: 'bad' }], SKIP)).toThrow()
+    expect(() => repo.replace([{ name: 'bad' }], SKIP)).toThrow(
+      expect.objectContaining({ code: 'IO' }),
+    )
 
     disk.failWrite = false
     repo.replace([{ name: 'ok' }], SKIP)

@@ -62,7 +62,14 @@ interface Window {
   __adobe_cep__?: CepBridge
   /** 构建信息，启动自检写入；用于控制台/支持排查 */
   __PSZ_BUILD__?: { version: string; time: string }
-  /** CEP 开了 --enable-nodejs 后可用 */
+  /**
+   * CEP 开了 --enable-nodejs 后可用（**裸函数**：只按 id 返回模块，不是 NodeRequire）。
+   *
+   * ⚠️ 在 **tests** program 里不能直接 `window.require = …`：`@types/node` 声明的全局
+   * `require` 是 `NodeRequire`，与这一行**合并成交集** ⇒ 赋值编译不过（TS2322）、
+   * `delete` 也不许（必填属性，TS2790）。⇒ tests 一律走
+   * `tests/helpers/host-stub.ts` 的 `installHostRequire` / `removeHostRequire`（那里有那唯一一处转型与理由）。
+   */
   require?: (id: string) => unknown
   cep_node?: { require: (id: string) => unknown }
   /** CEP 的 Node 侧 API（文件对话框在 `cep.fs`，外链在 `cep.util`） */

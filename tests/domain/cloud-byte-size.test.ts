@@ -56,6 +56,6 @@ describe('没有 TextEncoder 时不许静默算错（TD-12-28）', () => {
   it('环境缺 TextEncoder → 抛，而不是退回字符数', () => {
     vi.stubGlobal('TextEncoder', undefined)
 
-    expect(() => fileByteSize('中文')).toThrow()
+    expect(() => fileByteSize('中文')).toThrow(/TextEncoder/)
   })
 })

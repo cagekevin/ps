@@ -234,7 +234,18 @@ function writingModules(root: string): string[] {
   return out.sort()
 }
 
-/** B：装了 `__adobe_cep__`（`evalScript`）+ `window.require` 两样的用例 */
+/**
+ * B：装了 `__adobe_cep__`（`evalScript`）+ `window.require` 两样的用例。
+ *
+ * 判据认**两种形状**（两种都算"真机装法"）：
+ * ① **调宿主桩入口**：`installHostBridge` / `installFakeCepBridge`（桥）+ `installHostRequire` /
+ *    `installFakeFs`（require 侧）。这是现在的正式写法（`tests/helpers/host-stub.ts` 是唯一入口）。
+ * ② **直接赋值**：`window.__adobe_cep__ = { …evalScript… }` + `window.require = …`。
+ *    保留它，是因为本文件下面的"反例"夹具（临时仓库里铺的最小用例）就是这么写的。
+ *
+ * ⚠️ 判据只认**"装了桥且装了 require"**：只有 require 没桥 ⇒ `hasCep()` 为假 ⇒ 走的是内存实现，
+ * 那不算真机装法（这条界线不能松）。
+ */
 function realInstallTests(root: string): string[] {
   const out: string[] = []
   for (const file of walkSources(join(root, 'tests'), ['.ts'])) {
@@ -243,6 +254,13 @@ function realInstallTests(root: string): string[] {
     let bridge = false
     let node = false
     const visit = (node_: ts.Node): void => {
+      // ① 入口调用
+      if (ts.isCallExpression(node_) && ts.isIdentifier(node_.expression)) {
+        const fn = node_.expression.text
+        if (fn === 'installHostBridge' || fn === 'installFakeCepBridge') bridge = true
+        if (fn === 'installHostRequire' || fn === 'installFakeFs') node = true
+      }
+      // ② 直接赋值（反例夹具用）
       if (
         ts.isBinaryExpression(node_) &&
         node_.operatorToken.kind === ts.SyntaxKind.EqualsToken &&
@@ -369,9 +387,8 @@ export function dataRepo<T>(path: () => string, seed: () => T, decode: (raw: unk
 
 /** 真机装法的最小形状：两样都装 */
 const REAL_TEST = (mod: string): string => `import { it } from 'vitest'
-const w = window as unknown as { require?: unknown; __adobe_cep__?: unknown }
-w.require = () => ({})
-w.__adobe_cep__ = { evalScript: () => undefined }
+window.require = () => ({})
+window.__adobe_cep__ = { evalScript: () => undefined }
 it('x', async () => {
   await import('${mod}')
 })
@@ -472,8 +489,7 @@ export const halfRepo = dataRepo(() => 'x', () => [], () => null)
 `,
       // 只装了桥：hasCep 为真但写会走 NO_NODE 抛错，测不出"真落盘"
       'tests/cep/half.test.ts': `import { it } from 'vitest'
-const w = window as unknown as { __adobe_cep__?: unknown }
-w.__adobe_cep__ = { evalScript: () => undefined }
+window.__adobe_cep__ = { evalScript: () => undefined }
 it('x', async () => { await import('@/cep/data/half-repo') })
 `,
     })

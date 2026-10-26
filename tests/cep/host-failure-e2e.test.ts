@@ -1,5 +1,12 @@
 import { createRequire } from 'node:module'
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import {
+  installHostBridge,
+  installHostRequire,
+  removeHostBridge,
+  removeHostRequire,
+} from '../helpers/host-stub'
+import { hasNode } from '@/cep/node'
 
 /**
  * 假 PS 的三种宿主失败，各走一遍**真链路**：假桥 → 真 transport → 真 jsx 域 → 真 registry
@@ -16,16 +23,10 @@ const realRequire = createRequire(import.meta.url)
 
 const disk = { files: new Map<string, string>() }
 
-type Bridge = {
-  evalScript: (script: string, cb: (res: string) => void) => void
-  getSystemPath: (what: string) => string
-}
-const holder = window as unknown as { __adobe_cep__?: Bridge }
-
 /** 假 PS：先答掉 ps.ts 的初始化脚本，其余交给 `answer`；返回 null 表示**永不回包** */
 function installBridge(answer: (script: string) => string | null | undefined) {
   const scripts: string[] = []
-  holder.__adobe_cep__ = {
+  installHostBridge({
     // ps.ts 的 doInit 要扩到目录才肯 evalFile；不给就等于 INIT 失败，测的就不是本轮那三条链了
     getSystemPath: (what) => (what === 'extension' ? '/ext' : '/user'),
     evalScript(script, cb) {
@@ -38,7 +39,7 @@ function installBridge(answer: (script: string) => string | null | undefined) {
       if (res === null) return // 不回包：模拟 PS 侧卡住/崩溃
       cb(res ?? 'null')
     },
-  }
+  })
   return scripts
 }
 
@@ -64,8 +65,7 @@ function installRequire() {
     },
     existsSync: (p: string) => disk.files.has(p),
   }
-  const w = window as unknown as { require?: (id: string) => unknown }
-  w.require = (id: string) => (id === 'fs' ? fs : realRequire(id))
+  installHostRequire((id: string) => (id === 'fs' ? fs : realRequire(id)))
 }
 
 /** 只挡掉命令层的数据仓库（与本轮失败链无关，避免把 fs/Node 全拖进来） */
@@ -106,8 +106,10 @@ beforeEach(() => {
 
 afterEach(() => {
   vi.useRealTimers()
-  delete holder.__adobe_cep__
-  delete (window as unknown as { require?: unknown }).require
+  removeHostBridge()
+  removeHostRequire()
+  // 桩不许留在环境里：卸完必须"没有 node"（留着 → 下一个用例带着上一个的桩跑 → 假绿）
+  expect(hasNode()).toBe(false)
 })
 
 describe('假 PS 全链路：三类宿主失败', () => {

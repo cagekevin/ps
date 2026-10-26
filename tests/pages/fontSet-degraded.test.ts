@@ -2,6 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest'
 import { createPinia, setActivePinia } from 'pinia'
 import { mount } from '@vue/test-utils'
 import { ERR_PREFIX } from '@/utils/errors'
+import { installHostBridge, installHostRequire } from '../helpers/host-stub'
 
 /**
  * T-111 判据 A 的**页面那一半**：`/fontSet` 真的把 `store.degraded` 渲染出来。
@@ -28,26 +29,19 @@ const fakeFs = {
 }
 
 function installBridges() {
-  const w = window as unknown as { require?: (id: string) => unknown }
-  w.require = (id: string) => {
+  installHostRequire((id: string) => {
     if (id === 'fs') return fakeFs
     if (id === 'path') return { join: (...parts: string[]) => parts.join('/'), dirname: () => '' }
     if (id === 'os') return { homedir: () => '/home/u' }
     throw new Error(`用例没准备 ${id}`)
-  }
-  const cep = window as unknown as {
-    __adobe_cep__?: {
-      evalScript: (script: string, cb: (res: string) => void) => void
-      getSystemPath: (name: string) => string
-    }
-  }
-  cep.__adobe_cep__ = {
+  })
+  installHostBridge({
     // 真桥一定有 `getSystemPath`；`userDir()` 现在"桥在就只认宿主"（拿不到就抛，不静默回落）。
     // 这里给的值与下面 `os.homedir() = '/home/u'` 那条平台公式**逐字等价**，用例期望不变。
     getSystemPath: () => 'file:///home/u/Library/Application Support',
     evalScript: (_script, cb) =>
       cb(disk.code === 'ENOENT' ? `${ERR_PREFIX}文件不存在: /x` : `${ERR_PREFIX}用例：jsx 不可用`),
-  }
+  })
 }
 
 // `dataRepo()` 在模块加载时按 `hasCep()` 定死实现，桥必须先进

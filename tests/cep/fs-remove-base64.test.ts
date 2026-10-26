@@ -1,4 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { installHostRequire, removeHostRequire } from '../helpers/host-stub'
+import { hasNode } from '@/cep/node'
 
 /**
  * T-109：`fs.ts` 自己遵守 ADR-26。
@@ -44,12 +46,11 @@ const fakeFs = {
 }
 
 function installNode() {
-  const w = window as unknown as { require?: (id: string) => unknown }
-  w.require = (id: string) => {
+  installHostRequire((id: string) => {
     if (id === 'fs') return fakeFs
     if (id === 'path') return { join: (a: string, b: string) => `${a}/${b}` }
     throw new Error(`用例没准备 ${id}`)
-  }
+  })
 }
 
 const { dirUsage } = await import('@/cep/dir-usage')
@@ -57,16 +58,18 @@ const { dirUsage } = await import('@/cep/dir-usage')
 const { readBase64File: readBase64Outcome } = await import('@/cep/fs-read')
 const { removeFile } = await import('@/cep/disk-write')
 
+afterEach(() => {
+  removeHostRequire()
+  // 桩不许留在环境里：卸完必须"没有 node"（留着 → 下一个用例带着上一个的桩跑 → 假绿）
+  expect(hasNode()).toBe(false)
+})
+
 beforeEach(() => {
   installNode()
   realFs.unlinkCode = ''
   realFs.readCode = ''
   realFs.readdirCode = ''
   realFs.base64 = 'aGk='
-})
-
-afterEach(() => {
-  delete (window as unknown as { require?: unknown }).require
 })
 
 /**
@@ -96,7 +99,7 @@ describe('removeFile · 不许谎报成功（判据 A）', () => {
 
   it('实现不再依赖 existsSync（假 fs 的 existsSync 一被调用就抛）', () => {
     realFs.unlinkCode = 'EPERM'
-    expect(() => removeFile('/tmp/a.json')).toThrow()
+    expect(() => removeFile('/tmp/a.json')).toThrow(/EPERM/)
   })
 })
 

@@ -2,7 +2,9 @@ import fs from 'node:fs'
 import { createRequire } from 'node:module'
 import os from 'node:os'
 import path from 'node:path'
-import { afterAll, beforeEach, describe, expect, it } from 'vitest'
+import { afterAll, afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { installHostRequire, removeHostRequire } from '../helpers/host-stub'
+import { hasNode } from '@/cep/node'
 
 /**
  * D-42（一）：原子写的临时文件名必须**每进程、每次调用都不同**。
@@ -35,13 +37,12 @@ const fakeFs = {
   readFileSync: (p: string) => fs.readFileSync(p, 'utf8'),
 }
 
-function installRequire() {
-  const w = window as unknown as { require?: (id: string) => unknown }
-  w.require = (id: string) => (id === 'fs' ? fakeFs : realRequire(id))
-}
-
 // 导出文件的写已收进唯一落盘入口 `writeDisk`（`saveExportedText` 已删）
 const { writeDisk } = await import('@/cep/disk-write')
+
+function installRequire() {
+  installHostRequire((id: string) => (id === 'fs' ? fakeFs : realRequire(id)))
+}
 
 beforeEach(() => {
   installRequire()
@@ -50,9 +51,14 @@ beforeEach(() => {
   dir = fs.mkdtempSync(path.join(os.tmpdir(), 'psz-fs-'))
 })
 
+afterEach(() => {
+  removeHostRequire()
+  // 桩不许留在环境里：卸完必须"没有 node"（留着 → 下一个用例带着上一个的桩跑 → 假绿）
+  expect(hasNode()).toBe(false)
+})
+
 afterAll(() => {
   fs.rmSync(dir, { recursive: true, force: true })
-  delete (window as unknown as { require?: unknown }).require
 })
 
 describe('writeDisk（原子写：tmp 名唯一 / 不留 tmp / 失败必抛）', () => {
@@ -120,7 +126,7 @@ describe('writeDisk（原子写：tmp 名唯一 / 不留 tmp / 失败必抛）',
   })
 
   it('无 node（未装 window.require）时抛，不静默', async () => {
-    delete (window as unknown as { require?: unknown }).require
+    removeHostRequire()
     await expect(
       writeDisk(path.join(dir, 'x.json'), '{}', {
         backup: { mode: 'none' as const, why: '测试：新建文件' },
@@ -152,7 +158,7 @@ describe('writeDisk（导出到用户选的路径）', () => {
         backup: { mode: 'none' as const, why: '测试：新建文件' },
         cas: { mode: 'skip' as const, why: '测试：不涉及并发' },
       }),
-    ).rejects.toThrow()
+    ).rejects.toThrow(expect.objectContaining({ code: 'IO' }))
     expect(fs.readdirSync(dir)).toEqual([])
   })
 })

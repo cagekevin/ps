@@ -4,24 +4,22 @@ import { createFontJsx } from '@/cep/jsx/font'
 import { createLayerJsx } from '@/cep/jsx/layer'
 import { createJsxPort } from '@/cep/jsx'
 import { createMockJsx } from '@/cep/jsx/mock'
-
-type Bridge = { evalScript: (script: string, cb: (res: string) => void) => void }
-const holder = window as unknown as { __adobe_cep__?: Bridge }
+import { installHostBridge, removeHostBridge } from '../helpers/host-stub'
 
 let scripts: string[] = []
 
 function setBridge(handler: (script: string) => string) {
   scripts = []
-  holder.__adobe_cep__ = {
+  installHostBridge({
     evalScript(script, cb) {
       scripts.push(script)
       cb(handler(script))
     },
-  }
+  })
 }
 
 afterEach(() => {
-  delete holder.__adobe_cep__
+  removeHostBridge()
   scripts = []
 })
 

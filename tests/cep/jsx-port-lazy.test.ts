@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it } from 'vitest'
 import { jsx } from '@/cep/jsx'
 import { log } from '@/utils/logger'
+import { installHostBridge, removeHostBridge } from '../helpers/host-stub'
 
 /**
  * jsx 端口的环境判据必须在**调用点**，不能是模块求值期快照。
@@ -13,11 +14,8 @@ import { log } from '@/utils/logger'
  * 再补上桥（真实：false）。快照式实现第二次仍返回 true，直接红。
  */
 
-type Bridge = { evalScript: (script: string, cb: (res: string) => void) => void }
-const holder = window as unknown as { __adobe_cep__?: Bridge }
-
 afterEach(() => {
-  delete holder.__adobe_cep__
+  removeHostBridge()
 })
 
 describe('jsx 端口按调用期判环境', () => {
@@ -27,12 +25,12 @@ describe('jsx 端口按调用期判环境', () => {
     expect(log.dump()).toContain('走 mock')
 
     const scripts: string[] = []
-    holder.__adobe_cep__ = {
+    installHostBridge({
       evalScript(script, cb) {
         scripts.push(script)
         cb('false')
       },
-    }
+    })
 
     // 真实实现：Layer_isSelectLayer 回 'false' → false（与 mock 的 true 可区分）
     await expect(jsx.layer.isSelectLayer()).resolves.toEqual({ ok: true, data: false })
@@ -41,14 +39,14 @@ describe('jsx 端口按调用期判环境', () => {
   })
 
   it('环境回退也按调用点算：桥被拿掉后下一次调用回到 mock 并留痕', async () => {
-    holder.__adobe_cep__ = {
+    installHostBridge({
       evalScript(_script, cb) {
         cb('false')
       },
-    }
+    })
     await expect(jsx.layer.isSelectLayer()).resolves.toEqual({ ok: true, data: false })
 
-    delete holder.__adobe_cep__
+    removeHostBridge()
     await expect(jsx.layer.isSelectLayer()).resolves.toEqual({ ok: true, data: true })
     expect(log.dump()).toContain('当前不在 CEP 环境')
   })

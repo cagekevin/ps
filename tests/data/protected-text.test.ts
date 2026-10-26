@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, it } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it } from 'vitest'
+import { hasNode } from '@/cep/node'
 
 /**
  * /：仓库层**受保护的纯文本写入口**。
@@ -18,6 +19,12 @@ const disk = installFakeFs()
 const { writeProtectedText } = await import('@/cep/data/protected-text')
 
 const target = (name: string) => `ROAM/FengZiSeBan/${name}`
+
+afterEach(() => {
+  disk.uninstall()
+  // 桩不许留在环境里：卸完必须"没有 node"（留着 → 下一个用例带着上一个的桩跑 → 假绿）
+  expect(hasNode()).toBe(false)
+})
 
 beforeEach(() => {
   disk.install()

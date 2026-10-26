@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { hasNode } from '@/cep/node'
 
 /**
  * 偏好文件**读不到**时不许拿默认值回写。
@@ -26,6 +27,12 @@ vi.mock('@/cep/transport', () => ({
 const errors: string[] = []
 
 const settings = await import('@/cep/data/settings')
+
+afterEach(() => {
+  disk.uninstall()
+  // 桩不许留在环境里：卸完必须"没有 node"（留着 → 下一个用例带着上一个的桩跑 → 假绿）
+  expect(hasNode()).toBe(false)
+})
 
 beforeEach(() => {
   settings.__resetSettingsForTest()

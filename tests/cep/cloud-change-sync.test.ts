@@ -7,7 +7,7 @@ import { SEED } from '../helpers/cas-seed'
  * 每个用例换一个新队列：mock 成活的 getter，订阅层每次 `markDirty` 都取到当前实例。
  * 这样测的是真队列（防抖/串行）与真 repo.onChange 的接线，只有网络出口是假的。
  */
-const holder = vi.hoisted(() => ({ queue: undefined as unknown }))
+const holder = vi.hoisted((): { queue: unknown } => ({ queue: undefined }))
 
 vi.mock('@/cep/cloud/setup', () => ({
   get cloudSyncQueue() {

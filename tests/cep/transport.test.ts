@@ -1,16 +1,16 @@
 import { afterEach, describe, expect, it, vi } from 'vitest'
 import { CepError, ERR_PREFIX } from '@/utils/errors'
 import { evalScriptRaw, hasCep, jsxRead } from '@/cep/transport'
+import { installHostBridge, removeHostBridge } from '../helpers/host-stub'
 
 type Bridge = { evalScript: (script: string, cb: (res: string) => void) => void }
-const holder = window as unknown as { __adobe_cep__?: Bridge }
 
 function setBridge(evalScript: Bridge['evalScript']) {
-  holder.__adobe_cep__ = { evalScript }
+  installHostBridge({ evalScript })
 }
 
 afterEach(() => {
-  delete holder.__adobe_cep__
+  removeHostBridge()
   vi.useRealTimers()
 })
 

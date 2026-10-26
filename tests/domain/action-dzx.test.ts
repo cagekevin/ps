@@ -16,8 +16,8 @@ describe('action .dzx codec', () => {
   })
 
   it('非法 JSON / 缺字段抛错', () => {
-    expect(() => decodeDzx('not json')).toThrow()
-    expect(() => decodeDzx(JSON.stringify({ store }))).toThrow()
+    expect(() => decodeDzx('not json')).toThrow(/不是合法的 JSON/)
+    expect(() => decodeDzx(JSON.stringify({ store }))).toThrow(/缺少 arrFileData 或 store/)
   })
 
   it('remap 同时改 arrFileData.name 和 store.fileName', () => {

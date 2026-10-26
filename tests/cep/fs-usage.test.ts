@@ -3,6 +3,7 @@ import { createRequire } from 'node:module'
 import os from 'node:os'
 import path from 'node:path'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
+import { installHostRequire, removeHostRequire } from '../helpers/host-stub'
 
 /**
  * `dirUsage()`（T-68）：清缓存弹窗的「缓存大小」要读真实目录。
@@ -13,13 +14,11 @@ const realRequire = createRequire(import.meta.url)
 let root = ''
 
 function installRequire() {
-  const w = window as unknown as { require?: (id: string) => unknown }
-  w.require = (id: string) => realRequire(id)
+  installHostRequire((id: string) => realRequire(id))
 }
 
 function uninstallRequire() {
-  const w = window as unknown as { require?: (id: string) => unknown }
-  delete w.require
+  removeHostRequire()
 }
 
 const { dirUsage } = await import('@/cep/dir-usage')

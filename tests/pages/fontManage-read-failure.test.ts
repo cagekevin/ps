@@ -12,7 +12,7 @@ import type { FontItem } from '@/domain/font-item'
 
 const reads = vi.hoisted(() => ({
   getFontList: vi.fn(),
-  readFontTags: vi.fn(() => ({ ok: true, value: [] })),
+  readFontTags: vi.fn(() => ({ status: 'ok', value: [] })),
   readFontStars: vi.fn(),
 }))
 
@@ -66,21 +66,24 @@ beforeEach(() => {
   pinia = createPinia()
   setActivePinia(pinia)
   vi.clearAllMocks()
-  reads.readFontTags.mockReturnValue({ ok: true, value: [] })
-  reads.readFontStars.mockReturnValue({ ok: true, value: {} })
+  reads.readFontTags.mockReturnValue({ status: 'ok', value: [] })
+  reads.readFontStars.mockReturnValue({ status: 'ok', value: {} })
   reads.getFontList.mockResolvedValue([font('MiSans')])
   class NoopObserver {
     observe() {}
     unobserve() {}
     disconnect() {}
   }
-  ;(globalThis as unknown as { IntersectionObserver: unknown }).IntersectionObserver = NoopObserver
+  Object.defineProperty(globalThis, 'IntersectionObserver', {
+    value: NoopObserver,
+    configurable: true,
+  })
 })
 
 describe('字体管理页 · 星级读不到（TD-01-4）', () => {
   it('星级读不到时页面上出现「读取不到星级文件」，并且说明 0 不代表没收藏', async () => {
     reads.readFontStars.mockReturnValue({
-      ok: false,
+      status: 'error',
       reason: 'EPERM: 拒绝访问',
       fallback: {},
     })
@@ -92,7 +95,7 @@ describe('字体管理页 · 星级读不到（TD-01-4）', () => {
   })
 
   it('星级读得到时不出这句话（不许把正常状态也说成故障）', async () => {
-    reads.readFontStars.mockReturnValue({ ok: true, value: { MiSans: 3 } })
+    reads.readFontStars.mockReturnValue({ status: 'ok', value: { MiSans: 3 } })
 
     const text = (await mountPage()).text()
 

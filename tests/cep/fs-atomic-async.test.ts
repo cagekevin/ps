@@ -1,4 +1,5 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest'
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
+import { hasNode } from '@/cep/node'
 import { installFakeFs } from '../helpers/fake-fs'
 import { ERR_PREFIX } from '@/utils/errors'
 
@@ -23,6 +24,12 @@ vi.mock('@/cep/transport', () => ({
 const { writeDisk } = await import('@/cep/disk-write')
 
 const TARGET = '/out/a.json'
+
+afterEach(() => {
+  disk.uninstall()
+  // 桩不许留在环境里：卸完必须"没有 node"（留着 → 下一个用例带着上一个的桩跑 → 假绿）
+  expect(hasNode()).toBe(false)
+})
 
 beforeEach(() => {
   disk.files.clear()
@@ -54,7 +61,7 @@ describe('writeDisk（async）· 与同步版同四条判据', () => {
         backup: { mode: 'none', why: '用例：不备份，但仍要求原文可读' },
         requireReadable: true,
       }),
-    ).rejects.toThrow()
+    ).rejects.toThrow(expect.objectContaining({ code: 'IO' }))
 
     expect(disk.writes).toHaveLength(0)
   })

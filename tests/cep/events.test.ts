@@ -139,8 +139,8 @@ describe('parseEventData', () => {
   })
 
   it('解析失败直接抛，不静默返回 null', () => {
-    expect(() => parseEventData('garbage')).toThrow()
-    expect(() => parseEventData(42)).toThrow()
+    expect(() => parseEventData('garbage')).toThrow(SyntaxError)
+    expect(() => parseEventData(42)).toThrow(/不是字符串/)
   })
 })
 
@@ -268,7 +268,12 @@ describe('hasCepEvents', () => {
   })
 
   it('只有大写 getExtensionID 不算可用', () => {
-    const bridge = window.__adobe_cep__ as unknown as Record<string, unknown>
+    // 这个用例**故意把桥改坏**（把 getExtensionId 换成大小写写错的 getExtensionID）
+    // ⇒ 这里把形状收窄到"这两个键"，好让 `delete` / 赋值都不越界
+    const bridge = window.__adobe_cep__ as {
+      getExtensionId?: () => string
+      getExtensionID?: () => string
+    }
     delete bridge.getExtensionId
     bridge.getExtensionID = () => EXT
 
@@ -277,7 +282,7 @@ describe('hasCepEvents', () => {
   })
 
   it('桥上没有 dispatchEvent 时为 false', () => {
-    delete window.__adobe_cep__!.dispatchEvent
+    delete window.__adobe_cep__?.dispatchEvent
     expect(hasCepEvents()).toBe(false)
   })
 })
@@ -313,7 +318,7 @@ describe('sendAppEvent', () => {
   })
 
   it('桥上没有 dispatchEvent 时返回 false，不抛', () => {
-    delete window.__adobe_cep__!.dispatchEvent
+    delete window.__adobe_cep__?.dispatchEvent
     expect(sendAppEvent(APP_EVENT_SEBAN, 'GengXin')).toBe(false)
   })
 })

@@ -26,17 +26,18 @@ function setGeometry(
 
 /** 用一个宿主组件承载 composable，`onBeforeUnmount` 才不会在 setup 外调用 */
 function useHost() {
+  // **直接持有** composable 的返回值：不用从 `wrapper.vm` 里反射
+  // （Vue 的 `vm` 类型里没有 expose 出来的成员 ⇒ 那条路必须转型）
+  let drag: ReturnType<typeof useLongPressDrag> | undefined
   const host = defineComponent({
-    setup(_, { expose }) {
-      expose({ drag: useLongPressDrag() })
+    setup() {
+      drag = useLongPressDrag()
       return () => h('div')
     },
   })
   const wrapper = mount(host)
-  return {
-    wrapper,
-    drag: (wrapper.vm as unknown as { drag: ReturnType<typeof useLongPressDrag> }).drag,
-  }
+  if (!drag) throw new Error('宿主组件没挂上，拿不到 drag')
+  return { wrapper, drag }
 }
 
 interface Fixture {

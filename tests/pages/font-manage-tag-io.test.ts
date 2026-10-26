@@ -87,7 +87,10 @@ beforeEach(() => {
     unobserve() {}
     disconnect() {}
   }
-  ;(globalThis as unknown as { IntersectionObserver: unknown }).IntersectionObserver = NoopObserver
+  Object.defineProperty(globalThis, 'IntersectionObserver', {
+    value: NoopObserver,
+    configurable: true,
+  })
 })
 
 describe('字体管理页 · 标签导入 / 导出（T-51）', () => {

@@ -69,7 +69,10 @@ beforeEach(() => {
     unobserve() {}
     disconnect() {}
   }
-  ;(globalThis as unknown as { IntersectionObserver: unknown }).IntersectionObserver = NoopObserver
+  Object.defineProperty(globalThis, 'IntersectionObserver', {
+    value: NoopObserver,
+    configurable: true,
+  })
 })
 
 describe('字体管理页 · 系统字体读不到（TD-09-3）', () => {

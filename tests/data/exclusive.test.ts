@@ -129,6 +129,7 @@ describe('真实入口：importActionArchive', () => {
 
     gate.release()
     // 第一轮自己失败（空文件解不出东西），但**失败原因不是互斥** —— 说明它真的跑完了
-    await expect(first).rejects.toThrow()
+    // （这里只要求"抛了且有原因"，因为要断的是"不是互斥"，不是某个具体码）
+    await expect(first).rejects.toThrow(/./)
   })
 })

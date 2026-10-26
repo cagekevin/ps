@@ -14,8 +14,8 @@ import type { CloudStatus, PendingChange } from '@/cloud/types'
  * 4. 点确认才真的调 cloud.download（并且带 onConfirm，由确认框负责）。
  */
 const cloudState = vi.hoisted(() => ({
-  status: null as unknown as CloudStatus,
-  queuedUnits: null as unknown as ReturnType<typeof ref<number>>,
+  status: null as CloudStatus | null,
+  queuedUnits: null as ReturnType<typeof ref<number>> | null,
 }))
 
 const calls = vi.hoisted(() => [] as Array<{ id: string; payload: unknown }>)
@@ -24,7 +24,8 @@ vi.mock('@/stores/cloud', () => ({
   useCloudStore: () => ({
     refresh: vi.fn(),
     refreshLive: vi.fn(),
-    status: reactive(cloudState.status),
+    // `cloudState.status` 初值是 null（"还没有状态"），用例随后会填真状态
+    status: reactive(cloudState.status as CloudStatus),
     queuedUnits: cloudState.queuedUnits,
   }),
 }))

@@ -1,5 +1,6 @@
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 import { ERR_PREFIX } from '@/utils/errors'
+import { installHostBridge, installHostRequire, removeHostRequire } from '../helpers/host-stub'
 
 /**
  * T-105 / T-108：读取原语必须是**三态**（`ok` / `notSeen` / `error`），而且 `notSeen` 要精确。
@@ -33,23 +34,19 @@ const fakeFs = {
 const jsx = { reply: '' }
 
 function installNode() {
-  const w = window as unknown as { require?: (id: string) => unknown }
-  w.require = (id: string) => {
+  installHostRequire((id: string) => {
     if (id !== 'fs') throw new Error(`用例没准备 ${id}`)
     return fakeFs
-  }
+  })
 }
 
 function installCep() {
-  const w = window as unknown as {
-    __adobe_cep__?: { evalScript: (script: string, cb: (res: string) => void) => void }
-  }
-  w.__adobe_cep__ = { evalScript: (_script, cb) => cb(jsx.reply) }
+  installHostBridge({ evalScript: (_script, cb) => cb(jsx.reply) })
 }
 
 function clearBridges() {
-  delete (window as unknown as { require?: unknown }).require
-  delete (window as unknown as { __adobe_cep__?: unknown }).__adobe_cep__
+  removeHostRequire()
+  delete window.__adobe_cep__
 }
 
 // `fs.ts` 已拆：异步三态读在 `fs-read`，且 `readTextOutcome` 已改名 `readTextAsync`

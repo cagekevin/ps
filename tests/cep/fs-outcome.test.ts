@@ -1,4 +1,6 @@
 import { createRequire } from 'node:module'
+import { installHostRequire, removeHostRequire } from '../helpers/host-stub'
+import { hasNode } from '@/cep/node'
 import { afterEach, beforeEach, describe, expect, it } from 'vitest'
 
 /**
@@ -63,11 +65,16 @@ function installRequire() {
       return { size: (fake.files.get(p) ?? '').length }
     },
   }
-  const w = window as unknown as { require?: (id: string) => unknown }
-  w.require = (id: string) => (id === 'fs' ? fs : realRequire(id))
+  installHostRequire((id: string) => (id === 'fs' ? fs : realRequire(id)))
 }
 
 const { readTextSync } = await import('@/cep/fs-read')
+
+afterEach(() => {
+  removeHostRequire()
+  // 桩不许留在环境里：卸完必须"没有 node"（留着 → 下一个用例带着上一个的桩跑 → 假绿）
+  expect(hasNode()).toBe(false)
+})
 
 beforeEach(() => {
   installRequire()
@@ -75,10 +82,6 @@ beforeEach(() => {
   fake.denied.clear()
   fake.statFail.clear()
   fake.entries.clear()
-})
-
-afterEach(() => {
-  delete (window as unknown as { require?: unknown }).require
 })
 
 describe('readTextSync · 三态（不是 string | null）', () => {
@@ -99,7 +102,8 @@ describe('readTextSync · 三态（不是 string | null）', () => {
   })
 
   it('无 Node → error（不是 notSeen：没有 Node 不等于文件不存在）', () => {
-    delete (window as unknown as { require?: unknown }).require
+    // 这一例要"没有 Node"⇒ 临时卸掉（下一例由 helper 自动重装）
+    Reflect.deleteProperty(window, 'require')
     expect(readTextSync('/u/a.json')).toEqual({
       status: 'error',
       reason: 'Node 不可用（--enable-nodejs 未开）',
