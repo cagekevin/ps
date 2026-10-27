@@ -44,7 +44,7 @@ function readUnits(value: unknown): Record<string, string> | undefined {
 export async function readCloudLedger(): Promise<LedgerRead> {
   // 走档 1 的**未折叠**结论：台账"不在"与"读坏了"是两个结论，不能拿默认值顶（T-114）
   const outcome = readRepoFile(path(), decodeLedger)
-  if (outcome.status === 'notSeen') return { status: 'none' }
+  if (outcome.status === 'notSeen') return { status: 'notSeen' }
   if (outcome.status === 'error') {
     // only `readError` 有技术现场；另两种是"内容不对"，本身没有 errno
     log.error(
@@ -52,12 +52,17 @@ export async function readCloudLedger(): Promise<LedgerRead> {
       '台账读不到',
       outcome.fail === 'readError' ? outcome.failure : { fail: outcome.fail },
     )
-    // 两臂各自成型：读盘失败带现场，内容失败只带子码 —— 不再把 UI 文案当"底层原话"传下去
+    // 两臂各自成型：读盘失败带现场，内容失败只带子码；`reason` 是 `msg` 拼的用户文案
     return outcome.fail === 'readError'
-      ? { status: 'broken', fail: 'readError', failure: outcome.failure }
-      : { status: 'broken', fail: outcome.fail }
+      ? {
+          status: 'error',
+          fail: 'readError',
+          reason: outcome.reason,
+          failure: outcome.failure,
+        }
+      : { status: 'error', fail: outcome.fail, reason: outcome.reason }
   }
-  return { status: 'ok', ledger: outcome.value }
+  return { status: 'ok', value: outcome.value }
 }
 
 /** 非负整数；取不到就 0（`rev` / `syncedAt` 缺失只影响"从哪开始比"，不影响台账可信度） */
@@ -100,12 +105,14 @@ export function writeCloudLedger(ledger: CloudLedgerRecord): void {
       throw new CloudError(
         'CLOUD_WRITE_FAILED',
         error instanceof Error ? error.message : String(error),
+        error,
       )
     }
   } catch (error) {
     throw new CloudError(
       'CLOUD_WRITE_FAILED',
       error instanceof Error ? error.message : '台账写入失败',
+      error,
     )
   }
 }

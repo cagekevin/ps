@@ -72,7 +72,7 @@ describe('readTextOutcome · Node 路', () => {
   it('读到了 → ok + 原文', async () => {
     installNode()
 
-    await expect(readTextOutcome('/tmp/a.json')).resolves.toEqual({ status: 'ok', text: '{}' })
+    await expect(readTextOutcome('/tmp/a.json')).resolves.toEqual({ status: 'ok', value: '{}' })
   })
 
   it('ENOENT → notSeen（只有这一个码算"查不到"）', async () => {

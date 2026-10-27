@@ -225,8 +225,6 @@ export const msg: Msg = {
       renameLayerOrExprRequired: '请输入图层名或表达式',
       renamePresetMissing: '预设不存在',
       renameHistoryMissing: '最近使用分组缺失',
-      renameImportFailed: '导入失败',
-      renameImportBadFormat: '导入失败，文件格式不对',
     },
     fn: {
       freePanelOptionNotNumber: (key: string, preview: string) =>
@@ -305,7 +303,6 @@ export const msg: Msg = {
       styleNoGradientPayload: '这一项没有 gradient 载荷',
       styleReadGradientFailed: '读取渐变失败',
       styleReadGradientEmpty: '读取渐变失败：没有内容',
-      styleSaveLayerStyleEmpty: '保存图层样式失败：没有内容',
       stylePickOnlyColorLib: '快速吸色只能加到颜色库',
       styleReadFontAttrEmpty: '读取字体属性失败：没有可添加的字体',
       // swatch.ts
@@ -341,7 +338,6 @@ export const msg: Msg = {
       fontStarReadFailed: (reason: string) => `评分读取失败：${reason}`,
       quickFontBlocked: (fail: string) =>
         fail === 'limit' ? '最多添加15个字体哦' : '已存在同名字体',
-      fontImportError: (error: string) => `导入失败：${error}`,
       // fontSet.ts
       fontSetUnknownAlign: (axis: string) =>
         `未知的对齐方向：${axis}（合法值：h / v / bg-h / bg-v）`,
@@ -363,7 +359,6 @@ export const msg: Msg = {
       optimizingDoc: (cur: string, total: string) => `正在优化文档：${cur}/${total}`,
       exporting: (cur: string, total: string) => `正在导出：${cur}/${total}`,
       readSelectionFailed: (reason: string) => `读取选区失败：${reason}`,
-      applyFontFailed: (family: string) => `设置字体失败：${family}`,
       addedToFreePanel: (text: string) => `已加入自由面板「${text}」`,
       addedNActions: (n: string) => `已加入 ${n} 个动作`,
       prefSaveFailed: (message: string) => `偏好保存失败：${message}`,
@@ -442,7 +437,6 @@ export const msg: Msg = {
       // classification-repo.ts：两种原因**不许合并成一句**（T-107：读不到 ≠ 读不懂）
       classificationReadFailed: () => '分类数据读取失败',
       classificationBadShape: () => '分类数据格式不正确',
-      classificationNotSeen: () => '分类数据文件不存在',
       sysFontReadFailed: (reason: string) => `读不到系统字体：${reason}（SysFont2.json）`,
       sysFontUnrecognized: (data: string) => `ztgl_initSystemList 返回了无法识别的数据：${data}`,
       // legacy-settings.ts
@@ -450,7 +444,6 @@ export const msg: Msg = {
       // protected-text.ts
       // 备份/写入失败统一由 `disk-write` 的 `fileWriteFailed` 出（含完整路径与原因）；
       // owner 层不再各写一句 —— 两处都写就是同一句话套两遍。
-      protectedWriteFailed: (path: string, reason: string) => `${path} 写入失败：${reason}`,
       protectedReadBackMismatch: (path: string) => `${path} 写入后回读不一致，已按失败处理`,
       // settings.ts
       prefReadFailedSkipSave: (reason: string) =>
@@ -466,11 +459,8 @@ export const msg: Msg = {
       warehouseIndexCorruptAbort: (reason: string) =>
         `仓库索引文件损坏（${reason}），已中止：不猜库文件路径`,
       warehouseIndexEmpty: () => '仓库索引里没有任何仓库',
-      warehouseIndexUnusableAbort: (reason: string) =>
-        `仓库索引不可用（${reason}），已中止：不猜库文件路径`,
       indexNoKindFileName: (kind: string) => `索引里没有当前仓库的${kind}库文件名`,
       libFileNameInvalid: (fileName: string) => `库文件名不合法：${fileName}`,
-      libFileReadFailed: (kind: string, path: string) => `${kind} 库文件读不到：${path}`,
       libFileNotJson: (kind: string) => `${kind} 库文件不是合法 JSON`,
       libFileRootNotArray: (kind: string) => `${kind} 库文件顶层不是数组`,
       libFileBadItem: (kind: string, count: string) =>
@@ -486,12 +476,6 @@ export const msg: Msg = {
 
       libFileReadFailedAbortWrite: (kind: string, fileName: string, reason: string) =>
         `${kind} 库文件读不到，已中止写入：${fileName}（${reason}）`,
-      libFileNotJsonAbortWrite: (kind: string, fileName: string) =>
-        `${kind} 库文件不是合法 JSON，已中止写入：${fileName}`,
-      libFileRootNotArrayAbortWrite: (kind: string, fileName: string) =>
-        `${kind} 库文件顶层不是数组，已中止写入：${fileName}`,
-      libFileWriteFailed: (kind: string, fileName: string, reason: string) =>
-        `${kind} 库文件写入失败：${fileName}（${reason}）`,
       warehouseMissing: (index: string) => `仓库 ${index} 不存在`,
       // 复制到回收目录失败由 `disk-write` 的 `fileWriteFailed` 出（含目标路径与原因）
       // swatch-repo.ts
@@ -528,7 +512,6 @@ export const msg: Msg = {
       // fs.ts
       nodeUnavailable: 'Node 不可用，检查 manifest 里的 --enable-nodejs',
       /** cep/fs-read.ts：异步读既没有 Node 也没有 CEP（两条路都没有，不是"读不到文件"） */
-      noNodeNoCep: '当前环境既没有 Node，也没有 CEP，读不到任何文件',
       /** cep/events.ts：宿主没给可用的回调频道（挂不上监听，事件永远收不到） */
       psEventListenerUnavailable: 'CEP 回调监听不可用',
       // http.ts

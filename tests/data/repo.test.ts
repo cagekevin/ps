@@ -161,7 +161,7 @@ describe('fileRepo 写', () => {
 
   /**
    * T2：`Repo.write` 与 `Repo.overwrite` 合并成 `replace(value, cas)` 后，
-   * 「只在新装机时写种子」这件事终于有结构保证 —— 传 `expected: { status: 'absent' }` 就是
+   * 「只在新装机时写种子」这件事终于有结构保证 —— 传 `expected: { status: 'notSeen' }` 就是
    * 「这个路径上应当没有文件」，文件已被别的面板/用户写出来就抛 `CONFLICT`，不覆盖。
    *
    * 旧 `Repo.write` 没有这个能力：它恒 `previous: null`、恒不比对，种子会盖掉用户数据。
@@ -174,7 +174,7 @@ describe('fileRepo 写', () => {
     try {
       createRepo().replace([{ name: '种子' }], {
         mode: 'compare',
-        expected: { status: 'absent' },
+        expected: { status: 'notSeen' },
       })
     } catch (e) {
       code = (e as { code?: string }).code ?? ''

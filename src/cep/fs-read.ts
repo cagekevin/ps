@@ -39,58 +39,15 @@ import { ERR_PREFIX } from '@/utils/errors'
  *
  * 压成两态（`string | null`）就会让写路径拿 fallback 派生值覆盖用户文件（D-42 / T-105）。
  */
-/**
- * 读取失败的**结构**（不是一句话）。
- *
- * ①观测层只许说"我看到什么"，仅此四种：
- * - `errno`：系统 errno（`EPERM`/`EACCES`/`EBUSY`/`ENOSPC`…）或 jsx 侧的 `JSX`；`raw` 是原始现场；
- * - `noNode`：没开 `--enable-nodejs`；
- * - `noCep`：既没有 Node 也没有 CEP 桥 —— 两条路都断；
- * - `pathEscape`：目录守卫没过（`target` + 哪条守卫），**话由消费方说**。
- *
- * **①层不写用户文案**：谁说给用户听、怎么说，由消费方经 `msg` 决定。
- */
-export type ReadFailure =
-  | { kind: 'errno'; code: string; raw: unknown }
-  | { kind: 'noNode' }
-  | { kind: 'noCep' }
-  | { kind: 'pathEscape'; guard: 'ownDir' | 'outsideDir'; target: string }
+// `ReadFailure` / `ReadFail` / `describeReadFailure` 的唯一定义在 `utils/read-fail.ts`
+// （各层都要用同一个失败形状，定义留在观测层会让业务层反向依赖本文件）
+import type { ReadFailure } from '@/utils/read-fail'
 
-/**
- * 观测失败 → 一行**技术原文**（给日志与诊断，**不是**用户文案）。
- *
- * `switch` 完备：新增 `kind` 而这里不补分支 ⇒ 编译不过。这是"唯一渲染处"的类型保证。
- */
-/**
- * 「**这份数据为什么不可用**」的唯一定义：读盘失败（有现场）/ 内容失败（无现场）。
- *
- * 仓库结论（`RepoReadBad`）、台账（`LedgerBrokenFail`）、系统字体（`SysFontRead`）都用这一份 ——
- * 各写一遍会长出"有的带 `failure` 有的不带"的缝，而那种缝**不报错**，只是安静地少一个字段。
- */
-export type ReadFail =
-  { fail: 'readError'; failure: ReadFailure } | { fail: 'notJson' | 'badShape' }
+export type { ReadFail, ReadFailure } from '@/utils/read-fail'
+export { describeReadFailure } from '@/utils/read-fail'
 
-export function describeReadFailure(f: ReadFailure): string {
-  switch (f.kind) {
-    case 'errno':
-      return typeof f.raw === 'string' ? f.raw : f.raw instanceof Error ? f.raw.message : f.code
-    case 'noNode':
-      return 'NO_NODE：没有 --enable-nodejs'
-    case 'noCep':
-      return 'NO_CEP：既没有 Node 也没有 CEP 桥'
-    case 'pathEscape':
-      return `PATH_ESCAPE(${f.guard})：${f.target}`
-  }
-}
-
-export type TextRead =
-  { status: 'ok'; text: string } | { status: 'notSeen' } | { status: 'error'; failure: ReadFailure }
-
-/** base64 读取的三态（与 `TextRead` 同形：**观测**，不是结论） */
-export type Base64Read =
-  | { status: 'ok'; base64: string }
-  | { status: 'notSeen' }
-  | { status: 'error'; failure: ReadFailure }
+export type Observation<T> =
+  { status: 'ok'; value: T } | { status: 'notSeen' } | { status: 'error'; failure: ReadFailure }
 
 /** Node 系统错误的 `code`（`ENOENT` / `EPERM` / `EACCES` / `EBUSY` …）；取不到返回空串 */
 function errCode(e: unknown): string {
@@ -124,9 +81,7 @@ export function classifyFsError(
  * 只把"怎么取字节"当参数传进来。以前这两处各自写了一遍 `if (!hasNode()) … try/catch …`，
  * 结构重复、只差 `readFileSync` 的编码参数。
  */
-function readNodeOutcome<T>(
-  take: (fs: NodeModules['fs']) => T,
-): { status: 'ok'; value: T } | { status: 'notSeen' } | { status: 'error'; failure: ReadFailure } {
+function readNodeOutcome<T>(take: (fs: NodeModules['fs']) => T): Observation<T> {
   if (!hasNode()) return { status: 'error', failure: { kind: 'noNode' } }
   try {
     return { status: 'ok', value: take(nodeRequire('fs')) }
@@ -136,9 +91,8 @@ function readNodeOutcome<T>(
   }
 }
 
-function readTextNode(absPath: string): TextRead {
-  const out = readNodeOutcome((fs) => fs.readFileSync(absPath, 'utf8'))
-  return out.status === 'ok' ? { status: 'ok', text: out.value } : out
+function readTextNode(absPath: string): Observation<string> {
+  return readNodeOutcome((fs) => fs.readFileSync(absPath, 'utf8'))
 }
 
 /**
@@ -159,7 +113,7 @@ function readTextNode(absPath: string): TextRead {
  *
  * **想加第二个消费者 ⇒ 先回答"它是不是在取上一版原文做备份/CAS"。答不出就说明它该走上面四条档里的某一条。**
  */
-export function readTextSync(absPath: string): TextRead {
+export function readTextSync(absPath: string): Observation<string> {
   // `hasNode` 守卫与三态映射都在 `readNodeOutcome` 里，这里不再各写一遍
   return readTextNode(absPath)
 }
@@ -172,10 +126,9 @@ export function readTextSync(absPath: string): TextRead {
  * "这个文件是不是本次新建的"，回滚时只删新建的那些。把"读不到"当成"没有"，
  * 回滚就会删掉一个本来就存在的文件（T-109 的 P1）。
  */
-export function readBase64File(absPath: string): Base64Read {
+export function readBase64File(absPath: string): Observation<string> {
   // 与 `readTextNode` 共用同一个骨架（`readNodeOutcome`），只换"怎么取字节"
-  const out = readNodeOutcome((fs) => fs.readFileSync(absPath).toString('base64'))
-  return out.status === 'ok' ? { status: 'ok', base64: out.value } : out
+  return readNodeOutcome((fs) => fs.readFileSync(absPath).toString('base64'))
 }
 
 /**
@@ -188,7 +141,7 @@ export function readBase64File(absPath: string): Base64Read {
  */
 const JSX_MISSING_PREFIX = '文件不存在: '
 
-async function readTextViaJsxOutcome(absPath: string): Promise<TextRead> {
+async function readTextViaJsxOutcome(absPath: string): Promise<Observation<string>> {
   const script =
     `(function(){try{var __f = new File(${JSON.stringify(toPosix(absPath))});` +
     `if(!__f.exists){return '${ERR_PREFIX}${JSX_MISSING_PREFIX}' + __f.fsName;}` +
@@ -196,7 +149,7 @@ async function readTextViaJsxOutcome(absPath: string): Promise<TextRead> {
     `catch(e){return '${ERR_PREFIX}' + ((e && e.message) ? e.message : String(e));}})()`
   try {
     const raw = await evalScriptRaw(script, 15000)
-    if (!raw.startsWith(ERR_PREFIX)) return { status: 'ok', text: raw }
+    if (!raw.startsWith(ERR_PREFIX)) return { status: 'ok', value: raw }
     const message = raw.slice(ERR_PREFIX.length)
     if (message.startsWith(JSX_MISSING_PREFIX)) return { status: 'notSeen' }
     return { status: 'error', failure: { kind: 'errno', code: 'JSX', raw: message } }
@@ -214,7 +167,10 @@ async function readTextViaJsxOutcome(absPath: string): Promise<TextRead> {
  * 它只能留在原语层：数据层根本看不到"有两个来源"这件事，挪过去就没法判。
  * 所以本条**必须**是具名的、可测的、注释写明是策略——不许再往里塞别的规则（ADR-26 ②）。
  */
-function combineReads(node: TextRead | null, viaJsx: TextRead): TextRead {
+function combineReads(
+  node: Observation<string> | null,
+  viaJsx: Observation<string>,
+): Observation<string> {
   if (viaJsx.status === 'ok') return viaJsx
   if (node?.status === 'error') return node
   return viaJsx
@@ -247,7 +203,7 @@ function combineReads(node: TextRead | null, viaJsx: TextRead): TextRead {
  * （合并规则见 `combineReads`，那是策略）。写路径必须用它：读失败被当成"文件不存在"时，
  * `update` 会拿 `fallback()` 派生的值覆盖用户文件，而且因为"原文为空"连 `.bak` 都不留（D-42 / T-105）。
  */
-export async function readTextAsync(absPath: string): Promise<TextRead> {
+export async function readTextAsync(absPath: string): Promise<Observation<string>> {
   const node = hasNode() ? readTextNode(absPath) : null
   if (node?.status === 'ok') return node
   if (!hasCep()) return node ?? { status: 'error', failure: { kind: 'noCep' } }
@@ -276,7 +232,7 @@ export async function readTextAsync(absPath: string): Promise<TextRead> {
  * 谁拿这里的原文自己 `JSON.parse` 当数据用，就是在写第二份 `decode` —— 那是可见的（review 一眼），
  * 不是"绕过入口"。**判据入口唯一、取原文开放**，这是设计不是漏洞。
  */
-export function readOwnFileText(target: string): TextRead {
+export function readOwnFileText(target: string): Observation<string> {
   // 放行**本应用拥有的两个根**，不放行任意外部路径（那些走 `readExternalText`）：
   //   ① `userDir()`      —— 扩展自己的数据（`sj_*.json`）
   //   ② `appDataRoot()`  —— `%APPDATA%`：色板在 `%APPDATA%/FengZiSeBan/` 下，
@@ -304,7 +260,7 @@ export function readOwnFileText(target: string): TextRead {
  * 所以守卫反过来 —— **拒绝 `userDir()` 下的路径**（那些是面板自己的文件，归 `readOwnFileText` /
  * `readRepoFile`）。两条守卫方向相反、互为补集，所以"读哪个目录"在结构上没有第三种选择。
  */
-export function readExternalText(target: string): Promise<TextRead> {
+export function readExternalText(target: string): Promise<Observation<string>> {
   if (target.startsWith(`${userDir()}/`)) {
     return Promise.resolve({
       status: 'error',

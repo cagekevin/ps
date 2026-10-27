@@ -71,8 +71,8 @@ export const useCommonUseStore = defineStore('common-use', () => {
     // 默认值取生产者给的 `fallback`（`legacySettingsRepo` 的 `{}` 经 `pickCommonUseOptions` 归一），
     // 消费侧不另写一份空对象（T-104 / ADR-24）
     options.value = read.status === 'ok' ? read.value : read.fallback
-    reasons.value.options = read.status === 'ok' ? '' : read.reason
-    if (read.status !== 'ok') {
+    reasons.value.options = read.status === 'error' ? read.reason : ''
+    if (read.status === 'error') {
       // 日志拿技术现场：只有读盘失败有 `failure`，内容失败传种类。message 只写事件
       log.error(
         'common-use',
@@ -95,7 +95,7 @@ export const useCommonUseStore = defineStore('common-use', () => {
       // 坏读的默认值取生产者给的 `fallback`（`commonUseRepo` 的 `createEmptyCommonUseFile()` 就是 `[]`，
       // `common-use.ts:31-36`）——`toTiles([])` 与旧写法 `toTiles(null)` 逐项同结果（T-104）
       applyFile(read.status === 'ok' ? read.value : read.fallback)
-      reasons.value.tiles = read.status === 'ok' ? '' : read.reason
+      reasons.value.tiles = read.status === 'error' ? read.reason : ''
     } catch (e) {
       error.value = describeCepError(e)
       applyFile(null)

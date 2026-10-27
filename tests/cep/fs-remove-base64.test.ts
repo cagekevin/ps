@@ -105,7 +105,7 @@ describe('removeFile · 不许谎报成功（判据 A）', () => {
 
 describe('readBase64Outcome · 三态', () => {
   it('读到了 → ok + base64', () => {
-    expect(readBase64Outcome('/tmp/a.png')).toEqual({ status: 'ok', base64: 'aGk=' })
+    expect(readBase64Outcome('/tmp/a.png')).toEqual({ status: 'ok', value: 'aGk=' })
   })
 
   it('ENOENT → notSeen', () => {

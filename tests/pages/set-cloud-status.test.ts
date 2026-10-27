@@ -1,5 +1,6 @@
 import { describe, expect, it } from 'vitest'
-import type { CloudStatus, LedgerBrokenFail, PendingChange } from '@/cloud/types'
+import type { CloudStatus, PendingChange } from '@/cloud/types'
+import type { Bad } from '@/utils/read-fail'
 import { describeCloudStatus, formatSyncedAt } from '@/pages/set/cloud-status'
 
 /**
@@ -9,9 +10,10 @@ import { describeCloudStatus, formatSyncedAt } from '@/pages/set/cloud-status'
  * 2. 「没配置地址」和「冲突」文案必须分开——用户要做的事完全不同。
  */
 /** 坏台账：读盘失败（带 errno 现场）—— 页面只关心"读不到"，不关心 errno */
-const BROKEN_LEDGER: { status: 'broken' } & LedgerBrokenFail = {
-  status: 'broken',
+const BROKEN_LEDGER: Bad = {
+  status: 'error',
   fail: 'readError',
+  reason: '台账读不到',
   failure: { kind: 'errno', code: 'EPERM', raw: new Error('EPERM: operation not permitted') },
 }
 
@@ -20,7 +22,7 @@ function status(over: Partial<CloudStatus> = {}): CloudStatus {
     configured: true,
     autoSyncEnabled: true,
     // T-114：判别位是 `ledgerState`（三态），不再是一个 boolean
-    ledgerState: { status: 'ok', ledger: { rev: 3, syncedAt: 0, localHash: 'h' } },
+    ledgerState: { status: 'ok', value: { rev: 3, syncedAt: 0, localHash: 'h' } },
     rev: 3,
     syncedAt: 0,
     localHash: 'h',
@@ -118,7 +120,7 @@ describe('describeCloudStatus', () => {
   it('没台账 / 自动同步关 各有一句解释（用户要做的事不同）', () => {
     expect(
       describeCloudStatus({
-        status: status({ ledgerState: { status: 'none' } }),
+        status: status({ ledgerState: { status: 'notSeen' } }),
         queuedUnits: 0,
       }).notice,
     ).toContain('本地还没有同步记录')

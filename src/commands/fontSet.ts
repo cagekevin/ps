@@ -51,7 +51,7 @@ async function requireFontApplied(action: () => Promise<void>, name: string): Pr
     // `jsxWrite` 抛的 `CepError` 带 `hostCode`；`hostCode === 1` 是"字体缺失"（`useFont` 的约定）
     if (e instanceof CepError && Number(e.hostCode) === 1) {
       missingFontPort().signal(name)
-      throw new CepError('FONT_MISSING', msg.command.text.fontSetMissing)
+      throw new CepError('FONT_MISSING', msg.command.text.fontSetMissing, e.hostCode, e)
     }
     throw e
   }
@@ -152,10 +152,11 @@ export const fontSetCommands: Command<unknown>[] = [
       const settingsRead = readFontSetSettings()
       // 坏设置文件 → 数据层不再给 fallback：照常跑等于拿默认 `ztDistributionFilter`
       // 去动用户的文档，用户以为用的是自己的设置（T-101-1）
-      if (settingsRead.status !== 'ok') {
+      if (settingsRead.status === 'error') {
         throw new CepError('IO', msg.command.fn.fontSetSettingsCorrupt(settingsRead.reason))
       }
-      await ctx.jsx.font.distributeByPitch(axis, text, settingsRead.value.ztDistributionFilter)
+      const settingsValue = settingsRead.value
+      await ctx.jsx.font.distributeByPitch(axis, text, settingsValue.ztDistributionFilter)
     },
   }),
 
@@ -259,7 +260,7 @@ export const fontSetCommands: Command<unknown>[] = [
       // 计数器坏了按 0 次继续（清单 §二：对用户有利、不写盘）。这个值决定**是否放行翻译**，
       // 是判断不是渲染，所以默认值也不在消费侧拼：取坏读臂的 `fallback`（仓库自己给的），坏因自己落日志
       const counterRead = translateCounterWriter.read()
-      if (counterRead.status !== 'ok') {
+      if (counterRead.status === 'error') {
         log.warn(
           'fontSet.translate',
           '翻译计数读取失败，本次按 0 次处理',
@@ -302,8 +303,8 @@ export const fontSetCommands: Command<unknown>[] = [
             { ...buildTranslateParams({ text: source, from: payload.from, to: payload.to }) },
             { timeout: 20000 },
           )
-        } catch {
-          throw new CepError('NETWORK', msg.command.text.fontSetNetworkFailed)
+        } catch (e) {
+          throw new CepError('NETWORK', msg.command.text.fontSetNetworkFailed, undefined, e)
         }
 
         const parsed = parseTranslateResponse(raw)

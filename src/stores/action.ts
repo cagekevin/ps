@@ -61,7 +61,7 @@ export const useActionStore = defineStore('action', () => {
 
     const reasons: string[] = []
     const indexFile = currentWarehouseFile(indexValue)
-    if (index.status !== 'ok') {
+    if (index.status === 'error') {
       reasons.push(msg.data.fn.actionIndexCorruptDefault(index.reason, indexFile))
       log.error('action', `索引损坏，已回退默认仓库 ${indexFile}`, index.reason)
     }
@@ -71,7 +71,7 @@ export const useActionStore = defineStore('action', () => {
     // 坏库的默认值取生产者给的 `fallback`（`actionLibraryRepo` 构造时传的 `() => []`，`actions.ts:75-79`），
     // 消费侧不另写一份空数组（T-104 / ADR-24）
     groups.value = library.status === 'ok' ? library.value : library.fallback
-    if (library.status !== 'ok') reasons.push(msg.data.fn.actionLibraryCorrupt(library.reason))
+    if (library.status === 'error') reasons.push(msg.data.fn.actionLibraryCorrupt(library.reason))
     degraded.value = reasons.join('；')
   }
 
@@ -135,7 +135,8 @@ export const useActionStore = defineStore('action', () => {
     // 凭证：`tests/stores/action-warehouse-switch.test.ts`（本条修复前它是红的）。
     const library = actionLibraryRepo.read()
     groups.value = library.status === 'ok' ? library.value : library.fallback
-    degraded.value = library.status === 'ok' ? '' : msg.data.fn.actionLibraryCorrupt(library.reason)
+    degraded.value =
+      library.status === 'error' ? msg.data.fn.actionLibraryCorrupt(library.reason) : ''
   }
 
   // ── 对外**只给用途**，不给内部字段（深模块：窄接口） ──────────────────

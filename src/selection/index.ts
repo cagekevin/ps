@@ -27,15 +27,16 @@ export const selectionRef = shallowRef<SelectionSnapshot>(EMPTY)
  * 上一次查询的结果，只有命令执行前的查询还在兜。页面对着它显示提示条是下一轮的事，
  * 这里先保证状态和日志存在——以前是 `stopWatch = () => {}`，失败了也长得像成功。
  */
-export type SelectionWatchStatus = 'idle' | 'watching' | 'degraded'
-
-export interface SelectionWatchState {
-  status: SelectionWatchStatus
-  /** degraded 的原因原文（不换词，用户报障时能对上日志） */
-  error?: string
-  /** 上次订阅失败的时刻（ms），便于 UI 说「多久前失败」 */
-  failedAt?: number
-}
+/**
+ * 选区订阅的状态机：没试过 / 订阅中 / 订阅失败。
+ *
+ * `error` 是**失败臂**（不是"可用但不完整"）：订阅没建成时按钮会停在旧快照，
+ * 只靠执行前查询兜底。所以它带 `detail`（技术原文，进日志）与 `failedAt`（多久前失败）。
+ */
+export type SelectionWatchState =
+  | { status: 'idle' }
+  | { status: 'watching' }
+  | { status: 'error'; detail: string; failedAt: number }
 
 export const watchStateRef = shallowRef<SelectionWatchState>({ status: 'idle' })
 
@@ -82,7 +83,7 @@ const RETRY_MS = 10_000
  * 面板不空转定时器，用户一动手就有第二次机会，且重试频率天然跟着真实使用走。
  */
 function retryWatchIfDegraded(): void {
-  if (stopWatch || watchStateRef.value.status !== 'degraded') return
+  if (stopWatch || watchStateRef.value.status !== 'error') return
   if (Date.now() - lastAttemptAt < RETRY_MS) return
   void startSelectionWatch()
 }
@@ -124,8 +125,8 @@ async function doStartWatch(): Promise<() => void> {
     return stopWatch
   } catch (e) {
     watchStateRef.value = {
-      status: 'degraded',
-      error: e instanceof Error ? e.message : String(e),
+      status: 'error',
+      detail: e instanceof Error ? e.message : String(e),
       failedAt: Date.now(),
     }
     log.error(

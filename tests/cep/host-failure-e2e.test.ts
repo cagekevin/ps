@@ -189,8 +189,10 @@ describe('假 PS 全链路：三类宿主失败', () => {
     selection.__resetWatchForTest()
     await selection.startSelectionWatch()
 
-    expect(selection.watchStateRef.value.status).toBe('degraded')
-    expect(selection.watchStateRef.value.error).toContain('CEP 回调监听不可用')
+    expect(selection.watchStateRef.value.status).toBe('error')
+    expect(
+      selection.watchStateRef.value.status === 'error' && selection.watchStateRef.value.detail,
+    ).toContain('CEP 回调监听不可用')
 
     vi.advanceTimersByTime(500)
     const onDisk = disk.files.get(logPath()) ?? ''

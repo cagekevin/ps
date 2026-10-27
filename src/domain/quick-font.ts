@@ -3,6 +3,7 @@
 // 替代了什么：原版 `lv.findFontAllInfo` / `lv.sortWeight`（app.v4.js:40193-40246）
 // 谁在用：commands/fontSet.ts 的 fontSet.quickFont
 // 禁止：这里不读文件、不调 jsx（数据由调用方传入）
+// 关于 throw：本文件的 `CepError` 是**业务校验**（上限 / 重名），不是解析失败。
 
 import { CepError } from '@/utils/errors'
 import { msg } from './messages'

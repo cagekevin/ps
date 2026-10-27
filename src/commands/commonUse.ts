@@ -620,7 +620,7 @@ export async function dispatchPlaceImage(
   // 设置文件坏了 → 开关全缺，`placeImageAction` 会一路静默走 'none'（与 T-97-8 同一个症状）。
   // 事件回调没有 `useCommand` 接住，弹不了 toast（命令层不许 import 视图层，ADR-16），
   // 所以按本文件既有口径落 error 日志（`设置页 → 打开日志` 能看到），并且**不按默认值猜**。
-  if (read.status !== 'ok') {
+  if (read.status === 'error') {
     // message 只写事件；技术原因走 detail（读盘失败有现场，内容失败传种类）
     log.error(
       'commonUse.placeImage',
@@ -629,13 +629,14 @@ export async function dispatchPlaceImage(
     )
     return 'none'
   }
-  const action = placeImageAction(name, read.value)
+  const options = read.value
+  const action = placeImageAction(name, options)
   if (action === 'relink') {
     await deps.relinkToFile(placeImagePath(payload))
     return 'relink'
   }
   if (action === 'embed') {
-    await deps.embedImage(buildDragInPayload(read.value))
+    await deps.embedImage(buildDragInPayload(options))
     return 'embed'
   }
   return 'none'

@@ -2,7 +2,7 @@ import { hasCep } from '@/cep/transport'
 import { userDir } from '@/cep/paths'
 import { DATA_FILES } from '@/cep/env'
 import { writeDiskSync, type DiskBefore } from '@/cep/disk-write'
-import { describeDecodeFail, foldAbsent, readRepoFile } from './repo-read'
+import { describeDecodeFail, readRepoFile, foldAbsent } from './repo-read'
 import { CepError } from '@/utils/errors'
 import { msg } from '@/domain/messages'
 import { isRecord } from '@/utils/guards'
@@ -59,7 +59,7 @@ let readFailureReported = false
  * 读**失败**时保持 `absent`，但那条路本来就被 `refuseIfReadFailed` 关着（会话级判据），
  * 两道关各管一件事，不重复。
  */
-let rawText: DiskBefore = { status: 'absent' }
+let rawText: DiskBefore = { status: 'notSeen' }
 let timer: ReturnType<typeof setTimeout> | null = null
 
 const errorListeners = new Set<(message: string) => void>()
@@ -109,9 +109,9 @@ function loadAll(): Record<string, unknown> {
   const read = foldAbsent(outcome, () => ({}))
   if (read.status === 'ok') {
     cache = read.value
-    // CAS 基准：读成功才设。`notSeen`（折叠成 ok + 空对象）在这里是 `absent` 臂，
+    // CAS 基准：读成功才设。`notSeen`（折成 ok + 空对象）在这里是 `absent` 臂，
     // 写的语义就成了「这个路径上应当还没有文件」——与首次使用一致
-    rawText = outcome.status === 'ok' ? { status: 'ok', text: outcome.text } : { status: 'absent' }
+    rawText = outcome.status === 'ok' ? { status: 'ok', text: outcome.text } : { status: 'notSeen' }
   } else {
     // 读不到 / 坏文件 ⇒ 给 UI 默认值，但**本次会话禁止写回**：
     // 内存里只是空壳，写回去会把磁盘上其他键抹掉（`refuseIfReadFailed` 负责喊出来）。
@@ -255,7 +255,7 @@ export function __resetSettingsForTest() {
   readFailure = ''
   readFailureReported = false
   // CAS 基准也是会话级状态：不清会让下一个用例拿上一个用例的原文去比
-  rawText = { status: 'absent' }
+  rawText = { status: 'notSeen' }
 }
 
 export function getPref<T>(key: PrefKey, fallback: T): T {

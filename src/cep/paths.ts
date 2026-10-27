@@ -63,7 +63,7 @@ function hostAppDataRoot(): string | null {
   } catch (e) {
     // ADR-0014 扩展一 出口③：转成 CepError 带原因重抛（不静默、不降级）
     const reason = e instanceof Error ? e.message : String(e)
-    throw new CepError('IO', msg.ps.fn.userDataUnavailable(reason))
+    throw new CepError('IO', msg.ps.fn.userDataUnavailable(reason), undefined, e)
   }
 
   // `raw` 必须是字符串：桥返 `undefined` 时 `decodeURI(undefined)` 会给出字符串
@@ -78,7 +78,7 @@ function hostAppDataRoot(): string | null {
   } catch (e) {
     // `decodeURI` 抛 `URIError` 不许穿透成非 `CepError`
     const reason = e instanceof Error ? e.message : String(e)
-    throw new CepError('IO', msg.ps.fn.userDataUnavailable(reason))
+    throw new CepError('IO', msg.ps.fn.userDataUnavailable(reason), undefined, e)
   }
   if (!root) throw new CepError('IO', msg.ps.fn.userDataUnavailable(raw))
   return root
@@ -129,11 +129,7 @@ export function extensionDir(): string {
   try {
     uri = bridge.getSystemPath('extension')
   } catch (e) {
-    throw new CepError(
-      'INIT',
-      msg.ps.text.extDirUnavailable,
-      e instanceof Error ? e.message : String(e),
-    )
+    throw new CepError('INIT', msg.ps.text.extDirUnavailable, undefined, e)
   }
   if (typeof uri !== 'string' || !uri) throw new CepError('INIT', msg.ps.text.extDirUnavailable)
 
@@ -141,11 +137,7 @@ export function extensionDir(): string {
   try {
     dir = toLocalPath(uri)
   } catch (e) {
-    throw new CepError(
-      'INIT',
-      msg.ps.text.extDirUnavailable,
-      e instanceof Error ? e.message : String(e),
-    )
+    throw new CepError('INIT', msg.ps.text.extDirUnavailable, undefined, e)
   }
   if (!dir) throw new CepError('INIT', msg.ps.text.extDirUnavailable)
   return dir

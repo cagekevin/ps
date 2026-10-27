@@ -85,12 +85,6 @@ export default tseslint.config(
           message:
             "读 mock 必须带类型参数：vi.fn<Repo<T>['read']>() / vi.fn<typeof 读函数>()。裸 vi.fn() 的 mockResolvedValue 收 any，旧形状编译不过不了（T-101-4）",
         },
-        {
-          selector:
-            "CallExpression[callee.property.name=/^mockResolvedValue(Once)?$/] > ObjectExpression:has(> Property[key.name='value']):not(:has(> Property[key.name='ok']))",
-          message:
-            'RepoRead 的成功臂必须带 `ok: true`：`{ value }` 是旧形状，运行时 read.ok 是 undefined（T-101-2 起是判别联合）',
-        },
         // 不扫 `degraded` 字段：`StyleLibrarySnapshot`（`style.test.ts` 的 `repo.read`）是另一份
         // 合法形状，它真的有 `degraded`。混着扫只会逼人加 disable。
       ],

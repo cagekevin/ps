@@ -195,7 +195,7 @@ export const renameCommands: Command<unknown>[] = [
     kind: 'instant',
     async invoke() {
       const read = renameWriter.read()
-      if (read.status !== 'ok') throw new CepError('IO', read.reason)
+      if (read.status === 'error') throw new CepError('IO', read.reason)
 
       // 原版 saveFile("导出", ["cmm"], "重命名.cmm", "设计助理导出文件")（:57020）
       const path = saveFile('导出', ['cmm'], '重命名.cmm')
@@ -227,7 +227,7 @@ export const renameCommands: Command<unknown>[] = [
       // 与 `data/action-archive.ts` 的差别只是**做法不一致**（那处把导入收进 `data/`，这里没有），不是违规。
       // 不必统一：用户选的一次性导入文件不是面板数据、没有唯一真相，收进 `data/` 是为对称而对称（T-119）。
       if (read.status !== 'ok') throw new CepError('IO', msg.command.text.fontImportReadFailed)
-      const text = read.text
+      const text = read.value
 
       // JSON 优先、旧格式 `<z>`/`<>` 兜底，见 domain/rename.ts 的 parsePreset（原版 :57036-57045）
       // 预设文本整份替换：用户显式触发重命名，整份覆盖即意图

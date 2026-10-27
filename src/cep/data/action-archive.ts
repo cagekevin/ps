@@ -95,7 +95,7 @@ function requireIndex(
   read: RepoRead<ActionWarehouseIndex>,
   action: '导入' | '导出',
 ): ActionWarehouseIndex {
-  if (read.status !== 'ok') {
+  if (read.status === 'error') {
     throw new CepError('IO', msg.data.fn.actionIndexCorruptAbort(read.reason, action))
   }
   return read.value
@@ -119,7 +119,7 @@ export function exportActionArchive(current: boolean, targetPath: string): void 
     // T-109：导出前读不到就不许导出。两种不 ok 这里同果（都抛同一句），文案不变
     if (read.status !== 'ok')
       throw new CepError('IO', msg.data.fn.readWarehouseFailed(item.fileName))
-    return { name: item.fileName, data: read.base64 }
+    return { name: item.fileName, data: read.value }
   })
 
   const store: ActionWarehouseIndex = current
@@ -146,7 +146,7 @@ export function importActionArchive(append: boolean, sourcePath: string): Promis
     const read = await readExternalText(sourcePath)
     // T-107：导入前读不到就不许继续。两种不 ok 这里同果（都抛同一句），文案不变
     if (read.status !== 'ok') throw new CepError('IO', msg.data.text.readImportFileFailed)
-    importArchiveFromText(append, read.text)
+    importArchiveFromText(append, read.value)
   })
 }
 

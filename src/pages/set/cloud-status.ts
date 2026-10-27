@@ -97,14 +97,14 @@ export function describeCloudStatus(input: {
   let notice = ''
   if (!status.configured) {
     notice = '没设置同步地址：云同步不会运行。'
-  } else if (status.ledgerState.status === 'broken') {
+  } else if (status.ledgerState.status === 'error') {
     // T-114：坏台账**不许**说成"还没有同步记录"——用户会以为自己是新设备，
     // 然后点「上传」把云端覆盖掉。这里必须说清"读不到"和"已停止上传"。
     //「上传」在界面上**没有按钮** —— 用户会去找一个不存在的东西。说的是自动上传这件事，就按自动上传写。
     // 技术原文（EPERM / errno）只进日志，不进这里：用户要的是"该做什么"，不是 errno
     notice =
       '本地同步记录读不到：自动上传已暂停，避免把云端覆盖掉。修好这个文件后重开面板，或点「从云端拉取」重新建立记录。'
-  } else if (status.ledgerState.status === 'none') {
+  } else if (status.ledgerState.status === 'notSeen') {
     notice = '本地还没有同步记录。先点「从云端拉取」建立记录；新设备不会自动上传，避免覆盖云端。'
   } else if (!status.autoSyncEnabled) {
     notice = '自动同步已关闭：改动现在只存在本地，打开上面的开关才会推送。'
@@ -112,7 +112,7 @@ export function describeCloudStatus(input: {
 
   return {
     // T-114：坏台账不能显示"尚未同步"——那也是"从没同步过"的说法，会误导用户
-    syncedText: status.ledgerState.status === 'broken' ? '读不到' : formatSyncedAt(status.syncedAt),
+    syncedText: status.ledgerState.status === 'error' ? '读不到' : formatSyncedAt(status.syncedAt),
     // 两个数各自写明出处：前者是"本会话还没到点"，后者是"历史没推上去"
     queuedText:
       queuedUnits === 0

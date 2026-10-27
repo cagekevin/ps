@@ -24,8 +24,8 @@ vi.mock('@/cep/node', () => ({
 }))
 
 vi.mock('@/cep/fs-read', () => ({
-  readTextOutcome: async () => ({ status: 'ok' as const, text: disk.text }),
-  readTextSync: () => ({ status: 'ok' as const, text: disk.text }),
+  readTextOutcome: async () => ({ status: 'ok' as const, value: disk.text }),
+  readTextSync: () => ({ status: 'ok' as const, value: disk.text }),
   writeTextFile: () => undefined,
   writeTextFileAtomic: () => ({ status: 'ok' as const }),
 }))

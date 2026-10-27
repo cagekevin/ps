@@ -180,7 +180,7 @@ export function readRecentLimit(): RepoRead<number> {
   }
   if (read.status === 'notSeen') return { status: 'ok', value: DEFAULT_RECENT_LIMIT }
 
-  const value = parseInt(read.text, 10)
+  const value = parseInt(read.value, 10)
   return {
     status: 'ok',
     value:
@@ -214,7 +214,7 @@ export function appendCustomItem(item: unknown): { added: boolean } {
   const path = swatchFilePath()
   const read = readSwatchItems(path)
   // T-112：读不到就不许写回 —— 否则一次追加会把整份读不到的色板抹平
-  if (read.status !== 'ok') throw new CepError('IO', read.reason)
+  if (read.status === 'error') throw new CepError('IO', read.reason)
   const items = read.value
   if (items.some((existing) => itemHex(existing) === hex)) return { added: false }
 
@@ -240,7 +240,7 @@ export function setRecentLimit(limit: number): void {
 
   // 「写数量 → 读色板 → 裁剪 → 写回」是一个同步段
   const read = readSwatchItems(recentFilePath())
-  if (read.status !== 'ok') throw new CepError('IO', read.reason)
+  if (read.status === 'error') throw new CepError('IO', read.reason)
   const items = read.value
   if (items.length <= limit) {
     // 数量文件已经变了，投影要跟着变；色板本身没动，不重写

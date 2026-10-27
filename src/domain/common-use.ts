@@ -393,6 +393,7 @@ export const NARROW_ALL_PRESETS = [99, 98, 97, 70, 60, 50, 33, 25, 20, 10] as co
 export function buildOptionPatch(path: string, value: unknown): Record<string, unknown> {
   const segments = path.split('.').map((s) => s.trim())
   if (!segments.length || segments.some((s) => !s)) {
+    // 开发者断言：调用方给了非法路径（读者是写代码的人，不上 UI）
     throw new Error(`设置项路径非法：${path}`)
   }
   // 逐层包成 `{ segment: inner }`，最内层是调用方给的值：中间态是 unknown，

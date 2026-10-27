@@ -3,6 +3,8 @@
 // 替代了什么：原版 Rename 组件里与数据有关的方法（app.v4.js:56800-56895、56933-57280）
 // 谁在用：`commands/rename.ts`、`stores/rename.ts`、`tests/domain/rename.test.ts`
 // 禁止：不许在这里实现表达式求值，求值交给 PS 的 `cmm_batchName`（见下方 UNVERIFIED）
+// 关于 throw：本文件的 `CepError('PARSE')` 是**业务校验**（用户输入不合法：组名空、项不存在），
+//   不是解析失败 —— 纯解析契约（`Decoded | DecodeFail`）在 `parsePreset` 里，那里 0 处 throw。
 
 import { msg } from './messages'
 import { CepError } from '@/utils/errors'

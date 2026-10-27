@@ -84,7 +84,7 @@ function classifyOriginal(relative: string, path: string, base64: string): 'keep
       // **不在这里再包一层** —— 包了就是"备份失败：x.corrupt（写入失败：x.corrupt（EACCES））"。
       // `.corrupt-<ts>` 是新文件：它还在就说明同一毫秒内撞了，停下比覆盖安全
       writeBase64File(quarantine, base64, {
-        cas: { mode: 'compare', expected: { status: 'absent' } },
+        cas: { mode: 'compare', expected: { status: 'notSeen' } },
         backup: { mode: 'none', why: '坏原文的隔离副本就是退路，不再为它留退路' },
       })
       log.warn(
@@ -112,7 +112,7 @@ function writeKuFile(relative: string, base64: string): boolean {
   // **只有判据留在这里**（"这份原文算不算可用库文件"是领域知识）；
   // 写 `.bak` 的机制归落盘入口（`backup: 'keep'`），本文件不再自己写一份。
   const classified =
-    before.status === 'absent' ? 'none' : classifyOriginal(relative, path, before.text)
+    before.status === 'notSeen' ? 'none' : classifyOriginal(relative, path, before.text)
   // 写不进去就抛（底层文案已含完整路径与原因）。不二次包装。
   // CAS 比的是**本次读到的原文**：读与写之间别的面板可能已经改过这一份库文件。
   writeBase64File(path, base64, {
@@ -266,7 +266,7 @@ export function exportKuArchive(
       // 所以这里**有意**把 `notSeen` 与 `error` 合成都写成 `false`（导出格式要求的形状）
       const read = readBase64File(`${userDir()}/${fileName}`)
       if (read.status === 'error') log.warn('style', `导出：${fileName} 读不到`, read.failure)
-      arrFileData.push({ name: fileName, data: read.status === 'ok' ? read.base64 : false })
+      arrFileData.push({ name: fileName, data: read.status === 'ok' ? read.value : false })
     }
 
     // UNVERIFIED: 契约 §3.4 只写“4 个库文件 + 旁路图”，实测样本 A 没有旁路图；
@@ -275,7 +275,7 @@ export function exportKuArchive(
       // 同上：契约 §2.5 要求 `false` 表示"读不到"，这里有意把两态合成 `false`
       const sidecar = readBase64File(`${userDir()}/${name}`)
       if (sidecar.status === 'error') log.warn('style', `导出：${name} 读不到`, sidecar.failure)
-      arrFileData.push({ name, data: sidecar.status === 'ok' ? sidecar.base64 : false })
+      arrFileData.push({ name, data: sidecar.status === 'ok' ? sidecar.value : false })
     }
 
     done += 1
@@ -307,8 +307,8 @@ function moveToRecycle(names: readonly string[], keep: ReadonlySet<string>, dir:
     // 两段各自窄 catch，各说各的话 —— 合并成一个大 catch 会把"复制失败"和"删不掉"说成同一句
     try {
       // 回收目录名带时间戳，副本必定是新文件
-      writeBase64File(`${dir}/${name}`, read.base64, {
-        cas: { mode: 'compare', expected: { status: 'absent' } },
+      writeBase64File(`${dir}/${name}`, read.value, {
+        cas: { mode: 'compare', expected: { status: 'notSeen' } },
         backup: { mode: 'none', why: '回收副本是新文件，无原文可备' },
       })
     } catch (e) {
@@ -362,7 +362,7 @@ export function importKuArchive(
     const read = await readExternalText(sourcePath)
     // T-107：导入前读不到就不许继续。两种不 ok 这里同果（都抛同一句），文案不变
     if (read.status !== 'ok') throw new CepError('IO', msg.data.text.readImportFileFailed)
-    return importKuFromText(append, read.text, onProgress)
+    return importKuFromText(append, read.value, onProgress)
   })
 }
 

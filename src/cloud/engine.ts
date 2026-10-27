@@ -19,9 +19,9 @@ import type {
   CloudPendingPort,
   CloudStatus,
   DownloadOptions,
-  LedgerBrokenFail,
   PushUnitsOptions,
   UploadOptions,
+  LedgerRead,
 } from './types'
 import { describeReadFailure } from '@/cep/fs-read'
 
@@ -72,6 +72,7 @@ async function collectUnits(entries: SyncUnitAdapter[]): Promise<Record<string, 
       throw new CloudError(
         'CLOUD_COLLECT_FAILED',
         entry.id + ': ' + (error instanceof Error ? error.message : String(error)),
+        error,
       )
     }
   }
@@ -132,7 +133,7 @@ function recordNetworkPending(port: CloudPendingPort, units: string[], error: un
  *
  * 不许在这里拼一句中文 —— 那是 UI 的事；也不许把码复制进 `reason`。
  */
-function ledgerBroken(b: LedgerBrokenFail): CloudFailure {
+function ledgerBroken(b: Extract<LedgerRead, { status: 'error' }>): CloudFailure {
   return b.fail === 'readError'
     ? { fail: 'CLOUD_LEDGER_BROKEN', reason: describeReadFailure(b.failure) }
     : { fail: 'CLOUD_LEDGER_BROKEN' }
@@ -151,7 +152,7 @@ export function createCloudEngine(deps: CloudDeps): CloudEngine {
     const pendingItems = deps.pending.list()
     // T-114：判别位是 `ledgerState`（三态）。`broken` 不许被压成"没有台账"——
     // 那会让设置页显示"还没有同步记录"，用户据此点「上传」就把云端覆盖了
-    const ledger = read.status === 'ok' ? read.ledger : null
+    const ledger = read.status === 'ok' ? read.value : null
     return {
       configured: deps.config.isConfigured(),
       autoSyncEnabled: deps.config.isAutoSyncEnabled(),
@@ -184,8 +185,8 @@ export function createCloudEngine(deps: CloudDeps): CloudEngine {
     // T-114：坏台账**不许**当成"没有台账"。后者会让 `decideUpload` 判成 `cloud-newer`，
     // 用户确认后就把云端那一份覆盖掉；而"读不到"根本不是冲突，是**没有依据判断**。
     const read = await deps.ledger.read()
-    if (read.status === 'broken') return { status: 'error', failure: ledgerBroken(read) }
-    const ledger = read.status === 'ok' ? read.ledger : null
+    if (read.status === 'error') return { status: 'error', failure: ledgerBroken(read) }
+    const ledger = read.status === 'ok' ? read.value : null
 
     let pulled: CloudPullOutcome
     try {
@@ -194,10 +195,10 @@ export function createCloudEngine(deps: CloudDeps): CloudEngine {
       return { status: 'error', failure: errorResult(error) }
     }
     //读不懂 ≠ 云端为空。后者会以 rev=1 覆盖云端
-    if (pulled.status === 'unreadable') {
+    if (pulled.status === 'error') {
       return { status: 'error', failure: cloudUnreadable(pulled.reason) }
     }
-    const cloud = pulled.status === 'ok' ? pulled.snapshot : null
+    const cloud = pulled.status === 'ok' ? pulled.value : null
 
     const decision = decideUpload({
       cloudReadable: true,
@@ -261,10 +262,10 @@ export function createCloudEngine(deps: CloudDeps): CloudEngine {
       return { status: 'error', failure: errorResult(error) }
     }
     //读不懂不许说成"云端没有数据"（用户会以为云端真的是空的）
-    if (pulled.status === 'unreadable') {
+    if (pulled.status === 'error') {
       return { status: 'error', failure: cloudUnreadable(pulled.reason) }
     }
-    const cloud = pulled.status === 'ok' ? pulled.snapshot : null
+    const cloud = pulled.status === 'ok' ? pulled.value : null
 
     if (!cloud) {
       return {
@@ -405,19 +406,19 @@ export function createCloudEngine(deps: CloudDeps): CloudEngine {
       return { status: 'error', failure: errorResult(error) }
     }
     //读不懂就**不推**（否则读不懂的 unit 会被当成"云端没有"，直接覆盖推上去）
-    if (pulled.status === 'unreadable') {
+    if (pulled.status === 'error') {
       deps.pending.record(ready, 'conflict')
       return { status: 'error', failure: cloudUnreadable(pulled.reason) }
     }
-    const cloud: CloudSnapshotView | null = pulled.status === 'ok' ? pulled.snapshot : null
+    const cloud: CloudSnapshotView | null = pulled.status === 'ok' ? pulled.value : null
 
     // T-114：坏台账 → **不许推**。`ledger = null` 时 per-unit 基线全缺，T-76① 的
     // "没有基线不判冲突"会让**每一个改过的 unit 直接推**，别人在另一台机器上的改动被覆盖
     const read = await deps.ledger.read()
-    if (read.status === 'broken') {
+    if (read.status === 'error') {
       return { status: 'error', failure: ledgerBroken(read) }
     }
-    const ledger = read.status === 'ok' ? read.ledger : null
+    const ledger = read.status === 'ok' ? read.value : null
     const cloudUnits = cloud?.units ?? {}
     const changed = ready.filter((id) => cloudUnits[id]?.hash !== localUnits[id].hash)
 

@@ -72,20 +72,21 @@ export const useFontSetStore = defineStore('fontSet', () => {
 
     // 读坏的四份汇成一条 `degraded`（清单 §6.7 的 S2 档）：渲染成默认值与"用户自己配的"
     // 在界面上不可分辨，所以必须让用户看见。**只有 `status:'error'` 才有 reason**——
-    // 首次使用（`notSeen`）走 `status:'ok'` 且无 reason，天然不进这里（T-111 判据 C，用例钉住）
+    // 首次使用（`notSeen`）是独立一臂，天然不进这里（T-111 判据 C，用例钉住）
     const reasons: string[] = []
-    if (settingsRead.status !== 'ok')
+    if (settingsRead.status === 'error')
       reasons.push(msg.data.fn.panelSettingsReadFailed(settingsRead.reason))
 
     quickFonts.value = quickRead.status === 'ok' ? quickRead.value : quickRead.fallback
-    if (quickRead.status !== 'ok') reasons.push(msg.data.fn.quickFontReadFailed(quickRead.reason))
+    if (quickRead.status === 'error')
+      reasons.push(msg.data.fn.quickFontReadFailed(quickRead.reason))
 
     hierarchy.value = hierarchyRead.status === 'ok' ? hierarchyRead.value : hierarchyRead.fallback
-    if (hierarchyRead.status !== 'ok')
+    if (hierarchyRead.status === 'error')
       reasons.push(msg.data.fn.hierarchyReadFailed(hierarchyRead.reason))
 
     counter.value = counterRead.status === 'ok' ? counterRead.value : counterRead.fallback
-    if (counterRead.status !== 'ok')
+    if (counterRead.status === 'error')
       reasons.push(msg.data.fn.translateCounterReadFailed(counterRead.reason))
 
     // 最近字体 fallback 是 `[]`（S3 档）："没有最近记录"本来就是合法状态，日志够了

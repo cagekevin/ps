@@ -1,3 +1,9 @@
+// 是什么：`CepError` 的**用户文案**渲染处（④层，给 toast / 错误条）
+// 唯一入口：`CepError` → 一句中文，只在这里；页面与 store 不再各写各的
+// 谁在用：`useCommand` · 6 个 store · `ErrorBoundary.vue` · `error-handler.ts` · `usePagedList`
+// 禁止：这里不读 `cause`（技术原文归 `utils/logger` 的 `renderError`）；也不处理 `DecodeFail` / `CloudFailure`
+//   —— 那两个各有自己的渲染处（`repo-read.describeDecodeFail` / `cloud/types.describeCloudFailure`）
+
 import { CepError } from './errors'
 import { codeText } from './code-registry'
 

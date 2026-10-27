@@ -131,7 +131,7 @@ describe('writeBase64File · 库文件被别的面板改过（T1）', () => {
   it('expected: absent = "这个路径上应当没有文件"：文件在 → CONFLICT', () => {
     const code = codeOf(() =>
       writeBase64File(target, b64('新内容'), {
-        cas: { mode: 'compare', expected: { status: 'absent' } },
+        cas: { mode: 'compare', expected: { status: 'notSeen' } },
         backup: { mode: 'none', why: '用例：只看 CAS' },
       }),
     )
@@ -221,7 +221,7 @@ describe('writeBase64File · 库文件被别的面板改过（T1）', () => {
     expect(readBefore(target, 'bytes')).toEqual({ status: 'ok', text: b64('旧库文件') })
 
     store.delete(target)
-    expect(readBefore(target, 'bytes')).toEqual({ status: 'absent' })
+    expect(readBefore(target, 'bytes')).toEqual({ status: 'notSeen' })
 
     store.set(target, Buffer.from('旧库文件'))
     failRead = true

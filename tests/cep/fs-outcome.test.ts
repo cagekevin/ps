@@ -88,7 +88,7 @@ beforeEach(() => {
 describe('readTextSync · 三态（不是 string | null）', () => {
   it('读到内容 → ok', () => {
     fake.files.set('/u/a.json', '{"a":1}')
-    expect(readTextSync('/u/a.json')).toEqual({ status: 'ok', text: '{"a":1}' })
+    expect(readTextSync('/u/a.json')).toEqual({ status: 'ok', value: '{"a":1}' })
   })
 
   it('ENOENT → notSeen（"查不到"，可当首次使用）', () => {

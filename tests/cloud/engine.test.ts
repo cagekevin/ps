@@ -62,7 +62,7 @@ function cloudView(units: Record<string, SyncUnit>, rev = 3): CloudPullOutcome {
     units,
     raw: buildSnapshot(units, rev, 100),
   }
-  return { status: 'ok', snapshot }
+  return { status: 'ok', value: snapshot }
 }
 
 /** 契约测试，非实机：任何真实网络请求都让用例失败 */
@@ -101,7 +101,7 @@ describe('cloud engine', () => {
     writeA = vi.fn<SyncUnitAdapter['write']>().mockResolvedValue({ status: 'ok' })
     readB = vi.fn<SyncUnitAdapter['read']>().mockResolvedValue(payloadB)
     writeB = vi.fn<SyncUnitAdapter['write']>().mockResolvedValue({ status: 'ok' })
-    pull = vi.fn<CloudDeps['transport']['pull']>().mockResolvedValue({ status: 'empty' })
+    pull = vi.fn<CloudDeps['transport']['pull']>().mockResolvedValue({ status: 'notSeen' })
     push = vi.fn<CloudDeps['transport']['push']>().mockResolvedValue(undefined)
     ledgerRead = vi.fn<() => CloudLedgerRecord | null | typeof BROKEN>().mockReturnValue(null)
     ledgerWrite = vi.fn<CloudDeps['ledger']['write']>()
@@ -119,8 +119,9 @@ describe('cloud engine', () => {
           const raw = ledgerRead()
           if (typeof raw === 'symbol') {
             return {
-              status: 'broken' as const,
+              status: 'error' as const,
               fail: 'readError' as const,
+              reason: '台账读不到',
               failure: {
                 kind: 'errno' as const,
                 code: 'EPERM',
@@ -128,7 +129,9 @@ describe('cloud engine', () => {
               },
             }
           }
-          return raw === null ? { status: 'none' as const } : { status: 'ok' as const, ledger: raw }
+          return raw === null
+            ? { status: 'notSeen' as const }
+            : { status: 'ok' as const, value: raw }
         },
         write: ledgerWrite,
       },
@@ -392,7 +395,7 @@ describe('cloud engine', () => {
     const snapshot = push.mock.calls[0][0]
     pull.mockResolvedValue({
       status: 'ok',
-      snapshot: {
+      value: {
         rev: snapshot.rev,
         updatedAt: snapshot.updatedAt,
         units: snapshot.units,
@@ -537,7 +540,7 @@ describe('cloud engine', () => {
     const snapshot = push.mock.calls[0][0]
     pull.mockResolvedValue({
       status: 'ok',
-      snapshot: {
+      value: {
         rev: snapshot.rev,
         updatedAt: snapshot.updatedAt,
         units: snapshot.units,
@@ -566,10 +569,10 @@ describe('cloud engine', () => {
 
       const status = await engine.getStatus()
 
-      expect(status.ledgerState.status).toBe('broken')
+      expect(status.ledgerState.status).toBe('error')
       // 断结构不断文案：是读盘失败、码是 EPERM。文案归 `msg`，这里钉它等于钉死措辞。
       expect(
-        status.ledgerState.status === 'broken' && status.ledgerState.fail === 'readError'
+        status.ledgerState.status === 'error' && status.ledgerState.fail === 'readError'
           ? status.ledgerState.failure
           : null,
       ).toMatchObject({ kind: 'errno', code: 'EPERM' })
@@ -578,7 +581,7 @@ describe('cloud engine', () => {
     it('判据 A：文件不在（ENOENT）→ 才是 none', async () => {
       ledgerRead.mockReturnValue(null)
 
-      expect((await engine.getStatus()).ledgerState.status).toBe('none')
+      expect((await engine.getStatus()).ledgerState.status).toBe('notSeen')
     })
 
     it('判据 B：坏台账 → upload 直接拒绝，一次 push 都不发（不当成首次同步全量重推）', async () => {

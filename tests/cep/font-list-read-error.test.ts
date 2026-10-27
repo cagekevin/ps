@@ -35,13 +35,16 @@ describe('getFontList 遇到读不到', () => {
   it('SysFont2.json 读不到 → 抛 IO 且带上原因（页面据此显示"读不到"）', async () => {
     sys.readSysFontFile.mockReturnValue({
       status: 'error',
-      why: 'readError',
+      fail: 'readError',
       reason: 'EACCES: 拒绝访问',
       failure: { kind: 'errno', code: 'EACCES', raw: new Error('EACCES: 拒绝访问') },
     })
 
-    await expect(getFontList({ refresh: true })).rejects.toMatchObject({ code: 'IO' })
-    await expect(getFontList({ refresh: true })).rejects.toThrow('读不到系统字体：EACCES')
+    // 断结构不断文案：码 + 现场（`cause` 是 `ReadFailure`），文案归 `msg`
+    await expect(getFontList({ refresh: true })).rejects.toMatchObject({
+      code: 'IO',
+      cause: { kind: 'errno', code: 'EACCES' },
+    })
   })
 
   it('文件不在 / 内容为空 → 抛 PARSE，同样不是空列表', async () => {
@@ -52,7 +55,7 @@ describe('getFontList 遇到读不到', () => {
 
   it('缓存命中时不再问 PS（读到且非空才算命中）', async () => {
     const cached = [{ family: 'MiSans', weights: [], names: [], postScriptNames: [], star: 0 }]
-    sys.readSysFontFile.mockReturnValue({ status: 'ok', list: cached })
+    sys.readSysFontFile.mockReturnValue({ status: 'ok', value: cached })
 
     await expect(getFontList()).resolves.toEqual(cached)
   })

@@ -84,13 +84,13 @@ describe('writeDiskSync · 备份与 CAS 的前置形状', () => {
   })
 
   /**
-   * `expected: { status: 'absent' }` = 「这个路径上应当还没有文件」。
+   * `expected: { status: 'notSeen' }` = 「这个路径上应当还没有文件」。
    * 文件已经被别人写出来 ⇒ 必须 `CONFLICT`，不许拿种子盖掉用户数据。
    */
   it('声明「应当没有文件」但文件已存在 → CONFLICT，不写', () => {
     expect(() =>
       writeDiskSync(TARGET, '种子', {
-        cas: { mode: 'compare', expected: { status: 'absent' } },
+        cas: { mode: 'compare', expected: { status: 'notSeen' } },
         backup: { mode: 'none', why: '用例：只看 CAS' },
       }),
     ).toThrow(expect.objectContaining({ code: 'CONFLICT' }))
@@ -102,7 +102,7 @@ describe('writeDiskSync · 备份与 CAS 的前置形状', () => {
     const fresh = '/out/fresh.json'
 
     writeDiskSync(fresh, '种子', {
-      cas: { mode: 'compare', expected: { status: 'absent' } },
+      cas: { mode: 'compare', expected: { status: 'notSeen' } },
       backup: { mode: 'none', why: '用例：只看 CAS' },
     })
 

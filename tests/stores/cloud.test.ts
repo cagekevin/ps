@@ -25,7 +25,7 @@ function status(pending = 0): CloudStatus {
     configured: true,
     autoSyncEnabled: true,
     // T-114：判别位是 `ledgerState`（三态）
-    ledgerState: { status: 'ok', ledger: { rev: 7, syncedAt: 100, localHash: 'h' } },
+    ledgerState: { status: 'ok', value: { rev: 7, syncedAt: 100, localHash: 'h' } },
     rev: 7,
     syncedAt: 100,
     localHash: 'h',
@@ -47,7 +47,7 @@ describe('cloud store 投影', () => {
     const store = useCloudStore()
 
     // T-114：`getStatus()` 是 async，构造 store 时读不到台账，所以初值是 `emptyCloudStatus()`
-    expect(store.status.ledgerState.status).toBe('none')
+    expect(store.status.ledgerState.status).toBe('notSeen')
     expect(store.status.rev).toBe(0)
 
     await store.refresh()

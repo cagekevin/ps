@@ -44,7 +44,7 @@ beforeEach(() => {
     // 真 pull：走 normalizeCloudPayload 的真实判据
     transport: { pull: pullSnapshot, push },
     ledger: {
-      read: async () => ({ status: 'none' as const }),
+      read: async () => ({ status: 'notSeen' as const }),
       write: ledgerWrite,
     },
     pending: { record: vi.fn(), list: vi.fn(() => []), clear: vi.fn() },
@@ -67,7 +67,10 @@ describe('云端读不懂 → 拒绝覆盖（TD-11-5）', () => {
 
     expect(result).toMatchObject({ status: 'error', failure: { fail: 'CLOUD_BAD_RESPONSE' } })
     // 不再包中文：reason 就是底层那句（响应原文片段）
-    expect(result).toMatchObject({ failure: { reason: expect.any(String) } })
+    // 断结构：码 + 原话都在（`reason` 是"回包为什么读不懂"，不是用户话）
+    expect(result).toMatchObject({
+      failure: { fail: 'CLOUD_BAD_RESPONSE', reason: expect.any(String) },
+    })
     // 「云端原内容不变」的可观察证据：一次写都没有发生
     expect(push).not.toHaveBeenCalled()
     expect(ledgerWrite).not.toHaveBeenCalled()
@@ -80,7 +83,7 @@ describe('云端读不懂 → 拒绝覆盖（TD-11-5）', () => {
 
     expect(result).toMatchObject({ status: 'error', failure: { fail: 'CLOUD_BAD_RESPONSE' } })
     expect(result).toMatchObject({
-      failure: { reason: expect.any(String) },
+      failure: { fail: 'CLOUD_BAD_RESPONSE', reason: expect.any(String) },
     })
   })
 

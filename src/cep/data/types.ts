@@ -1,5 +1,7 @@
 import type { CasMode } from '@/cep/disk-write'
-import type { ReadFail } from '@/cep/fs-read'
+import type { Bad } from '@/utils/read-fail'
+
+export type { Bad }
 
 /**
  * `Repo.replace` 拿不到 CAS 基准时的**统一表态**。
@@ -23,47 +25,40 @@ export const REPLACE_WITHOUT_BASELINE: CasMode = {
  * - 每个文件一条串行队列：连点两次收藏不能丢更新
  */
 
-/** 读成功：`value` 是磁盘上的真实数据 */
+/**
+ * 读成功：`value` 是磁盘上的真实数据。
+ *
+ * **谁能造它**：`foldAbsent`（`repo-read.ts`）+ 11 处"文件不在给空"的分支
+ * （`swatch-repo` 3 · `style-library-repo` 3 · `legacy-settings` 2 · `font-meta` 1 ·
+ * `classification-repo` 1 · `foldAbsent` 自己 1）。`ok` 臂可以直造：它没有可选字段，
+ * 不存在"忘带字段"的静默降级 —— 需要收口的只有失败臂。
+ */
 export interface RepoReadOk<T> {
   /**
-   * 判别位。**读链域全仓一份**（观测层 / 语义层 / 仓库层都用它 + 同一套取值词表
-   * `ok` / `notSeen` / `error`）—— 见 `daily/架构日志/18-横切-读链判别联合收口-2026-10-26.md`。
+   * 判别位。**读链域全仓一份**（观测层 / 判据层 / 业务层都用它 + 同一套取值词表
+   * `ok` / `notSeen` / `error`）。
    *
    * 用枚举而不是布尔，是为了能承载第三态（`notSeen`）；布尔只能"成 / 不成"。
+   * **本形状只有两臂**：`notSeen` 是"首次使用"的正常状态，折成 `ok` + `fallback()`。
+   * 需要把"没有这份数据"与"有"分开的形状（台账 / 系统字体 / 云端快照）各自保留
+   * 独立的 `notSeen` 臂 —— 那是**另一个问题**（有没有 ≠ 能不能当默认值用）。
    */
   status: 'ok'
   value: T
-  /**
-   * 非空 = `value` **可用但不完整**，UI 仍要提示。
-   *
-   * 目前两处会这么返回，都在 `classification-repo.ts`：
-   * - 「分类数据里没有可用分组」：文件是合法 JSON，只是 `categories` 为空——把整份 `value`
-   *   降成 `status: 'error'` 会连 `presets` / `commercials` 一起丢掉（字体管理页的"免费商用"
-   *   筛选会跟着空），所以留这个口子。
-   * - 「分类数据文件不存在」（T-103）：与 `file-repo.ts:71-72`「文件不存在是首次使用的正常
-   *   状态，不算读失败」同一条规则。原版 `app.v4.js:45717-45721` 对 `ENOENT` 也是去下载、
-   *   不报错；`classification.json` 不随面板分发（`getClassificationURL` → `v1/font/link`，
-   *   `:49501`），首次使用真的不存在。值给空分类，但 reason 保留——不留就是静默回退（20(b)）。
-   * **其余仓库一律 `status: 'error'` 表示"`value` 不可用"**。
-   */
 }
 
 /**
- * 读失败：磁盘上的内容不能当数据用（类型上取不到 `value`）。
+ * 仓库结论的失败臂 = 失败内容 + 本层的 `fallback`。
  *
  * `fallback` 是**仓库自己规定的默认值**，由 `fileRepo(resolvePath, fallback)` 的
- * `fallback()` 产生（`file-repo.ts:36`）——与"文件不存在"（`file-repo.ts:72`）**同一个来源**。
- * 消费侧要展示时取它，不许自己再写一份默认值（ADR-0024）。
+ * `fallback()` 产生 —— 与缺席折成 `ok` 时用的是同一个来源。消费侧要展示时取它，
+ * 不许自己再写一份默认值（ADR-0024）。
  *
- * 代价（ADR-14 扩展二）：`fallback` 与"文件不存在"在**值上不可分辨**，
- * 要区分只能看 `status`——所以 `status` 是唯一判别位，不是调试字段。
+ * **谁能造它**：只有 `repo-read.ts` 的三个工厂 —— `badRead`（读盘失败，**必带现场**）·
+ * `badContent`（内容失败，**没有 `failure` 字段**）· `rebad`（换 payload 类型，字段一个不丢）。
+ * 别处不许写 `{ status:'error', … }` 字面量：手写这一臂最容易把 `failure` 忘掉，而忘掉**不会报错**。
  */
-/**
- * 仓库结论的失败臂 = 「为什么读不了」（`ReadFail`，唯一定义）+ 本层的 `reason` / `fallback`。
- *
- * `ReadFail` 是交叉进来的，不是重写一遍：重写会长出"这层带 `failure`、那层不带"的缝。
- */
-export type RepoReadBad<T> = { status: 'error'; reason: string; fallback: T } & ReadFail
+export type RepoReadBad<T> = Bad & { fallback: T }
 
 /**
  * 判别联合：取 `.value` 前必须先判 `status`；坏读时展示 `fallback`（生产者给的）。

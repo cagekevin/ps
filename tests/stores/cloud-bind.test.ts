@@ -30,7 +30,7 @@ function status(over: Partial<CloudStatus> = {}): CloudStatus {
   return {
     configured: true,
     autoSyncEnabled: true,
-    ledgerState: { status: 'ok', ledger: { rev: 1, syncedAt: 0, localHash: 'h' } },
+    ledgerState: { status: 'ok', value: { rev: 1, syncedAt: 0, localHash: 'h' } },
     rev: 1,
     syncedAt: 0,
     localHash: 'h',

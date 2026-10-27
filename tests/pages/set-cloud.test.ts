@@ -67,7 +67,7 @@ function status(over: Partial<CloudStatus> = {}): CloudStatus {
     configured: true,
     autoSyncEnabled: true,
     // T-114：判别位是 `ledgerState`（三态），不再是一个 boolean
-    ledgerState: { status: 'ok', ledger: { rev: 4, syncedAt: 0, localHash: 'h' } },
+    ledgerState: { status: 'ok', value: { rev: 4, syncedAt: 0, localHash: 'h' } },
     rev: 4,
     syncedAt: 0,
     localHash: 'h',

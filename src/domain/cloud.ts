@@ -1,6 +1,7 @@
 import { md5 } from '@/utils/md5'
 import { isDecodeFail, shapeFail, type DecodeFail, type Decoded } from '@/utils/decode'
 import { isRecord } from '@/utils/guards'
+import type { Exists } from '@/utils/exists'
 
 export type FileEncoding = 'json' | 'text' | 'base64'
 
@@ -123,11 +124,19 @@ export type CloudErrorCode =
 
 export class CloudError extends Error {
   readonly code: CloudErrorCode
+  /**
+   * **技术原文**：系统 / 网络 / 宿主给的原因，只进日志，不进用户文案。
+   *
+   * 与 `CepError.cause` 同一分工。自己赋值而不是 `super(message, { cause })`：
+   * `Error` 的第二参是 Chrome 93+ 才有的，CEP 的 Chromium 更老，传了会被静默丢掉。
+   */
+  override readonly cause?: unknown
 
-  constructor(code: CloudErrorCode, message: string) {
+  constructor(code: CloudErrorCode, message: string, cause?: unknown) {
     super(message)
     this.name = 'CloudError'
     this.code = code
+    this.cause = cause
   }
 }
 
@@ -247,12 +256,9 @@ function normalizeUnit(raw: unknown): Decoded<SyncUnit> | DecodeFail {
  *   只有显式声明才算，**不靠"没看到 units"倒推**；
  * - `unreadable`：回包结构不符（含坏 unit）→ 调用方必须**拒绝写云端**。
  */
-export type CloudPullOutcome =
-  | { status: 'ok'; snapshot: CloudSnapshotView }
-  | { status: 'empty' }
-  | { status: 'unreadable'; reason: string }
+export type CloudPullOutcome = Exists<CloudSnapshotView>
 
-/** 给 reason 用的一句话形状描述（不抛、不猜） */
+/** 给 `reason` 用的一句话形状描述（不抛、不猜）—— 只进日志与失败提示，不是用户话 */
 function describeShape(raw: unknown): string {
   if (raw === undefined) return 'undefined'
   if (raw === null) return 'null'
@@ -270,12 +276,12 @@ function describeShape(raw: unknown): string {
  */
 export function normalizeCloudPayload(raw: unknown): CloudPullOutcome {
   // 1. 显式的"没有"：服务端把 data 置 null（唯一能证明"没有"的信号）
-  if (raw === null || raw === undefined) return { status: 'empty' }
+  if (raw === null || raw === undefined) return { status: 'notSeen' }
   if (typeof raw !== 'object' || Array.isArray(raw)) {
-    return { status: 'unreadable', reason: `回包不是对象（${describeShape(raw)}）` }
+    return { status: 'error', fail: 'badShape', reason: `回包不是对象（${describeShape(raw)}）` }
   }
   const outer = raw as Record<string, unknown>
-  if ('data' in outer && outer.data === null) return { status: 'empty' }
+  if ('data' in outer && outer.data === null) return { status: 'notSeen' }
 
   const candidate =
     outer.data && typeof outer.data === 'object' && !Array.isArray(outer.data)
@@ -286,7 +292,8 @@ export function normalizeCloudPayload(raw: unknown): CloudPullOutcome {
     // 这里以前 return null = "云端是空的"。`{ok:true}` 这类回包正好落进来，
     // 于是引擎拿 rev=1 覆盖云端。
     return {
-      status: 'unreadable',
+      status: 'error',
+      fail: 'badShape',
       reason: `回包没有 units，且没明说"没有"（${describeShape(raw)}）`,
     }
   }
@@ -301,7 +308,11 @@ export function normalizeCloudPayload(raw: unknown): CloudPullOutcome {
     else units[id] = unit.value
   }
   if (dropped.length) {
-    return { status: 'unreadable', reason: `云端有读不懂的 unit：${dropped.join('、')}` }
+    return {
+      status: 'error',
+      fail: 'badShape',
+      reason: `云端有读不懂的 unit：${dropped.join('、')}`,
+    }
   }
 
   const meta =
@@ -320,7 +331,7 @@ export function normalizeCloudPayload(raw: unknown): CloudPullOutcome {
     __meta: { rev, updatedAt, schema: 1 },
   }
 
-  return { status: 'ok', snapshot: { rev, updatedAt, units, raw: snapshot } }
+  return { status: 'ok', value: { rev, updatedAt, units, raw: snapshot } }
 }
 
 export function buildSnapshot(

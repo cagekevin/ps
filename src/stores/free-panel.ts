@@ -20,7 +20,7 @@ export const useFreePanelStore = defineStore('freePanel', () => {
 
   async function load() {
     const read = freePanelRepo.read()
-    degraded.value = read.status === 'ok' ? '' : read.reason
+    degraded.value = read.status === 'error' ? read.reason : ''
     // **故意不用 `read.fallback`**（T-104 逐处判过，这处不是 F 类）：生产者的默认值
     // `createEmptyFreePanel()` 带**一个** `norow` 区域（`domain/free-panel.ts:56-76`），
     // 不是空数组。投影它 = 坏文件和"新装首次使用"在界面上长得一模一样（ADR-14 扩展二），

@@ -8,8 +8,8 @@
 //
 // ── 一份判据、一个入口、一个折叠 ────────────────────────────────────────────────
 // 入口：`readRepoFile(target, decode)` —— **只有一个**。`decode` 必填 ⇒「把 JSON.parse 的结果直接当 T」写不出来。
-// 折叠：`foldAbsent(outcome, fallback)` —— **纯函数**，把 `notSeen` 折成 `status:'ok' + fallback()`。
-//   它不是第二个入口：无 IO、无判断，只做一次映射。**"文件不在"怎么处理只在这里决定一次。**
+// 折叠：`foldAbsent(outcome, fallback)` —— **纯函数**，`notSeen` 折成 `ok` + `fallback()`。
+//   它不是第二个入口：无 IO、无判断，只做一次映射。**"文件不在"给什么值只在这里决定一次。**
 // 为什么折叠必须能单独存在：台账 / 系统字体**没有默认值** —— 拿 `{rev:0}` 顶"没有台账"正是 T-114 的 bug。
 //   给它们硬塞一个 `fallback` 参数 = 往签名里塞谎言，所以折叠不做进入口。
 //
@@ -29,11 +29,9 @@ import { CepError } from '@/utils/errors'
 /**
  * 档 1 的**结论**（三态）。每一臂都带 `text`，所以取原文做 CAS 比对不用分支。
  *
- * 为什么必须是三态而不是 `RepoRead` 的两臂：`RepoRead` 把"文件不在"折成 `status:'ok' + fallback()`。
- * 对**有默认值**的数据文件（动作库、色板、分类）这是对的 —— 首次使用就是空数据。
- * 但对**没有默认值**的文件（同步台账、系统字体列表），"文件不在"是**另一个结论**
- * （还没有同步过 / 还没生成过）。拿默认值顶上去会把"读不到"和"没有"混成一件事
- * （T-114 原始症状）。需要两臂的调用方用 `foldAbsent` 折。
+ * 为什么它比 `RepoRead` 多一个 `text`：`RepoRead` 是**结论**，不带原文；
+ * 本形状是 `readRepoFile` 内部的中间站 —— 写完回读 / CAS 比对要的是原文。
+ * 两者的三态语义相同，`foldAbsent` 是唯一转换处。
  */
 export type RepoFileOutcome<T> =
   | { status: 'ok'; value: T; text: string }
@@ -77,7 +75,7 @@ export function readRepoFile<T>(target: string, decode: Decoder<T>): RepoFileOut
 
   if (outcome.status === 'notSeen') return { status: 'notSeen', text: null }
 
-  const text = outcome.text
+  const text = outcome.value
   let parsed: unknown
   try {
     parsed = JSON.parse(text)
@@ -114,12 +112,12 @@ export function readRepoFile<T>(target: string, decode: Decoder<T>): RepoFileOut
 /**
  * **把三态折成两臂**（纯函数，无 IO、无判断）。读模型的唯一折法。
  *
- * `notSeen` → `status:'ok'` + `fallback()`：文件本来就不存在是**正常状态**，不是失败（ADR-26 ②）。
- * `error` → `status:'error'` + `reason` + `fallback()`（`fallback` 是生产者给的默认值，消费侧不许自己再造）。
+ * - `ok` → `status:'ok'` + `value`
+ * - `notSeen` → `status:'ok'` + `fallback()`：文件本来就不存在是**正常状态**（ADR-26 ②）
+ * - `error` → `status:'error'` + `reason` + `fallback()`
  *
- * **"文件不在就顶上默认值"只在这里决定一次** —— 有默认值的仓库都调它，
+ * **"缺席给什么默认值"只在这里决定一次** —— 有默认值的仓库都调它，
  * 谁也不许在自己文件里再写一遍 `status === 'notSeen' ? fallback() : …`。
- * 没有默认值的文件（台账 / 系统字体）**不调它**，直接看 `status`。
  *
  * 没有「值可用但不完整」这一臂：读不懂就是 `error`，半成品值不许流到业务层。
  */
@@ -179,7 +177,7 @@ export function foldAbsent<T>(outcome: RepoFileOutcome<T>, fallback: () => T): R
  */
 export function readTextForWrite(target: string): string | null {
   const read = readTextSync(target)
-  if (read.status === 'ok') return read.text
+  if (read.status === 'ok') return read.value
   if (read.status === 'notSeen') return null
   throw new CepError(
     'IO',

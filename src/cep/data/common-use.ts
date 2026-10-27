@@ -66,8 +66,8 @@ export function ensureCommonUseFile(): EnsureResult {
     // 无 CEP（浏览器 / jsdom）：内存仓库没有"文件不存在"这个概念，按"进程内首次"算
     if (memoryEnsured) return { created: false }
     memoryEnsured = true
-    // 种子只在"文件确实不存在"时写 ⇒ `expected: { status: 'absent' }` = 「这个路径上应当没有文件」
-    base.replace(createCommonUseSeed(), { mode: 'compare', expected: { status: 'absent' } })
+    // 种子只在"文件确实不存在"时写 ⇒ `expected: { status: 'notSeen' }` = 「这个路径上应当没有文件」
+    base.replace(createCommonUseSeed(), { mode: 'compare', expected: { status: 'notSeen' } })
     return { created: true }
   }
 
@@ -77,8 +77,8 @@ export function ensureCommonUseFile(): EnsureResult {
 
   // 查不到 = 首次使用，写种子（`requireExisting` 在这条路上是"文件确实没有"，不是"读不出"）
   if (outcome.status === 'notSeen') {
-    // 种子只在"文件确实不存在"时写 ⇒ `expected: { status: 'absent' }` = 「这个路径上应当没有文件」
-    base.replace(createCommonUseSeed(), { mode: 'compare', expected: { status: 'absent' } })
+    // 种子只在"文件确实不存在"时写 ⇒ `expected: { status: 'notSeen' }` = 「这个路径上应当没有文件」
+    base.replace(createCommonUseSeed(), { mode: 'compare', expected: { status: 'notSeen' } })
     return { created: true }
   }
 

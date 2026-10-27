@@ -63,7 +63,7 @@ export const fontHierarchyEntry: SyncUnitAdapter = {
 
   async read() {
     const read = await hierarchyWriter.read()
-    if (read.status !== 'ok') throw new Error(read.reason)
+    if (read.status === 'error') throw new Error(read.reason)
     return unitPayload([inlineFile(PATH, JSON.stringify(read.value))])
   },
 

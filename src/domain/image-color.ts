@@ -2,6 +2,8 @@
 // 替代了什么：原版 app.v4.js:54498 `nS` 把「建 canvas、画图、取像素、量化、算百分比」耦成一坨挂在 Style 页 methods 上；
 //             这里拆成「纯算法（本文件主体）」+「可注入的 canvas 缝（readPixelsFromImage）」
 // 谁在用：`/style` 页图片取色（原版 `getImgHex`，app.v4.js:54682-54693 → `nS(t, 350, 10, cb)`）
+// 关于 throw：本文件的 `throw new Error(...)` 全是**开发者断言**（注入缺失 / 尺寸非法），
+//   读者是写代码的人，不上 UI —— 不是失败表达，别改成 `DecodeFail`。
 // 禁止：本文件不碰 document / window / new Image；像素来源必须由调用方注入，
 //       因为 jsdom 没有真实 canvas 像素能力（见文件末「jsdom 边界」）
 

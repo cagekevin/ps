@@ -48,7 +48,7 @@ async function failOf(run: Promise<unknown>): Promise<{ fail: string; reason: st
 
 describe('font.importTags · 解析失败路径', () => {
   it('不是合法 JSON → PARSE，文案来自唯一渲染处，且不写盘', async () => {
-    fsRead.readExternalText.mockResolvedValue({ status: 'ok', text: 'not json' })
+    fsRead.readExternalText.mockResolvedValue({ status: 'ok', value: 'not json' })
 
     const fail = await failOf(execute('font.importTags', PAYLOAD))
 
@@ -60,7 +60,7 @@ describe('font.importTags · 解析失败路径', () => {
   it('标签项缺 text → PARSE，文案说得出**哪个字段**（不是一句"格式不对"）', async () => {
     fsRead.readExternalText.mockResolvedValue({
       status: 'ok',
-      text: JSON.stringify([{ name: '缺 text' }]),
+      value: JSON.stringify([{ name: '缺 text' }]),
     })
 
     const fail = await failOf(execute('font.importTags', PAYLOAD))
@@ -71,7 +71,7 @@ describe('font.importTags · 解析失败路径', () => {
   })
 
   it('顶层既不是数组也不是对象 → PARSE（形状臂带期望/实际）', async () => {
-    fsRead.readExternalText.mockResolvedValue({ status: 'ok', text: '42' })
+    fsRead.readExternalText.mockResolvedValue({ status: 'ok', value: '42' })
 
     const fail = await failOf(execute('font.importTags', PAYLOAD))
 
@@ -81,7 +81,7 @@ describe('font.importTags · 解析失败路径', () => {
 
   it('对照：合法数组 + 确认 → 写盘一次（证明失败分支不是"什么都抛"）', async () => {
     const tags = [{ text: '标签A' }, { text: '标签B', xz: true }]
-    fsRead.readExternalText.mockResolvedValue({ status: 'ok', text: JSON.stringify(tags) })
+    fsRead.readExternalText.mockResolvedValue({ status: 'ok', value: JSON.stringify(tags) })
 
     await execute('font.importTags', { onConfirm: async () => true })
 

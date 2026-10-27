@@ -26,7 +26,7 @@ vi.mock('@/stores/cloud', () => ({
     status: reactive({
       autoSyncEnabled: false,
       pendingItems: [],
-      ledgerState: { status: 'none' as const },
+      ledgerState: { status: 'notSeen' as const },
     }),
     queuedUnits: ref(0),
   }),

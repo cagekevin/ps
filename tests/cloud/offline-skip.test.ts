@@ -28,7 +28,7 @@ vi.mock('@/cep/cloud/config', () => ({
   isAutoSyncEnabled: () => true,
 }))
 vi.mock('@/cep/cloud/ledger', () => ({
-  readCloudLedger: async () => ({ status: 'ok', ledger: { rev: 1, syncedAt: 1, localHash: 'h' } }),
+  readCloudLedger: async () => ({ status: 'ok', value: { rev: 1, syncedAt: 1, localHash: 'h' } }),
   writeCloudLedger: () => {},
 }))
 vi.mock('@/cep/cloud/pending', () => ({
@@ -38,7 +38,7 @@ vi.mock('@/cep/cloud/pending', () => ({
 }))
 vi.mock('@/cep/cloud/transport', () => ({
   pushSnapshot: async () => {},
-  pullSnapshot: async () => ({ status: 'empty' as const }),
+  pullSnapshot: async () => ({ status: 'notSeen' as const }),
 }))
 // 不弹 toast 的判据：整条云同步链没有 feedback 的入口。接了就会被这里记到。
 vi.mock('@/stores/feedback', () => ({ useFeedbackStore: () => feedback }))

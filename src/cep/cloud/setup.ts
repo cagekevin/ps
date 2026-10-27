@@ -67,8 +67,8 @@ async function gate(): Promise<SyncOutcome | null> {
   if (!isCloudUrlUsable()) return skip('CLOUD_NOT_CONFIGURED')
   if (!isAutoSyncEnabled()) return skip('CLOUD_AUTO_SYNC_OFF')
   const read = await readCloudLedger()
-  if (read.status === 'broken') return skip('CLOUD_LEDGER_BROKEN')
-  if (read.status === 'none') return skip('CLOUD_NO_LEDGER')
+  if (read.status === 'error') return skip('CLOUD_LEDGER_BROKEN')
+  if (read.status === 'notSeen') return skip('CLOUD_NO_LEDGER')
   if (typeof navigator !== 'undefined' && navigator.onLine === false) {
     return skip('CLOUD_OFFLINE')
   }

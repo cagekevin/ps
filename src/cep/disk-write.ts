@@ -113,7 +113,7 @@ function writeBackupFile(path: string, text: string): void {
  * 所以「读不到却继续写」在类型上写不出来 —— 旧写法里 `null` 同时表示「没有文件」「不备份」
  * 「本函数自己读」，忘传一次就静默跳过 `.bak`（TD-18-195）。
  */
-export type DiskBefore = { status: 'ok'; text: string } | { status: 'absent' }
+export type DiskBefore = { status: 'ok'; text: string } | { status: 'notSeen' }
 
 /** 文本：观测三态 → `DiskBefore`。**读不到就抛**（全仓唯一一处「读不到 ⇒ 拒写」的判据） */
 function textBefore(target: string): DiskBefore {
@@ -124,7 +124,7 @@ function textBefore(target: string): DiskBefore {
       msg.data.fn.fileReadFailedAbortWrite(target, describeReadFailure(read.failure)),
     )
   }
-  return read.status === 'ok' ? { status: 'ok', text: read.text } : { status: 'absent' }
+  return read.status === 'ok' ? { status: 'ok', text: read.value } : { status: 'notSeen' }
 }
 
 /** 字节版：同上，`text` 里装 base64 串（`compareBase64Sync` 比的就是它） */
@@ -136,7 +136,7 @@ function base64Before(target: string): DiskBefore {
       msg.data.fn.fileReadFailedAbortWrite(target, describeReadFailure(read.failure)),
     )
   }
-  return read.status === 'ok' ? { status: 'ok', text: read.base64 } : { status: 'absent' }
+  return read.status === 'ok' ? { status: 'ok', text: read.value } : { status: 'notSeen' }
 }
 
 /**
@@ -155,7 +155,7 @@ export function readBefore(target: string, kind: 'text' | 'bytes'): DiskBefore {
 
 /** 两臂逐臂比：`absent` 只等于 `absent`（`null === null` 曾把「读不到」判成「没人改过」） */
 function sameBefore(actual: DiskBefore, expected: DiskBefore): boolean {
-  if (actual.status === 'absent') return expected.status === 'absent'
+  if (actual.status === 'notSeen') return expected.status === 'notSeen'
   return expected.status === 'ok' && actual.text === expected.text
 }
 
@@ -172,7 +172,7 @@ function compareSync(target: string, expected: DiskBefore): 'same' | 'diff' | 'u
   // 于是权限错时并发守卫恒真、别的面板刚建的文件被覆盖。
   if (read.status === 'error') return 'unknown'
   const actual: DiskBefore =
-    read.status === 'ok' ? { status: 'ok', text: read.text } : { status: 'absent' }
+    read.status === 'ok' ? { status: 'ok', text: read.value } : { status: 'notSeen' }
   return sameBefore(actual, expected) ? 'same' : 'diff'
 }
 
@@ -187,7 +187,7 @@ function compareBase64Sync(target: string, expected: DiskBefore): 'same' | 'diff
   const read = readBase64File(target)
   if (read.status === 'error') return 'unknown'
   const actual: DiskBefore =
-    read.status === 'ok' ? { status: 'ok', text: read.base64 } : { status: 'absent' }
+    read.status === 'ok' ? { status: 'ok', text: read.value } : { status: 'notSeen' }
   return sameBefore(actual, expected) ? 'same' : 'diff'
 }
 
@@ -197,7 +197,7 @@ function compareBase64Sync(target: string, expected: DiskBefore): 'same' | 'diff
  * 为什么必填：「忘了传」与「决定不比」在类型上同形，调用点易落到「没传」这一支，
  * CAS 只被 `Repo.update` 一条路用到。不比要显式写 `{ cas: 'skip', why }`，漏表态编译不过。
  *
- * `expected: { status: 'absent' }` = 「这个路径上应当没有文件」（新文件）；
+ * `expected: { status: 'notSeen' }` = 「这个路径上应当没有文件」（新文件）；
  * `expected: { status: 'ok', text }` = 「磁盘上应当还是这份」。
  * 不一致 ⇒ **抛 `CepError('CONFLICT')` 且不写**。
  */
@@ -224,13 +224,13 @@ export interface DiskWriteOptions extends BackupOptions {
 /**
  * 步骤 ①：备份上一版。**只备份**，不判断好坏、不决定写不写。
  *
- * `backup: 'none'` = 调用方表态不留退路（要写理由）；`before.status === 'absent'` = 没有原文可备。
+ * `backup: 'none'` = 调用方表态不留退路（要写理由）；`before.status === 'notSeen'` = 没有原文可备。
  * `before` 省略时由 `textBefore` 现读一次 —— **读不到就抛**，旧行为是静默跳过 `.bak` 继续写。
  */
 function backupStep(path: string, opts: DiskWriteOptions): void {
   if (opts.backup.mode === 'none') return
   const before = opts.backup.before ?? textBefore(path)
-  if (before.status === 'absent') return
+  if (before.status === 'notSeen') return
   backupOrQuarantine(path, before.text, opts)
 }
 
@@ -244,7 +244,7 @@ function backupStep(path: string, opts: DiskWriteOptions): void {
 function backupBytesStep(path: string, opts: DiskWriteOptions): void {
   if (opts.backup.mode === 'none') return
   const before = opts.backup.before ?? base64Before(path)
-  if (before.status === 'absent') return
+  if (before.status === 'notSeen') return
   const buffer = nodeRequire('buffer').Buffer
   atomicReplaceBytes(`${path}.bak`, buffer.from(before.text, 'base64'))
 }
@@ -282,7 +282,7 @@ function atomicBytesStep(path: string, base64: string): void {
     const buffer = nodeRequire('buffer').Buffer
     atomicReplaceBytes(path, buffer.from(base64, 'base64'))
   } catch (e) {
-    throw new CepError('IO', msg.data.fn.fileWriteFailed(path, writeFailureReason(e)))
+    throw new CepError('IO', msg.data.fn.fileWriteFailed(path, writeFailureReason(e)), undefined, e)
   }
 }
 
@@ -290,8 +290,12 @@ function atomicBytesStep(path: string, base64: string): void {
 function verifyStep(path: string, text: string, on: boolean | undefined): void {
   if (!on) return
   const after = readTextSync(path)
-  if (after.status !== 'ok' || after.text !== text) {
-    log.error('repo', `${path} 写入后回读不一致`, after.status === 'ok' ? after.text : after.status)
+  if (after.status !== 'ok' || after.value !== text) {
+    log.error(
+      'repo',
+      `${path} 写入后回读不一致`,
+      after.status === 'ok' ? after.value : after.status,
+    )
     throw new CepError('IO', msg.data.fn.protectedReadBackMismatch(path))
   }
 }
@@ -314,11 +318,11 @@ function writeCore(path: string, text: string, opts: DiskWriteOptions): void {
 function verifyBytesStep(path: string, base64: string, on: boolean | undefined): void {
   if (!on) return
   const after = readBase64File(path)
-  if (after.status !== 'ok' || after.base64 !== base64) {
+  if (after.status !== 'ok' || after.value !== base64) {
     log.error(
       'repo',
       `${path} 写入后回读不一致`,
-      after.status === 'ok' ? after.base64 : after.status,
+      after.status === 'ok' ? after.value : after.status,
     )
     throw new CepError('IO', msg.data.fn.protectedReadBackMismatch(path))
   }
@@ -404,7 +408,12 @@ function writeTextFileAtomic(absPath: string, text: string): void {
   try {
     atomicReplace(absPath, text)
   } catch (e) {
-    throw new CepError('IO', msg.data.fn.fileWriteFailed(absPath, writeFailureReason(e)))
+    throw new CepError(
+      'IO',
+      msg.data.fn.fileWriteFailed(absPath, writeFailureReason(e)),
+      undefined,
+      e,
+    )
   }
 }
 
@@ -438,6 +447,8 @@ export function removeFile(absPath: string): void {
     throw new CepError(
       'IO',
       msg.data.fn.fileRemoveFailed(absPath, describeReadFailure(classified.failure)),
+      undefined,
+      e,
     )
   }
 }

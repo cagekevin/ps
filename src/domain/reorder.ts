@@ -3,6 +3,7 @@
 //             （T-67 已合并，全项目只剩这一份落点计算）
 // 谁在用：`cep/data/style-library-repo.ts`、`commands/action.ts`、`commands/rename.ts`、`commands/freePanel.ts`
 // 禁止：不读文件、不认"库/页"、不兜底——下标越界一律抛，让调用方看见
+// 关于 throw：本文件的 `CepError('PARSE')` 是**业务校验**（拖拽落点越界），不是解析失败。
 
 import { CepError } from '@/utils/errors'
 import { msg } from './messages'

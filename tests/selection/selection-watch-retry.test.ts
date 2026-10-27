@@ -36,9 +36,10 @@ describe('startSelectionWatch 失败', () => {
 
     await startSelectionWatch()
 
-    expect(watchStateRef.value.status).toBe('degraded')
-    expect(watchStateRef.value.error).toContain('CEP 回调监听不可用')
-    expect(watchStateRef.value.failedAt).toBeTypeOf('number')
+    expect(watchStateRef.value.status).toBe('error')
+    const failed = watchStateRef.value.status === 'error' ? watchStateRef.value : null
+    expect(failed?.detail).toContain('CEP 回调监听不可用')
+    expect(failed?.failedAt).toBeTypeOf('number')
     expect(log.dump()).toContain('选区事件订阅失败')
   })
 
@@ -62,7 +63,7 @@ describe('startSelectionWatch 失败', () => {
     events.subscribeHostEvent.mockResolvedValueOnce(() => {})
 
     await startSelectionWatch()
-    expect(watchStateRef.value.status).toBe('degraded')
+    expect(watchStateRef.value.status).toBe('error')
 
     // 间隔不够：不重试（否则每条命令都去注册一次事件）
     await refresh()

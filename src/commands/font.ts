@@ -3,7 +3,7 @@ import type { RawStar, RawTag } from '@/cep/data'
 import { readExternalText } from '@/cep/fs-read'
 import { writeDiskSync } from '@/cep/disk-write'
 import { CepError } from '@/utils/errors'
-import { isRecord } from '@/utils/guards'
+import { isArrayOf, isRecord, isString } from '@/utils/guards'
 import {
   decodeJsonText,
   isDecodeFail,
@@ -46,7 +46,8 @@ function tagItemFail(tag: unknown, index: number): DecodeFail | null {
   if (!isRecord(tag)) return { fail: 'badItem', count: index + 1 }
   if (typeof tag.text !== 'string' || !tag.text)
     return shapeFail(`[${index}].text`, 'string', tag.text)
-  if (tag.arr !== undefined && !Array.isArray(tag.arr)) {
+  // 元素也必须是字符串：原实现只证到"是数组"，`as RawTag[]` 顺手把 `unknown[]` 断言成 `string[]`
+  if (tag.arr !== undefined && !isArrayOf(tag.arr, isString)) {
     return shapeFail(`[${index}].arr`, 'array', tag.arr)
   }
   if (tag.xz !== undefined && typeof tag.xz !== 'boolean') {
@@ -81,6 +82,11 @@ interface TagImport {
 
 /**
  * 解析导入文件的内容并校验。**校验不过一个字都不写**。
+ *
+ * 下面三处 `as RawTag[]` / `as RawStar[]` 是**运行时已逐项证明、TS 表达不了**的收窄：
+ * 每个元素都过了 `tagItemFail` / `starItemFail`（字段类型 + `arr` 元素类型都查了），
+ * 但 `Record<string, unknown>` 的索引签名不参与窄化，TS 不会因此认成 `RawTag`。
+ * 不用"重建对象"换掉断言：导入是覆盖写，未知键必须原样带过去（重建 = 悄悄丢字段）。
  *
  * 失败是判别联合（`notJson` / `shape` / `badItem`），不是 `{error:'一句中文'}`：
  * 后者让调用方只能把整句话原样拼进提示，说不出是"哪个字段"错了。
@@ -276,7 +282,7 @@ export const fontCommands: Command<unknown>[] = [
       // 与 `data/action-archive.ts` 的差别只是**做法不一致**（那处把导入收进 `data/`，这里没有），不是违规。
       // 不必统一：用户选的一次性导入文件不是面板数据、没有唯一真相，收进 `data/` 是为对称而对称（T-119）。
       if (read.status !== 'ok') throw new CepError('IO', msg.command.text.fontImportReadFailed)
-      const text = read.text
+      const text = read.value
 
       // 先校验：校验不过不碰任何文件
       const decoded = parseTagImport(text)
@@ -297,7 +303,8 @@ export const fontCommands: Command<unknown>[] = [
 
       // 覆盖写：repo 内部先落 `.bak` 再写
       ctx.data.tags.update(() => parsed.tags)
-      if (parsed.stars) ctx.data.stars.update(() => parsed.stars as RawStar[])
+      const stars = parsed.stars
+      if (stars) ctx.data.stars.update(() => stars)
     },
   }),
 
@@ -324,13 +331,16 @@ export const fontCommands: Command<unknown>[] = [
       if (!path) throw new CepError('PARSE', msg.command.text.actionCancelled)
 
       const tagRead = ctx.data.tags.read()
-      if (tagRead.status !== 'ok')
+      if (tagRead.status === 'error')
         throw new CepError('IO', msg.command.fn.fontTagReadFailed(tagRead.reason))
       const starRead = ctx.data.stars.read()
-      if (starRead.status !== 'ok')
+      if (starRead.status === 'error')
         throw new CepError('IO', msg.command.fn.fontStarReadFailed(starRead.reason))
 
-      const payload: TagImportFile = { tags: tagRead.value, stars: starRead.value }
+      const payload: TagImportFile = {
+        tags: tagRead.value,
+        stars: starRead.value,
+      }
       // 导出文件是**新文件**，无 `.bak` 概念（`backup: 'none'`）；走唯一落盘入口（原子写）
       writeDiskSync(path, JSON.stringify(payload), {
         backup: { mode: 'none', why: '导出产物，无原文可备' },

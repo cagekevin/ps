@@ -1,4 +1,9 @@
-﻿import { CepError } from '@/utils/errors'
+﻿// 是什么：旧版自由面板命令（`{command, options}`）→ 当前 `LegacyCommand` 的适配纯逻辑
+// 唯一入口：旧数据只有这一个适配器；形状不认识返回 `DecodeFail`，不抛
+// 谁在用：`cep/data/free-panel-legacy.ts`、`tests/domain/free-panel-legacy-reject.test.ts`
+// 禁止：这里的 `CepError('PARSE')` 是**业务校验**（选项不是数字 / 变换不是文本），不是解析失败。
+
+import { CepError } from '@/utils/errors'
 import { msg } from './messages'
 import type { FreePanelItem } from './free-panel'
 import { shapeFail, type DecodeFail, type Decoded } from '@/utils/decode'

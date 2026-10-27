@@ -1,4 +1,10 @@
-﻿import { getBridge } from './host'
+﻿// 是什么：宿主事件订阅（`evalScript` 回调 → 本地监听器）与事件 ID 冲突诊断
+// 唯一入口：`subscribeHostEvent` / `register` 只在这里
+// 谁在用：`selection` · `stores/*` · `cep/cloud/*`
+// 禁止：`describeEventIdConflict` 是**开发者断言**（读者是写代码的人：ID 撞了就注册不上），
+//   不上 UI —— 它不是失败渲染器，别和 `describeCepError` 混。
+
+import { getBridge } from './host'
 import { hasCep } from './transport'
 import { log } from '@/utils/logger'
 import { msg } from '@/domain/messages'

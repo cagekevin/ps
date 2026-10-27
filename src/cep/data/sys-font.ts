@@ -5,7 +5,7 @@ import { normalizeFontList } from '@/domain/font-normalize'
 import { isRecord } from '@/utils/guards'
 import type { FontItem } from '@/domain/font-item'
 import { readRepoFile, type RepoFileOutcome } from './repo-read'
-import type { ReadFail } from '@/cep/fs-read'
+import type { Exists } from '@/utils/exists'
 import { shapeFail, type DecodeFail, type Decoded } from '@/utils/decode'
 import { readFontStars } from './font-meta'
 
@@ -24,23 +24,6 @@ export function mergeFontStars(list: FontItem[]): FontItem[] {
 }
 
 /**
- * SysFont2.json 的读取**观测**。
- *
- * 三态而不是 `FontItem[]`：空数组同时表示"文件不在（首次使用）""读不到""解析失败"，
- * 而这三件事用户看到的是三种不同结论——`[]` 一折，页面只会显示"没有系统字体"。
- * 与 `LedgerRead` / `TextRead` 同一判据：原语报观测，结论由调用方下（ADR-0026 ②）。
- */
-export type SysFontRead =
-  | { status: 'ok'; list: FontItem[] }
-  /** 文件不在：首次使用 / 还没生成，不是失败 */
-  | { status: 'notSeen' }
-  /**
-   * 读不到：**必有现场**（`kind` + errno + 原始错误），调用方要取它得先判 `why`。
-   * **调用方不许把这一臂当成"没有字体"**。
-   */
-  | ({ status: 'error'; reason: string } & ReadFail)
-
-/**
  * `SysFont2.json` 的 decode。
  *
  * 不许 `as SysFontFile`：`as` 之后 `file.arr` 恒可信，坏形状会漏过去变成"没有系统字体"（静默）。
@@ -53,19 +36,20 @@ function decodeSysFont(raw: unknown): Decoded<unknown[]> | DecodeFail {
 }
 
 /**
- * `RepoFileOutcome` → `SysFontRead` 失败臂的**唯一构造点**（别处只调，不写字面量）。
+ * `RepoFileOutcome` → `Exists` 失败臂的**唯一构造点**（别处只调，不写字面量）。
  *
- * 这个形状**没有 `fallback`** —— 读不到不许顶成"没有字体"（T-114）。所以它用不了
- * `repo-read` 的 `badRead` / `badContent`（那两个都带 `fallback`）。
+ * 这个形状**没有 `fallback`** —— 读不到不许顶成"没有字体"（T-114）。
  */
-function badSysFont(outcome: Extract<RepoFileOutcome<unknown>, { status: 'error' }>): SysFontRead {
+function badSysFont(
+  outcome: Extract<RepoFileOutcome<unknown>, { status: 'error' }>,
+): Exists<FontItem[]> {
   return outcome.fail === 'readError'
     ? { status: 'error', fail: 'readError', reason: outcome.reason, failure: outcome.failure }
     : { status: 'error', fail: outcome.fail, reason: outcome.reason }
 }
 
 /** 读 SysFont2.json；浏览器没有 userDir，按"文件不在"处理（不是失败） */
-export function readSysFontFile(): SysFontRead {
+export function readSysFontFile(): Exists<FontItem[]> {
   if (!hasCep()) return { status: 'notSeen' }
   const abs = `${userDir()}/${DATA_FILES.sysFontList}`
 
@@ -78,5 +62,5 @@ export function readSysFontFile(): SysFontRead {
     if (outcome.text === '') return { status: 'notSeen' }
     return badSysFont(outcome)
   }
-  return { status: 'ok', list: mergeFontStars(normalizeFontList(outcome.value)) }
+  return { status: 'ok', value: mergeFontStars(normalizeFontList(outcome.value)) }
 }

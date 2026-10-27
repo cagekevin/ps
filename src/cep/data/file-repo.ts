@@ -14,7 +14,7 @@
 //      `tests/scripts/data-repo-realfs.test.ts`（夹具字符串，不真 import）。
 import { CepError } from '@/utils/errors'
 import { msg } from '@/domain/messages'
-import { foldAbsent, readRepoFile } from './repo-read'
+import { readRepoFile, foldAbsent } from './repo-read'
 import { writeDiskSync, type CasMode, type DiskBefore } from '@/cep/disk-write'
 import { log } from '@/utils/logger'
 import type { Decoder } from '@/utils/decode'
@@ -100,7 +100,7 @@ export function fileRepo<T>(
 
   /** 读一次：写是原子 rename，读到的要么旧值要么新值，不会看到半截 */
   function rawRead(): RepoRead<T> {
-    // 对外只暴露**一个**形状（`RepoRead`）；三态里的 `notSeen` 由 `foldAbsent` 折成「首次使用」
+    // 对外只暴露**一个**形状（`RepoRead`）；三态一一对应，缺席不折成成功
     return foldAbsent(readRepoFile(resolvePath(), decode), fallback)
   }
 
@@ -120,7 +120,7 @@ export function fileRepo<T>(
       /**
        * 写前置的**唯一判据**：一个 switch 判完三态，每条臂自己「给值 / 给形状 / 抛」。
        *
-       * 以前这里是两份结论并排（先 `foldAbsent` 得 `RepoRead`，再从 `outcome` 折一次 `DiskBefore`），
+       * 以前这里是两份结论并排（先转 `RepoRead`，再从 `outcome` 折一次 `DiskBefore`），
        * 同一件事折两次、一个入口产两个形状 ⇒ 消费侧要在两个形状间对照（判据一：入口数 = 形状数）。
        */
       let value: T
@@ -140,7 +140,7 @@ export function fileRepo<T>(
           }
           // 首次使用是正常状态（不是失败）：用仓库自己的默认值，与 `foldAbsent` 同一规则
           value = fallback()
-          before = { status: 'absent' }
+          before = { status: 'notSeen' }
           break
         case 'ok':
           value = outcome.value
@@ -161,7 +161,12 @@ export function fileRepo<T>(
         if (!(e instanceof CepError && e.code === 'CONFLICT')) throw e
         attempts += 1
         if (attempts > retries) {
-          throw new CepError('IO', msg.data.fn.fileLockedByOtherPanel(target, String(retries)))
+          throw new CepError(
+            'IO',
+            msg.data.fn.fileLockedByOtherPanel(target, String(retries)),
+            undefined,
+            e,
+          )
         }
         log.warn('repo', `${target} 被其他面板改过，重试 ${attempts}/${retries}`)
         // 不退避等待：整段同步，本进程内不可能有第二个写插进来；

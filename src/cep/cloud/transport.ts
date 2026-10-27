@@ -126,9 +126,13 @@ async function request(
     if (error instanceof CloudError) throw error
     // 11-8 的判据：超时与"发不出去"的重试方式、用户动作都一样 → 同一个码
     if (error instanceof CepError && error.code === 'TIMEOUT') {
-      throw new CloudError('CLOUD_NETWORK', error.message)
+      throw new CloudError('CLOUD_NETWORK', error.message, error)
     }
-    throw new CloudError('CLOUD_NETWORK', error instanceof Error ? error.message : String(error))
+    throw new CloudError(
+      'CLOUD_NETWORK',
+      error instanceof Error ? error.message : String(error),
+      error,
+    )
   }
 }
 
@@ -138,7 +142,7 @@ export async function pushSnapshot(snapshot: CloudSnapshot): Promise<void> {
 
 /**
  * 拉云端快照。**三态**：网络/权限/非 JSON 仍然抛 `CloudError`（既有语义不变）
- * 200 但结构不符返回 `{status:'unreadable'}` —— 由引擎决定"拒绝覆盖云端"，
+ * 200 但结构不符返回 `{status:'error'}` —— 由引擎决定"拒绝覆盖云端"，
  * 这里不替它判（ADR-0026 ②：原语只报观测）。
  */
 export async function pullSnapshot(): Promise<CloudPullOutcome> {

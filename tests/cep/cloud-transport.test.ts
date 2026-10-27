@@ -57,7 +57,7 @@ describe('cloud transport', () => {
 
     const pulled = await pullSnapshot()
     expect(pulled.status).toBe('ok')
-    const view = pulled.status === 'ok' ? pulled.snapshot : null
+    const view = pulled.status === 'ok' ? pulled.value : null
     expect(view?.rev).toBe(2)
     expect(view?.units['font.tags']).toBeTruthy()
   })
@@ -68,12 +68,12 @@ describe('cloud transport', () => {
    */
   it('pull_data 回 {"ok":true}（无 units）→ unreadable，不是 empty', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(JSON.stringify({ status: 'ok' }))))
-    expect(await pullSnapshot()).toMatchObject({ status: 'unreadable' })
+    expect(await pullSnapshot()).toMatchObject({ status: 'error' })
   })
 
   it('pull_data 回 {data:null} → empty（服务端显式说没有）', async () => {
     vi.stubGlobal('fetch', vi.fn().mockResolvedValue(response(JSON.stringify({ data: null }))))
-    expect(await pullSnapshot()).toEqual({ status: 'empty' })
+    expect(await pullSnapshot()).toEqual({ status: 'notSeen' })
   })
 
   it('HTML 权限页报 CLOUD_PERMISSION（与 401/403 同一类：用户要做的事和重试策略都一样）', async () => {
@@ -182,8 +182,8 @@ describe('cloud transport', () => {
     releaseFirst(response('{"ok":true}'))
     // 这份回包本身没有 units（之后是 unreadable）——本用例只关心"排队"
     // 所以断言三态而不是 null
-    await expect(first).resolves.toMatchObject({ status: 'unreadable' })
-    await expect(second).resolves.toMatchObject({ status: 'unreadable' })
+    await expect(first).resolves.toMatchObject({ status: 'error' })
+    await expect(second).resolves.toMatchObject({ status: 'error' })
     expect(fetchMock).toHaveBeenCalledTimes(2)
   })
 })

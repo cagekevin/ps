@@ -14,6 +14,7 @@
  */
 import { describe, expect, it } from 'vitest'
 import { CepError } from '@/utils/errors'
+import { CloudError } from '@/domain/cloud'
 import { describeCepError } from '@/utils/error-text'
 import { log } from '@/utils/logger'
 
@@ -59,6 +60,20 @@ describe('CepError 的两条通道', () => {
 
     expect(dumped).toContain('[ENOENT]')
     expect(dumped).toContain('no such file or directory')
+  })
+
+  it('CloudError 的 cause 也进日志：云层与本地层走同一条通道', () => {
+    const e = new CloudError(
+      'CLOUD_WRITE_FAILED',
+      '台账写入失败',
+      new Error('EACCES: permission denied, open /u/sj_cloud.json'),
+    )
+    log.error('cloud', '写台账失败（probe-e）', e)
+
+    const dumped = log.dump()
+
+    expect(dumped).toContain('[CLOUD_WRITE_FAILED]')
+    expect(dumped).toContain('EACCES: permission denied')
   })
 
   it('没有 code 也没有 cause 的 Error：退回 `name: message`', () => {

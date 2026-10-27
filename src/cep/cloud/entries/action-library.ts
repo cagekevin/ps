@@ -65,12 +65,13 @@ export const actionLibraryEntry: SyncUnitAdapter = {
 
   async read() {
     const read = await actionIndexWriter.read()
-    if (read.status !== 'ok') throw new Error(read.reason)
+    if (read.status === 'error') throw new Error(read.reason)
 
-    const files: SyncFile[] = [inlineFile(INDEX_PATH, JSON.stringify(read.value))]
+    const index = read.value
+    const files: SyncFile[] = [inlineFile(INDEX_PATH, JSON.stringify(index))]
 
     const seen = new Set<string>()
-    for (const entry of read.value.list) {
+    for (const entry of index.list) {
       const name = safeName(entry.fileName)
       if (seen.has(name)) throw new Error(`EDUP_NAME: ${name}`)
       seen.add(name)
@@ -86,7 +87,7 @@ export const actionLibraryEntry: SyncUnitAdapter = {
       if (read.status === 'error') {
         throw new Error(`${describeReadFailure(read.failure)}: ${name}`)
       }
-      files.push(inlineFile(`/${name}`, read.text))
+      files.push(inlineFile(`/${name}`, read.value))
     }
 
     return unitPayload(files)

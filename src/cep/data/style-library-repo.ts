@@ -72,10 +72,10 @@ export function readKuLibrary(kind: KuKind, fileName: string): RepoRead<KuGroup[
     log.error('style', `${kind} 库文件读不到`, read.failure)
     return badRead(`库文件读不到（${describeReadFailure(read.failure)}）`, [], read.failure)
   }
-  if (read.status === 'notSeen' || read.text === '') return { status: 'ok', value: [] }
+  if (read.status === 'notSeen' || read.value === '') return { status: 'ok', value: [] }
 
   // domain 的纯解析走 `Decoded | DecodeFail`；这一层折成 IO 结论 `RepoRead`
-  const parsed = readKuGroups(kind, read.text, b64ToUtf8)
+  const parsed = readKuGroups(kind, read.value, b64ToUtf8)
   if (isDecodeFail(parsed)) {
     // 内层不是 JSON 单独成臂（消费侧要能分开说"文件坏了"与"结构不认识"）
     return badContent(parsed.fail === 'notJson' ? 'notJson' : 'badShape', parsed.fail, [])
@@ -99,7 +99,7 @@ export function readIndexState(): StyleWarehouseIndex {
   const stored = styleIndexImpl.read()
   // `styleIndexImpl.read()` 已过 `decodeStyleWarehouseIndex` ⇒ `stored.value` 就是合法索引。
   // 读坏了就抛（索引是整页的地基，拿 fallback 顶上去会让页面显示一个不存在的仓库）
-  if (stored.status !== 'ok') {
+  if (stored.status === 'error') {
     throw new CepError('IO', msg.data.fn.indexReadFailedAbortReplace(stored.reason))
   }
   return stored.value
@@ -120,7 +120,7 @@ export function readStyleLibrary(): StyleLibrarySnapshot {
   for (const kind of KU_KINDS) {
     const read = readKuLibrary(kind, fileNameOf(current, kind))
     // 读不到就抛：以前给空库 + 一条 note，页面看起来是"这个库没东西"，与实际（坏文件）同形
-    if (read.status !== 'ok') throw new CepError('IO', read.reason)
+    if (read.status === 'error') throw new CepError('IO', read.reason)
     libraries[kind] = read.value
   }
 
@@ -132,14 +132,15 @@ function currentLibPath(kind: KuKind): string {
   // 读索引，取当前仓库这一类的库文件名
   const stored = styleIndexImpl.read()
   // 「索引文件坏了」≠「这个仓库没登记库文件名」：不分开说，用户会以为是自己没建过库（T-101-1）
-  if (stored.status !== 'ok') {
+  if (stored.status === 'error') {
     throw new CepError('IO', msg.data.fn.warehouseIndexCorruptAbort(stored.reason))
   }
-  // `stored.value` 已过 decode；这里只剩「一个仓库都没有」这一种不可用
-  if (!stored.value.list.length) {
+  // 取到的索引已过 decode；这里只剩「一个仓库都没有」这一种不可用
+  const index = stored.value
+  if (!index.list.length) {
     throw new CepError('IO', msg.data.fn.warehouseIndexEmpty())
   }
-  const warehouse = stored.value.list[stored.value.index]
+  const warehouse = index.list[index.index]
   const fileName = fileNameOf(warehouse, kind)
   if (!fileName) {
     throw new CepError('IO', msg.data.fn.indexNoKindFileName(kind))
@@ -172,7 +173,8 @@ function readRawGroups(kind: KuKind): { path: string; groups: KuRawGroup[] } {
   const path = currentLibPath(kind)
   // 文件不存在 = 这个库还没有内容（首次往里写），空数组，不是错
   const text = readTextForWrite(path)
-  const decoded = text === null ? { value: [] as KuRawGroup[] } : decodeKuRawGroupsText(text)
+  const decoded: Decoded<KuRawGroup[]> | DecodeFail =
+    text === null ? { value: [] } : decodeKuRawGroupsText(text)
   if (isDecodeFail(decoded)) {
     // 日志写事实（哪个库、坏在哪），错误码原样交给 logger
     log.error('style', `${kind} 库文件解析失败`, decoded)
@@ -356,7 +358,7 @@ function updateKuGroups(kind: KuKind, mutate: (groups: KuRawGroup[]) => void): v
   const read = repo.read()
   // T-112：**读不到 ≠ 首次使用**。读不到时既不知道旧内容、也写不出 `.bak`，继续写回等于
   // 把一份读不到的库文件换成空数组。`notSeen`（文件本来不存在）才是"首次使用按空处理"。
-  if (read.status !== 'ok') {
+  if (read.status === 'error') {
     throw new CepError(
       'IO',
       msg.data.fn.libFileReadFailedAbortWrite(kind, target.fileName, read.reason),
@@ -542,8 +544,8 @@ function copyToRecycle(relative: string, recycleDir: string): boolean {
   // 复制失败必须抛：**没有退路就不许往下删原件**（`.bak` / 回收目录是唯一退路）。
   // 底层文案已含目标路径（就在 recycleDir 下）与原因，不再二次包装。
   // 回收目录名带时间戳，副本必定是新文件：它还在就说明同名碰撞，停下比覆盖安全
-  writeBase64File(`${recycleDir}/${relative}`, read.base64, {
-    cas: { mode: 'compare', expected: { status: 'absent' } },
+  writeBase64File(`${recycleDir}/${relative}`, read.value, {
+    cas: { mode: 'compare', expected: { status: 'notSeen' } },
     backup: { mode: 'none', why: '回收副本是新文件，无原文可备' },
   })
   return true
@@ -856,7 +858,7 @@ export function appendKuItemToSwatch(kind: KuKind, groupIndex: number, itemIndex
   const path = swatchFilePath()
 
   const read = readSwatchItems(path)
-  if (read.status !== 'ok') throw new CepError('IO', read.reason)
+  if (read.status === 'error') throw new CepError('IO', read.reason)
   const items = read.value
   items.push(item)
   writeSwatchItems(path, items)
@@ -879,7 +881,7 @@ export function appendKuGroupToSwatch(kind: KuKind, groupIndex: number): void {
   const path = swatchFilePath()
 
   const read = readSwatchItems(path)
-  if (read.status !== 'ok') throw new CepError('IO', read.reason)
+  if (read.status === 'error') throw new CepError('IO', read.reason)
   const items = read.value
   for (const item of list) items.push(item)
   writeSwatchItems(path, items)

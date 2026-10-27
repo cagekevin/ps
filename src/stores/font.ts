@@ -70,9 +70,9 @@ export const useFontStore = defineStore('font', () => {
   async function loadStars() {
     try {
       const read = readFontStars()
-      stars.value = read.status === 'ok' ? read.value : {}
-      starsError.value = read.status === 'ok' ? '' : msg.data.fn.starsReadFailed(read.reason)
-      if (read.status !== 'ok')
+      stars.value = read.status === 'ok' ? read.value : read.fallback
+      starsError.value = read.status === 'error' ? msg.data.fn.starsReadFailed(read.reason) : ''
+      if (read.status === 'error')
         log.warn('font', '星级读不到：界面显示"读不到"，不是"未收藏"', read.reason)
     } catch (e) {
       stars.value = {}
@@ -87,8 +87,8 @@ export const useFontStore = defineStore('font', () => {
     // `readFontTags()` **不抛**（读失败在判别联合里），直接判 `ok` 取数据或原因：
     // `tagsError` 只在读失败时设置，不是永远装饰的错误通道。
     const read = readFontTags()
-    tags.value = read.status === 'ok' ? read.value : []
-    tagsError.value = read.status === 'ok' ? '' : read.reason
+    tags.value = read.status === 'ok' ? read.value : read.fallback
+    tagsError.value = read.status === 'error' ? read.reason : ''
   }
 
   function cyclePreview() {

@@ -24,7 +24,7 @@ export async function getFontList(opts: { refresh?: boolean } = {}): Promise<Fon
   if (!opts.refresh) {
     const cached = readSysFontFile()
     // 只有"读到了且非空"才算命中缓存；读不到继续往下走，让 PS 重建一次
-    if (cached.status === 'ok' && cached.list.length) return cached.list
+    if (cached.status === 'ok' && cached.value.length) return cached.value
   }
 
   const res = await jsx.font.initSystemList()
@@ -46,10 +46,10 @@ export async function getFontList(opts: { refresh?: boolean } = {}): Promise<Fon
         fromFile.fail === 'readError' ? fromFile.failure : { fail: fromFile.fail },
       )
     }
-    if (fromFile.status === 'notSeen' || !fromFile.list.length) {
+    if (fromFile.status === 'notSeen' || !fromFile.value.length) {
       throw new CepError('PARSE', msg.data.text.sysFontEmpty)
     }
-    return fromFile.list
+    return fromFile.value
   }
 
   // 空数组 = PS 那边确实一个系统字体都没有（这是"没有"，不是"读不懂"）

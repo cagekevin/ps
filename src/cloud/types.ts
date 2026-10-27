@@ -1,3 +1,9 @@
+// 是什么：云同步的端口类型 + 唯一失败形状（`CloudFailure`）+ 它的唯一渲染器
+// 唯一入口：`describeCloudFailure` 是 `CloudFailure` → 一行技术诊断的**唯一**处（给日志 / 报表）
+// 谁在用：`cloud/engine` · `cep/cloud/*` · `pages/set/cloud-status`
+// 禁止：用户面不要用 `describeCloudFailure`（它带码前缀）—— 用户文案取 `reason ?? fail`；
+//   也不在这里拼 `DecodeFail` 的文案（那是 `repo-read.describeDecodeFail`）。
+
 import type {
   CloudLedger,
   CloudSnapshot,
@@ -6,7 +12,7 @@ import type {
   SyncDiff,
   UploadDecision,
 } from '@/domain/cloud'
-import type { ReadFail } from '@/cep/fs-read'
+import type { Exists } from '@/utils/exists'
 
 export interface CloudTransportPort {
   push(snapshot: CloudSnapshot): Promise<void>
@@ -38,17 +44,13 @@ export interface CloudLedgerRecord extends CloudLedger {
  * 点「上传」，把云端那一份覆盖掉。三态把这两件事分开，`broken` 一律**拒绝上传**。
  */
 /**
- * 台账读坏的两种形态（与 `RepoReadBad` 同型）：读盘失败**必有现场**，内容失败没有。
+ * 台账的**三态**：有 / 没有 / 坏了。
  *
- * 不许写成 `{ status:'broken'; reason: string }` —— 那个 `reason` 是 `msg` 拼的用户文案，
+ * 与系统字体、云端快照同一个形状（`Exists<T>`）—— 三者都在答"有没有这份数据"。
+ * 不许写成 `{ status:'broken'; reason: string }`：那个 `reason` 会变成 `msg` 拼的用户文案，
  * 上游把它当"底层原话"传下去，等于 UI 文案冒充技术原因。
  */
-export type LedgerBrokenFail = ReadFail
-
-export type LedgerRead =
-  | { status: 'ok'; ledger: CloudLedgerRecord }
-  | { status: 'none' }
-  | ({ status: 'broken' } & LedgerBrokenFail)
+export type LedgerRead = Exists<CloudLedgerRecord>
 
 export interface CloudLedgerPort {
   read(): Promise<LedgerRead>
@@ -133,7 +135,7 @@ export function emptyCloudStatus(): CloudStatus {
   return {
     configured: false,
     autoSyncEnabled: false,
-    ledgerState: { status: 'none' },
+    ledgerState: { status: 'notSeen' },
     rev: 0,
     syncedAt: 0,
     localHash: '',

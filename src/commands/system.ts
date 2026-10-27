@@ -42,6 +42,8 @@ export const systemCommands: Command<unknown>[] = [
         throw new CepError(
           'IO',
           msg.command.fn.copyFileError(e instanceof Error ? e.message : String(e)),
+          undefined,
+          e,
         )
       }
     },
@@ -64,6 +66,8 @@ export const systemCommands: Command<unknown>[] = [
         throw new CepError(
           'IO',
           msg.command.fn.copyFileError(e instanceof Error ? e.message : String(e)),
+          undefined,
+          e,
         )
       }
     },

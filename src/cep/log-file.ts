@@ -137,7 +137,7 @@ export function createLogFileSink(onError?: (reason: string) => void): DiskLogSi
       // 读不到就交给调用方决定（logger 会把它记成一条 warn，不静默）
       if (read.status === 'error')
         throw new Error(`${FILE} 读不到：${describeReadFailure(read.failure)}`)
-      const persisted = read.text.split('\n').filter((line) => line.trim() !== '')
+      const persisted = read.value.split('\n').filter((line) => line.trim() !== '')
       // 只回最近的：文件被外部改大过也不把内存撑爆
       return persisted.slice(-MAX_LINES)
     },
